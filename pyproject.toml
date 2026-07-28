@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lean-compcert"
+version = "0.1.0"
+description = "Compatibility reconnaissance tooling for a Lean-to-CompCert backend"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "lean-compcert contributors" }]
+
+[project.scripts]
+lean-compcert-probe = "lean_compcert_probe.cli:main"
+lean-compcert = "lean_compcert_driver.cli:main"
+
+[tool.setuptools]
+packages = ["lean_compcert_probe", "lean_compcert_driver"]

@@ -1,0 +1,31 @@
+--- a/src/lean/Init/Tactics.lean
++++ b/src/lean/Init/Tactics.lean
+@@ -1479 +1479,2 @@
+-example : (List.range 1000).length = 1000 := by native_decide
++set_option maxRecDepth 100000 in
++example : (List.range 1000).length = 1000 := by decide +kernel
+--- a/src/lean/Lean/Data/Lsp/LanguageFeatures.lean
++++ b/src/lean/Lean/Data/Lsp/LanguageFeatures.lean
+@@ -472 +472 @@
+-  cases v <;> native_decide
++  cases v <;> rfl
+@@ -503 +503 @@
+-  cases v <;> native_decide
++  cases v <;> rfl
+--- a/src/lean/lake/Lake/Build/Trace.lean
++++ b/src/lean/lake/Lake/Build/Trace.lean
+@@ -136,2 +136 @@
+-example : ofHex "0123456789" = ⟨0x0123456789⟩ ∧
+-  ofHex "abcdeF" = ⟨0xabcdef⟩ ∧ ofHex "ABCDEF" = ⟨0xABCDEF⟩ := by native_decide
++-- Moved to the legacy test `lakeHashOfHexKernel.lean`, where imported module definitions are reducible.
+--- /dev/null
++++ b/tests/lean/run/lakeHashOfHexKernel.lean
+@@ -0,0 +1,8 @@
++import Lake.Build.Trace
++
++open Lake
++
++example : Hash.ofHex "0123456789" = ⟨0x0123456789⟩ ∧
++  Hash.ofHex "abcdeF" = ⟨0xabcdef⟩ ∧
++  Hash.ofHex "ABCDEF" = ⟨0xABCDEF⟩ := by
++  set_option maxRecDepth 100000 in (decide +kernel)

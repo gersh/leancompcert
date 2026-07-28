@@ -1,0 +1,14 @@
+name = "leancompcert"
+version = "0.1.0"
+defaultTargets = ["LeanCompCert", "lean-compcert", "lean-compcert-tests"]
+
+[[lean_lib]]
+name = "LeanCompCert"
+
+[[lean_exe]]
+name = "lean-compcert"
+root = "LeanCompCert.Main"
+
+[[lean_exe]]
+name = "lean-compcert-tests"
+root = "LeanCompCertTests"

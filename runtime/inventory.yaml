@@ -1,0 +1,18 @@
+schema_version: 1
+symbols:
+  lean_compcert_unreachable:
+    status: compatible
+    source: runtime/portable/unreachable.c
+  lean_compcert_atomic_fetch_sub_int:
+    status: adapted
+    source: runtime/adapters/atomics.c
+    reason: CompCert 3.17 does not accept C11 atomic types
+  lean_alloc_ctor:
+    status: external_trusted
+    source: Lean runtime
+  lean_dec_ref:
+    status: external_trusted
+    source: Lean runtime
+  lean_spawn_task:
+    status: unsupported
+    reason: requires threads and synchronization
