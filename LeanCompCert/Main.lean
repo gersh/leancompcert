@@ -8,6 +8,7 @@ import LeanCompCert.Testing.FixedPointCertificate
 import LeanCompCert.Testing.RolledFixedPoint
 import LeanCompCert.Verified.ClightEmit
 import LeanCompCert.Testing.SquarefreeMertensCertificate
+import LeanCompCert.NativeCheck
 
 open LeanCompCert
 
@@ -30,6 +31,9 @@ private def usage : String :=
   "                       write the 128-bit-product fixed-point certificate\n" ++
   "  emit-rolled-10m-c FILE\n" ++
   "                       write the rolled 10^7-iteration fixed-point checker\n" ++
+  "  check-native [--force] [--dir DIR]\n" ++
+  "                       compile every certificate with CompCert and run the\n" ++
+  "                       native cross-check; cached by generated-C content hash\n" ++
   "  mangle NAME...       print stable C symbols\n" ++
   "  abi-manifest         print the active ABI manifest\n" ++
   "  version              print backend and compiler versions\n\n" ++
@@ -105,6 +109,16 @@ private def emitFixedPointCertificate (file : String) : IO UInt32 :=
 private def emitRolled10M (file : String) : IO UInt32 :=
   emitCertificate file Testing.RolledFixedPoint.emittedC
 
+private def nativeCerts : List NativeCheck.Cert := [
+  ⟨"verified-decide", Testing.VerifiedDecide.emittedC⟩,
+  ⟨"mertens", Testing.MertensCertificate.emittedC⟩,
+  ⟨"wide-mertens", Testing.WideMertensCertificate.emittedC⟩,
+  ⟨"squarefree-mertens", Testing.SquarefreeMertensCertificate.emittedC⟩,
+  ⟨"reflected", Testing.ReflectedCertificate.emittedC⟩,
+  ⟨"fixedpoint", Testing.FixedPointCertificate.emittedC⟩,
+  ⟨"rolled-10m", Testing.RolledFixedPoint.emittedC⟩
+]
+
 def main (args : List String) : IO UInt32 :=
   match args with
   | ["demo"] => runDemo
@@ -116,6 +130,7 @@ def main (args : List String) : IO UInt32 :=
   | ["emit-reflected-cert-c", file] => emitReflectedCertificate file
   | ["emit-fixedpoint-cert-c", file] => emitFixedPointCertificate file
   | ["emit-rolled-10m-c", file] => emitRolled10M file
+  | "check-native" :: rest => NativeCheck.run nativeCerts rest
   | ["emit-clight-fixedpoint-v", file] =>
       match Verified.ClightEmit.emitClight "direct_FixedPoint_mulShiftSum"
           Testing.FixedPointCertificate.computation.statements

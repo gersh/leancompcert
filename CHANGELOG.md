@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+- **Documentation restructured around the two use cases** — a verified
+  `native_decide` (`docs/use-case-1-verified-native-decide.md`) and a
+  trusted compiled artifact (`docs/use-case-2-verified-artifact.md`) —
+  each stating exactly what is proved and why the method is
+  trustworthy; README leads with them, tutorials remain as deep dives.
+- **Consumer `check-native`**: `NativeCheck` is exported from the root
+  `LeanCompCert` module, gained a repeatable `--include DIR` flag, and
+  the `examples/consumer` project wires the cached native cross-check in
+  five lines (`consumer check-native`).
+- **`check-native`** (`lean-compcert check-native`): cached native
+  cross-check pipeline. Emits every registered certificate's generated
+  C, compiles it with CompCert, runs the self-checking binary, and
+  caches by content hash of the generated C plus ccomp version — only
+  certificates whose C actually changed are recompiled and re-run
+  (`--force`, `--dir DIR`). The acceptance suite runs it twice and fails
+  if the second run is not fully cached. The run remains a cross-check:
+  its exit status is never admitted as a theorem.
+- **Startup fix**: rolled emission (`Verified/Rolled.lean`) lowered
+  against the fully unrolled `toFn` context — at 10⁷ iterations this
+  materialized ~10⁸ instructions during module initialization, costing
+  ~235 s on *every* CLI invocation. Lowering now uses a `loopCount := 1`
+  typing context (`loweringContext`), which declares the identical
+  locals; emitted C is byte-identical and startup drops to ~0.4 s.
+- `lakefile.toml` version corrected to 0.2.0.
+
 ## 0.2.0 — 2026-07-28
 
 *(2026-07-29: documentation refresh — five tutorials in `docs/`, README

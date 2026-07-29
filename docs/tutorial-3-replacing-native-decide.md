@@ -1,5 +1,10 @@
 # Tutorial 3 — Replacing `native_decide`: the equivalence architecture
 
+> The end-to-end recipe for this use case — including the cached
+> `check-native` pipeline — is
+> [use case 1](use-case-1-verified-native-decide.md); this tutorial is
+> the deep dive on migrating real recursive code.
+
 `native_decide` proves finite facts by trusting Lean's compiler, a C
 compiler, and the runtime. This package replaces that trust with kernel
 checking — but naive `decide` fails at production scale. The working

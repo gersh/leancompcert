@@ -795,10 +795,20 @@ theorem rolledTrace_eq_augmented (p : Program)
   rw [foldTrace_augment_eq_litSeg p count]
   exact rolledTrace_eq_litSeg p hBody count 0 env hCounter
 
+/-- Typing context for rolled lowering: the padded program at
+`loopCount := 1`.  `lowerSequence` consults the function only through
+`localType?`, and the preamble plus a single body copy already declares
+every local at its (uniform) type, so lowering against this context
+produces exactly the statements it would against the full program —
+without materializing `loopCount` unrolled body copies at emission
+time. -/
+def loweringContext (p : Program) (name : String) : CCIR.Function :=
+  { p with regCount := p.regCount + 1, loopCount := 1 }.toFn name
+
 /-- Rolled-body statements: the body compiled once at the counter
 variable, through the production lowering. -/
 def rolledBody (p : Program) (name : String) : Option (List C.CStmt) :=
-  match lowerSequence ({ p with regCount := p.regCount + 1 }.toFn name)
+  match lowerSequence (loweringContext p name)
       (compileInstrsVar p p.body) with
   | .ok statements => some statements
   | .error _ => none
@@ -808,12 +818,12 @@ counter increment, return. Emission-only — semantics stays `foldTrace`. -/
 def rolledCFunction (p : Program) (name : String) : Option C.CFunction := do
   let bodyStatements ← rolledBody p name
   let initStatements ←
-    match lowerSequence ({ p with regCount := p.regCount + 1 }.toFn name)
+    match lowerSequence (loweringContext p name)
         (preamble p.regCount ++ compileInstrs 0 p.init) with
     | .ok statements => some statements
     | .error _ => none
   let epilogueStatements ←
-    match lowerSequence ({ p with regCount := p.regCount + 1 }.toFn name)
+    match lowerSequence (loweringContext p name)
         (compileInstrs 0 p.epilogue) with
     | .ok statements => some statements
     | .error _ => none

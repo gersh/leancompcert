@@ -1,5 +1,11 @@
 # Tutorial 1 — Your first certificate
 
+> New here? The two use-case guides —
+> [a verified `native_decide`](use-case-1-verified-native-decide.md) and
+> [a compiled artifact you can trust](use-case-2-verified-artifact.md) —
+> say what is proved and why to trust it; this tutorial is the worked
+> example both build on.
+
 This walkthrough takes a small computation from nothing to a
 machine-checked theorem plus a CompCert-verified native check. Everything
 here uses only the stable public API (README, "Public API and

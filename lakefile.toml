@@ -1,5 +1,5 @@
 name = "leancompcert"
-version = "0.1.0"
+version = "0.2.0"
 defaultTargets = ["LeanCompCert", "lean-compcert", "lean-compcert-tests"]
 
 [[lean_lib]]

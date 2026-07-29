@@ -98,6 +98,18 @@ ccomp "$include_runtime" "$include_lean" \
   -o "$rolled_10m_exe" "$rolled_10m_c"
 "$rolled_10m_exe"
 
+native_check_dir="$output/native-check"
+rm -rf "$native_check_dir"
+.lake/build/bin/lean-compcert check-native --dir "$native_check_dir"
+native_second=$(.lake/build/bin/lean-compcert check-native --dir "$native_check_dir")
+case "$native_second" in
+  *"[run]"*)
+    echo "native check change tracking failed: second run recompiled" >&2
+    exit 1
+    ;;
+esac
+echo "native check: all certificates pass; change tracking verified (second run fully cached)"
+
 if command -v clightgen >/dev/null 2>&1; then
   for cert_c in "$verified_decide_c" "$mertens_cert_c" \
       "$wide_mertens_cert_c" "$squarefree_cert_c" \

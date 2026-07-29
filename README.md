@@ -1,30 +1,54 @@
 # lean-compcert
 
-`lean-compcert` is an experimental backend project for compiling Lean-generated
-application code with [CompCert](https://compcert.org/). It includes a working
-Version 0.1 hybrid driver, a compatibility reconnaissance tool, an initial
-direct LCNF-to-restricted-C path for pure fixed-width declarations, a
-machine-checked scalar semantic-preservation proof, and an axiom-free
-`verified_decide` tactic built on that proof, with Goldbach-style fold
-certificates as the model workload for replacing `native_decide`.
+`lean-compcert` turns finite Lean computations into kernel-checked
+theorems and [CompCert](https://compcert.org/)-compiled native
+artifacts. It serves two use cases:
+
+**1. A verified `native_decide`.** `native_decide` is fast but proves
+things by axiom (`Lean.ofReduceBool` — trust Lean's compiler, a C
+compiler, and the runtime); plain `decide` is trustworthy but too slow
+at scale. This package gives you both halves: the theorem is checked by
+**Lean's kernel only** (standard axioms — `#print axioms` shows no
+native trust), while fast native runs come from CompCert-compiled
+self-checking binaries via the cached `check-native` pipeline — nothing
+re-runs when you recompile unless the generated code actually changed.
+→ **[How to do it](docs/use-case-1-verified-native-decide.md)**
+
+**2. A compiled artifact you can trust.** When you want the binary
+itself: a Lean theorem states what the emitted C computes, Coq's kernel
+proves CompCert's own semantics assigns it the certified value (on the
+direct path), and CompCert's machine-checked theorem carries that to
+assembly. → **[How to do it](docs/use-case-2-verified-artifact.md)**
+
+Both guides state exactly *what is proved* and *why the method deserves
+trust*; the boundary is drawn honestly in each.
 
 It does **not** claim end-to-end verified compilation from Lean. When generated
 C is accepted by CompCert, only the C-to-assembly portion receives CompCert's
 semantic-preservation guarantee, subject to CompCert's assumptions and external
-functions.
-
-The Lean frontend and C emitter, normalization, runtime, atomics
-adapter, assembler, linker, external libraries, operating system, and hardware
-remain in the trusted boundary.
+functions. For general application code (the hybrid driver and LCNF
+paths below), the Lean frontend and C emitter, normalization, runtime,
+atomics adapter, assembler, linker, external libraries, operating system,
+and hardware remain in the trusted boundary; for fragment certificates,
+the guides above give the much tighter story.
 
 The development plan toward a generic, consumable verified-computation
 package — milestones, acceptance criteria, trust commitments, and
 non-goals — is in [ROADMAP.md](ROADMAP.md); all seven milestones are
 implemented, with per-milestone evidence recorded there.
 
-## Tutorials
+## Documentation
 
-Step-by-step guides in [docs/](docs/):
+Start with the use-case guide that matches your goal:
+
+- **[Use case 1 — a verified `native_decide`](docs/use-case-1-verified-native-decide.md)**
+  — kernel-checked certificates with cached CompCert-compiled native
+  cross-checks.
+- **[Use case 2 — a compiled artifact you can trust](docs/use-case-2-verified-artifact.md)**
+  — emission, the verification gates, and the Coq-side semantics
+  theorem.
+
+Deep-dive tutorials in [docs/](docs/):
 
 1. [Your first certificate](docs/tutorial-1-first-certificate.md) — from
    a register program to an axiom-audited theorem and a CompCert-checked
@@ -39,7 +63,8 @@ Step-by-step guides in [docs/](docs/):
 5. [Loops, arrays, and scale](docs/tutorial-5-loops-and-scale.md) —
    rolled emission, the array machine, batch project compilation.
 
-A complete external-consumer walkthrough lives in
+A complete external-consumer walkthrough — including the five-line
+`check-native` wiring — lives in
 [examples/consumer/](examples/consumer/).
 
 ## Quick start
@@ -358,6 +383,35 @@ ccomp -Iruntime/include -I"$(lean --print-prefix)/include" \
 ```
 
 The executable returns zero when the compiled computation returns 42.
+
+### The cached native cross-check: `check-native`
+
+The manual emit/ccomp/run loop above is packaged as a single cached
+command over every registered certificate:
+
+```console
+lake exe lean-compcert check-native
+```
+
+For each certificate it emits the generated C (whose `main` returns 0
+exactly when the computed value equals the certified constant), compiles
+it with `ccomp`, runs it, and records a stamp keyed by the **content
+hash of the generated C** plus the ccomp version. On later runs,
+certificates whose C is unchanged are reported `[cached]` and skipped;
+only certificates whose generated C actually changed are recompiled and
+re-run. Change tracking is therefore two-layered: Lake rebuilds the
+`lean-compcert` executable when certificate Lean sources change, and the
+runner re-emits and re-hashes the C to decide what to re-run. `--force`
+re-runs everything; `--dir DIR` relocates the cache (default
+`.lake/build/native-check`). Stamps are written only on a passing run,
+so failures always retry.
+
+This is the `native_decide` *workflow* — fast native execution on every
+change — with the trust split kept intact: the theorem is established by
+`verified_decide` in Lean's kernel, and the CompCert-compiled run is an
+independent cross-check whose exit status never becomes a premise. The
+acceptance suite runs `check-native` twice and fails if the second run
+is not fully cached.
 
 ### Current fragment
 

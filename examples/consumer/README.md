@@ -48,3 +48,20 @@ lake build                       # proves the certificate; zero errors expected
 ccomp -I../../runtime/include -I"$(lean --print-prefix)/include" -o demo demo.c
 ./demo; echo $?                  # 0: the native run reproduces 28707
 ```
+
+Or let the cached pipeline do the emit/compile/run loop (this is the
+recommended way to keep a fast native cross-check in CI — see
+[use case 1](../../docs/use-case-1-verified-native-decide.md)):
+
+```console
+./.lake/build/bin/consumer check-native
+# [run] demo: compiled with CompCert, native check passed
+./.lake/build/bin/consumer check-native
+# [cached] demo: C unchanged since last passing run
+```
+
+The second invocation re-runs nothing: results are cached by content
+hash of the generated C, so rebuilding the project or editing unrelated
+files never repeats the native run. The wiring is five lines in
+`Main.lean` (`LeanCompCert.NativeCheck.run` over a list of
+certificates).
