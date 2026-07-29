@@ -113,7 +113,10 @@ whose `consumer check-native` does exactly the above.
 - **The theorem's trusted base is Lean's kernel, full stop.** Every
   helper along the way — the reflection bridge (`Program.evalCC_compile`),
   the packaging (`toComputation_returns`), the equivalence library — is
-  itself a kernel-checked theorem, not a tool you have to believe.
+  itself a kernel-checked theorem, not a tool you have to believe. Put
+  bluntly: **you do not have to trust this package's authors at all.** A
+  bug in our lemmas or tactics cannot produce a false theorem — it can
+  only fail to typecheck. The worst this package can do is not compile.
 - **Nothing fast is trusted.** The CompCert binary's exit status is
   never admitted as a theorem — a permanent design commitment, enforced
   by the axiom-audit CI gate. If the native cross-check and the kernel

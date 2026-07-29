@@ -26,6 +26,16 @@
   typing context (`loweringContext`), which declares the identical
   locals; emitted C is byte-identical and startup drops to ~0.4 s.
 - `lakefile.toml` version corrected to 0.2.0.
+- **Stamp hardening**: `check-native` cache keys now cover the include
+  configuration and the *contents* of non-toolchain header directories
+  (e.g. the CompCert runtime shim), so editing a shim header or bumping
+  the Lean toolchain re-runs affected certificates. Verified: failed
+  compiles/runs write no stamps and exit 1.
+- README consistency: the proof-boundary section now reflects the
+  implemented M6 Clight bridge instead of describing it as future work;
+  the versioning section says 0.2.x; use-case 1 states explicitly that a
+  bug in this package cannot produce a false theorem — it can only fail
+  to typecheck.
 
 ## 0.2.0 — 2026-07-28
 

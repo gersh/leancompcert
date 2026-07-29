@@ -305,22 +305,34 @@ straight-line scalar CCIR
 restricted generated-C computation model
 ```
 
-It does not yet close these boundaries:
+The next boundary — this restricted C model versus **CompCert's own
+Clight semantics** — is closed for the certificate fragment by the M6
+bridge (see [use case 2](docs/use-case-2-verified-artifact.md) and
+[Tutorial 4](docs/tutorial-4-trust-chain.md)): `clightgen -normalize`
+translation validation of every certificate unit, a structural
+correspondence checker plus the same correspondence re-checked inside
+Coq's kernel at `Qed`, and — for straight-line certificates — direct
+Clight emission with a Coq-kernel theorem that CompCert's bigstep
+semantics (`ClightBigstep.eval_funcall`) computes the certified value
+for every global environment and memory. The Coq-side gates need a
+CompCert Coq development (or `clightgen`) installed; a compiler-only
+`ccomp` installation still gets the Lean-side proof and the Python
+structural checker, and the acceptance suite skips the Coq gates
+gracefully.
+
+Boundaries that remain open, stated plainly:
 
 ```text
-Lean / LCNF semantics
-        → full CCIR control flow, calls, and memory
-        → CompCert Clight semantics
-        → CompCert assembly semantics
+Lean / LCNF semantics  →  CCIR        (not proved; certificates instead
+                                       *state* their theorem at the CCIR
+                                       denotation, so nothing is trusted here)
+full CCIR control flow, calls, heap    (outside the fragment; loops enter
+                                       as proved traces, arrays under the
+                                       disjoint-single-array discipline)
 ```
 
-In particular, the repository's C AST currently has its own restricted
-executable semantics. A checked bridge to CompCert's Coq `Clight` semantics
-still requires the CompCert Coq development or `clightgen` output, neither of
-which is supplied by a compiler-only `ccomp` installation. Shifts also need
-the usual C/Clight definedness hypotheses before this scalar model can be
-identified with Clight execution. The hybrid path that recompiles Lean's
-ordinary emitted C is not covered by this proof.
+The hybrid path that recompiles Lean's ordinary emitted C is not covered
+by this proof.
 
 ## `verified_decide`
 
@@ -638,7 +650,7 @@ CI if any certificate acquires a native-evaluation axiom.
 ## Public API and versioning
 
 The consumable surface, kept stable under semantic versioning from
-`LeanCompCert.backendVersion` (currently 0.1.x — breaking changes to any
+`LeanCompCert.backendVersion` (currently 0.2.x — breaking changes to any
 item below bump the minor version until 1.0, and the major version
 after):
 

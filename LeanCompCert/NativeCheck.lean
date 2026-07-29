@@ -49,7 +49,7 @@ private def ccompVersion : IO (Option String) := do
   try
     let out ← IO.Process.output { cmd := "ccomp", args := #["-version"] }
     if out.exitCode == 0 then
-      return some out.stdout.trim
+      return some out.stdout.trimAscii.toString
     return none
   catch _ =>
     return none
@@ -58,21 +58,45 @@ private def leanIncludeDir : IO (Option String) := do
   try
     let out ← IO.Process.output { cmd := "lean", args := #["--print-prefix"] }
     if out.exitCode == 0 then
-      return some (out.stdout.trim ++ "/include")
+      return some (out.stdout.trimAscii.toString ++ "/include")
     return none
   catch _ =>
     return none
 
-/-- Stamp recorded after a passing run: generated-C hash and toolchain hash. -/
-private def stampFor (source version : String) : String :=
-  s!"{hash source} {hash version} pass"
+/-- Content hash of every regular file under `dir` (path and text),
+order-independent of directory enumeration. Unreadable files fall back
+to their size. Used so that edits to header directories (e.g. the
+CompCert runtime shim) invalidate stamps. -/
+private def dirContentHash (dir : System.FilePath) : IO UInt64 := do
+  if !(← dir.pathExists) then
+    return 0
+  let entries ← dir.walkDir
+  let sorted := entries.qsort (·.toString < ·.toString)
+  let mut h : UInt64 := 0
+  for entry in sorted do
+    let info ← entry.metadata
+    if info.type == IO.FS.FileType.file then
+      let contentHash ←
+        try
+          pure (hash (← IO.FS.readFile entry))
+        catch _ =>
+          pure (hash info.byteSize.toNat)
+      h := mixHash h (mixHash (hash entry.toString) contentHash)
+  return h
+
+/-- Stamp recorded after a passing run: generated-C hash plus a
+toolchain hash covering the ccomp version, the include configuration
+(the Lean include path is versioned, so toolchain bumps change it), and
+the contents of non-toolchain header directories. -/
+private def stampFor (source toolchain : String) : String :=
+  s!"{hash source} {hash toolchain} pass"
 
 private structure Outcome where
   passed : Bool
   cached : Bool
 
 private def runOne (opts : Options) (includes : List String)
-    (version : String) (cert : Cert) : IO Outcome := do
+    (toolchain : String) (cert : Cert) : IO Outcome := do
   match cert.emitted with
   | .error errors =>
       IO.eprintln s!"[FAIL] {cert.name}: C emission failed"
@@ -80,11 +104,11 @@ private def runOne (opts : Options) (includes : List String)
         IO.eprintln s!"       {error}"
       return ⟨false, false⟩
   | .ok source =>
-      let stamp := stampFor source version
+      let stamp := stampFor source toolchain
       let stampPath := opts.dir / s!"{cert.name}.stamp"
       unless opts.force do
         if (← stampPath.pathExists) then
-          if (← IO.FS.readFile stampPath).trim == stamp then
+          if (← IO.FS.readFile stampPath).trimAscii.toString == stamp then
             IO.println s!"[cached] {cert.name}: C unchanged since last passing run"
             return ⟨true, true⟩
       let cSource := opts.dir / s!"{cert.name}.c"
@@ -117,15 +141,23 @@ def run (certs : List Cert) (args : List String) : IO UInt32 := do
       return 2
   IO.FS.createDirAll opts.dir
   let mut includes := opts.extraIncludes.map (s!"-I{·}")
+  let mut headerDirs : List System.FilePath :=
+    opts.extraIncludes.map System.FilePath.mk
   if (← (System.FilePath.mk "runtime/include").pathExists) then
     includes := includes ++ ["-Iruntime/include"]
+    headerDirs := headerDirs ++ [System.FilePath.mk "runtime/include"]
   if let some leanInclude ← leanIncludeDir then
     includes := includes ++ [s!"-I{leanInclude}"]
+  let mut headerHash : UInt64 := 0
+  for dir in headerDirs do
+    headerHash := mixHash headerHash (← dirContentHash dir)
+  let toolchain :=
+    version ++ "\n" ++ String.intercalate " " includes ++ s!"\n{headerHash}"
   let mut passed := 0
   let mut cached := 0
   let mut failed := 0
   for cert in certs do
-    let outcome ← runOne opts includes version cert
+    let outcome ← runOne opts includes toolchain cert
     if outcome.passed then
       passed := passed + 1
       if outcome.cached then
