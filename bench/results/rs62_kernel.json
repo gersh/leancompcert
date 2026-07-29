@@ -1,0 +1,102 @@
+{
+ "note": "RS62 ladder loopE kernel sweep, Lean 4.32.1, leancompcert oleans, guard = mod-6 wheel (not Nat.minFac)",
+ "rows": [
+  {
+   "status": "ok",
+   "cpu_s": 0.16,
+   "rss_kb": 424336,
+   "err": "",
+   "case": "baseline"
+  },
+  {
+   "status": "ok",
+   "cpu_s": 0.27,
+   "rss_kb": 453492,
+   "err": "",
+   "case": "source",
+   "n": 1000,
+   "value": "(226427509673420, 226437262246755)"
+  },
+  {
+   "status": "ok",
+   "cpu_s": 0.29,
+   "rss_kb": 462084,
+   "err": "",
+   "case": "word",
+   "n": 1000,
+   "value": "(226427509673420, 226437262246755)"
+  },
+  {
+   "status": "ok",
+   "cpu_s": 0.55,
+   "rss_kb": 511692,
+   "err": "",
+   "case": "source",
+   "n": 3000,
+   "value": "(323550668838631, 323560489222606)"
+  },
+  {
+   "status": "ok",
+   "cpu_s": 0.67,
+   "rss_kb": 536496,
+   "err": "",
+   "case": "word",
+   "n": 3000,
+   "value": "(323550668838631, 323560489222606)"
+  },
+  {
+   "status": "ok",
+   "cpu_s": 1.71,
+   "rss_kb": 719056,
+   "err": "",
+   "case": "source",
+   "n": 10000,
+   "value": "(434420533174646, 434430362419104)"
+  },
+  {
+   "status": "ok",
+   "cpu_s": 2.12,
+   "rss_kb": 798720,
+   "err": "",
+   "case": "word",
+   "n": 10000,
+   "value": "(434420533174646, 434430362419104)"
+  },
+  {
+   "status": "ok",
+   "cpu_s": 4.74,
+   "rss_kb": 1280320,
+   "err": "",
+   "case": "source",
+   "n": 30000,
+   "value": "(536867140998049, 536876971065436)"
+  },
+  {
+   "status": "ok",
+   "cpu_s": 5.8100000000000005,
+   "rss_kb": 1529284,
+   "err": "",
+   "case": "word",
+   "n": 30000,
+   "value": "(536867140998049, 536876971065436)"
+  }
+ ],
+ "segmentation": {
+  "monolithic_10000": {
+   "cpu_s_above_base": 1.55,
+   "rss_MB_above_base": 288
+  },
+  "ten_x_1000_one_process": {
+   "cpu_s": 1.4,
+   "rss_MB_above_base": 283
+  },
+  "one_segment_1000": {
+   "cpu_s_above_base": 0.11,
+   "rss_MB_above_base": 28
+  },
+  "baseline": {
+   "cpu_s": 0.16,
+   "rss_MB": 414
+  }
+ }
+}
