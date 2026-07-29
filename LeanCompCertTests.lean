@@ -7,6 +7,7 @@ import LeanCompCert.Testing.SquarefreeMertensCertificate
 import LeanCompCert.Testing.ReflectedCertificate
 import LeanCompCert.Testing.FixedPointCertificate
 import LeanCompCert.Testing.RolledFixedPoint
+import LeanCompCert.Testing.PackedCoverageCertificate
 import LeanCompCert.Verified.ClightEmit
 
 open LeanCompCert

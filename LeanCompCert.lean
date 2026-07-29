@@ -30,6 +30,9 @@ import LeanCompCert.Verified.ArrayState
 import LeanCompCert.Verified.MemFragment
 import LeanCompCert.Verified.Limb
 import LeanCompCert.Verified.EarlyExit
+import LeanCompCert.Verified.Packed
+import LeanCompCert.Verified.PackedTransfer
+import LeanCompCert.Verified.ListFold
 import LeanCompCert.LCNF.View
 import LeanCompCert.LCNF.AdapterV4_32
 import LeanCompCert.LCNF.Validate

@@ -4,6 +4,7 @@ import LeanCompCert.Testing.WideMertensCertificate
 import LeanCompCert.Testing.SquarefreeMertensCertificate
 import LeanCompCert.Testing.ReflectedCertificate
 import LeanCompCert.Testing.FixedPointCertificate
+import LeanCompCert.Testing.PackedCoverageCertificate
 import LeanCompCert.Verified.Limb
 import LeanCompCert.Verified.EarlyExit
 import LeanCompCert.Verified.Rolled
@@ -17,6 +18,9 @@ import LeanCompCert.Verified.MulWide
 import LeanCompCert.Verified.Frontend
 import LeanCompCert.Verified.ArrayState
 import LeanCompCert.Verified.MemFragment
+import LeanCompCert.Verified.Packed
+import LeanCompCert.Verified.PackedTransfer
+import LeanCompCert.Verified.ListFold
 
 
 /-!
@@ -38,6 +42,26 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Testing.FixedPointCertificate.referenceSum_eq
 #print axioms LeanCompCert.Verified.Reflect.Program.evalCC_compile
 #print axioms LeanCompCert.Verified.Reflect.toComputation_returns
+#print axioms LeanCompCert.Verified.Packed.lane_poke_self
+#print axioms LeanCompCert.Verified.Packed.lane_poke_ne
+#print axioms LeanCompCert.Verified.Packed.lane_lt
+#print axioms LeanCompCert.Verified.Packed.laneState_poke
+#print axioms LeanCompCert.Verified.Packed.testBit_repunit
+#print axioms LeanCompCert.Verified.Packed.testBit_classMask
+#print axioms LeanCompCert.Verified.Packed.testBit_orAll
+#print axioms LeanCompCert.Verified.Packed.covers_iff
+#print axioms LeanCompCert.Verified.Packed.mem_class_of_covers_classUnion
+#print axioms LeanCompCert.Verified.Packed.laneState_poke_eq_set
+#print axioms LeanCompCert.Verified.Packed.denoteInstrsPacked_eq
+#print axioms LeanCompCert.Verified.Packed.Program.denotePacked_eq_denote
+#print axioms LeanCompCert.Verified.Packed.arrState_poke_eq_writeArr
+#print axioms LeanCompCert.Verified.ListFold.foldl_guard
+#print axioms LeanCompCert.Verified.ListFold.foldl_table
+#print axioms LeanCompCert.Verified.ListFold.foldl_of_certifies
+#print axioms LeanCompCert.Verified.ListFold.evalCCSequence_foldTraceList
+#print axioms LeanCompCert.Verified.ListFold.LProgram.evalCC_compile
+#print axioms LeanCompCert.Testing.PackedCoverageCertificate.coverage_accepted
+#print axioms LeanCompCert.Testing.PackedCoverageCertificate.covering_system_covers
 #print axioms LeanCompCert.Verified.Limb.mulLimbs_val
 #print axioms LeanCompCert.Verified.EarlyExit.foldP_accepts_iff
 #print axioms LeanCompCert.Verified.Reflect.evalCCSequence_var_eq_lit
