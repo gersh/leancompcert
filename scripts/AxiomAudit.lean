@@ -21,6 +21,7 @@ import LeanCompCert.Verified.MemFragment
 import LeanCompCert.Verified.Packed
 import LeanCompCert.Verified.PackedTransfer
 import LeanCompCert.Verified.ListFold
+import LeanCompCert.Verified.PackedSieve
 
 
 /-!
@@ -62,6 +63,15 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Verified.ListFold.LProgram.evalCC_compile
 #print axioms LeanCompCert.Testing.PackedCoverageCertificate.coverage_accepted
 #print axioms LeanCompCert.Testing.PackedCoverageCertificate.covering_system_covers
+#print axioms LeanCompCert.Verified.PackedSieve.exists_prime_dvd
+#print axioms LeanCompCert.Verified.PackedSieve.exists_prime_factor_le_sqrt
+#print axioms LeanCompCert.Verified.PackedSieve.isPrime_iff_bounded
+#print axioms LeanCompCert.Verified.PackedSieve.testBit_multiplesMask
+#print axioms LeanCompCert.Verified.PackedSieve.testBit_compositeBits
+#print axioms LeanCompCert.Verified.PackedSieve.testBit_compositeBits_eq_false_iff
+#print axioms LeanCompCert.Verified.PackedSieve.sieveList_eq_filter
+#print axioms LeanCompCert.Verified.PackedSieve.PrimeBase.step
+#print axioms LeanCompCert.Verified.PackedSieve.PrimeBase.ofTrialDivision
 #print axioms LeanCompCert.Verified.Limb.mulLimbs_val
 #print axioms LeanCompCert.Verified.EarlyExit.foldP_accepts_iff
 #print axioms LeanCompCert.Verified.Reflect.evalCCSequence_var_eq_lit
