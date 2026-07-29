@@ -264,6 +264,136 @@ theorem lowerBinary_unsigned_correct
           rw [lowerOperand_correct fn rhs rhsExpr ccEnv cEnv hEnv hRhs]
           simp only [evalBinary_lowerType]
 
+/--
+The unsigned comparison fragment. Comparisons produce the normalized values
+`1` and `0` at the destination type on both sides of the lowering.
+-/
+inductive UnsignedComparison where
+  | eq | ne | ult | ule | ugt | uge
+  deriving Repr, BEq, DecidableEq
+
+def UnsignedComparison.ccir : UnsignedComparison → CCIR.BinaryOp
+  | .eq => .eq
+  | .ne => .ne
+  | .ult => .ult
+  | .ule => .ule
+  | .ugt => .ugt
+  | .uge => .uge
+
+def UnsignedComparison.c : UnsignedComparison → C.CBinaryOp
+  | .eq => .eq
+  | .ne => .ne
+  | .ult => .lt
+  | .ule => .le
+  | .ugt => .gt
+  | .uge => .ge
+
+/-- CCIR comparison semantics, separate from the generated-C AST semantics. -/
+def evalCCComparison
+    (type : CCIR.CCType)
+    (op : UnsignedComparison)
+    (lhs rhs : Int) : Option Int :=
+  match op with
+  | .eq => normalizeCC type (if lhs = rhs then 1 else 0)
+  | .ne => normalizeCC type (if lhs ≠ rhs then 1 else 0)
+  | .ult => normalizeCC type (if lhs < rhs then 1 else 0)
+  | .ule => normalizeCC type (if lhs ≤ rhs then 1 else 0)
+  | .ugt => normalizeCC type (if lhs > rhs then 1 else 0)
+  | .uge => normalizeCC type (if lhs ≥ rhs then 1 else 0)
+
+theorem evalBinary_lowerType_comparison
+    (type : CCIR.CCType)
+    (op : UnsignedComparison)
+    (lhs rhs : Int) :
+    evalBinary (Lower.lowerType type) op.c lhs rhs =
+      evalCCComparison type op lhs rhs := by
+  cases op <;>
+    simp [UnsignedComparison.c, evalBinary, evalCCComparison,
+      normalize_lowerType]
+
+/--
+The production comparison lowering emits a cast-free `.binary` exactly when the
+lowered operand expressions carry non-signed C types. This is the decidable
+side condition carried by the proved fragment's comparison instructions.
+-/
+def operandLowersUnsigned (fn : CCIR.Function) (operand : CCIR.Operand) : Bool :=
+  match Lower.lowerOperand fn operand with
+  | .ok expr => !expr.type.isSigned
+  | .error _ => true
+
+theorem lowerBinary_comparison
+    (fn : CCIR.Function)
+    (dest : CCIR.LocalDecl)
+    (op : UnsignedComparison)
+    (lhs rhs : CCIR.Operand)
+    (lhsExpr rhsExpr : C.CExpr)
+    (hLhsLower : Lower.lowerOperand fn lhs = .ok lhsExpr)
+    (hRhsLower : Lower.lowerOperand fn rhs = .ok rhsExpr)
+    (hLhs : lhsExpr.type.isSigned = false)
+    (hRhs : rhsExpr.type.isSigned = false) :
+    Lower.lowerBinary fn dest op.ccir lhs rhs =
+      .ok (.binary (Lower.lowerType dest.type) op.c lhsExpr rhsExpr) := by
+  unfold Lower.lowerBinary
+  rw [hLhsLower, hRhsLower]
+  cases op <;>
+    simp [UnsignedComparison.ccir, UnsignedComparison.c, Lower.comparisonOp,
+      bind, Except.bind, pure, Except.pure, hLhs, hRhs]
+
+theorem lowerBinary_comparison_error
+    (fn : CCIR.Function)
+    (dest : CCIR.LocalDecl)
+    (op : UnsignedComparison)
+    (lhs rhs : CCIR.Operand)
+    (expr : C.CExpr)
+    (hLower : Lower.lowerBinary fn dest op.ccir lhs rhs = .ok expr) :
+    (∃ lhsExpr, Lower.lowerOperand fn lhs = .ok lhsExpr) ∧
+      (∃ rhsExpr, Lower.lowerOperand fn rhs = .ok rhsExpr) := by
+  unfold Lower.lowerBinary at hLower
+  cases hLhsLower : Lower.lowerOperand fn lhs with
+  | error error =>
+      rw [hLhsLower] at hLower
+      simp [bind, Except.bind] at hLower
+  | ok lhsExpr =>
+      rw [hLhsLower] at hLower
+      cases hRhsLower : Lower.lowerOperand fn rhs with
+      | error error =>
+          rw [hRhsLower] at hLower
+          simp [bind, Except.bind] at hLower
+      | ok rhsExpr =>
+          exact ⟨⟨lhsExpr, rfl⟩, ⟨rhsExpr, rfl⟩⟩
+
+theorem lowerBinary_comparison_correct
+    (fn : CCIR.Function)
+    (dest : CCIR.LocalDecl)
+    (op : UnsignedComparison)
+    (lhs rhs : CCIR.Operand)
+    (expr : C.CExpr)
+    (ccEnv : CCEnv)
+    (cEnv : CEnv)
+    (hEnv : EnvRel ccEnv cEnv)
+    (hLhs : operandLowersUnsigned fn lhs = true)
+    (hRhs : operandLowersUnsigned fn rhs = true)
+    (hLower : Lower.lowerBinary fn dest op.ccir lhs rhs = .ok expr) :
+    evalCExpr cEnv expr =
+      (do
+        let lhsValue ← evalOperand ccEnv lhs
+        let rhsValue ← evalOperand ccEnv rhs
+        evalCCComparison dest.type op lhsValue rhsValue) := by
+  obtain ⟨⟨lhsExpr, hLhsLower⟩, ⟨rhsExpr, hRhsLower⟩⟩ :=
+    lowerBinary_comparison_error fn dest op lhs rhs expr hLower
+  unfold operandLowersUnsigned at hLhs hRhs
+  rw [hLhsLower] at hLhs
+  rw [hRhsLower] at hRhs
+  simp only [Bool.not_eq_true'] at hLhs hRhs
+  rw [lowerBinary_comparison fn dest op lhs rhs lhsExpr rhsExpr
+    hLhsLower hRhsLower hLhs hRhs] at hLower
+  injection hLower with hExpr
+  subst expr
+  simp only [evalCExpr]
+  rw [lowerOperand_correct fn lhs lhsExpr ccEnv cEnv hEnv hLhsLower]
+  rw [lowerOperand_correct fn rhs rhsExpr ccEnv cEnv hEnv hRhsLower]
+  simp only [evalBinary_lowerType_comparison]
+
 def CCEnv.set (env : CCEnv) (id : CCIR.LocalId) (value : Int) : CCEnv :=
   fun candidate => if candidate = id then some value else env candidate
 
@@ -369,6 +499,83 @@ theorem lowerBinary_assignment_correct
               simp only [Option.bind_some, ResultsRel]
               exact hEnv.set dest.id value
 
+def evalCCComparisonStep
+    (env : CCEnv)
+    (dest : CCIR.LocalDecl)
+    (op : UnsignedComparison)
+    (lhs rhs : CCIR.Operand) : Option CCEnv := do
+  let lhsValue ← evalOperand env lhs
+  let rhsValue ← evalOperand env rhs
+  let result ← evalCCComparison dest.type op lhsValue rhsValue
+  pure (env.set dest.id result)
+
+theorem lowerComparison_assignment_correct
+    (fn : CCIR.Function)
+    (dest : CCIR.LocalDecl)
+    (op : UnsignedComparison)
+    (lhs rhs : CCIR.Operand)
+    (expr : C.CExpr)
+    (ccEnv : CCEnv)
+    (cEnv : CEnv)
+    (hEnv : EnvRel ccEnv cEnv)
+    (hLhs : operandLowersUnsigned fn lhs = true)
+    (hRhs : operandLowersUnsigned fn rhs = true)
+    (hLower : Lower.lowerBinary fn dest op.ccir lhs rhs = .ok expr) :
+    ResultsRel
+      (evalCCComparisonStep ccEnv dest op lhs rhs)
+      (evalCAssign cEnv (Lower.localExpr dest) expr) := by
+  have hExpr := lowerBinary_comparison_correct
+    fn dest op lhs rhs expr ccEnv cEnv hEnv hLhs hRhs hLower
+  simp only [evalCCComparisonStep, evalCAssign, Lower.localExpr]
+  rw [hExpr]
+  generalize hLhsValue : evalOperand ccEnv lhs = lhsResult
+  cases lhsResult with
+  | none => simp [ResultsRel]
+  | some lhsValue =>
+      generalize hRhsValue : evalOperand ccEnv rhs = rhsResult
+      cases rhsResult with
+      | none => simp [ResultsRel]
+      | some rhsValue =>
+          generalize hValue :
+            evalCCComparison dest.type op lhsValue rhsValue = result
+          cases result with
+          | none =>
+              change ResultsRel
+                ((evalCCComparison dest.type op lhsValue rhsValue).bind
+                  (fun result => some (ccEnv.set dest.id result)))
+                ((evalCCComparison dest.type op lhsValue rhsValue).bind
+                  (fun result =>
+                    some (cEnv.set (ABI.localName dest.id.value) result)))
+              rw [hValue]
+              trivial
+          | some value =>
+              change ResultsRel
+                ((evalCCComparison dest.type op lhsValue rhsValue).bind
+                  (fun result => some (ccEnv.set dest.id result)))
+                ((evalCCComparison dest.type op lhsValue rhsValue).bind
+                  (fun result =>
+                    some (cEnv.set (ABI.localName dest.id.value) result)))
+              rw [hValue]
+              simp only [Option.bind_some, ResultsRel]
+              exact hEnv.set dest.id value
+
+theorem lowerInstruction_binary_general
+    (fn : CCIR.Function)
+    (block : CCIR.Block)
+    (index : Nat)
+    (dest : CCIR.LocalDecl)
+    (op : CCIR.BinaryOp)
+    (lhs rhs : CCIR.Operand)
+    (expr : C.CExpr)
+    (hLower : Lower.lowerBinary fn dest op lhs rhs = .ok expr) :
+    Lower.lowerInstruction fn block index (.binary dest op lhs rhs) =
+      .ok {
+        statements := #[.assign (Lower.localExpr dest) expr]
+      } := by
+  simp only [Lower.lowerInstruction]
+  rw [hLower]
+  rfl
+
 theorem lowerInstruction_unsigned_binary
     (fn : CCIR.Function)
     (block : CCIR.Block)
@@ -393,6 +600,112 @@ def evalCCAssignStep
     (value : CCIR.Operand) : Option CCEnv := do
   let result ← evalOperand env value
   pure (env.set dest.id result)
+
+/--
+Width-conversion semantics: the operand value is renormalized at the
+destination type. This models the production `.cast` unary lowering when the
+cast target is the destination type itself.
+-/
+def evalCCCastStep
+    (env : CCEnv)
+    (dest : CCIR.LocalDecl)
+    (value : CCIR.Operand) : Option CCEnv := do
+  let operandValue ← evalOperand env value
+  let result ← normalizeCC dest.type operandValue
+  pure (env.set dest.id result)
+
+theorem lowerUnary_cast
+    (fn : CCIR.Function)
+    (dest : CCIR.LocalDecl)
+    (value : CCIR.Operand)
+    (operandExpr : C.CExpr)
+    (hOperand : Lower.lowerOperand fn value = .ok operandExpr) :
+    Lower.lowerUnary fn dest (.cast dest.type) value =
+      .ok (.cast (Lower.lowerType dest.type) operandExpr) := by
+  unfold Lower.lowerUnary
+  rw [hOperand]
+  rfl
+
+theorem lowerUnary_cast_inv
+    (fn : CCIR.Function)
+    (dest : CCIR.LocalDecl)
+    (value : CCIR.Operand)
+    (expr : C.CExpr)
+    (hLower : Lower.lowerUnary fn dest (.cast dest.type) value = .ok expr) :
+    ∃ operandExpr,
+      Lower.lowerOperand fn value = .ok operandExpr ∧
+        expr = .cast (Lower.lowerType dest.type) operandExpr := by
+  unfold Lower.lowerUnary at hLower
+  cases hOperand : Lower.lowerOperand fn value with
+  | error error =>
+      rw [hOperand] at hLower
+      simp [bind, Except.bind] at hLower
+  | ok operandExpr =>
+      rw [hOperand] at hLower
+      change
+        Except.ok (C.CExpr.cast (Lower.lowerType dest.type) operandExpr) =
+          Except.ok expr at hLower
+      injection hLower with hExpr
+      exact ⟨operandExpr, rfl, hExpr.symm⟩
+
+theorem lowerCast_assignment_correct
+    (fn : CCIR.Function)
+    (dest : CCIR.LocalDecl)
+    (value : CCIR.Operand)
+    (operandExpr : C.CExpr)
+    (ccEnv : CCEnv)
+    (cEnv : CEnv)
+    (hEnv : EnvRel ccEnv cEnv)
+    (hOperand : Lower.lowerOperand fn value = .ok operandExpr) :
+    ResultsRel
+      (evalCCCastStep ccEnv dest value)
+      (evalCAssign cEnv (Lower.localExpr dest)
+        (.cast (Lower.lowerType dest.type) operandExpr)) := by
+  have hExpr := lowerOperand_correct fn value operandExpr ccEnv cEnv hEnv hOperand
+  simp only [evalCCCastStep, evalCAssign, Lower.localExpr, evalCExpr]
+  rw [hExpr]
+  simp only [normalize_lowerType]
+  generalize hValue : evalOperand ccEnv value = operandResult
+  cases operandResult with
+  | none => simp [ResultsRel]
+  | some operandValue =>
+      generalize hNorm : normalizeCC dest.type operandValue = result
+      cases result with
+      | none =>
+          change ResultsRel
+            ((normalizeCC dest.type operandValue).bind
+              (fun result => some (ccEnv.set dest.id result)))
+            ((normalizeCC dest.type operandValue).bind
+              (fun result =>
+                some (cEnv.set (ABI.localName dest.id.value) result)))
+          rw [hNorm]
+          trivial
+      | some resultValue =>
+          change ResultsRel
+            ((normalizeCC dest.type operandValue).bind
+              (fun result => some (ccEnv.set dest.id result)))
+            ((normalizeCC dest.type operandValue).bind
+              (fun result =>
+                some (cEnv.set (ABI.localName dest.id.value) result)))
+          rw [hNorm]
+          simp only [Option.bind_some, ResultsRel]
+          exact hEnv.set dest.id resultValue
+
+theorem lowerInstruction_unary_cast
+    (fn : CCIR.Function)
+    (block : CCIR.Block)
+    (index : Nat)
+    (dest : CCIR.LocalDecl)
+    (value : CCIR.Operand)
+    (expr : C.CExpr)
+    (hLower : Lower.lowerUnary fn dest (.cast dest.type) value = .ok expr) :
+    Lower.lowerInstruction fn block index (.unary dest (.cast dest.type) value) =
+      .ok {
+        statements := #[.assign (Lower.localExpr dest) expr]
+      } := by
+  simp only [Lower.lowerInstruction]
+  rw [hLower]
+  rfl
 
 theorem lowerAssignment_correct
     (fn : CCIR.Function)
@@ -445,20 +758,46 @@ inductive StraightInstruction where
       (dest : CCIR.LocalDecl)
       (op : UnsignedBinary)
       (lhs rhs : CCIR.Operand)
+  | compare
+      (dest : CCIR.LocalDecl)
+      (op : UnsignedComparison)
+      (lhs rhs : CCIR.Operand)
+  | cast (dest : CCIR.LocalDecl) (value : CCIR.Operand)
   deriving Repr
 
 def StraightInstruction.toCCIR : StraightInstruction → CCIR.Instruction
   | .assign dest value => .assign dest value
   | .binary dest op lhs rhs => .binary dest op.ccir lhs rhs
+  | .compare dest op lhs rhs => .binary dest op.ccir lhs rhs
+  | .cast dest value => .unary dest (.cast dest.type) value
 
-def StraightInstruction.WellFormed : StraightInstruction → Prop
+/--
+Comparison instructions additionally record that their operands lower to
+non-signed C expressions, which is exactly the cast-free case of the
+production comparison lowering. The predicate is decidable, so concrete
+computations discharge it with `decide`.
+-/
+def StraightInstruction.WellFormed
+    (fn : CCIR.Function) : StraightInstruction → Prop
   | .assign _ _ => True
   | .binary dest _ _ _ => dest.type.isUnsigned = true
+  | .compare _ _ lhs rhs =>
+      operandLowersUnsigned fn lhs = true ∧
+        operandLowersUnsigned fn rhs = true
+  | .cast _ _ => True
+
+instance (fn : CCIR.Function) (instruction : StraightInstruction) :
+    Decidable (instruction.WellFormed fn) := by
+  cases instruction <;>
+    simp only [StraightInstruction.WellFormed] <;>
+    infer_instance
 
 def evalCCStraight
     (env : CCEnv) : StraightInstruction → Option CCEnv
   | .assign dest value => evalCCAssignStep env dest value
   | .binary dest op lhs rhs => evalCCBinaryStep env dest op lhs rhs
+  | .compare dest op lhs rhs => evalCCComparisonStep env dest op lhs rhs
+  | .cast dest value => evalCCCastStep env dest value
 
 def evalCStmt (env : CEnv) : C.CStmt → Option CEnv
   | .assign target value => evalCAssign env target value
@@ -476,6 +815,12 @@ def lowerStraight
   | .binary dest op lhs rhs => do
       pure (.assign (Lower.localExpr dest)
         (← Lower.lowerBinary fn dest op.ccir lhs rhs))
+  | .compare dest op lhs rhs => do
+      pure (.assign (Lower.localExpr dest)
+        (← Lower.lowerBinary fn dest op.ccir lhs rhs))
+  | .cast dest value => do
+      pure (.assign (Lower.localExpr dest)
+        (← Lower.lowerUnary fn dest (.cast dest.type) value))
 
 theorem lowerStraight_correct
     (fn : CCIR.Function)
@@ -484,7 +829,7 @@ theorem lowerStraight_correct
     (ccEnv : CCEnv)
     (cEnv : CEnv)
     (hEnv : EnvRel ccEnv cEnv)
-    (hWellFormed : instruction.WellFormed)
+    (hWellFormed : instruction.WellFormed fn)
     (hLower : lowerStraight fn instruction = .ok stmt) :
     ResultsRel
       (evalCCStraight ccEnv instruction)
@@ -522,6 +867,43 @@ theorem lowerStraight_correct
           subst stmt
           exact lowerBinary_assignment_correct
             fn dest op lhs rhs expr ccEnv cEnv hEnv hWellFormed hExpr
+  | compare dest op lhs rhs =>
+      simp only [StraightInstruction.WellFormed] at hWellFormed
+      simp only [lowerStraight] at hLower
+      generalize hExpr :
+        Lower.lowerBinary fn dest op.ccir lhs rhs = result at hLower
+      cases result with
+      | error error =>
+          change Except.error error = Except.ok stmt at hLower
+          contradiction
+      | ok expr =>
+          change
+            Except.ok (.assign (Lower.localExpr dest) expr) =
+              Except.ok stmt at hLower
+          injection hLower with hStmt
+          subst stmt
+          exact lowerComparison_assignment_correct
+            fn dest op lhs rhs expr ccEnv cEnv hEnv
+              hWellFormed.1 hWellFormed.2 hExpr
+  | cast dest value =>
+      simp only [lowerStraight] at hLower
+      generalize hExpr :
+        Lower.lowerUnary fn dest (.cast dest.type) value = result at hLower
+      cases result with
+      | error error =>
+          change Except.error error = Except.ok stmt at hLower
+          contradiction
+      | ok expr =>
+          change
+            Except.ok (.assign (Lower.localExpr dest) expr) =
+              Except.ok stmt at hLower
+          injection hLower with hStmt
+          subst stmt
+          obtain ⟨operandExpr, hOperand, hCast⟩ :=
+            lowerUnary_cast_inv fn dest value expr hExpr
+          subst expr
+          exact lowerCast_assignment_correct
+            fn dest value operandExpr ccEnv cEnv hEnv hOperand
 
 theorem lowerStraight_is_lowerInstruction
     (fn : CCIR.Function)
@@ -563,6 +945,38 @@ theorem lowerStraight_is_lowerInstruction
           subst stmt
           exact lowerInstruction_unsigned_binary
             fn block index dest op lhs rhs expr hExpr
+  | compare dest op lhs rhs =>
+      simp only [lowerStraight] at hLower
+      generalize hExpr :
+        Lower.lowerBinary fn dest op.ccir lhs rhs = result at hLower
+      cases result with
+      | error error =>
+          change Except.error error = Except.ok stmt at hLower
+          contradiction
+      | ok expr =>
+          change
+            Except.ok (.assign (Lower.localExpr dest) expr) =
+              Except.ok stmt at hLower
+          injection hLower with hStmt
+          subst stmt
+          exact lowerInstruction_binary_general
+            fn block index dest op.ccir lhs rhs expr hExpr
+  | cast dest value =>
+      simp only [lowerStraight] at hLower
+      generalize hExpr :
+        Lower.lowerUnary fn dest (.cast dest.type) value = result at hLower
+      cases result with
+      | error error =>
+          change Except.error error = Except.ok stmt at hLower
+          contradiction
+      | ok expr =>
+          change
+            Except.ok (.assign (Lower.localExpr dest) expr) =
+              Except.ok stmt at hLower
+          injection hLower with hStmt
+          subst stmt
+          exact lowerInstruction_unary_cast
+            fn block index dest value expr hExpr
 
 def evalCCSequence (env : CCEnv) :
     List StraightInstruction → Option CCEnv
@@ -649,7 +1063,7 @@ theorem lowerSequence_correct
     (ccEnv : CCEnv)
     (cEnv : CEnv)
     (hEnv : EnvRel ccEnv cEnv)
-    (hWellFormed : ∀ instruction ∈ instructions, instruction.WellFormed)
+    (hWellFormed : ∀ instruction ∈ instructions, instruction.WellFormed fn)
     (hLower : lowerSequence fn instructions = .ok statements) :
     ResultsRel
       (evalCCSequence ccEnv instructions)
@@ -678,10 +1092,10 @@ theorem lowerSequence_correct
               injection hLower with hStatements
               subst statements
               have hHeadWellFormed :
-                  instruction.WellFormed :=
+                  instruction.WellFormed fn :=
                 hWellFormed instruction (by simp)
               have hRestWellFormed :
-                  ∀ next ∈ rest, next.WellFormed := by
+                  ∀ next ∈ rest, next.WellFormed fn := by
                 intro next hNext
                 exact hWellFormed next (by simp [hNext])
               have hStep := lowerStraight_correct fn instruction stmt
@@ -702,5 +1116,120 @@ theorem lowerSequence_correct
                   | some nextC =>
                       simpa [evalCCSequence, evalCSequence, hCC, hC] using
                         ih tail nextCC nextC hStep hRestWellFormed hTail
+
+/--
+Loop bodies compose. These lemmas let bounded-iteration (fold) certificates
+reuse `lowerSequence_correct` without re-proving anything per iteration: an
+unrolled trace is still one straight-line trace, and its lowering and
+semantics decompose along the unrolling.
+-/
+theorem lowerSequence_append
+    (fn : CCIR.Function)
+    (first rest : List StraightInstruction)
+    (firstStatements restStatements : List C.CStmt)
+    (hFirst : lowerSequence fn first = .ok firstStatements)
+    (hRest : lowerSequence fn rest = .ok restStatements) :
+    lowerSequence fn (first ++ rest) =
+      .ok (firstStatements ++ restStatements) := by
+  induction first generalizing firstStatements with
+  | nil =>
+      simp only [lowerSequence] at hFirst
+      injection hFirst with hStatements
+      subst firstStatements
+      simpa using hRest
+  | cons instruction tail ih =>
+      simp only [lowerSequence] at hFirst
+      generalize hHead : lowerStraight fn instruction = headResult at hFirst
+      cases headResult with
+      | error error =>
+          change Except.error error = Except.ok firstStatements at hFirst
+          contradiction
+      | ok stmt =>
+          generalize hTail : lowerSequence fn tail = tailResult at hFirst
+          cases tailResult with
+          | error error =>
+              change Except.error error = Except.ok firstStatements at hFirst
+              contradiction
+          | ok tailStatements =>
+              change
+                Except.ok (stmt :: tailStatements) =
+                  Except.ok firstStatements at hFirst
+              injection hFirst with hStatements
+              subst firstStatements
+              show lowerSequence fn (instruction :: (tail ++ rest)) = _
+              simp only [lowerSequence]
+              rw [hHead, ih tailStatements hTail]
+              rfl
+
+theorem evalCCSequence_append
+    (env : CCEnv)
+    (first rest : List StraightInstruction) :
+    evalCCSequence env (first ++ rest) =
+      (do
+        let env ← evalCCSequence env first
+        evalCCSequence env rest) := by
+  induction first generalizing env with
+  | nil => simp [evalCCSequence]
+  | cons instruction tail ih =>
+      cases hHead : evalCCStraight env instruction with
+      | none => simp [evalCCSequence, hHead]
+      | some next => simp [evalCCSequence, hHead, ih next]
+
+theorem evalCSequence_append
+    (env : CEnv)
+    (first rest : List C.CStmt) :
+    evalCSequence env (first ++ rest) =
+      (do
+        let env ← evalCSequence env first
+        evalCSequence env rest) := by
+  induction first generalizing env with
+  | nil => simp [evalCSequence]
+  | cons stmt tail ih =>
+      cases hHead : evalCStmt env stmt with
+      | none => simp [evalCSequence, hHead]
+      | some next => simp [evalCSequence, hHead, ih next]
+
+/--
+A bounded loop, expressed as the concatenation of its unrolled iterations.
+This is the proved-fragment encoding of fold-style `native_decide`
+certificates: `body k` is the straight-line trace of iteration `k`.
+-/
+def foldTrace
+    (count : Nat)
+    (body : Nat → List StraightInstruction) : List StraightInstruction :=
+  (List.range count).flatMap body
+
+theorem foldTrace_zero (body : Nat → List StraightInstruction) :
+    foldTrace 0 body = [] := rfl
+
+theorem foldTrace_succ
+    (count : Nat)
+    (body : Nat → List StraightInstruction) :
+    foldTrace (count + 1) body = foldTrace count body ++ body count := by
+  simp [foldTrace, List.range_succ]
+
+/--
+Evaluating an unrolled bounded loop is a monadic fold of its iteration
+semantics. This connects fold certificates to ordinary Lean folds, so a
+`Decision` specification can be proved by induction on the iteration count
+instead of by whole-trace evaluation.
+-/
+theorem evalCCSequence_foldTrace
+    (body : Nat → List StraightInstruction)
+    (count : Nat)
+    (env : CCEnv) :
+    evalCCSequence env (foldTrace count body) =
+      (List.range count).foldlM
+        (fun env index => evalCCSequence env (body index)) env := by
+  induction count generalizing env with
+  | zero => simp [foldTrace, evalCCSequence]
+  | succ count ih =>
+      rw [foldTrace_succ, evalCCSequence_append, List.range_succ]
+      cases hPrefix :
+          evalCCSequence env (foldTrace count body) with
+      | none => simp [ih] at hPrefix; simp [hPrefix]
+      | some next =>
+          rw [ih] at hPrefix
+          simp [hPrefix]
 
 end LeanCompCert.Proof

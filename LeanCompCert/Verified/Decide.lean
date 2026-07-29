@@ -28,7 +28,7 @@ structure Computation where
   instructions : List StraightInstruction
   statements : List C.CStmt
   output : CCIR.LocalId
-  wellFormed : ∀ instruction ∈ instructions, instruction.WellFormed
+  wellFormed : ∀ instruction ∈ instructions, instruction.WellFormed fn
   lowered : lowerSequence fn instructions = .ok statements
 
 namespace Computation
