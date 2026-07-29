@@ -10,6 +10,17 @@ class RewriteResult:
     applied: tuple[str, ...]
 
 
+def _drop_empty_flexible_member(initializer: str, member: str) -> str:
+    """Remove `.member = {}` and exactly one adjacent comma, whether the
+    member is the last field or not."""
+    text, count = re.subn(
+        rf",\s*\.{member}\s*=\s*\{{\s*\}}", "", initializer
+    )
+    if count:
+        return text
+    return re.sub(rf"\.{member}\s*=\s*\{{\s*\}}\s*,?\s*", "", initializer)
+
+
 def mechanical_rewrite(source: str) -> RewriteResult:
     """Apply deliberately conservative rewrites to a copy of generated C."""
     text = source
@@ -121,9 +132,7 @@ def mechanical_rewrite(source: str) -> RewriteResult:
             "uint16_t m_arity; uint16_t m_num_fixed;"
         )
         if fields == 0:
-            initializer = re.sub(
-                r",?\s*\.m_objs\s*=\s*\{\s*\}", "", initializer
-            )
+            initializer = _drop_empty_flexible_member(initializer, "m_objs")
             return f"{prefix} }} {name} = {initializer};"
         return (
             f"{prefix} lean_object *m_objs[{fields}]; }} "
@@ -151,8 +160,8 @@ def mechanical_rewrite(source: str) -> RewriteResult:
                 "size_t m_size; size_t m_capacity;"
             )
             if fields == 0:
-                initializer = re.sub(
-                    r",?\s*\.m_data\s*=\s*\{\s*\}", "", initializer
+                initializer = _drop_empty_flexible_member(
+                    initializer, "m_data"
                 )
                 return f"{prefix} }} {name} = {initializer};"
             return (

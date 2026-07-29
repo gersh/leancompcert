@@ -26,12 +26,19 @@ def _git_revision(root: Path) -> str | None:
 
 def runtime_hash(root: Path) -> str:
     digest = hashlib.sha256()
-    inputs = [
+    project_inputs = [
         ("project/runtime/include/stdatomic.h", root / "runtime" / "include" / "stdatomic.h"),
         ("project/runtime/adapters/atomics.c", root / "runtime" / "adapters" / "atomics.c"),
         ("project/runtime/portable/unreachable.c", root / "runtime" / "portable" / "unreachable.c"),
         ("project/runtime/inventory.yaml", root / "runtime" / "inventory.yaml"),
     ]
+    missing = [label for label, path in project_inputs if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "runtime ABI inputs missing (run from a repository checkout): "
+            + ", ".join(missing)
+        )
+    inputs = list(project_inputs)
     prefix = subprocess.run(
         ["lean", "--print-prefix"],
         text=True,

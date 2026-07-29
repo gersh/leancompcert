@@ -46,6 +46,11 @@ PARSING LIMITATIONS (documented, acceptable for the emitter's regular output):
   * A bare `Sloop` (rolled loop printed without the `Swhile` notation) is matched
     against a C `while` by structure only; its condition is compared when it
     appears in the `Swhile`/`Sfor` notational forms clightgen actually emits.
+  * Calls are compared as full events: callee name, result destination (or its
+    absence), and every argument's descriptor, in order.  Calls nested inside
+    expressions are parse errors on the C side and non-`Evar` callees
+    (function pointers) are parse errors on the Clight side -- both outside
+    the emitter's certificate fragment.
 """
 
 from __future__ import annotations
@@ -96,8 +101,10 @@ def c_expr(text):
     """Classify an emitter expression into a normalized descriptor.
 
     Descriptors: ("var", name) | ("lit", value, width) |
-                 ("bin", OpName, lhs, rhs) | ("un", OpName, arg) |
-                 ("call", name).  Casts are erased.
+                 ("bin", OpName, lhs, rhs) | ("un", OpName, arg).
+    Casts are erased.  Calls appear only as statements, never inside
+    expressions (Clight has no call expression), so a nested call here is a
+    parse error.
     """
     s = text.strip()
     # Strip a fully enclosing parenthesis pair.
@@ -118,7 +125,10 @@ def c_expr(text):
         return ("un", C_TO_CLIGHT_UNOP[s[0]], c_expr(s[1:]))
     m = re.match(r"([A-Za-z_]\w*)\(", s)
     if m and _match_paren(s, m.end() - 1) == len(s) - 1:
-        return ("call", m.group(1))
+        # Clight has no call *expressions* (calls are Scall statements), so a
+        # call nested inside an expression could never correspond; top-level
+        # calls are handled as statements before c_expr is reached.
+        raise ParseError(f"call expression inside a C expression: {text!r}")
     # Leftmost operand: parenthesized group, or a var/literal token.
     if s.startswith("("):
         close = _match_paren(s, 0)
@@ -136,6 +146,37 @@ def c_expr(text):
         if tail.startswith(op):
             return ("bin", C_TO_CLIGHT_OP[op], c_expr(left), c_expr(tail[len(op):]))
     raise ParseError(f"unrecognized C expression: {text!r}")
+
+
+def _split_top_level_args(s):
+    """Split a call's argument text on top-level commas; () -> no arguments."""
+    s = s.strip()
+    if not s:
+        return []
+    parts, depth, start = [], 0, 0
+    for j, ch in enumerate(s):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(s[start:j])
+            start = j + 1
+    parts.append(s[start:])
+    return parts
+
+
+def _c_call(text):
+    """Parse `name(args)` (the entire text) into ("name", (arg descriptors));
+    return None when the text is not exactly one top-level call."""
+    s = text.strip()
+    if re.fullmatch(r"U?INT(?:8|16|32|64)_C\(-?\d+\)", s):
+        return None                     # fixed-width literal macro, not a call
+    m = re.match(r"([A-Za-z_]\w*)\s*\(", s)
+    if not m or _match_paren(s, m.end() - 1) != len(s) - 1:
+        return None
+    args = _split_top_level_args(s[m.end():-1])
+    return m.group(1), tuple(c_expr(a) for a in args)
 
 
 def _match_paren(s, i):
@@ -195,7 +236,11 @@ def _parse_c_block(lines, i, out):
             continue
         m = re.fullmatch(r"(v_\d+)\s*=\s*(.*);", line)
         if m:
-            out.events.append(("assign", m.group(1), c_expr(m.group(2))))
+            call = _c_call(m.group(2))
+            if call is not None:
+                out.events.append(("call", call[0], m.group(1), call[1]))
+            else:
+                out.events.append(("assign", m.group(1), c_expr(m.group(2))))
             continue
         m = re.fullmatch(r"while\s*\((.*)\)", line)
         if m:
@@ -224,10 +269,11 @@ def _parse_c_block(lines, i, out):
         if m:
             out.events.append(("return", c_expr(m.group(1)) if m.group(1) else None))
             continue
-        m = re.fullmatch(r"(\w+)\s*\(.*\)\s*;", line)
-        if m:
-            out.events.append(("call", m.group(1)))
-            continue
+        if line.endswith(";"):
+            call = _c_call(line[:-1])
+            if call is not None:
+                out.events.append(("call", call[0], None, call[1]))
+                continue
         raise ParseError(f"unrecognized C statement: {line!r}")
     return i
 
@@ -279,7 +325,7 @@ def v_expr(node):
     if head == "Ecast":
         return v_expr(node[1])                      # casts erased (see docstring)
     if head == "Etempvar" or head == "Evar":
-        return ("var", node[1].lstrip("_"))
+        return ("var", node[1].removeprefix("_"))
     if head == "Econst_long":
         return ("lit", int(_repr_value(node[1])) % (1 << 64), 64)
     if head == "Econst_int":
@@ -297,6 +343,32 @@ def _repr_value(node):
     while isinstance(value, list):                  # (Int.repr (-5)) nests once
         value = value[0]
     return value
+
+
+def _v_call_args(node):
+    """Normalize a Coq `list expr` term (Scall's argument list) into a tuple
+    of expression descriptors.  Handles `nil`, the `e :: e' :: nil` notation
+    clightgen prints, and explicit `cons` applications."""
+    if node in ("nil", "@nil"):
+        return ()
+    if not isinstance(node, list):
+        raise ParseError(f"unrecognized Clight argument list: {node!r}")
+    if node and node[0] == "cons":                  # (cons e rest)
+        return (v_expr(node[1]),) + _v_call_args(node[2])
+    parts, buf = [], []
+    for item in node:                               # e :: e' :: ... :: nil
+        if item == "::":
+            parts.append(buf)
+            buf = []
+        else:
+            buf.append(item)
+    parts.append(buf)
+    if len(parts) < 2 or parts[-1] not in (["nil"], ["@nil"]):
+        raise ParseError(f"unrecognized Clight argument list: {node!r}")
+    out = []
+    for p in parts[:-1]:
+        out.append(v_expr(p[0] if len(p) == 1 else p))
+    return tuple(out)
 
 
 def v_walk(root, out):
@@ -320,7 +392,8 @@ def v_walk(root, out):
         if head == "Ssequence":
             work += [node[2], node[1]]              # node[1] runs first
         elif head == "Sset":
-            out.events.append(("assign", node[1].lstrip("_"), v_expr(node[2])))
+            out.events.append(
+                ("assign", node[1].removeprefix("_"), v_expr(node[2])))
         elif head in ("Swhile", "Sfor'"):
             out.events.append(("loop", v_expr(node[1])))
             work += [("#emit", ("endloop",)), node[2]]
@@ -333,19 +406,32 @@ def v_walk(root, out):
             work += [("#emit", ("endif",)), node[3],
                      ("#emit", ("else",)), node[2]]
         elif head == "Slabel":
-            out.events.append(("label", node[1].lstrip("_")))
+            out.events.append(("label", node[1].removeprefix("_")))
             work.append(node[2])
         elif head == "Sgoto":
-            out.events.append(("goto", node[1].lstrip("_")))
+            out.events.append(("goto", node[1].removeprefix("_")))
         elif head == "Sreturn":
             arg = node[1] if len(node) > 1 else "None"
             out.events.append(
                 ("return", None if arg == "None" else v_expr(arg[1])))
         elif head == "Scall":
-            callee = node[2]
-            name = callee[1].lstrip("_") if isinstance(callee, list) \
-                else str(callee)
-            out.events.append(("call", name))
+            dest, callee = node[1], node[2]
+            if dest == "None":
+                dest_name = None
+            elif isinstance(dest, list) and len(dest) == 2 \
+                    and dest[0] == "Some" and isinstance(dest[1], str):
+                dest_name = dest[1].removeprefix("_")
+            else:
+                raise ParseError(
+                    f"unrecognized Scall destination: {dest!r}")
+            if not (isinstance(callee, list) and callee
+                    and callee[0] == "Evar" and isinstance(callee[1], str)):
+                raise ParseError(
+                    f"unrecognized Scall callee (not a named function): "
+                    f"{callee!r}")
+            name = callee[1].removeprefix("_")
+            out.events.append(
+                ("call", name, dest_name, _v_call_args(node[3])))
         else:
             raise ParseError(f"unrecognized Clight statement head: {head}")
 
@@ -384,8 +470,6 @@ def describe(d):
         return f"({describe(d[2])} {d[1]} {describe(d[3])})"
     if kind == "un":
         return f"({d[1]} {describe(d[2])})"
-    if kind == "call":
-        return f"{d[1]}(...)"
     return repr(d)
 
 
@@ -394,8 +478,12 @@ def event_str(e):
         return f"{e[1]} := {describe(e[2])}"
     if e[0] in ("loop", "if"):
         return f"{e[0]} {describe(e[1])}"
-    if e[0] in ("label", "goto", "call"):
+    if e[0] in ("label", "goto"):
         return f"{e[0]} {e[1]}"
+    if e[0] == "call":
+        _, name, dest, args = e
+        prefix = f"{dest} := " if dest is not None else ""
+        return f"{prefix}call {name}({', '.join(describe(a) for a in args)})"
     if e[0] == "return":
         return f"return {describe(e[1])}"
     return e[0]

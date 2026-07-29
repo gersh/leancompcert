@@ -21,9 +21,15 @@ import LeanCompCert.Verified.MemFragment
 
 /-!
 Axiom-audit gate (M7): prints the axiom dependencies of every certificate
-theorem. The acceptance script fails if any native-evaluation axiom
-(`ofReduceBool`/`ofReduceNat`, `Lean.trustCompiler`) appears.
+theorem. The acceptance script enforces an allowlist — it fails if any
+axiom outside `propext`/`Classical.choice`/`Quot.sound` appears, which
+covers the native-evaluation axioms (`ofReduceBool`/`ofReduceNat`,
+`Lean.trustCompiler`) as well as `sorryAx` and bespoke axioms.
+
+New certificates must be added to this list by hand; a misspelled name
+fails elaboration, so an entry cannot silently audit nothing.
 -/
+#print axioms LeanCompCert.Verified.Computation.result_preserved
 #print axioms LeanCompCert.Testing.VerifiedDecide.source_computation_returns_42
 #print axioms LeanCompCert.Testing.MertensCertificate.referenceSum_eq
 #print axioms LeanCompCert.Testing.WideMertensCertificate.referenceSum_eq

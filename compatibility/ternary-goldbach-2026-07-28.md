@@ -3,7 +3,7 @@
 - Date: 2026-07-28
 - Host: AArch64 Linux
 - CompCert: 3.17
-- Project: <https://github.com/gersh/ternarygoldbach> (ternary-goldbach-lean)
+- Project: <https://github.com/gersh/ternary-goldbach-lean>
 - Revision: `700178d068c3763e8f161c9116fda41fccc074cb` (2026-07-26)
 - Toolchain: Lean 4.32.0
 

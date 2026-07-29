@@ -121,7 +121,10 @@ if command -v clightgen >/dev/null 2>&1; then
   echo "clightgen translation validation: all certificate units are Clight"
   python3 scripts/clight-correspond.py "$fixedpoint_cert_c" "${fixedpoint_cert_c%.c}.v"
   echo "clight structural correspondence: fixed-point certificate PASS"
-  if [ -d /home/gersh/CompCert-3.17 ]; then
+  compcert_coq_dir="${COMPCERT_DIR:-/home/gersh/CompCert-3.17}"
+  if [ -d "$compcert_coq_dir" ]; then
+    COMPCERT_DIR="$compcert_coq_dir"
+    export COMPCERT_DIR
     python3 scripts/clight-correspond-coq.py "$fixedpoint_cert_c" \
       "${fixedpoint_cert_c%.c}.v" "$output/coq-correspond"
     echo "coq-kernel correspondence: fixed-point certificate Qed"
@@ -141,11 +144,32 @@ fi
 audit_log="$output/axiom-audit.txt"
 lake env lean scripts/AxiomAudit.lean > "$audit_log"
 test -s "$audit_log"
-if grep -Eq "ofReduceBool|ofReduceNat|trustCompiler" "$audit_log"; then
-  echo "error: native-evaluation axiom found in certificate audit" >&2
-  exit 1
-fi
-echo "axiom audit clean: no native-evaluation axioms"
+# Allowlist check: every audited theorem may depend only on the three
+# standard axioms.  This also rejects `sorryAx` and any bespoke axiom, not
+# just the native-evaluation axioms.
+python3 - "$audit_log" <<'EOF'
+import re
+import sys
+
+allowed = {"propext", "Classical.choice", "Quot.sound"}
+text = open(sys.argv[1]).read()
+entries = re.findall(r"'([^']+)' depends on axioms: \[([^\]]*)\]", text)
+if not entries:
+    sys.exit("error: axiom audit output had no parseable axiom reports")
+bad = [
+    (name, axiom)
+    for name, axioms in entries
+    for axiom in (a.strip() for a in axioms.split(","))
+    if axiom and axiom not in allowed
+]
+for name, axiom in bad:
+    print(f"error: {name} depends on non-allowlisted axiom {axiom}",
+          file=sys.stderr)
+if bad:
+    sys.exit(1)
+print(f"axiom audit clean: {len(entries)} theorems, "
+      "axioms within {propext, Classical.choice, Quot.sound}")
+EOF
 
 python3 -m unittest discover -s tests -v
 echo "CompCert integration tests passed"

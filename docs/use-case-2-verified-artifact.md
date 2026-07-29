@@ -23,7 +23,7 @@ Three machine-checked layers meet at the artifact:
    semantics computes your value.
 2. **In Coq's kernel:** for the direct-emission path, CompCert's own
    bigstep semantics computes the certified value —
-   `eval_funcall ge m (Internal f) nil E0 m (Vlong value)` for **every**
+   `eval_funcall function_entry2 ge m (Internal f) nil E0 m (Vlong value)` for **every**
    global environment and **every** memory (proved via a fragment
    evaluator shown sound against `ClightBigstep.exec_stmt`; see
    `scripts/coq/ClightFragmentSem.v`).

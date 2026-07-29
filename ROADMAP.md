@@ -320,21 +320,16 @@ later effort).
 
 ## Sequencing and effort
 
-Current state: **M1 complete**; **M2 core complete** (add, subtract,
-compare, multiply, divide with value theorems; the fixed-point acceptance
-certificate ships) with the reciprocal/signed/dyadic-interval layers
-remaining; **M3 partial** (early-exit equivalence proved, `iterN`
-subsumed; sqrt/gcd spec equivalences and the front end remain); **M4
-emission + demonstration delivered** (statement-level correspondence
-lifting remains); **M5 not started** (the largest remaining item); **M6
-translation validation operational** (checked AST correspondence and
-direct emission remain); **M7 partial** (audit gate, authoring guide, and
-the full acceptance pipeline in place; API stability/semver remain). M5
-and the M4/M6 proof-lifting items are the remaining substantial proof
-engineering; M7 hardens continuously and gates the 1.0.
+Current state: **all seven milestones are implemented**, with the
+per-milestone evidence recorded in the sections above. The remaining
+open item is M7's 1.0 gate: the public API is stable under semantic
+versioning from 0.2.x, and 1.0 is cut once external consumers have
+exercised the surface (the `examples/consumer` project demonstrates the
+intended integration).
 
-First external validation target on this path: the integer certificate
-families of the ternary-goldbach development (ternary arithmetic,
-ChebyshevPsi, vmHead, little-Mertens) after M1–M2 — monotone, permanent
-reductions of a real proof's native trust surface, with everything else
-built on top by the consumer.
+First external validation target: the integer certificate families of
+the ternary-goldbach development (ternary arithmetic, ChebyshevPsi,
+vmHead, little-Mertens) — monotone, permanent reductions of a real
+proof's native trust surface, with everything else built on top by the
+consumer. What that migration needs from the goldbach side is described
+in Tutorial 3 and the compatibility reports.

@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+- **Verification-gate hardening** (audit follow-up):
+  - `check-runtime` now fails with status `runtime-missing` when no
+    runtime C sources are found, instead of reporting `compatible`
+    having checked nothing; `runtime_hash` raises when the project's
+    runtime ABI inputs are absent instead of hashing `<missing>`
+    placeholders (both were reachable from a non-editable pip install,
+    which does not ship `runtime/`).
+  - `lean-compcert-probe` exits 3 (not 0) on `probe-incomplete`, so a
+    missing `ccomp` can no longer look like success to a caller gating
+    on the exit code.
+  - The acceptance suite's axiom gate is now an allowlist: any axiom
+    outside `propext`/`Classical.choice`/`Quot.sound` — including
+    `sorryAx` and bespoke axioms, not just the native-evaluation axioms
+    — fails the build. `Computation.result_preserved` joined the audit
+    list.
+- **Correspondence checkers compare calls in full**: both
+  `clight-correspond.py` and the Coq-kernel checker
+  (`clight-correspond-coq.py`, `ECall` now carries the destination and
+  argument descriptors) compare a call's result destination and every
+  argument, not just the callee name; the Coq self-test's mini
+  certificate exercises a call, and its negative control must fail at
+  the lemma stage (an infrastructure failure no longer counts as a
+  rejected mutant). Leading-underscore identifier conflation
+  (`lstrip` → `removeprefix`) fixed; function-pointer callees are
+  parse errors.
+- **`clight-direct-verify.py`** caches `.vo` files keyed on content plus
+  the exact `coqc` and CompCert flags (switching toolchains no longer
+  reuses a stale cache), and honors `COMPCERT_DIR`/`COQC`; the
+  acceptance suite's Coq gates honor `COMPCERT_DIR` instead of a
+  hardcoded path.
+- **Normalizer**: removing an empty flexible-array member that is not
+  the last initializer field no longer leaves a stray comma.
+- **Python packaging**: version aligned to 0.2.0 (build manifests
+  previously recorded a stale 0.1.0 `backendVersion`).
+- Minor robustness: `_CoqProject` token-scan off-by-one, empty
+  `-version` output guards, `run_command` no longer treats an explicit
+  empty environment as "inherit"; ROADMAP's stale "Sequencing and
+  effort" section rewritten to match the implemented milestones.
+
 - **Documentation restructured around the two use cases** — a verified
   `native_decide` (`docs/use-case-1-verified-native-decide.md`) and a
   trusted compiled artifact (`docs/use-case-2-verified-artifact.md`) —

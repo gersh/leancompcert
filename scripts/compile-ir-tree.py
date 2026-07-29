@@ -57,7 +57,8 @@ def ccomp_version(ccomp: str) -> str:
     result = subprocess.run(
         [ccomp, "-version"], capture_output=True, text=True, check=False
     )
-    return (result.stdout or result.stderr).strip().splitlines()[0]
+    lines = (result.stdout or result.stderr).strip().splitlines()
+    return lines[0] if lines else "unknown"
 
 
 def compile_unit(

@@ -64,6 +64,17 @@ class RewriteTests(unittest.TestCase):
         self.assertNotIn(".m_objs", result.text)
         self.assertIn("materialize static closure flexible array", result.applied)
 
+    def test_empty_flexible_member_not_last_leaves_valid_initializer(self) -> None:
+        source = (
+            "static const lean_closure_object l_closure = "
+            "{.m_objs = {}, .m_header = {.m_rc = 0}, .m_fun = (void*)l_fun, "
+            ".m_arity = 3, .m_num_fixed = 0};"
+        )
+        result = mechanical_rewrite(source)
+        self.assertNotIn(".m_objs", result.text)
+        self.assertNotIn("{,", result.text.replace(" ", ""))
+        self.assertIn("l_closure = {.m_header", result.text)
+
     def test_materializes_static_object_array(self) -> None:
         source = (
             "static const lean_array_object l_array = "

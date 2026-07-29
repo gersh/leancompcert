@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from lean_compcert_probe.cli import main as probe_main
 from lean_compcert_probe.probe import run_probe
 
 
@@ -76,6 +77,34 @@ esac
             )
             self.assertEqual(report.status, "probe-incomplete")
             self.assertIn("tool unavailable", report.failures)
+
+    def test_cli_exit_code_distinguishes_incomplete_from_success(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = Path(directory)
+            source = tmp_path / "Main.lean"
+            source.write_text("def main : IO Unit := pure ()\n", encoding="utf-8")
+            fake_lean = _executable(
+                tmp_path / "lean",
+                """#!/bin/sh
+case "$1" in
+  --version) echo "Lean test" ;;
+  -g) echo "revision" ;;
+  -c) echo 'int x;' > "$2" ;;
+esac
+""",
+            )
+            exit_code = probe_main(
+                [
+                    str(source),
+                    "--output",
+                    str(tmp_path / "out"),
+                    "--lean",
+                    str(fake_lean),
+                    "--ccomp",
+                    "definitely-not-installed-ccomp",
+                ]
+            )
+            self.assertEqual(exit_code, 3)
 
     def test_matching_nonzero_execution_is_valid(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

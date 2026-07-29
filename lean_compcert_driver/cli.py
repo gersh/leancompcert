@@ -104,7 +104,11 @@ def _build_or_emit(args: argparse.Namespace, differential: bool) -> int:
     if error := _validate_mode(args.profile, args.runtime):
         print(f"error: {error}", file=sys.stderr)
         return 2
-    active_runtime_hash = runtime_hash(_root())
+    try:
+        active_runtime_hash = runtime_hash(_root())
+    except FileNotFoundError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
     if (
         args.expected_runtime_abi_hash
         and args.expected_runtime_abi_hash != active_runtime_hash

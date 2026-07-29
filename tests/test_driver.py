@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import stat
 import tempfile
 import unittest
 from pathlib import Path
 
 from lean_compcert_driver.cli import _insert_capture_import, _validate_mode
 from lean_compcert_driver.manifest import abi_manifest, runtime_hash, write_build_manifest
+from lean_compcert_driver.runtime_check import check_runtime
 from lean_compcert_probe.model import ProbeReport
 
 
@@ -22,6 +24,24 @@ class DriverTests(unittest.TestCase):
         self.assertTrue(
             derived.startswith("module\nimport LeanCompCert.CompilerAdapter.Pass\n")
         )
+
+    def test_check_runtime_fails_without_runtime_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "empty-root"
+            root.mkdir()
+            fake_ccomp = root / "ccomp"
+            fake_ccomp.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_ccomp.chmod(fake_ccomp.stat().st_mode | stat.S_IXUSR)
+            compatible, payload = check_runtime(
+                root, Path(directory) / "out", str(fake_ccomp), None, 10
+            )
+            self.assertFalse(compatible)
+            self.assertEqual(payload["status"], "runtime-missing")
+
+    def test_runtime_hash_requires_runtime_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(FileNotFoundError):
+                runtime_hash(Path(directory))
 
     def test_manifest_contains_assurance_boundary(self) -> None:
         root = Path(__file__).resolve().parents[1]

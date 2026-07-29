@@ -79,7 +79,13 @@ def main(argv: list[str] | None = None) -> int:
         candidate_command=args.candidate_command,
     )
     print(f"{report.status}: {output / 'report.md'}")
-    return 0 if report.status in {"compatible", "probe-incomplete"} else 1
+    # Exit codes: 0 compatible, 1 incompatible, 2 usage error, 3 incomplete
+    # (a required tool was unavailable, so nothing was actually verified).
+    if report.status == "compatible":
+        return 0
+    if report.status == "probe-incomplete":
+        return 3
+    return 1
 
 
 if __name__ == "__main__":

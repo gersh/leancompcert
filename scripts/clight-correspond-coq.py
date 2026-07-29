@@ -49,8 +49,10 @@ LIMITATIONS:
     clightgen -normalize emits; a rolled `Sloop` of any other shape extracts
     as `ELoop None` and will NOT match a C while (stricter than the Python
     checker, which let a bare Sloop match any condition).
-  * Call *expressions* in C assignments (`v = f();`) are rejected: Clight has
-    no call expression (calls are `Scall` statements) and the emitter's
+  * Calls are compared as full `ECall` events -- result destination, callee
+    ident, and every argument descriptor in order (`v = f(a);` maps to
+    Clight's `Scall (Some _v) (Evar _f _) [a]`).  Calls nested inside larger
+    expressions are rejected: Clight has no call expression and the emitter's
     certificate fragment never produces them.
   * `Econst_float`/`Econst_single` and address-of/deref/field expressions
     extract as `Dunknown`, and `Sassign`/`Sbuiltin`/`Sswitch` as `EOther`:
@@ -109,7 +111,7 @@ Inductive ev : Type :=
 | ELabel (l : ident)
 | EGoto (l : ident)
 | EReturn (r : option dsc)
-| ECall (f : ident)
+| ECall (dst : option ident) (f : ident) (args : list dsc)
 | EOther.
 
 Fixpoint dsc_of_expr (e : Clight.expr) : dsc :=
@@ -132,7 +134,7 @@ Fixpoint events (s : Clight.statement) : list ev :=
   | Sskip | Sbreak | Scontinue => []
   | Sassign _ _ => [EOther]
   | Sset dst e => [EAssign dst (dsc_of_expr e)]
-  | Scall _ (Evar f _) _ => [ECall f]
+  | Scall dst (Evar f _) args => [ECall dst f (map dsc_of_expr args)]
   | Scall _ _ _ => [EOther]
   | Sbuiltin _ _ _ _ => [EOther]
   | Ssequence s1 s2 => events s1 ++ events s2
@@ -152,6 +154,11 @@ Fixpoint events (s : Clight.statement) : list ev :=
 MINI_C = '''\
 #include <stdint.h>
 
+uint64_t l_help(uint64_t x)
+{
+    return x + UINT64_C(1);
+}
+
 uint64_t l_mini(void)
 {
     uint64_t v_0;
@@ -159,6 +166,7 @@ uint64_t l_mini(void)
     uint64_t v_2;
     v_0 = UINT64_C(2);
     v_1 = v_0 + UINT64_C(3);
+    l_help(v_1);
     v_2 = v_1 * v_0;
     return v_2;
 }
@@ -191,7 +199,7 @@ def compcert_flags(compcert_dir):
         toks = open(proj).read().split()
         i = 0
         while i < len(toks):
-            if toks[i] in ("-R", "-Q") and i + 2 < len(toks) + 1:
+            if toks[i] in ("-R", "-Q") and i + 2 < len(toks):
                 mappings.append((toks[i], toks[i + 1], toks[i + 2]))
                 i += 3
             else:
@@ -230,9 +238,10 @@ def find_coqc(explicit, flags, outdir):
         r = subprocess.run([cand] + flags + [probe],
                            capture_output=True, text=True)
         if r.returncode == 0:
-            ver = subprocess.run([cand, "--version"], capture_output=True,
-                                 text=True).stdout.splitlines()[0]
-            return cand, ver
+            ver_lines = subprocess.run(
+                [cand, "--version"], capture_output=True, text=True
+            ).stdout.splitlines()
+            return cand, ver_lines[0] if ver_lines else "unknown version"
         tried.append(f"{cand}: {r.stderr.strip().splitlines()[-1] if r.stderr.strip() else 'failed'}")
     raise GenError("no working coqc found (needs the Coq version the CompCert "
                    ".vo files were built with).  Tried:\n  " + "\n  ".join(tried))
@@ -305,7 +314,10 @@ class ExpectedPrinter:
             return "EReturn None" if e[1] is None \
                 else f"EReturn (Some {self.dsc(e[1])})"
         if kind == "call":
-            return f"ECall {self.ident(e[1])}"
+            _, name, dest, args = e
+            dst = "None" if dest is None else f"(Some {self.ident(dest)})"
+            arg_list = "[" + "; ".join(self.dsc(a) for a in args) + "]"
+            return f"ECall {dst} {self.ident(name)} {arg_list}"
         raise GenError(f"{self.func}: unknown C event {e!r}")
 
 
@@ -345,8 +357,11 @@ def run_coqc(coqc, flags, path, label):
 
 
 def check_pair(cc_mod, c_path, v_path, outdir, coqc, flags, quiet_fail=False):
-    """Generate + compile + prove.  Returns 0 on full success, 1 on any
-    failure (including a failed Qed, which is the discrimination case)."""
+    """Generate + compile + prove.  Returns 0 on full success, 1 when the
+    correspondence lemma itself is rejected by Coq (the discrimination case),
+    and 2 on infrastructure failure (certificate or prelude did not compile).
+    The self-test's negative control accepts only 1, so a broken environment
+    cannot masquerade as a rejected mutant."""
     c_text = open(c_path).read()
     v_text = open(v_path).read()
     c_funcs = cc_mod.parse_c_functions(c_text)
@@ -384,7 +399,7 @@ def check_pair(cc_mod, c_path, v_path, outdir, coqc, flags, quiet_fail=False):
         if r.returncode != 0:
             print(f"  FAIL: coqc could not compile the certificate .v "
                   f"({dt:.1f}s):\n{r.stderr}", file=sys.stderr)
-            return 1
+            return 2
         print(f"  Cert.v: compiled in {dt:.1f}s "
               f"({os.path.getsize(cert_v)} bytes)")
         with open(stamp_path, "w") as fh:
@@ -395,7 +410,7 @@ def check_pair(cc_mod, c_path, v_path, outdir, coqc, flags, quiet_fail=False):
     if r.returncode != 0:
         print(f"  FAIL: prelude did not compile ({dt:.1f}s):\n{r.stderr}",
               file=sys.stderr)
-        return 1
+        return 2
     print(f"  CorrespondPrelude.v: compiled in {dt:.1f}s")
 
     r, dt = run_coqc(coqc, local_flags,
@@ -446,9 +461,14 @@ def self_test(cc_mod, outdir, coqc, flags):
         fh.write(v_text.replace("Ebinop Oadd", "Ebinop Osub", 1))
     neg_dir = os.path.join(st_dir, "neg")
     os.makedirs(neg_dir, exist_ok=True)
-    if check_pair(cc_mod, mini_c, mut_v, neg_dir, coqc, flags,
-                  quiet_fail=True) == 0:
+    rc = check_pair(cc_mod, mini_c, mut_v, neg_dir, coqc, flags,
+                    quiet_fail=True)
+    if rc == 0:
         print("SELF-TEST RESULT: FAIL (mutated .v was wrongly accepted)")
+        return 1
+    if rc != 1:
+        print("SELF-TEST RESULT: FAIL (negative control hit an "
+              "infrastructure failure, not a lemma rejection)")
         return 1
     print("SELF-TEST RESULT: PASS (genuine pair proved; mutant rejected)")
     return 0

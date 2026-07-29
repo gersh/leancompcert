@@ -211,12 +211,10 @@ def run_probe(
             report,
             run_command("lean-prefix", [*lean_prefix, "--print-prefix"], root, timeout),
         )
-        include_args: list[str] = []
         if lean_prefix_result.succeeded:
             prefix = lean_prefix_result.stdout.strip()
             if prefix:
                 lean_install_prefix = Path(prefix)
-                include_args = ["-I", str(lean_install_prefix / "include")]
 
     standard_executable: Path | None = None
     if emission.succeeded and differential_check and lean_install_prefix is not None:

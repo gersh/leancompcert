@@ -20,7 +20,7 @@ def run_command(
         completed = subprocess.run(
             command,
             cwd=cwd,
-            env=env or os.environ.copy(),
+            env=env if env is not None else os.environ.copy(),
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

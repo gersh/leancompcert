@@ -415,7 +415,8 @@ re-run. Change tracking is therefore two-layered: Lake rebuilds the
 `lean-compcert` executable when certificate Lean sources change, and the
 runner re-emits and re-hashes the C to decide what to re-run. `--force`
 re-runs everything; `--dir DIR` relocates the cache (default
-`.lake/build/native-check`). Stamps are written only on a passing run,
+`.lake/build/native-check`); `--include DIR` adds a C include path
+(repeatable; used by consumer projects). Stamps are written only on a passing run,
 so failures always retry.
 
 This is the `native_decide` *workflow* — fast native execution on every

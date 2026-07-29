@@ -41,8 +41,25 @@ def check_runtime(
     )
     target_args = ["-target", target] if target else []
     entries: list[dict[str, object]] = []
+    sources = sorted((root / "runtime").glob("**/*.c"))
+    if not sources:
+        payload = {
+            "status": "runtime-missing",
+            "compiler": compiler,
+            "runtimeDirectory": str(root / "runtime"),
+            "error": (
+                "no runtime C sources found; the runtime/ directory must be "
+                "present (run from a repository checkout)"
+            ),
+            "files": [],
+        }
+        (output / "runtime-compatibility.json").write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return False, payload
     compatible = True
-    for source in sorted((root / "runtime").glob("**/*.c")):
+    for source in sources:
         relative = source.relative_to(root).as_posix()
         object_file = output / (relative.replace("/", "_") + ".o")
         expected_adapter = relative.startswith("runtime/adapters/")
