@@ -1,0 +1,18 @@
+[
+ {
+  "status": "timeout",
+  "wall_s": 2400,
+  "rss_kb": null,
+  "cpu_s": null,
+  "stdout": "",
+  "stderr": "",
+  "route": "chunked",
+  "n": 12000,
+  "chunk": 1000,
+  "k": 12,
+  "combine_only_wall_s": 91.02696824073792,
+  "combine_only_cpu_s": 1.2000000000000002,
+  "combine_only_rss_kb": 414792,
+  "combine_only_status": "ok"
+ }
+]

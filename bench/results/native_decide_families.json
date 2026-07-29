@@ -1,0 +1,122 @@
+{
+ "Rs62Certificates": {
+  "atoms": 1025,
+  "total_primitive_steps": 449448158,
+  "shapes": {
+   "linear-fold-rat": 9,
+   "fixed-expression": 7,
+   "transcendental-enclosure": 845,
+   "linear-fold-sieve": 164
+  }
+ },
+ "MathExtras.NumberTheory.Helfgott": {
+  "atoms": 202,
+  "total_primitive_steps": 5101890,
+  "shapes": {
+   "linear-fold-nat": 1,
+   "bisection-tree": 167,
+   "fixed-expression": 34
+  }
+ },
+ "MathExtras.NumberTheory.Vinogradov": {
+  "atoms": 55,
+  "total_primitive_steps": 311164,
+  "shapes": {
+   "bisection-tree": 54,
+   "fixed-expression": 1
+  }
+ },
+ "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14": {
+  "atoms": 34,
+  "total_primitive_steps": 115884,
+  "shapes": {
+   "bisection-tree": 10,
+   "fixed-expression": 2,
+   "transcendental-enclosure": 22
+  }
+ },
+ "AnalyticNT.LargeSieve": {
+  "atoms": 18,
+  "total_primitive_steps": 46396837,
+  "shapes": {
+   "linear-fold-rat": 2,
+   "linear-fold-sieve": 3,
+   "linear-fold-nat": 13
+  }
+ },
+ "TGNativeCertificates": {
+  "atoms": 11,
+  "total_primitive_steps": 27669383,
+  "shapes": {
+   "linear-fold-sieve": 8,
+   "linear-fold-rat": 1,
+   "table-streaming": 2
+  }
+ },
+ "Math.Problems.TernaryGoldbach.Certs": {
+  "atoms": 7,
+  "total_primitive_steps": 2900000,
+  "shapes": {
+   "linear-fold-sieve": 7
+  }
+ },
+ "HelfgottCertificates": {
+  "atoms": 4,
+  "total_primitive_steps": 1404655,
+  "shapes": {
+   "bisection-tree": 3,
+   "fixed-expression": 1
+  }
+ },
+ "AnalyticNT.Chebyshev": {
+  "atoms": 3,
+  "total_primitive_steps": 15000000,
+  "shapes": {
+   "linear-fold-sieve": 3
+  }
+ },
+ "MathExtras.NumberTheory.Analysis": {
+  "atoms": 3,
+  "total_primitive_steps": 5595,
+  "shapes": {
+   "linear-fold-rat": 3
+  }
+ },
+ "TGNativeCertificates.Ramare": {
+  "atoms": 3,
+  "total_primitive_steps": 340000000,
+  "shapes": {
+   "table-streaming": 3
+  }
+ },
+ "MathExtras.NumberTheory.LSeries": {
+  "atoms": 2,
+  "total_primitive_steps": 33,
+  "shapes": {
+   "fixed-expression": 1,
+   "bisection-tree": 1
+  }
+ },
+ "MathExtras.NumberTheory.Certs": {
+  "atoms": 2,
+  "total_primitive_steps": 74000000,
+  "shapes": {
+   "linear-fold-nat": 1,
+   "linear-fold-sieve": 1
+  }
+ },
+ "MathExtras.NumberTheory.Helfgott.Certs": {
+  "atoms": 1,
+  "total_primitive_steps": 30000,
+  "shapes": {
+   "linear-fold-rat": 1
+  }
+ },
+ "MathExtras.NumberTheory.Mertens": {
+  "atoms": 1,
+  "total_primitive_steps": 20953,
+  "shapes": {
+   "linear-fold-sieve": 1
+  }
+ }
+}

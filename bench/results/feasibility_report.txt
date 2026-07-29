@@ -1,0 +1,56 @@
+=== measured kernel cost laws (fits to this session's sweeps) ===
+log_enclose_full
+   cpu_s   = 0.0006275 * n^1.360     [n = argument decimal digits, 5 points over 2-617]
+   rss_MB  = 5.713 * n^0.504
+   basis   : gen_realkernels.py --probe log_enclose (IntervalArith, Lean 4.32.0)
+rs62_loopE
+   cpu_s   = 0.0001141 * n^1.251     [n = iterations, 4 points over 1000-30000]
+   rss_MB  = 0.03144 * n^1.182
+   basis   : gen_realkernels.py --probe rs62_loopE (MathExtras.RS62Ladder.loopE)
+chebyshev_psi
+   cpu_s   = 0.007101 * n^1.008     [n = iterations, 4 points over 300-10000]
+   rss_MB  = 2.071 * n^0.926
+   basis   : gen_realkernels.py --probe chebyshev_psi (AnalyticNT.ChebyshevPsi.checkAllPsiLeMul)
+cdem_rangeSweep
+   cpu_s   = 0.0001156 * n^1.252     [n = iterations, 4 points over 1000-30000]
+   rss_MB  = 0.04545 * n^1.162
+   basis   : gen_realkernels.py --probe cdem_rangeSweep (TGNativeCertificates.CDEMMertens.rangeSweep)
+ch25_leaf
+   cpu_s   = 0.003409 * n^1.043     [n = leaves, 8 points over 128-11658]
+   rss_MB  = 0.1668 * n^1.073
+   basis   : gen_ch25.py on the real CH25 Lemma A.7 leaf records
+leancompcert_reflect
+   cpu_s   = 0.001524 * n^1.125     [n = fold elements, 5 points over 1000-16000]
+   rss_MB  = 0.6814 * n^1.018
+   basis   : gen_kernel.py --route reflect (leancompcert CCIR, Lean 4.32.1)
+
+atoms  exact  decides  CPU (1 core)  wall @20   RSS/dec  verdict                      family
+--------------------------------------------------------------------------------------------
+ 1025   1009    12995         8.4 d    10.1 h   8000 MB  CHUNK + CLUSTER              Rs62Certificates
+   18      0     3992         2.6 d     3.1 h   8000 MB  NEEDS CHUNKING               AnalyticNT.LargeSieve
+    2      0     2247        32.6 h     1.6 h   8000 MB  NEEDS CHUNKING               MathExtras.NumberTheory.Certs
+    3      3     2009        31.7 h     1.6 h   8000 MB  NEEDS CHUNKING               AnalyticNT.Chebyshev
+   11      8      325         4.9 h    15 min   8000 MB  PARTIAL (2 atoms infeasible) TGNativeCertificates
+  202      0      440         4.1 h    12 min   8000 MB  NEEDS CHUNKING               MathExtras.NumberTheory.Helfgott
+    7      0       84        84 min     4 min   8000 MB  NEEDS CHUNKING               Math.Problems.TernaryGoldbach.Certs
+    4      0       85        68 min     3 min   8000 MB  NEEDS CHUNKING               HelfgottCertificates
+   55      0       55        14 min      43 s   5425 MB  FEASIBLE NOW                 MathExtras.NumberTheory.Vinogradov
+    1      0        5         5 min      14 s   8000 MB  NEEDS CHUNKING               MathExtras.NumberTheory.Helfgott.Certs
+    3      0        3          42 s       2 s   4064 MB  FEASIBLE NOW                 MathExtras.NumberTheory.Analysis
+    1      0        1          29 s       1 s   4040 MB  FEASIBLE NOW                 MathExtras.NumberTheory.Mertens
+   34     20       34           4 s       0 s     40 MB  FEASIBLE NOW                 Math.Problems.TernaryGoldbach.MinorArcs.Chapter14
+    2      0        2           0 s       0 s     10 MB  FEASIBLE NOW                 MathExtras.NumberTheory.LSeries
+    3      0        0           0 s       0 s      0 MB  INFEASIBLE (no kernel route) TGNativeCertificates.Ramare
+--------------------------------------------------------------------------------------------
+ 1371           22277        14.2 d    17.1 h            5 atoms with no kernel route
+
+by shape:
+    187 atoms    14740 decides       10.1 d  linear-fold-sieve
+     16 atoms     3586 decides        2.4 d  linear-fold-rat
+     15 atoms     2490 decides       35.7 h  linear-fold-nat
+    235 atoms      548 decides        5.4 h  bisection-tree
+    867 atoms      867 decides       17 min  transcendental-enclosure
+     46 atoms       46 decides          5 s  fixed-expression
+      5 atoms        0 decides          0 s  table-streaming   (5 with no route)
+
+wrote feasibility_by_family.json / feasibility_by_shape.json / feasibility_by_atom.csv

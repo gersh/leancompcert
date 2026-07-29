@@ -1,0 +1,6 @@
+{"route": "reflect", "n": 1000, "status": "ok", "wall_s": 3.902198553085327, "cpu_s": 3.9, "rss_kb": 1230492}
+{"route": "reflect", "n": 2000, "status": "ok", "wall_s": 7.939923286437988, "cpu_s": 7.9399999999999995, "rss_kb": 2046556}
+{"route": "reflect", "n": 4000, "status": "ok", "wall_s": 16.316303730010986, "cpu_s": 16.29, "rss_kb": 3678444}
+{"route": "reflect", "n": 8000, "status": "ok", "wall_s": 37.96522307395935, "cpu_s": 37.95, "rss_kb": 7045860}
+{"route": "reflect", "n": 16000, "status": "ok", "wall_s": 83.68694353103638, "cpu_s": 83.67, "rss_kb": 13780048}
+wrote bench/results/kernel_reflect_cpu.json

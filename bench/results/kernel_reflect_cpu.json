@@ -1,0 +1,57 @@
+[
+ {
+  "status": "ok",
+  "wall_s": 3.902198553085327,
+  "rss_kb": 1230492,
+  "cpu_s": 3.9,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 1000,
+  "value": 1778132693
+ },
+ {
+  "status": "ok",
+  "wall_s": 7.939923286437988,
+  "rss_kb": 2046556,
+  "cpu_s": 7.9399999999999995,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 2000,
+  "value": 7108979067
+ },
+ {
+  "status": "ok",
+  "wall_s": 16.316303730010986,
+  "rss_kb": 3678444,
+  "cpu_s": 16.29,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 4000,
+  "value": 28428812857
+ },
+ {
+  "status": "ok",
+  "wall_s": 37.96522307395935,
+  "rss_kb": 7045860,
+  "cpu_s": 37.95,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 8000,
+  "value": 113701044575
+ },
+ {
+  "status": "ok",
+  "wall_s": 83.68694353103638,
+  "rss_kb": 13780048,
+  "cpu_s": 83.67,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 16000,
+  "value": 454775764595
+ }
+]

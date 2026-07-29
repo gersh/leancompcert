@@ -1,0 +1,8 @@
+[run] verified-decide: compiled with CompCert, native check passed
+[run] mertens: compiled with CompCert, native check passed
+[run] wide-mertens: compiled with CompCert, native check passed
+[run] squarefree-mertens: compiled with CompCert, native check passed
+[run] reflected: compiled with CompCert, native check passed
+[run] fixedpoint: compiled with CompCert, native check passed
+[run] rolled-10m: compiled with CompCert, native check passed
+native check: 7 certificates agree with their certified values (0 cached, 7 run)

@@ -1,0 +1,8 @@
+cert,c_bytes,exe_bytes,compile_ms_min,compile_ms_med,run_ms_min,run_ms_med,exit
+fixedpoint,110752,70504,189.95,195.63,0.179,0.2,0
+mertens,19397,70504,69.33,72.74,0.21,0.477,0
+reflected,78867,70528,153.36,158.27,0.175,0.205,0
+rolled-10m,2074,70504,55.28,59.33,13.295,13.499,0
+squarefree-mertens,77353,70512,155.37,163.86,0.176,0.185,0
+verified-decide,471,70512,51.05,55.38,0.18,0.198,0
+wide-mertens,47117,70512,97.07,102.36,0.179,0.201,0

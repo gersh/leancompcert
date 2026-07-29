@@ -1,0 +1,8 @@
+total leaves parsed: 16191; contiguous left run: 11658
+Traceback (most recent call last):
+  File "/home/gersh/leancompcert/bench/gen_ch25.py", line 161, in <module>
+    main()
+  File "/home/gersh/leancompcert/bench/gen_ch25.py", line 139, in main
+    print(json.dumps({k: rows[0][k] for k in ("n", "status", "wall_s", "cpu_s",
+                         ~~~~~~~^^^
+KeyError: 'cpu_s'

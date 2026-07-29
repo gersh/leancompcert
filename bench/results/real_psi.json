@@ -1,0 +1,61 @@
+[
+ {
+  "status": "ok",
+  "wall_s": null,
+  "cpu_s": 1.27,
+  "rss_kb": 2840896,
+  "out": "",
+  "err": "",
+  "n": 0
+ },
+ {
+  "status": "ok",
+  "wall_s": null,
+  "cpu_s": 3.46,
+  "rss_kb": 3274112,
+  "out": "",
+  "err": "",
+  "n": 300,
+  "value": "true"
+ },
+ {
+  "status": "ok",
+  "wall_s": null,
+  "cpu_s": 9.0,
+  "rss_kb": 4073760,
+  "out": "",
+  "err": "",
+  "n": 1000,
+  "value": "true"
+ },
+ {
+  "status": "ok",
+  "wall_s": null,
+  "cpu_s": 23.6,
+  "rss_kb": 6193088,
+  "out": "",
+  "err": "",
+  "n": 3000,
+  "value": "true"
+ },
+ {
+  "status": "ok",
+  "wall_s": null,
+  "cpu_s": 77.35,
+  "rss_kb": 14043780,
+  "out": "",
+  "err": "",
+  "n": 10000,
+  "value": "true"
+ },
+ {
+  "status": "fail",
+  "wall_s": null,
+  "cpu_s": 654.82,
+  "rss_kb": 13294844,
+  "out": "",
+  "err": "Command terminated by signal 15\n",
+  "n": 30000,
+  "value": "true"
+ }
+]

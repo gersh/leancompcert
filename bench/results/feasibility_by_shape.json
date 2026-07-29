@@ -1,0 +1,44 @@
+{
+ "linear-fold-sieve": {
+  "atoms": 187,
+  "cpu": 876484.2535490949,
+  "decides": 14740,
+  "nokernel": 0
+ },
+ "linear-fold-rat": {
+  "atoms": 16,
+  "cpu": 203335.26450729294,
+  "decides": 3586,
+  "nokernel": 0
+ },
+ "linear-fold-nat": {
+  "atoms": 15,
+  "cpu": 128663.5410835454,
+  "decides": 2490,
+  "nokernel": 0
+ },
+ "bisection-tree": {
+  "atoms": 235,
+  "cpu": 19262.819413727215,
+  "decides": 548,
+  "nokernel": 0
+ },
+ "fixed-expression": {
+  "atoms": 46,
+  "cpu": 4.6,
+  "decides": 46,
+  "nokernel": 0
+ },
+ "transcendental-enclosure": {
+  "atoms": 867,
+  "cpu": 1025.9425569771554,
+  "decides": 867,
+  "nokernel": 0
+ },
+ "table-streaming": {
+  "atoms": 5,
+  "cpu": 0.0,
+  "decides": 0,
+  "nokernel": 5
+ }
+}

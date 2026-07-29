@@ -1,0 +1,691 @@
+[
+ {
+  "primary_kernel": "IntervalArith.RatInterval.log_enclose_full",
+  "shape_class": "transcendental-enclosure",
+  "atoms": 865,
+  "total_primitive_steps": 572881,
+  "max_primitive_steps": 2824,
+  "families": {
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14": 20,
+   "Rs62Certificates": 845
+  },
+  "modules": {
+   "Rs62Certificates.RS62Eq314Leaves": 201,
+   "Rs62Certificates.RS62Theta1420Leaves": 163,
+   "Rs62Certificates.RS62LadderRangeLogLeavesB": 124,
+   "Rs62Certificates.RS62LadderRangeLogLeavesA": 122,
+   "Rs62Certificates.RS62LadderRangeLogLeavesC": 120,
+   "Rs62Certificates.RS62LadderRangeLogLeavesD": 115
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.Helfgott.MinorSection51Pieces.BandIntervalExpr.evalInterval",
+  "shape_class": "bisection-tree",
+  "atoms": 153,
+  "total_primitive_steps": 1102333,
+  "max_primitive_steps": 7650,
+  "families": {
+   "MathExtras.NumberTheory.Helfgott": 144,
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14": 9
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Helfgott.Section53Corrected4ThrBandNoP2SIIHighCells": 100,
+   "MathExtras.NumberTheory.Helfgott.Section53Corrected4ThrBandNoP2SII": 24,
+   "MathExtras.NumberTheory.Helfgott.Section53Corrected4ThrBandNoP2SIIC0": 20,
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14.PaperEq1314SmallQHighCrossoverPlattSplit": 9
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.RS62Ladder.loopE",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 140,
+  "total_primitive_steps": 323999900,
+  "max_primitive_steps": 5000000,
+  "families": {
+   "Rs62Certificates": 140
+  },
+  "modules": {
+   "Rs62Certificates.RS62LadderRangeLeavesA": 12,
+   "Rs62Certificates.RS62LadderRangeLeavesB": 12,
+   "Rs62Certificates.RS62LadderRangeLeavesC": 12,
+   "Rs62Certificates.RS62LadderRangeLeavesD": 12,
+   "Rs62Certificates.RS62LadderRangeLeavesE": 12,
+   "Rs62Certificates.RS62LadderRangeLeavesF": 12
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.Helfgott.CorC13Certificate.corC13MarginKernel",
+  "shape_class": "bisection-tree",
+  "atoms": 50,
+  "total_primitive_steps": 309504,
+  "max_primitive_steps": 16384,
+  "families": {
+   "MathExtras.NumberTheory.Vinogradov": 50
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Vinogradov.HelfgottCorC13Certificate": 50
+  }
+ },
+ {
+  "primary_kernel": "(named constants only)",
+  "shape_class": "fixed-expression",
+  "atoms": 43,
+  "total_primitive_steps": 43,
+  "max_primitive_steps": 1,
+  "families": {
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14": 2,
+   "MathExtras.NumberTheory.LSeries": 1,
+   "MathExtras.NumberTheory.Helfgott": 32,
+   "HelfgottCertificates": 1,
+   "Rs62Certificates": 6,
+   "MathExtras.NumberTheory.Vinogradov": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Helfgott.Section413CorrectedLowQFiniteCert": 7,
+   "MathExtras.NumberTheory.Helfgott.Lemma37HighQLargeSharpBShape": 6,
+   "MathExtras.NumberTheory.Helfgott.Section413Lemma42G2WeakProducts": 3,
+   "MathExtras.NumberTheory.Helfgott.WAProp48QuadraticLogL2Cert": 3,
+   "MathExtras.NumberTheory.Helfgott.Section413Lemma42G2LargeMixedProducts": 2,
+   "MathExtras.NumberTheory.Helfgott.Section53Corrected4ThrBandEndpointGMTight": 2
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.RS62Ladder.loop410",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 20,
+  "total_primitive_steps": 99900010,
+  "max_primitive_steps": 5000000,
+  "families": {
+   "Rs62Certificates": 20
+  },
+  "modules": {
+   "Rs62Certificates.RS62Ladder410LeavesA": 4,
+   "Rs62Certificates.RS62Ladder410LeavesB": 4,
+   "Rs62Certificates.RS62Ladder410LeavesC": 4,
+   "Rs62Certificates.RS62Ladder410LeavesD": 4,
+   "Rs62Certificates.RS62Ladder410LeavesE": 4
+  }
+ },
+ {
+  "primary_kernel": "AnalyticNT.LargeSieve.uFold",
+  "shape_class": "linear-fold-nat",
+  "atoms": 13,
+  "total_primitive_steps": 10996838,
+  "max_primitive_steps": 6761828,
+  "families": {
+   "AnalyticNT.LargeSieve": 13
+  },
+  "modules": {
+   "AnalyticNT.LargeSieve.RamareGUpperCerts": 7,
+   "AnalyticNT.LargeSieve.GBounds1215Certs": 6
+  }
+ },
+ {
+  "primary_kernel": "IntervalArith.RatInterval.interval_bisect",
+  "shape_class": "bisection-tree",
+  "atoms": 11,
+  "total_primitive_steps": 2606363,
+  "max_primitive_steps": 1200000,
+  "families": {
+   "MathExtras.NumberTheory.LSeries": 1,
+   "MathExtras.NumberTheory.Helfgott": 3,
+   "MathExtras.NumberTheory.Vinogradov": 4,
+   "HelfgottCertificates": 3
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Vinogradov.HelfgottMinorArcCompactInterval": 4,
+   "HelfgottCertificates.SIIMarginCertificate": 3,
+   "MathExtras.NumberTheory.Helfgott.WACor49Eta2ExpMomentCert": 2,
+   "MathExtras.NumberTheory.LSeries.ChirreHelfgottLem85TgMiddleCert": 1,
+   "MathExtras.NumberTheory.Helfgott.H1MarginCertificate": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.Helfgott1221.checkAll",
+  "shape_class": "linear-fold-rat",
+  "atoms": 9,
+  "total_primitive_steps": 478200,
+  "max_primitive_steps": 300500,
+  "families": {
+   "Rs62Certificates": 9
+  },
+  "modules": {
+   "Rs62Certificates.Helfgott1221FiniteLeaves": 9
+  }
+ },
+ {
+  "primary_kernel": "IntervalArith.RatInterval.adaptiveUpper",
+  "shape_class": "bisection-tree",
+  "atoms": 8,
+  "total_primitive_steps": 16,
+  "max_primitive_steps": 16,
+  "families": {
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14": 1,
+   "MathExtras.NumberTheory.Helfgott": 7
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14.PaperEq1315HighRepairPrefixCost": 1,
+   "MathExtras.NumberTheory.Helfgott.Section53Corrected4ThrBandEndpointCertificateTightSmallC0Deep": 1,
+   "MathExtras.NumberTheory.Helfgott.Section53Corrected4ThrBandEndpointCertificateTightHigh": 1,
+   "MathExtras.NumberTheory.Helfgott.Section53Corrected4ThrBandEndpointCertificateTightMedium": 1,
+   "MathExtras.NumberTheory.Helfgott.Section53Corrected4ThrBandEndpointCertificateTightSmallC0": 1,
+   "MathExtras.NumberTheory.Helfgott.Section53Corrected4ThrBandEndpointCertificateTightSmallC1C2": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.NumberTheory.Helfgott.AppendixACertificates.bandEval",
+  "shape_class": "bisection-tree",
+  "atoms": 8,
+  "total_primitive_steps": 1600000,
+  "max_primitive_steps": 200000,
+  "families": {
+   "MathExtras.NumberTheory.Helfgott": 8
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Helfgott.AppendixACertSmall": 5,
+   "MathExtras.NumberTheory.Helfgott.AppendixACertMid": 2,
+   "MathExtras.NumberTheory.Helfgott.AppendixACertWide": 1
+  }
+ },
+ {
+  "primary_kernel": "TGNativeCertificates.CDEMMertens.rangeSweep",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 8,
+  "total_primitive_steps": 6155336,
+  "max_primitive_steps": 1000000,
+  "families": {
+   "TGNativeCertificates": 8
+  },
+  "modules": {
+   "TGNativeCertificates.CDEMMertensCert0": 1,
+   "TGNativeCertificates.CDEMMertensCert1": 1,
+   "TGNativeCertificates.CDEMMertensCert2": 1,
+   "TGNativeCertificates.CDEMMertensCert4": 1,
+   "TGNativeCertificates.CDEMMertensCert5": 1,
+   "TGNativeCertificates.CDEMMertensCert6": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.NumberTheory.Helfgott.AppendixA5Certificates.numEval",
+  "shape_class": "bisection-tree",
+  "atoms": 5,
+  "total_primitive_steps": 1000000,
+  "max_primitive_steps": 200000,
+  "families": {
+   "MathExtras.NumberTheory.Helfgott": 5
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Helfgott.AppendixACertA5Small": 3,
+   "MathExtras.NumberTheory.Helfgott.AppendixACertA5WideB": 1,
+   "MathExtras.NumberTheory.Helfgott.AppendixACertA5WideA": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.RS62Ladder.loop314",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 3,
+  "total_primitive_steps": 14497998,
+  "max_primitive_steps": 5000000,
+  "families": {
+   "Rs62Certificates": 3
+  },
+  "modules": {
+   "Rs62Certificates.RS62Ladder314Leaves": 3
+  }
+ },
+ {
+  "primary_kernel": "AnalyticNT.ChebyshevPsi.checkAllPsiLeMul",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 10000000,
+  "max_primitive_steps": 10000000,
+  "families": {
+   "AnalyticNT.Chebyshev": 1
+  },
+  "modules": {
+   "AnalyticNT.Chebyshev.PsiSharpCertBelow1e7": 1
+  }
+ },
+ {
+  "primary_kernel": "AnalyticNT.ChebyshevPsi.checkAllPsiSubThetaLeSqrt",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 1000000,
+  "max_primitive_steps": 1000000,
+  "families": {
+   "AnalyticNT.Chebyshev": 1
+  },
+  "modules": {
+   "AnalyticNT.Chebyshev.PsiSubThetaCertBelow1e6": 1
+  }
+ },
+ {
+  "primary_kernel": "AnalyticNT.ChebyshevPsi.checkPsiLeMulFrom",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 4000000,
+  "max_primitive_steps": 4000000,
+  "families": {
+   "AnalyticNT.Chebyshev": 1
+  },
+  "modules": {
+   "AnalyticNT.Chebyshev.PsiRR14Cert": 1
+  }
+ },
+ {
+  "primary_kernel": "AnalyticNT.LargeSieve.ceUPrimeAux",
+  "shape_class": "linear-fold-rat",
+  "atoms": 1,
+  "total_primitive_steps": 200000,
+  "max_primitive_steps": 200000,
+  "families": {
+   "AnalyticNT.LargeSieve": 1
+  },
+  "modules": {
+   "AnalyticNT.LargeSieve.RamareCEUpperCerts": 1
+  }
+ },
+ {
+  "primary_kernel": "AnalyticNT.LargeSieve.cePrimeAux",
+  "shape_class": "linear-fold-rat",
+  "atoms": 1,
+  "total_primitive_steps": 25000000,
+  "max_primitive_steps": 25000000,
+  "families": {
+   "AnalyticNT.LargeSieve": 1
+  },
+  "modules": {
+   "AnalyticNT.LargeSieve.RamareCECerts": 1
+  }
+ },
+ {
+  "primary_kernel": "AnalyticNT.LargeSieve.gFold1215",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 10000000,
+  "max_primitive_steps": 10000000,
+  "families": {
+   "AnalyticNT.LargeSieve": 1
+  },
+  "modules": {
+   "AnalyticNT.LargeSieve.GBounds1215Certs": 1
+  }
+ },
+ {
+  "primary_kernel": "AnalyticNT.LargeSieve.gFold",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 99999,
+  "max_primitive_steps": 99999,
+  "families": {
+   "AnalyticNT.LargeSieve": 1
+  },
+  "modules": {
+   "AnalyticNT.LargeSieve.RamareGUpperCerts": 1
+  }
+ },
+ {
+  "primary_kernel": "AnalyticNT.LargeSieve.gSum",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 100000,
+  "max_primitive_steps": 100000,
+  "families": {
+   "AnalyticNT.LargeSieve": 1
+  },
+  "modules": {
+   "AnalyticNT.LargeSieve.RamareGUpperCerts": 1
+  }
+ },
+ {
+  "primary_kernel": "Math.Problems.TernaryGoldbach.HEnvFloorCert.segProp",
+  "shape_class": "transcendental-enclosure",
+  "atoms": 1,
+  "total_primitive_steps": 97888,
+  "max_primitive_steps": 97888,
+  "families": {
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14": 1
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14.PaperEq1314HEnvelopeFloorProof": 1
+  }
+ },
+ {
+  "primary_kernel": "Math.Problems.TernaryGoldbach.deficitCertAcc",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 2000000,
+  "max_primitive_steps": 2000000,
+  "families": {
+   "Math.Problems.TernaryGoldbach.Certs": 1
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.Certs.SingularSeriesDeficitProdTwoMillion": 1
+  }
+ },
+ {
+  "primary_kernel": "IntervalArith.RatInterval.exp_enclose",
+  "shape_class": "transcendental-enclosure",
+  "atoms": 1,
+  "total_primitive_steps": 16384,
+  "max_primitive_steps": 16384,
+  "families": {
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14": 1
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14.PaperEq1314EnvelopeAggregationCore": 1
+  }
+ },
+ {
+  "primary_kernel": "Math.Problems.TernaryGoldbach.gcdMertensHiAcc",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 150000,
+  "max_primitive_steps": 150000,
+  "families": {
+   "Math.Problems.TernaryGoldbach.Certs": 1
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.Certs.OddSquarefreeGcdMertens150000": 1
+  }
+ },
+ {
+  "primary_kernel": "Math.Problems.TernaryGoldbach.oddMertensHiAcc",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 150000,
+  "max_primitive_steps": 150000,
+  "families": {
+   "Math.Problems.TernaryGoldbach.Certs": 1
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.Certs.OddSquarefreeMertens150000": 1
+  }
+ },
+ {
+  "primary_kernel": "Math.Problems.TernaryGoldbach.oddMertensLoAcc",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 150000,
+  "max_primitive_steps": 150000,
+  "families": {
+   "Math.Problems.TernaryGoldbach.Certs": 1
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.Certs.OddSquarefreeMertens150000": 1
+  }
+ },
+ {
+  "primary_kernel": "Math.Problems.TernaryGoldbach.phiSqDiscHiAcc",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 150000,
+  "max_primitive_steps": 150000,
+  "families": {
+   "Math.Problems.TernaryGoldbach.Certs": 1
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.Certs.OddSquarefreeMertensPhiSq": 1
+  }
+ },
+ {
+  "primary_kernel": "Math.Problems.TernaryGoldbach.phiSqHiAcc",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 150000,
+  "max_primitive_steps": 150000,
+  "families": {
+   "Math.Problems.TernaryGoldbach.Certs": 1
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.Certs.OddSquarefreeMertensPhiSq": 1
+  }
+ },
+ {
+  "primary_kernel": "Math.Problems.TernaryGoldbach.quinticMertensHiAcc",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 150000,
+  "max_primitive_steps": 150000,
+  "families": {
+   "Math.Problems.TernaryGoldbach.Certs": 1
+  },
+  "modules": {
+   "Math.Problems.TernaryGoldbach.Certs.OddSquarefreeQuinticMertens150000": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.EffectiveMertensDecay.littleLvalF",
+  "shape_class": "linear-fold-nat",
+  "atoms": 1,
+  "total_primitive_steps": 70000000,
+  "max_primitive_steps": 70000000,
+  "families": {
+   "MathExtras.NumberTheory.Certs": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Certs.LittleMertensSqrtHeadCert": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.Helfgott.EtaPlusHDerivGridCert.check",
+  "shape_class": "linear-fold-nat",
+  "atoms": 1,
+  "total_primitive_steps": 200000,
+  "max_primitive_steps": 200000,
+  "families": {
+   "MathExtras.NumberTheory.Helfgott": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Helfgott.EtaPlusHDerivGridCert": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.Helfgott.Section24.Head30000.scan",
+  "shape_class": "linear-fold-rat",
+  "atoms": 1,
+  "total_primitive_steps": 30000,
+  "max_primitive_steps": 30000,
+  "families": {
+   "MathExtras.NumberTheory.Helfgott.Certs": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Helfgott.Certs.LogWeightedMertensHead30000Cert": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.HelfgottLargeQ.masterCheck",
+  "shape_class": "fixed-expression",
+  "atoms": 1,
+  "total_primitive_steps": 24,
+  "max_primitive_steps": 24,
+  "families": {
+   "Rs62Certificates": 1
+  },
+  "modules": {
+   "Rs62Certificates.HelfgottLargeQBlockLeaves": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.LiouvilleSweep.ladderRun",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 4000000,
+  "max_primitive_steps": 4000000,
+  "families": {
+   "MathExtras.NumberTheory.Certs": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Certs.LiouvilleLittleSumSweepCert": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.NumberTheory.Analysis.MV73Lemma7Floor.certFrom",
+  "shape_class": "linear-fold-rat",
+  "atoms": 1,
+  "total_primitive_steps": 3595,
+  "max_primitive_steps": 3595,
+  "families": {
+   "MathExtras.NumberTheory.Analysis": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Analysis.MV73Lemma7FiniteCert": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.NumberTheory.Analysis.MV73WeightedFloorSevenTwentieths.passC",
+  "shape_class": "linear-fold-rat",
+  "atoms": 1,
+  "total_primitive_steps": 1000,
+  "max_primitive_steps": 1000,
+  "families": {
+   "MathExtras.NumberTheory.Analysis": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Analysis.MV73WeightedFloorSevenTwentiethsCert": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.NumberTheory.Analysis.MV73WeightedFloorSevenTwentieths.passD",
+  "shape_class": "linear-fold-rat",
+  "atoms": 1,
+  "total_primitive_steps": 1000,
+  "max_primitive_steps": 1000,
+  "families": {
+   "MathExtras.NumberTheory.Analysis": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Analysis.MV73WeightedFloorTwoFifthsCert": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.NumberTheory.Helfgott.AppendixA5Certificates.numMomentEval",
+  "shape_class": "fixed-expression",
+  "atoms": 1,
+  "total_primitive_steps": 120,
+  "max_primitive_steps": 120,
+  "families": {
+   "MathExtras.NumberTheory.Helfgott": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Helfgott.AppendixACertA5Small": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.NumberTheory.Helfgott.AppendixACertificates.momentEval",
+  "shape_class": "fixed-expression",
+  "atoms": 1,
+  "total_primitive_steps": 120,
+  "max_primitive_steps": 120,
+  "families": {
+   "MathExtras.NumberTheory.Helfgott": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Helfgott.AppendixACertSmall": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.NumberTheory.Mertens.LittleRamareFinite.ladderRun",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 20953,
+  "max_primitive_steps": 20953,
+  "families": {
+   "MathExtras.NumberTheory.Mertens": 1
+  },
+  "modules": {
+   "MathExtras.NumberTheory.Mertens.LittleMertensRamareFinite": 1
+  }
+ },
+ {
+  "primary_kernel": "MathExtras.RS62MertensFirst.loop",
+  "shape_class": "linear-fold-sieve",
+  "atoms": 1,
+  "total_primitive_steps": 10000000,
+  "max_primitive_steps": 10000000,
+  "families": {
+   "Rs62Certificates": 1
+  },
+  "modules": {
+   "Rs62Certificates.RS62MertensFirstFull": 1
+  }
+ },
+ {
+  "primary_kernel": "TGNativeCertificates.CDEMTablePrefixEngine.checkPrefixFields",
+  "shape_class": "linear-fold-rat",
+  "atoms": 1,
+  "total_primitive_steps": 996650,
+  "max_primitive_steps": 996650,
+  "families": {
+   "TGNativeCertificates": 1
+  },
+  "modules": {
+   "TGNativeCertificates.CDEMTablePrefixCert": 1
+  }
+ },
+ {
+  "primary_kernel": "TGNativeCertificates.PrimeLogSquare219.checkPrimeLogSquareTable",
+  "shape_class": "table-streaming",
+  "atoms": 1,
+  "total_primitive_steps": 1517397,
+  "max_primitive_steps": 1517397,
+  "families": {
+   "TGNativeCertificates": 1
+  },
+  "modules": {
+   "TGNativeCertificates.PrimeLogSquare219Cert": 1
+  }
+ },
+ {
+  "primary_kernel": "TGNativeCertificates.Ramare.Finite100M.checkFirstMertens100M",
+  "shape_class": "table-streaming",
+  "atoms": 1,
+  "total_primitive_steps": 100000000,
+  "max_primitive_steps": 100000000,
+  "families": {
+   "TGNativeCertificates.Ramare": 1
+  },
+  "modules": {
+   "TGNativeCertificates.Ramare.Finite100MCert": 1
+  }
+ },
+ {
+  "primary_kernel": "TGNativeCertificates.Ramare.Lemma71.checkLemma71_100M",
+  "shape_class": "table-streaming",
+  "atoms": 1,
+  "total_primitive_steps": 100000000,
+  "max_primitive_steps": 100000000,
+  "families": {
+   "TGNativeCertificates.Ramare": 1
+  },
+  "modules": {
+   "TGNativeCertificates.Ramare.Lemma71Cert": 1
+  }
+ },
+ {
+  "primary_kernel": "TGNativeCertificates.Ramare.MStar140MEngine.checkLimit",
+  "shape_class": "table-streaming",
+  "atoms": 1,
+  "total_primitive_steps": 140000000,
+  "max_primitive_steps": 140000000,
+  "families": {
+   "TGNativeCertificates.Ramare": 1
+  },
+  "modules": {
+   "TGNativeCertificates.Ramare.MStar140MCert": 1
+  }
+ },
+ {
+  "primary_kernel": "TGNativeCertificates.WeightedMoment217.checkWeightedMomentTable",
+  "shape_class": "table-streaming",
+  "atoms": 1,
+  "total_primitive_steps": 19000000,
+  "max_primitive_steps": 19000000,
+  "families": {
+   "TGNativeCertificates": 1
+  },
+  "modules": {
+   "TGNativeCertificates.WeightedMoment217Cert": 1
+  }
+ }
+]

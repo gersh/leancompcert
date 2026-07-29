@@ -22,6 +22,10 @@ import LeanCompCert.Verified.Packed
 import LeanCompCert.Verified.PackedTransfer
 import LeanCompCert.Verified.ListFold
 import LeanCompCert.Verified.PackedSieve
+import LeanCompCert.Verified.Segment
+import LeanCompCert.Verified.FoldBridge
+import LeanCompCert.Ports.RS62Increments
+import LeanCompCert.Ports.RS62LoopE
 
 
 /-!
@@ -88,3 +92,22 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Verified.Frontend.compileExpr_correct
 #print axioms LeanCompCert.Verified.ArrayState.sieveSweep_cell
 #print axioms LeanCompCert.Verified.MemFragment.lowerMSequence_correct
+
+-- Generic segmentation lever
+#print axioms LeanCompCert.Verified.Segment.foldl_range'_split
+#print axioms LeanCompCert.Verified.Segment.foldl_range'_of_chain
+#print axioms LeanCompCert.Verified.Segment.foldl_range_of_chain
+-- Generic program/fold bridge
+#print axioms LeanCompCert.Verified.FoldBridge.foldlM_body_eq_foldl
+#print axioms LeanCompCert.Verified.FoldBridge.foldl_obs
+#print axioms LeanCompCert.Verified.FoldBridge.LProgram.denote_eq_foldl
+#print axioms LeanCompCert.Verified.FoldBridge.Program.denote_eq_foldl
+#print axioms LeanCompCert.Verified.FoldBridge.Program.denote_eq_scalar_foldl
+-- RS62 ladder port
+#print axioms LeanCompCert.Ports.RS62.div_sub_eq_sub_ceilDiv
+#print axioms LeanCompCert.Ports.RS62.incL_eq_wordSafe
+#print axioms LeanCompCert.Ports.RS62.incU_eq_wordSafe
+#print axioms LeanCompCert.Ports.RS62.loopE_eq_foldl
+#print axioms LeanCompCert.Ports.RS62.loopE_of_chain
+#print axioms LeanCompCert.Ports.RS62.loopE_eq_filter_foldl
+#print axioms LeanCompCert.Ports.RS62.loopE_eq_word

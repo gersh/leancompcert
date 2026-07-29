@@ -1,0 +1,21 @@
+[
+ {
+  "status": "ok",
+  "wall_s": null,
+  "cpu_s": 21.17,
+  "rss_kb": 2438520,
+  "out": "",
+  "err": "",
+  "n": 0
+ },
+ {
+  "status": "fail",
+  "wall_s": null,
+  "cpu_s": 1.35,
+  "rss_kb": 2470784,
+  "out": "/tmp/claude-1000/-home-gersh-claude-math/24dabdd2-283b-49f1-a353-aa8f2f93e033/scratchpad/real/log_enclose_genericCert5.lean:4:163: error: Tactic `decide` failed for proposition\n  (IntervalArith.RatInterval.log_enclose_full (3 ^ 5 / 5) 24).lo =\n    249556824577500130580445814351590765298188288000000000000000000000000\nbecause its `Decidable` instance\n  instDecidableEqRat (IntervalArith.RatInterval.log_enclose_full (3 ^ 5 / 5) 24).lo\n    249556824577500130580445814351590765298188288000000000000000000000000\ndid not reduce to `isTrue` or `isFalse`.\n\nReduction got stuck at the `Decidable` instance\n  match (IntervalArith.RatInterval.log_enclose_full (3 ^ 5 / 5) 24).1.num,\n    \u2191249556824577500130580445814351590765298188288000000000000000000000000 with\n  | Int.ofNat a, Int.ofNat b =>\n    match decEq a b with\n    | isTrue h => isTrue \u22ef\n    | isFalse h => isFalse \u22ef\n  | Int.ofNat a, Int.negSucc a_1 => isFalse \u22ef\n  | Int.negSucc a, Int.ofNat a_1 => isFalse \u22ef\n  | Int.negSucc a, Int.negSucc b =>\n    match decEq a b with\n    | isTrue h => isTrue \u22ef\n    | isFalse h => isFalse \u22ef\n",
+  "err": "Command exited with non-zero status 1\n",
+  "n": 5,
+  "value": "249556824577500130580445814351590765298188288000000000000000000000000"
+ }
+]

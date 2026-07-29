@@ -1,0 +1,42 @@
+[
+ {
+  "status": "ok",
+  "wall_s": 0.49184107780456543,
+  "rss_kb": 519428,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 100,
+  "value": 17941150
+ },
+ {
+  "status": "ok",
+  "wall_s": 1.2402923107147217,
+  "rss_kb": 682416,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 300,
+  "value": 160404870
+ },
+ {
+  "status": "ok",
+  "wall_s": 3.7358906269073486,
+  "rss_kb": 1255048,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 1000,
+  "value": 1778132693
+ },
+ {
+  "status": "ok",
+  "wall_s": 11.497673988342285,
+  "rss_kb": 2863148,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 3000,
+  "value": 15992539122
+ }
+]

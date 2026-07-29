@@ -1,0 +1,32 @@
+[
+ {
+  "status": "ok",
+  "wall_s": 41.92219638824463,
+  "rss_kb": 8648336,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 10000,
+  "value": 177653442503
+ },
+ {
+  "status": "ok",
+  "wall_s": 90.05034255981445,
+  "rss_kb": 16958800,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 20000,
+  "value": 710578252897
+ },
+ {
+  "status": "ok",
+  "wall_s": 157.23294305801392,
+  "rss_kb": 25283332,
+  "stdout": "",
+  "stderr": "",
+  "route": "reflect",
+  "n": 30000,
+  "value": 1598774431160
+ }
+]

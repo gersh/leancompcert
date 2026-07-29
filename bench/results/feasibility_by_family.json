@@ -1,0 +1,227 @@
+{
+ "AnalyticNT.Chebyshev": {
+  "atoms": 3,
+  "primitive_steps": 15000000,
+  "pred_cpu_s": 114098.95062079735,
+  "pred_wall_s_at_20_cores": 5704.9475310398675,
+  "kernel_decides": 2009,
+  "peak_rss_mb_per_decide": 8000.0,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "NEEDS CHUNKING",
+  "shapes": {
+   "linear-fold-sieve": 3
+  },
+  "atoms_priced_by_their_own_measured_engine": 3
+ },
+ "AnalyticNT.LargeSieve": {
+  "atoms": 18,
+  "primitive_steps": 46396837,
+  "pred_cpu_s": 225647.79235300753,
+  "pred_wall_s_at_20_cores": 11282.389617650377,
+  "kernel_decides": 3992,
+  "peak_rss_mb_per_decide": 8000.0,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "NEEDS CHUNKING",
+  "shapes": {
+   "linear-fold-rat": 2,
+   "linear-fold-sieve": 3,
+   "linear-fold-nat": 13
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "Math.Problems.TernaryGoldbach.MinorArcs.Chapter14": {
+  "atoms": 34,
+  "primitive_steps": 115884,
+  "pred_cpu_s": 4.028514208625485,
+  "pred_wall_s_at_20_cores": 0.20142571043127427,
+  "kernel_decides": 34,
+  "peak_rss_mb_per_decide": 39.74414856746192,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "FEASIBLE NOW",
+  "shapes": {
+   "bisection-tree": 10,
+   "fixed-expression": 2,
+   "transcendental-enclosure": 22
+  },
+  "atoms_priced_by_their_own_measured_engine": 20
+ },
+ "Math.Problems.TernaryGoldbach.Certs": {
+  "atoms": 7,
+  "primitive_steps": 2900000,
+  "pred_cpu_s": 5040.868476684632,
+  "pred_wall_s_at_20_cores": 252.0434238342316,
+  "kernel_decides": 84,
+  "peak_rss_mb_per_decide": 8000.0,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "NEEDS CHUNKING",
+  "shapes": {
+   "linear-fold-sieve": 7
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "MathExtras.NumberTheory.LSeries": {
+  "atoms": 2,
+  "primitive_steps": 33,
+  "pred_cpu_s": 0.18279537432253665,
+  "pred_wall_s_at_20_cores": 0.009139768716126833,
+  "kernel_decides": 2,
+  "peak_rss_mb_per_decide": 10.0,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "FEASIBLE NOW",
+  "shapes": {
+   "fixed-expression": 1,
+   "bisection-tree": 1
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "MathExtras.NumberTheory.Certs": {
+  "atoms": 2,
+  "primitive_steps": 74000000,
+  "pred_cpu_s": 117199.99224217367,
+  "pred_wall_s_at_20_cores": 5859.999612108683,
+  "kernel_decides": 2247,
+  "peak_rss_mb_per_decide": 8000.0,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "NEEDS CHUNKING",
+  "shapes": {
+   "linear-fold-nat": 1,
+   "linear-fold-sieve": 1
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "MathExtras.NumberTheory.Vinogradov": {
+  "atoms": 55,
+  "primitive_steps": 311164,
+  "pred_cpu_s": 856.3729909545815,
+  "pred_wall_s_at_20_cores": 42.81864954772907,
+  "kernel_decides": 55,
+  "peak_rss_mb_per_decide": 5425.076279458552,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "FEASIBLE NOW",
+  "shapes": {
+   "bisection-tree": 54,
+   "fixed-expression": 1
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "MathExtras.NumberTheory.Helfgott": {
+  "atoms": 202,
+  "primitive_steps": 5101890,
+  "pred_cpu_s": 14688.679869743199,
+  "pred_wall_s_at_20_cores": 734.4339934871599,
+  "kernel_decides": 440,
+  "peak_rss_mb_per_decide": 8000.0,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "NEEDS CHUNKING",
+  "shapes": {
+   "linear-fold-nat": 1,
+   "bisection-tree": 167,
+   "fixed-expression": 34
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "HelfgottCertificates": {
+  "atoms": 4,
+  "primitive_steps": 1404655,
+  "pred_cpu_s": 4081.7133253851266,
+  "pred_wall_s_at_20_cores": 204.08566626925634,
+  "kernel_decides": 85,
+  "peak_rss_mb_per_decide": 8000.0,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "NEEDS CHUNKING",
+  "shapes": {
+   "bisection-tree": 3,
+   "fixed-expression": 1
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "MathExtras.NumberTheory.Helfgott.Certs": {
+  "atoms": 1,
+  "primitive_steps": 30000,
+  "pred_cpu_s": 283.96951374016265,
+  "pred_wall_s_at_20_cores": 14.198475687008132,
+  "kernel_decides": 5,
+  "peak_rss_mb_per_decide": 8000.0,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "NEEDS CHUNKING",
+  "shapes": {
+   "linear-fold-rat": 1
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "Rs62Certificates": {
+  "atoms": 1025,
+  "primitive_steps": 449448158,
+  "pred_cpu_s": 729305.6705074714,
+  "pred_wall_s_at_20_cores": 36465.28352537357,
+  "kernel_decides": 12995,
+  "peak_rss_mb_per_decide": 8000.0,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "CHUNK + CLUSTER",
+  "shapes": {
+   "linear-fold-rat": 9,
+   "fixed-expression": 7,
+   "transcendental-enclosure": 845,
+   "linear-fold-sieve": 164
+  },
+  "atoms_priced_by_their_own_measured_engine": 1009
+ },
+ "MathExtras.NumberTheory.Analysis": {
+  "atoms": 3,
+  "primitive_steps": 5595,
+  "pred_cpu_s": 42.154827748408565,
+  "pred_wall_s_at_20_cores": 2.107741387420428,
+  "kernel_decides": 3,
+  "peak_rss_mb_per_decide": 4064.0835181461994,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "FEASIBLE NOW",
+  "shapes": {
+   "linear-fold-rat": 3
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "MathExtras.NumberTheory.Mertens": {
+  "atoms": 1,
+  "primitive_steps": 20953,
+  "pred_cpu_s": 29.12388855287991,
+  "pred_wall_s_at_20_cores": 1.4561944276439955,
+  "kernel_decides": 1,
+  "peak_rss_mb_per_decide": 4040.2710574997895,
+  "atoms_with_no_kernel_route": 0,
+  "verdict": "FEASIBLE NOW",
+  "shapes": {
+   "linear-fold-sieve": 1
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ },
+ "TGNativeCertificates": {
+  "atoms": 11,
+  "primitive_steps": 27669383,
+  "pred_cpu_s": 17496.92118478383,
+  "pred_wall_s_at_20_cores": 874.8460592391915,
+  "kernel_decides": 325,
+  "peak_rss_mb_per_decide": 8000.0,
+  "atoms_with_no_kernel_route": 2,
+  "verdict": "PARTIAL (2 atoms infeasible)",
+  "shapes": {
+   "linear-fold-sieve": 8,
+   "linear-fold-rat": 1,
+   "table-streaming": 2
+  },
+  "atoms_priced_by_their_own_measured_engine": 8
+ },
+ "TGNativeCertificates.Ramare": {
+  "atoms": 3,
+  "primitive_steps": 340000000,
+  "pred_cpu_s": 0.0,
+  "pred_wall_s_at_20_cores": 0.0,
+  "kernel_decides": 0,
+  "peak_rss_mb_per_decide": 0.0,
+  "atoms_with_no_kernel_route": 3,
+  "verdict": "INFEASIBLE (no kernel route)",
+  "shapes": {
+   "table-streaming": 3
+  },
+  "atoms_priced_by_their_own_measured_engine": 0
+ }
+}

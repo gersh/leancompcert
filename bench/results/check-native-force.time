@@ -1,0 +1,76 @@
+⚠ [23/104] Replayed LeanCompCert.Verified.Rolled
+warning: LeanCompCert/Verified/Rolled.lean:423:41: This simp argument is unused:
+  obind_pure
+
+Hint: Omit it from the simp argument list.
+  simp only [mbind_some,̵ ̵o̵b̵i̵n̵d̵_̵p̵u̵r̵e̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: LeanCompCert/Verified/Rolled.lean:428:45: This simp argument is unused:
+  obind_pure
+
+Hint: Omit it from the simp argument list.
+  simp only [mbind_some,̵ ̵o̵b̵i̵n̵d̵_̵p̵u̵r̵e̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: LeanCompCert/Verified/Rolled.lean:529:45: This simp argument is unused:
+  obind_pure
+
+Hint: Omit it from the simp argument list.
+  simp only [mbind_some,̵ ̵o̵b̵i̵n̵d̵_̵p̵u̵r̵e̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: LeanCompCert/Verified/Rolled.lean:534:49: This simp argument is unused:
+  obind_pure
+
+Hint: Omit it from the simp argument list.
+  simp only [mbind_some,̵ ̵o̵b̵i̵n̵d̵_̵p̵u̵r̵e̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: LeanCompCert/Verified/Rolled.lean:568:40: This simp argument is unused:
+  obind_none
+
+Hint: Omit it from the simp argument list.
+  simp only [hRead, mbind_none,̵
+  ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵o̵b̵i̵n̵d̵_̵n̵o̵n̵e̵] at hCast
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: LeanCompCert/Verified/Rolled.lean:577:44: This simp argument is unused:
+  obind_none
+
+Hint: Omit it from the simp argument list.
+  simp only [hNorm, mbind_none,̵
+  ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵o̵b̵i̵n̵d̵_̵n̵o̵n̵e̵] at hCast
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: LeanCompCert/Verified/Rolled.lean:581:44: This simp argument is unused:
+  obind_pure
+
+Hint: Omit it from the simp argument list.
+  simp only [hNorm, mbind_some,̵
+  ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵o̵b̵i̵n̵d̵_̵p̵u̵r̵e̵] at hCast
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+	Command being timed: "lake exe lean-compcert check-native --force"
+	User time (seconds): 1.10
+	System time (seconds): 0.21
+	Percent of CPU this job got: 94%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:01.38
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 103800
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 82443
+	Voluntary context switches: 666
+	Involuntary context switches: 31
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 3720
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

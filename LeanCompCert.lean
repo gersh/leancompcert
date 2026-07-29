@@ -34,6 +34,10 @@ import LeanCompCert.Verified.Packed
 import LeanCompCert.Verified.PackedTransfer
 import LeanCompCert.Verified.ListFold
 import LeanCompCert.Verified.PackedSieve
+import LeanCompCert.Verified.Segment
+import LeanCompCert.Verified.FoldBridge
+import LeanCompCert.Ports.RS62Increments
+import LeanCompCert.Ports.RS62LoopE
 import LeanCompCert.LCNF.View
 import LeanCompCert.LCNF.AdapterV4_32
 import LeanCompCert.LCNF.Validate
