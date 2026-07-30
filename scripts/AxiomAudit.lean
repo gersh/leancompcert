@@ -35,6 +35,8 @@ import LeanCompCert.Verified.Straight
 import LeanCompCert.Verified.InstrBlock
 import LeanCompCert.Ports.TGProth
 import LeanCompCert.Ports.ArrayMobius
+import LeanCompCert.Ports.ArraySegSieve
+import LeanCompCert.Testing.ArraySegCertificate
 
 
 /-!
@@ -189,3 +191,14 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.TGProth.prothProgram_wf
 #print axioms LeanCompCert.Ports.TGProth.body_step
 #print axioms LeanCompCert.Ports.TGProth.prothProgram_denote
+
+-- Offset segmented sieve: the residues of the reduced cite families
+#print axioms LeanCompCert.Ports.ArraySegSieve.forall_wf_of_all
+#print axioms LeanCompCert.Ports.ArraySegSieve.coreBody_all
+#print axioms LeanCompCert.Ports.ArraySegSieve.coreInit_all
+#print axioms LeanCompCert.Ports.ArraySegSieve.segProgram_wf
+#print axioms LeanCompCert.Ports.ArraySegSieve.mertensProgram_wf
+#print axioms LeanCompCert.Ports.ArraySegSieve.mobiusProgram_wf
+#print axioms LeanCompCert.Ports.ArraySegSieve.mertensProgram_compiled
+#print axioms LeanCompCert.Ports.ArraySegSieve.mobiusProgram_compiled
+#print axioms LeanCompCert.Testing.ArraySegCertificate.program_wf

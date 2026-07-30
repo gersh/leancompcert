@@ -10,6 +10,7 @@ import LeanCompCert.Verified.ClightEmit
 import LeanCompCert.Testing.SquarefreeMertensCertificate
 import LeanCompCert.Testing.ProthCertificate
 import LeanCompCert.Testing.ArrayMobiusCertificate
+import LeanCompCert.Testing.ArraySegCertificate
 import LeanCompCert.NativeCheck
 
 open LeanCompCert
@@ -124,7 +125,8 @@ private def nativeCerts : List NativeCheck.Cert := [
   ⟨"fixedpoint", Testing.FixedPointCertificate.emittedC⟩,
   ⟨"rolled-10m", Testing.RolledFixedPoint.emittedC⟩,
   ⟨"proth", Testing.ProthCertificate.emittedC⟩,
-  ⟨"mobius-array", Testing.ArrayMobiusCertificate.emittedC⟩
+  ⟨"mobius-array", Testing.ArrayMobiusCertificate.emittedC⟩,
+  ⟨"mobius-seg", Testing.ArraySegCertificate.emittedC⟩
 ]
 
 def main (args : List String) : IO UInt32 :=

@@ -1,0 +1,842 @@
+import LeanCompCert.Verified.ArrayBridge
+
+/-!
+# The offset segmented sieve, and the residues of the reduced cite families
+
+`Ports/ArrayMobius.lean` sieves `[0, L)` in one shot: cell `i` *is* the
+integer `i`, the array is `3L` cells wide, and the whole range has to fit in
+memory at once.  At `L = 10⁸` that is already 1.56 GB, so `10¹²` is 15 TB and
+`10¹⁶` is not a number one writes down.  This file is the offset, multi-segment
+version: cell `i` of the current window represents `lo + s·L + i`, one
+`AProgram` walks `segCount` consecutive windows, and the memory is `3L` cells
+no matter how long the walk is.
+
+## What changes against `ArrayMobius`
+
+Three things, all inside the program; the bridge is untouched.
+
+* **The offset.**  The first multiple of `p` inside the window `[w, w+L)` is at
+  cell `(p − w mod p) mod p`, one `urem` when the prime cursor advances.  The
+  square test `p² ∣ n` likewise reads `n = w + tgt` rather than `tgt`.
+* **The segment walk.**  The single loop is `segCount · (T + L)` iterations
+  long; the position `r` inside a window and the window base `w` are ordinary
+  registers advanced by a branchless wrap at the end of every body.  At `r = 0`
+  the prime cursor is reset, again branchlessly.
+* **No clear pass.**  The accumulation phase writes `0` back into the two cells
+  it has just read, so the next window starts from a zero array — which is
+  exactly the state the bridge's `initialMem` hands to the first window.  A
+  separate clear phase would have cost another `L` iterations per window.
+
+## The residues
+
+The point of the sieve is not `μ` but the *running* quantities the reduced
+cite families bound.  Two residue blocks are provided, each a suffix of the
+loop body reading the per-`n` signals the core leaves in registers:
+
+* `mertensResidue` — the Mertens sum `M(n) = Σ_{m≤n} μ(m)` and the squarefree
+  count `Q(n) = Σ_{m≤n} |μ(m)|`, together with the running extrema of `M` and
+  of `G(n) = Q(n)·2³⁶ − c·n` (`c = ⌊(6/π²)·2³⁶⌋`).  These are the residues of
+  `mertensM_hurst_sqrt` and of the CDEM reproducible squarefree head.
+* `mobiusOverNResidue` — the fixed-point partial sum
+  `T(n) = Σ_{m≤n} μ(m)·round(2⁶³/m)`, whose extrema are the residue of Platt's
+  (2.11) and of Platt's stronger rigorously-computed range.
+
+Every comparison against a real-valued majorant happens **once per artifact**,
+in the epilogue, against a threshold that is an exact integer computed in Lean
+(`Nat.sqrt` of an exact rational cross-multiplication, and for `6/π²` a Machin
+computation of `π` in integer arithmetic).  The loop body itself only adds and
+compares machine words.  This is what makes the per-integer cost small: the
+√ and the π never appear in the artifact.
+
+## What is proved here and what is not
+
+Proved, `[propext, Classical.choice, Quot.sound]`:
+
+* `segProgram_wf` — every program this file builds is well-formed, at every
+  `(lo, L, segCount)` and for either residue;
+* `segProgram_compiled` — hence `AProgram.evalCC_compile` applies: the compiled
+  CCIR trace, and through `MemFragment.lowerMSequence_correct` the emitted C,
+  computes exactly `denote`.
+
+Not proved, exactly as in `ArrayMobius`: that `denote` *is* the residue —
+that the sieve computes `μ`, that the accumulators are `M`, `Q`, `T`, and that
+a zero output means the reduced family holds on the range.  That is an
+algorithmic-correctness statement about the sieve; it is checked here by kernel
+evaluation against a trial-division reference at small sizes, and by the
+artifact against the reference sieve at large ones.  The distinction is the
+same one `ArrayMobius` records, and it is deliberate.
+-/
+
+namespace LeanCompCert.Ports.ArraySegSieve
+
+open LeanCompCert
+open LeanCompCert.Verified.Reflect
+open LeanCompCert.Verified.ArrayState
+
+/-! ## Emit-time number theory
+
+Everything in this section runs in Lean when the artifact is built.  None of
+it is compiled; it only produces the literals the program carries.
+-/
+
+/-- Primes `< n`, by an array sieve (the `ArrayMobius` version is quadratic
+and cannot reach the `10⁶` this file needs). -/
+def primesBelow (n : Nat) : List Nat := Id.run do
+  if n ≤ 2 then return []
+  let mut sieve : Array Bool := Array.replicate n true
+  let mut d := 2
+  while d * d < n do
+    if sieve[d]! then
+      let mut m := d * d
+      while m < n do
+        sieve := sieve.set! m false
+        m := m + d
+    d := d + 1
+  let mut out : Array Nat := #[]
+  for i in [2:n] do
+    if sieve[i]! then out := out.push i
+  return out.toList
+
+/-- All primes `p` with `p² ≤ hi`: exactly the primes a window inside
+`[2, hi]` has to sieve by. -/
+def sievingPrimes (hi : Nat) : List Nat := primesBelow (Nat.sqrt hi + 1)
+
+/-! ### `π` in integer arithmetic
+
+`⌊π · 2^N⌋` to within a handful of ulps, by Machin's formula
+`π = 16·atan(1/5) − 4·atan(1/239)`, summed with integer division only.  The
+series alternates and its terms decrease, so truncating after a term of the
+same sign as the tail keeps the partial sum on a known side; the `± 4096`
+slack below swallows both that and the per-term floor error.
+-/
+
+/-- `Σ_{k<terms} (−1)^k ⌊2^N / ((2k+1)·x^{2k+1})⌋`, returned as
+`(positive part, negative part)`. -/
+def atanInvParts (x N terms : Nat) : Nat × Nat := Id.run do
+  let scale := 2 ^ N
+  let mut pos := 0
+  let mut neg := 0
+  let mut k := 0
+  while k < terms do
+    let den := (2 * k + 1) * x ^ (2 * k + 1)
+    if den = 0 || den > scale then
+      k := terms
+    else
+      let term := scale / den
+      if k % 2 = 0 then pos := pos + term else neg := neg + term
+      k := k + 1
+  return (pos, neg)
+
+/-- `⌊π·2^N⌋` up to a few thousand ulps, as a `(lower, upper)` pair. -/
+def piScaled (N : Nat) : Nat × Nat :=
+  let (p5, n5) := atanInvParts 5 N (N + 8)
+  let (p239, n239) := atanInvParts 239 N (N + 8)
+  let a := 16 * p5 + 4 * n239
+  let b := 16 * n5 + 4 * p239
+  let mid := a - b
+  (mid - 65536, mid + 65536)
+
+/-- `⌊(6/π²)·2^k⌋`, rounded **down** with slack: the value returned is `≤ the
+true `(6/π²)·2^k`.  Clause 1 of the CDEM family wants exactly that side. -/
+def sixOverPiSqScaled (k : Nat) : Nat :=
+  let N := 128
+  let (_, hi) := piScaled N
+  -- (6/π²)·2^k = 6·2^(k+2N) / (π·2^N)²  — dividing by the *upper* π gives a
+  -- lower bound, and the floor lowers it further.
+  6 * 2 ^ (k + 2 * N) / (hi * hi)
+
+/-! ## Configuration -/
+
+/-- Everything the emitted program needs to know.  `lo ≥ 1` is required: the
+`μ(n)/n` residue divides by `n`, and the "one large prime factor" decoding of
+the sieve is wrong at `n = 0` (which would be read as `μ(0) = −1`).  At
+`n = 1` it is right — the cell is never marked, `prod` reads back as the empty
+product `1`, and `1 = n` gives no extra sign flip. -/
+structure Cfg where
+  /-- First integer covered. -/
+  lo : Nat
+  /-- Cells per window. -/
+  segLen : Nat
+  /-- Number of windows. -/
+  segCount : Nat
+  /-- Primes `p` with `p² ≤ lo + segLen·segCount − 1`. -/
+  primes : List Nat
+  deriving Repr
+
+/-- Last integer covered. -/
+def Cfg.hi (c : Cfg) : Nat := c.lo + c.segLen * c.segCount - 1
+
+def Cfg.ofRange (lo segLen segCount : Nat) : Cfg :=
+  { lo := lo, segLen := segLen, segCount := segCount
+    primes := sievingPrimes (lo + segLen * segCount - 1) }
+
+def Cfg.tableLen (c : Cfg) : Nat := c.primes.length
+
+/-- Mark steps budgeted per window: one per multiple of each prime inside the
+window, one per prime to advance the cursor, and slack.  Too small silently
+truncates the sieve (the kernel checks below catch that); too large only wastes
+iterations. -/
+def Cfg.markSteps (c : Cfg) : Nat :=
+  (c.primes.map (fun p => c.segLen / p + 2)).foldl (· + ·) 0 + 16
+
+/-- Iterations per window: the mark phase then the accumulation phase.  There
+is no clear phase — accumulation zeroes the cells it reads. -/
+def Cfg.period (c : Cfg) : Nat := c.markSteps + c.segLen
+
+def Cfg.sinkProd (c : Cfg) : Nat := 2 * c.segLen
+def Cfg.primeBase (c : Cfg) : Nat := 3 * c.segLen + 1
+def Cfg.resultBase (c : Cfg) : Nat := 3 * c.segLen + c.tableLen + 2
+def Cfg.arrayLen (c : Cfg) : Nat := c.resultBase + 8
+def Cfg.sentinel (c : Cfg) : Nat := c.segLen + 1
+def Cfg.firstPrime (c : Cfg) : Nat := c.primes.headD 2
+
+/-- The prime table as written into the array: the primes, then a sentinel
+value (only its being `≥ 2` matters; the cursor position, not the value, is
+what stops the marking). -/
+def Cfg.table (c : Cfg) : List Nat := c.primes ++ [c.sentinel]
+
+/-! ## Register allocation
+
+`0`–`7` persistent, `8`–`99` recomputed every iteration, `100`–`127` the
+residue's own persistent state.
+-/
+
+def rPi : Nat := 2      -- prime-table cursor
+def rP : Nat := 3       -- current prime
+def rJ : Nat := 4       -- current multiple, as a cell index
+def rR : Nat := 5       -- position inside the window
+def rW : Nat := 6       -- window base (the integer cell 0 stands for)
+def rZero : Nat := 7    -- constant 0, for the clearing stores
+
+def regCount : Nat := 128
+
+/-! ## The core loop body
+
+Leaves, for the accumulation phase, `pos` in `79`, `neg` in `80`, `|μ|` in
+`81`, the current integer `n` in `65`, and the phase selector `inAcc` in `9`.
+All four are already gated: during the mark phase they are `0` (and `n` is the
+window base, which is `≥ 2`, so the residue may divide by it unconditionally).
+-/
+
+def Cfg.coreBody (c : Cfg) : List AInstr :=
+  let L := c.segLen
+  let T := c.markSteps
+  let K := c.tableLen
+  let P := c.period
+  let p1 := c.firstPrime
+  [ -- phase selectors
+    .scalar (.binop 8 .lt (.reg rR) (.lit T))            -- inMark
+  , .scalar (.binop 9 .sub (.lit 1) (.reg 8))            -- inAcc
+    -- window start: reset the prime cursor, branchlessly
+  , .scalar (.binop 10 .eq (.reg rR) (.lit 0))           -- isStart
+  , .scalar (.binop 11 .sub (.lit 1) (.reg 10))
+  , .scalar (.binop 12 .urem (.reg rW) (.lit p1))
+  , .scalar (.binop 13 .sub (.lit p1) (.reg 12))
+  , .scalar (.binop 14 .urem (.reg 13) (.lit p1))        -- first cell of p1
+  , .scalar (.binop rPi .mul (.reg 11) (.reg rPi))
+  , .scalar (.binop 16 .mul (.reg 10) (.lit p1))
+  , .scalar (.binop 17 .mul (.reg 11) (.reg rP))
+  , .scalar (.binop rP .add (.reg 16) (.reg 17))
+  , .scalar (.binop 18 .mul (.reg 10) (.reg 14))
+  , .scalar (.binop 19 .mul (.reg 11) (.reg rJ))
+  , .scalar (.binop rJ .add (.reg 18) (.reg 19))
+    -- mark step: target cell, or the sink when this iteration marks nothing
+  , .scalar (.binop 20 .lt (.reg rJ) (.lit L))
+  , .scalar (.binop 21 .mul (.reg 20) (.reg 8))          -- inR
+  , .scalar (.binop 22 .mul (.reg 21) (.reg rJ))
+  , .scalar (.binop 23 .sub (.lit 1) (.reg 21))
+  , .scalar (.binop 24 .mul (.reg 23) (.lit c.sinkProd))
+  , .scalar (.binop 25 .add (.reg 22) (.reg 24))         -- prod index
+  , .scalar (.binop 26 .add (.reg 25) (.lit L))          -- flag index
+  , .load 27 25
+  , .scalar (.binop 28 .eq (.reg 27) (.lit 0))
+  , .scalar (.binop 29 .add (.reg 27) (.reg 28))
+  , .scalar (.binop 30 .mul (.reg 29) (.reg rP))
+  , .store 25 30
+  , .load 31 26
+  , .scalar (.binop 32 .mul (.reg rP) (.reg rP))
+  , .scalar (.binop 33 .add (.reg 25) (.reg rW))         -- the integer marked
+  , .scalar (.binop 34 .urem (.reg 33) (.reg 32))
+  , .scalar (.binop 35 .eq (.reg 34) (.lit 0))
+  , .scalar (.binop 36 .bxor (.reg 31) (.lit 1))
+  , .scalar (.binop 37 .mul (.reg 35) (.lit 2))
+  , .scalar (.binop 38 .bor (.reg 36) (.reg 37))
+  , .store 26 38
+    -- advance the prime cursor when the multiple ran past the window
+  , .scalar (.binop 39 .sub (.lit 1) (.reg 21))
+  , .scalar (.binop 40 .mul (.reg 8) (.reg 39))          -- advance
+  , .scalar (.binop 41 .add (.reg rPi) (.reg 40))
+  , .scalar (.binop 42 .gt (.reg 41) (.lit K))
+  , .scalar (.binop 43 .sub (.lit 1) (.reg 42))
+  , .scalar (.binop 44 .mul (.reg 43) (.reg 41))
+  , .scalar (.binop 45 .mul (.reg 42) (.lit K))
+  , .scalar (.binop rPi .add (.reg 44) (.reg 45))
+  , .scalar (.binop 46 .add (.reg rPi) (.lit c.primeBase))
+  , .load 47 46
+  , .scalar (.binop 48 .sub (.lit 1) (.reg 40))
+  , .scalar (.binop 49 .add (.reg rJ) (.reg rP))         -- next multiple, old p
+  , .scalar (.binop 50 .mul (.reg 40) (.reg 47))
+  , .scalar (.binop 51 .mul (.reg 48) (.reg rP))
+  , .scalar (.binop rP .add (.reg 50) (.reg 51))         -- new p
+  , .scalar (.binop 52 .urem (.reg rW) (.reg rP))
+  , .scalar (.binop 53 .sub (.reg rP) (.reg 52))
+  , .scalar (.binop 54 .urem (.reg 53) (.reg rP))        -- first cell of new p
+  , .scalar (.binop 55 .eq (.reg rPi) (.lit K))          -- table exhausted
+  , .scalar (.binop 56 .sub (.lit 1) (.reg 55))
+  , .scalar (.binop 57 .mul (.reg 55) (.lit (L + 1)))
+  , .scalar (.binop 58 .mul (.reg 56) (.reg 54))
+  , .scalar (.binop 59 .add (.reg 57) (.reg 58))
+  , .scalar (.binop 60 .mul (.reg 40) (.reg 59))
+  , .scalar (.binop 61 .mul (.reg 48) (.reg 49))
+  , .scalar (.binop rJ .add (.reg 60) (.reg 61))
+    -- accumulation phase: decode μ(n) for n = w + i
+  , .scalar (.binop 62 .sub (.reg rR) (.lit T))
+  , .scalar (.binop 63 .mul (.reg 9) (.reg 62))          -- i
+  , .scalar (.binop 64 .add (.reg 63) (.lit L))
+  , .scalar (.binop 65 .add (.reg 63) (.reg rW))         -- n
+  , .load 66 63
+  , .load 69 64
+  , .scalar (.binop 67 .eq (.reg 66) (.lit 0))
+  , .scalar (.binop 68 .add (.reg 66) (.reg 67))         -- prod, 0 meaning 1
+  , .scalar (.binop 70 .lshr (.reg 69) (.lit 1))
+  , .scalar (.binop 71 .band (.reg 70) (.lit 1))         -- p² ∣ n
+  , .scalar (.binop 72 .band (.reg 69) (.lit 1))         -- parity so far
+  , .scalar (.binop 73 .ne (.reg 68) (.reg 65))          -- one large prime left
+  , .scalar (.binop 74 .bxor (.reg 72) (.reg 73))
+  , .scalar (.binop 75 .sub (.lit 1) (.reg 71))          -- squarefree
+  , .scalar (.binop 76 .sub (.lit 1) (.reg 74))
+  , .scalar (.binop 77 .mul (.reg 75) (.reg 76))
+  , .scalar (.binop 78 .mul (.reg 75) (.reg 74))
+  , .scalar (.binop 79 .mul (.reg 9) (.reg 77))          -- μ = +1
+  , .scalar (.binop 80 .mul (.reg 9) (.reg 78))          -- μ = −1
+  , .scalar (.binop 81 .mul (.reg 9) (.reg 75))          -- |μ|
+    -- zero the two cells just read, so the next window starts clean
+  , .scalar (.binop 82 .sub (.lit 1) (.reg 9))
+  , .scalar (.binop 83 .mul (.reg 82) (.lit c.sinkProd))
+  , .scalar (.binop 84 .add (.reg 63) (.reg 83))
+  , .scalar (.binop 85 .add (.reg 84) (.lit L))
+  , .store 84 rZero
+  , .store 85 rZero
+    -- advance the window position, and the window base at the wrap
+  , .scalar (.binop 86 .add (.reg rR) (.lit 1))
+  , .scalar (.binop 87 .eq (.reg 86) (.lit P))
+  , .scalar (.binop 88 .sub (.lit 1) (.reg 87))
+  , .scalar (.binop rR .mul (.reg 88) (.reg 86))
+  , .scalar (.binop 89 .mul (.reg 87) (.lit L))
+  , .scalar (.binop rW .add (.reg rW) (.reg 89))
+  ]
+
+/-- Write the prime table, then set the window base to `lo`. -/
+def Cfg.coreInit (c : Cfg) : List AInstr :=
+  (c.table.zipIdx.flatMap fun (v, t) =>
+    [ AInstr.scalar (.mov 90 (.lit (c.primeBase + t)))
+    , AInstr.scalar (.mov 91 (.lit v))
+    , AInstr.store 90 91 ]) ++
+  [ .scalar (.mov rW (.lit c.lo)) ]
+
+/-! ## Residue: Mertens and the squarefree count
+
+`M(n)` biased by `2⁴⁰` (it never leaves `±0.6·10⁸` on any range this can
+reach), `Q(n)` plain, and `G(n) = Q(n)·2³⁶ − c·n` biased by `2⁶²`, all three
+maintained by a single add per integer.  The running extrema of `M` and `G`
+are what the epilogue compares.
+
+`k = 36` is the fixed-point scale for `c = 6/π²`.  The dropped fraction costs
+`n·2⁻³⁶`, which at `n = 10¹⁶` is `1.5·10⁵` against a `b√n = 7.6·10⁶` budget —
+2% of the slack — while keeping `|G| < 2⁶²` so the accumulator is one word.
+-/
+
+def cdemScale : Nat := 36
+
+def mertensBias : Nat := 2 ^ 40
+def gBias : Nat := 2 ^ 62
+
+def rM : Nat := 100
+def rMmax : Nat := 103
+def rMmin : Nat := 108
+def rQ : Nat := 112
+def rG : Nat := 116
+def rGmax : Nat := 118
+def rGmin : Nat := 123
+
+/-- `c = ⌊(6/π²)·2^cdemScale⌋`, computed once at emit time. -/
+def cdemC : Nat := sixOverPiSqScaled cdemScale
+
+def mertensResidue : List AInstr :=
+  [ .scalar (.binop 101 .add (.reg rM) (.reg 79))
+  , .scalar (.binop rM .sub (.reg 101) (.reg 80))
+    -- running maximum of M
+  , .scalar (.binop 102 .gt (.reg rM) (.reg rMmax))
+  , .scalar (.binop 104 .sub (.lit 1) (.reg 102))
+  , .scalar (.binop 105 .mul (.reg 102) (.reg rM))
+  , .scalar (.binop 106 .mul (.reg 104) (.reg rMmax))
+  , .scalar (.binop rMmax .add (.reg 105) (.reg 106))
+    -- running minimum of M
+  , .scalar (.binop 107 .lt (.reg rM) (.reg rMmin))
+  , .scalar (.binop 109 .sub (.lit 1) (.reg 107))
+  , .scalar (.binop 110 .mul (.reg 107) (.reg rM))
+  , .scalar (.binop 111 .mul (.reg 109) (.reg rMmin))
+  , .scalar (.binop rMmin .add (.reg 110) (.reg 111))
+    -- Q, and G = Q·2^k − c·n
+  , .scalar (.binop rQ .add (.reg rQ) (.reg 81))
+  , .scalar (.binop 113 .shl (.reg 81) (.lit cdemScale))
+  , .scalar (.binop 114 .mul (.reg 9) (.lit cdemC))
+  , .scalar (.binop 115 .add (.reg rG) (.reg 113))
+  , .scalar (.binop rG .sub (.reg 115) (.reg 114))
+    -- running extrema of G
+  , .scalar (.binop 117 .gt (.reg rG) (.reg rGmax))
+  , .scalar (.binop 119 .sub (.lit 1) (.reg 117))
+  , .scalar (.binop 120 .mul (.reg 117) (.reg rG))
+  , .scalar (.binop 121 .mul (.reg 119) (.reg rGmax))
+  , .scalar (.binop rGmax .add (.reg 120) (.reg 121))
+  , .scalar (.binop 122 .lt (.reg rG) (.reg rGmin))
+  , .scalar (.binop 124 .sub (.lit 1) (.reg 122))
+  , .scalar (.binop 125 .mul (.reg 122) (.reg rG))
+  , .scalar (.binop 126 .mul (.reg 124) (.reg rGmin))
+  , .scalar (.binop rGmin .add (.reg 125) (.reg 126))
+  ]
+
+/-! ## Residue: the fixed-point `Σ μ(m)/m`
+
+`T(n) = Σ_{m≤n} μ(m)·round(2⁶²/m)`, biased by `2⁶³`.  Round-to-nearest keeps
+the accumulated truncation to `n/2` ulps rather than `n`; the epilogue's
+threshold subtracts that budget, so the comparison is a sound bound on the
+real `Σ μ(m)/m` and not merely on its fixed-point image.
+-/
+
+def tBias : Nat := 2 ^ 63
+
+/-- The fixed-point unit of the `Σ μ(m)/m` accumulator.  `2⁶²`, not `2⁶³`:
+`|Σ_{m≤n} μ(m)/m| ≤ 1` with equality at `n = 1`, so at scale `2⁶³` the very
+first term would sit exactly on the sign boundary and the unsigned running
+extrema would be meaningless.  At `2⁶²` the accumulator is a signed value of
+magnitude `< 2⁶²` for every `n ≥ 1`, and the biased word orders correctly. -/
+def mobScale : Nat := 2 ^ 62
+
+def rT : Nat := 100
+def rTmax : Nat := 102
+def rTmin : Nat := 107
+
+def mobiusOverNResidue : List AInstr :=
+  [ -- w = round(2⁶² / n); n ≥ 1 always, so the division is defined
+    .scalar (.binop 101 .udiv (.lit mobScale) (.reg 65))
+  , .scalar (.binop 104 .urem (.lit mobScale) (.reg 65))
+  , .scalar (.binop 105 .add (.reg 104) (.reg 104))
+  , .scalar (.binop 106 .ge (.reg 105) (.reg 65))
+  , .scalar (.binop 109 .add (.reg 101) (.reg 106))      -- w = round(2⁶²/n)
+  , .scalar (.binop 110 .mul (.reg 79) (.reg 109))
+  , .scalar (.binop 111 .mul (.reg 80) (.reg 109))
+  , .scalar (.binop 112 .sub (.reg 110) (.reg 111))      -- two's complement δ
+  , .scalar (.binop rT .add (.reg rT) (.reg 112))
+    -- running extrema
+  , .scalar (.binop 113 .gt (.reg rT) (.reg rTmax))
+  , .scalar (.binop 114 .sub (.lit 1) (.reg 113))
+  , .scalar (.binop 115 .mul (.reg 113) (.reg rT))
+  , .scalar (.binop 116 .mul (.reg 114) (.reg rTmax))
+  , .scalar (.binop rTmax .add (.reg 115) (.reg 116))
+  , .scalar (.binop 117 .lt (.reg rT) (.reg rTmin))
+  , .scalar (.binop 118 .sub (.lit 1) (.reg 117))
+  , .scalar (.binop 119 .mul (.reg 117) (.reg rT))
+  , .scalar (.binop 120 .mul (.reg 118) (.reg rTmin))
+  , .scalar (.binop rTmin .add (.reg 119) (.reg 120))
+  ]
+
+/-! ## Programs
+
+A program is the core plus a residue, with an init block seeding the residue's
+carry-in and an epilogue comparing the running extrema against integer
+thresholds and storing the carry-out for the next artifact in a chain.
+-/
+
+/-- Seed a register with a literal. -/
+def seed (reg value : Nat) : List AInstr := [.scalar (.mov reg (.lit value))]
+
+/-- Store a register into a result cell, using `90` as the address scratch. -/
+def storeResult (c : Cfg) (slot reg : Nat) : List AInstr :=
+  [ .scalar (.mov 90 (.lit (c.resultBase + slot))), .store 90 reg ]
+
+/-- A violation test `reg > bound`, accumulated into `92`. -/
+def gtTest (reg bound : Nat) : List AInstr :=
+  [ .scalar (.binop 91 .gt (.reg reg) (.lit bound))
+  , .scalar (.binop 92 .add (.reg 92) (.reg 91)) ]
+
+/-- A violation test `reg < bound`, accumulated into `92`. -/
+def ltTest (reg bound : Nat) : List AInstr :=
+  [ .scalar (.binop 91 .lt (.reg reg) (.lit bound))
+  , .scalar (.binop 92 .add (.reg 92) (.reg 91)) ]
+
+/-- The output register: the number of failed epilogue tests. -/
+def outputReg : Nat := 92
+
+def Cfg.program (c : Cfg) (residue init epilogue : List AInstr) : AProgram := {
+  regCount := regCount
+  arrayLen := c.arrayLen
+  loopCount := c.period * c.segCount
+  init := c.coreInit ++ init
+  body := c.coreBody ++ residue
+  epilogue := epilogue
+  output := outputReg
+}
+
+/-! ### The Mertens / squarefree program
+
+Thresholds, all exact integers:
+
+* Hurst, `|M(n)| ≤ 0.571√n` on `[33, 10¹⁶]`: `⌊√(⌊326041·lo/10⁶⌋)⌋ ≤ 0.571√lo`
+  and the majorant is increasing, so the window's left end is the worst point.
+* CDEM clause 1, `Q(n) − (6/π²)n ≤ b√n`: `G(n)/2^k ≥ Q(n) − (6/π²)n`, so
+  `G ≤ ⌊b·2^k·√lo⌋` suffices.
+* CDEM clause 2, `(6/π²)(n+1) − Q(n) ≤ b√n`: bounded by
+  `(−G + c + n + 1)/2^k`, worst at `n = hi`, so `G ≥ c + hi + 1 − ⌊b·2^k√lo⌋`.
+
+`b` arrives as a rational `bNum/bDen` (`755/10⁴` and `285/10⁴` are the two
+production values).
+-/
+
+/-- `⌊(bNum/bDen)·2^cdemScale·√lo⌋`, by an exact cross-multiplied `Nat.sqrt`. -/
+def cdemThreshold (bNum bDen lo : Nat) : Nat :=
+  Nat.sqrt (bNum * bNum * 2 ^ (2 * cdemScale) * lo / (bDen * bDen))
+
+/-- `⌊0.571·√lo⌋`, exact. -/
+def hurstThreshold (lo : Nat) : Nat :=
+  Nat.sqrt (326041 * lo / 1000000)
+
+structure MertensSeed where
+  /-- `M(lo − 1)`, biased by `2⁴⁰`. -/
+  m : Nat
+  /-- `Q(lo − 1)`. -/
+  q : Nat
+  /-- `G(lo − 1)`, biased by `2⁶²`. -/
+  g : Nat
+  deriving Repr
+
+def mertensInit (s : MertensSeed) : List AInstr :=
+  seed rM s.m ++ seed rMmax s.m ++ seed rMmin s.m ++
+  seed rQ s.q ++
+  seed rG s.g ++ seed rGmax s.g ++ seed rGmin s.g
+
+def mertensEpilogue (c : Cfg) (bNum bDen : Nat) : List AInstr :=
+  let thrM := hurstThreshold c.lo
+  let thrG := cdemThreshold bNum bDen c.lo
+  let lowG := cdemC + c.hi + 1
+  gtTest rMmax (mertensBias + thrM) ++
+  ltTest rMmin (mertensBias - thrM) ++
+  gtTest rGmax (gBias + thrG) ++
+  ltTest rGmin (gBias + lowG - thrG) ++
+  storeResult c 0 rM ++ storeResult c 1 rQ ++ storeResult c 2 rG ++
+  storeResult c 3 rMmax ++ storeResult c 4 rMmin ++
+  storeResult c 5 rGmax ++ storeResult c 6 rGmin
+
+/-- The Mertens/squarefree residue program: `mertensM_hurst_sqrt` and the CDEM
+reproducible squarefree head, on one sieve pass. -/
+def mertensProgram (c : Cfg) (s : MertensSeed) (bNum bDen : Nat) : AProgram :=
+  c.program mertensResidue (mertensInit s) (mertensEpilogue c bNum bDen)
+
+/-! ### The `Σ μ(m)/m` program
+
+`|Σ_{m≤n} μ(m)/m| ≤ g(n)` with `g` antitone, so the window's **right** end is
+the worst point.  The threshold is `⌊2⁶³·g(hi)⌋ − ⌈hi/2⌉`: the subtraction is
+the accumulated round-to-nearest budget, which makes the integer test a bound
+on the real sum.
+-/
+
+/-- `⌊2⁶²·√(2/N)⌋ − ⌈N/2⌉` — Platt's (2.11) majorant.  The subtracted
+`⌈N/2⌉` is the accumulated round-to-nearest budget, so passing this test
+bounds the *real* `Σ μ(m)/m`, not merely its fixed-point image. -/
+def platt211Threshold (N : Nat) : Nat :=
+  let raw := Nat.sqrt (2 ^ 125 / N)
+  let budget := (N + 1) / 2
+  if raw ≤ budget then 0 else raw - budget
+
+/-- `⌊2⁶²/(2√N)⌋ − ⌈N/2⌉` — Platt's stronger rigorously-computed range. -/
+def plattStrongerThreshold (N : Nat) : Nat :=
+  let raw := Nat.sqrt (2 ^ 122 / N)
+  let budget := (N + 1) / 2
+  if raw ≤ budget then 0 else raw - budget
+
+def mobiusInit (t : Nat) : List AInstr :=
+  seed rT t ++ seed rTmax t ++ seed rTmin t
+
+def mobiusEpilogue (c : Cfg) (thr : Nat) : List AInstr :=
+  gtTest rTmax (tBias + thr) ++
+  ltTest rTmin (tBias - thr) ++
+  storeResult c 0 rT ++ storeResult c 1 rTmax ++ storeResult c 2 rTmin
+
+/-- The `Σ μ(m)/m` residue program.  `thr` is `platt211Threshold c.hi` or
+`plattStrongerThreshold c.hi`. -/
+def mobiusProgram (c : Cfg) (t thr : Nat) : AProgram :=
+  c.program mobiusOverNResidue (mobiusInit t) (mobiusEpilogue c thr)
+
+/-! ## Well-formedness, and the bridge instantiated
+
+`AProgram.WF` is the only obligation `AProgram.evalCC_compile` carries.  It is
+decided by a `Bool` mirror that reduces definitionally, so the proof is `rfl`
+at every configuration — no case split over a hundred instructions.
+-/
+
+def operandWFB (r : Nat) : Operand → Bool
+  | .reg i => decide (i < r)
+  | _ => true
+
+theorem operandWFB_correct {r : Nat} {o : Operand} (h : operandWFB r o = true) :
+    o.WF r := by
+  cases o with
+  | reg i => exact of_decide_eq_true h
+  | lit _ => trivial
+  | idx => trivial
+
+def instrWFB (r : Nat) : Instr → Bool
+  | .mov d s => decide (d < r) && operandWFB r s
+  | .binop d _ l rr => decide (d < r) && operandWFB r l && operandWFB r rr
+
+theorem instrWFB_correct {r : Nat} {i : Instr} (h : instrWFB r i = true) :
+    i.WF r := by
+  cases i with
+  | mov d s =>
+      simp only [instrWFB, Bool.and_eq_true] at h
+      exact ⟨of_decide_eq_true h.1, operandWFB_correct h.2⟩
+  | binop d op l rr =>
+      simp only [instrWFB, Bool.and_eq_true] at h
+      exact ⟨of_decide_eq_true h.1.1, operandWFB_correct h.1.2,
+        operandWFB_correct h.2⟩
+
+def ainstrWFB (r : Nat) : AInstr → Bool
+  | .scalar i => instrWFB r i
+  | .load d i => decide (d < r) && decide (i < r)
+  | .store i s => decide (i < r) && decide (s < r)
+
+theorem ainstrWFB_correct {r : Nat} {a : AInstr} (h : ainstrWFB r a = true) :
+    a.WF r := by
+  cases a with
+  | scalar i => exact instrWFB_correct h
+  | load d i =>
+      simp only [ainstrWFB, Bool.and_eq_true] at h
+      exact ⟨of_decide_eq_true h.1, of_decide_eq_true h.2⟩
+  | store i s =>
+      simp only [ainstrWFB, Bool.and_eq_true] at h
+      exact ⟨of_decide_eq_true h.1, of_decide_eq_true h.2⟩
+
+theorem forall_wf_of_all {r : Nat} {l : List AInstr}
+    (h : l.all (ainstrWFB r) = true) : ∀ a ∈ l, a.WF r := by
+  intro a ha
+  exact ainstrWFB_correct (List.all_eq_true.mp h a ha)
+
+theorem all_append {r : Nat} {l₁ l₂ : List AInstr}
+    (h₁ : l₁.all (ainstrWFB r) = true) (h₂ : l₂.all (ainstrWFB r) = true) :
+    (l₁ ++ l₂).all (ainstrWFB r) = true := by
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨h₁, h₂⟩
+
+theorem coreInit_all (c : Cfg) : c.coreInit.all (ainstrWFB regCount) = true := by
+  simp only [Cfg.coreInit, List.all_append, List.all_flatMap, Bool.and_eq_true]
+  refine ⟨List.all_eq_true.mpr ?_, by rfl⟩
+  intro x _
+  rfl
+
+theorem coreBody_all (c : Cfg) : c.coreBody.all (ainstrWFB regCount) = true := by
+  rfl
+
+theorem mertensResidue_all : mertensResidue.all (ainstrWFB regCount) = true := by
+  rfl
+
+theorem mobiusOverNResidue_all :
+    mobiusOverNResidue.all (ainstrWFB regCount) = true := by
+  rfl
+
+theorem seed_all (reg value : Nat) (h : reg < regCount) :
+    (seed reg value).all (ainstrWFB regCount) = true := by
+  simp only [seed, regCount, List.all_cons, List.all_nil, ainstrWFB, instrWFB,
+    operandWFB, Bool.and_true, decide_eq_true_eq]
+  simp only [regCount] at h
+  omega
+
+theorem storeResult_all (c : Cfg) (slot reg : Nat) (h : reg < regCount) :
+    (storeResult c slot reg).all (ainstrWFB regCount) = true := by
+  simp only [storeResult, regCount, List.all_cons, List.all_nil, ainstrWFB,
+    instrWFB, operandWFB, Bool.and_true, Bool.and_eq_true, decide_eq_true_eq]
+  simp only [regCount] at h
+  omega
+
+theorem gtTest_all (reg bound : Nat) (h : reg < regCount) :
+    (gtTest reg bound).all (ainstrWFB regCount) = true := by
+  simp only [gtTest, regCount, List.all_cons, List.all_nil, ainstrWFB, instrWFB,
+    operandWFB, Bool.and_true, Bool.and_eq_true, decide_eq_true_eq]
+  simp only [regCount] at h
+  omega
+
+theorem ltTest_all (reg bound : Nat) (h : reg < regCount) :
+    (ltTest reg bound).all (ainstrWFB regCount) = true := by
+  simp only [ltTest, regCount, List.all_cons, List.all_nil, ainstrWFB, instrWFB,
+    operandWFB, Bool.and_true, Bool.and_eq_true, decide_eq_true_eq]
+  simp only [regCount] at h
+  omega
+
+/-- **The bridge's side condition, once for every program this file builds.** -/
+theorem segProgram_wf (c : Cfg) {residue init epilogue : List AInstr}
+    (hr : residue.all (ainstrWFB regCount) = true)
+    (hi : init.all (ainstrWFB regCount) = true)
+    (he : epilogue.all (ainstrWFB regCount) = true) :
+    (c.program residue init epilogue).WF :=
+  ⟨show outputReg < regCount by decide,
+   forall_wf_of_all (all_append (coreInit_all c) hi),
+   forall_wf_of_all (all_append (coreBody_all c) hr),
+   forall_wf_of_all he⟩
+
+theorem mertensInit_all (s : MertensSeed) :
+    (mertensInit s).all (ainstrWFB regCount) = true :=
+  all_append (all_append (all_append (all_append (all_append (all_append
+    (seed_all rM s.m (by decide)) (seed_all rMmax s.m (by decide)))
+    (seed_all rMmin s.m (by decide))) (seed_all rQ s.q (by decide)))
+    (seed_all rG s.g (by decide))) (seed_all rGmax s.g (by decide)))
+    (seed_all rGmin s.g (by decide))
+
+theorem mertensEpilogue_all (c : Cfg) (bNum bDen : Nat) :
+    (mertensEpilogue c bNum bDen).all (ainstrWFB regCount) = true :=
+  all_append (all_append (all_append (all_append (all_append (all_append
+    (all_append (all_append (all_append (all_append
+      (gtTest_all rMmax _ (by decide)) (ltTest_all rMmin _ (by decide)))
+      (gtTest_all rGmax _ (by decide))) (ltTest_all rGmin _ (by decide)))
+      (storeResult_all c 0 rM (by decide)))
+      (storeResult_all c 1 rQ (by decide)))
+      (storeResult_all c 2 rG (by decide)))
+      (storeResult_all c 3 rMmax (by decide)))
+      (storeResult_all c 4 rMmin (by decide)))
+      (storeResult_all c 5 rGmax (by decide)))
+      (storeResult_all c 6 rGmin (by decide))
+
+theorem mobiusInit_all (t : Nat) :
+    (mobiusInit t).all (ainstrWFB regCount) = true :=
+  all_append (all_append (seed_all rT t (by decide)) (seed_all rTmax t (by decide)))
+    (seed_all rTmin t (by decide))
+
+theorem mobiusEpilogue_all (c : Cfg) (thr : Nat) :
+    (mobiusEpilogue c thr).all (ainstrWFB regCount) = true :=
+  all_append (all_append (all_append (all_append
+    (gtTest_all rTmax _ (by decide)) (ltTest_all rTmin _ (by decide)))
+    (storeResult_all c 0 rT (by decide)))
+    (storeResult_all c 1 rTmax (by decide)))
+    (storeResult_all c 2 rTmin (by decide))
+
+theorem mertensProgram_wf (c : Cfg) (s : MertensSeed) (bNum bDen : Nat) :
+    (mertensProgram c s bNum bDen).WF :=
+  segProgram_wf c mertensResidue_all (mertensInit_all s)
+    (mertensEpilogue_all c bNum bDen)
+
+theorem mobiusProgram_wf (c : Cfg) (t thr : Nat) :
+    (mobiusProgram c t thr).WF :=
+  segProgram_wf c mobiusOverNResidue_all (mobiusInit_all t)
+    (mobiusEpilogue_all c thr)
+
+/--
+**The bridge, instantiated for the Mertens / squarefree residue.**  For any
+array base at which the window fits, the compiled CCIR trace leaves the
+program's denotation — the number of failed threshold tests — in the output
+register.
+-/
+theorem mertensProgram_compiled (c : Cfg) (s : MertensSeed) (bNum bDen : Nat)
+    (base : Int)
+    (hBase : BaseOk (mertensProgram c s bNum bDen).arrayLen base)
+    (n : Nat) (hDenote : (mertensProgram c s bNum bDen).denote = some n) :
+    Option.bind
+        (Verified.MemFragment.evalMCCSequence
+          ((mertensProgram c s bNum bDen).initialMCC base)
+          (mertensProgram c s bNum bDen).compile)
+        (fun m : Verified.MemFragment.MCCState =>
+          m.env ⟨(mertensProgram c s bNum bDen).output + 1⟩) = some ((n : Nat) : Int) :=
+  AProgram.evalCC_compile _ (mertensProgram_wf c s bNum bDen) base hBase n hDenote
+
+/-- **The bridge, instantiated for the `Σ μ(m)/m` residue.** -/
+theorem mobiusProgram_compiled (c : Cfg) (t thr : Nat) (base : Int)
+    (hBase : BaseOk (mobiusProgram c t thr).arrayLen base)
+    (n : Nat) (hDenote : (mobiusProgram c t thr).denote = some n) :
+    Option.bind
+        (Verified.MemFragment.evalMCCSequence
+          ((mobiusProgram c t thr).initialMCC base)
+          (mobiusProgram c t thr).compile)
+        (fun m : Verified.MemFragment.MCCState =>
+          m.env ⟨(mobiusProgram c t thr).output + 1⟩) = some ((n : Nat) : Int) :=
+  AProgram.evalCC_compile _ (mobiusProgram_wf c t thr) base hBase n hDenote
+
+
+/-! ## Kernel sanity checks
+
+The bridge does not depend on any of this: it says the artifact computes
+`denote`, whatever `denote` is.  These checks are the other half — evidence
+that `denote` is the residue it is meant to be.  They evaluate the sieve in
+the kernel at a tiny configuration and compare against a trial-division
+reference, exactly as `ArrayMobius` does; the artifact repeats the comparison
+against `bench/ref_seg.c` at `10⁸`, where `M(10⁸) = 1928` and
+`Q(10⁸) = 60 792 694` are the published values.
+-/
+
+namespace Check
+
+/-- Trial-division `μ`, encoded `0 ↦ μ = 0`, `1 ↦ μ = 1`, `2 ↦ μ = −1`. -/
+def refMuCode (n : Nat) : Nat :=
+  if n = 0 then 0 else
+  let rec go (m d fuel : Nat) (par : Nat) : Nat :=
+    match fuel with
+    | 0 => if m = 1 then (if par = 0 then 1 else 2) else (if par = 0 then 2 else 1)
+    | fuel + 1 =>
+        if d * d > m then
+          (if m = 1 then (if par = 0 then 1 else 2) else (if par = 0 then 2 else 1))
+        else if m % d = 0 then
+          let m' := m / d
+          if m' % d = 0 then 0 else go m' (d + 1) fuel (1 - par)
+        else go m (d + 1) fuel par
+  go n 2 (n + 2) 0
+
+def window (lo hi : Nat) : List Nat := (List.range (hi + 1)).drop lo
+
+/-- `2⁴⁰ + M(hi) − M(lo−1)`, the biased Mertens accumulator. -/
+def refM (lo hi : Nat) : Nat :=
+  (window lo hi).foldl (fun acc n =>
+    match refMuCode n with
+    | 1 => acc + 1
+    | 2 => acc - 1
+    | _ => acc) mertensBias
+
+/-- `Q(hi) − Q(lo−1)`. -/
+def refQ (lo hi : Nat) : Nat :=
+  (window lo hi).foldl (fun acc n =>
+    if refMuCode n = 0 then acc else acc + 1) 0
+
+/-- `2⁶³ + Σ μ(m)·round(2⁶²/m)`, mod `2⁶⁴`. -/
+def refT (lo hi : Nat) : Nat :=
+  (window lo hi).foldl (fun acc n =>
+    let w := (mobScale + n / 2) / n
+    match refMuCode n with
+    | 1 => (acc + w) % Verified.Reflect.M
+    | 2 => (acc + (Verified.Reflect.M - w)) % Verified.Reflect.M
+    | _ => acc) tBias
+
+/-- A program with the epilogue stripped and the output pointed at one
+accumulator, so a single residue register can be read off. -/
+def probe (c : Cfg) (residue init : List AInstr) (out : Nat) : AProgram :=
+  { regCount := regCount, arrayLen := c.arrayLen
+    loopCount := c.period * c.segCount
+    init := c.coreInit ++ init
+    body := c.coreBody ++ residue
+    epilogue := [], output := out }
+
+/-- Three windows of eight cells covering `[1, 24]`; the prime list is spelled
+out because the emit-time sieve is not a kernel-reducible definition. -/
+def cfg : Cfg := { lo := 1, segLen := 8, segCount := 3, primes := [2, 3] }
+
+def mertensProbe (out : Nat) : AProgram :=
+  probe cfg mertensResidue (mertensInit ⟨mertensBias, 0, gBias⟩) out
+
+def mobiusProbe : AProgram := probe cfg mobiusOverNResidue (mobiusInit tBias) rT
+
+set_option maxRecDepth 4000000 in
+example : (mertensProbe rM).denote = some (refM 1 24) := by decide
+
+set_option maxRecDepth 4000000 in
+example : (mertensProbe rQ).denote = some (refQ 1 24) := by decide
+
+set_option maxRecDepth 4000000 in
+example : mobiusProbe.denote = some (refT 1 24) := by decide
+
+end Check
+
+end LeanCompCert.Ports.ArraySegSieve
