@@ -26,6 +26,8 @@ import LeanCompCert.Verified.Segment
 import LeanCompCert.Verified.FoldBridge
 import LeanCompCert.Ports.RS62Increments
 import LeanCompCert.Ports.RS62LoopE
+import LeanCompCert.Ports.TGSieve
+import LeanCompCert.Ports.TGLadder
 
 
 /-!
@@ -111,3 +113,25 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.RS62.loopE_of_chain
 #print axioms LeanCompCert.Ports.RS62.loopE_eq_filter_foldl
 #print axioms LeanCompCert.Ports.RS62.loopE_eq_word
+
+-- Helfgott--Platt Goldbach ladder port: stage (a), the progression sieve
+#print axioms LeanCompCert.Ports.TGSieve.dvd_of_odd_dvd_two_mul
+#print axioms LeanCompCert.Ports.TGSieve.dvd_of_odd_dvd_two_pow_mul
+#print axioms LeanCompCert.Ports.TGSieve.dvd_proth_iff
+#print axioms LeanCompCert.Ports.TGSieve.sieveTable_valid
+#print axioms LeanCompCert.Ports.TGSieve.hitCount_eq_zero_iff
+#print axioms LeanCompCert.Ports.TGSieve.bodyInstrs_wf
+#print axioms LeanCompCert.Ports.TGSieve.sieveProgram_wf
+#print axioms LeanCompCert.Ports.TGSieve.sieveProgram_denote_mod
+#print axioms LeanCompCert.Ports.TGSieve.sieveProgram_denote
+-- stage (c), ladder assembly
+#print axioms LeanCompCert.Ports.TGLadder.gap_le_iff
+#print axioms LeanCompCert.Ports.TGLadder.covers
+#print axioms LeanCompCert.Ports.TGLadder.lastNum_runningK
+#print axioms LeanCompCert.Ports.TGLadder.gapChain_of_deltas
+#print axioms LeanCompCert.Ports.TGLadder.covers_of_deltas
+#print axioms LeanCompCert.Ports.TGLadder.finalK_eq
+#print axioms LeanCompCert.Ports.TGLadder.ladderProgram_wf
+#print axioms LeanCompCert.Ports.TGLadder.ladderProgram_denote_mod
+#print axioms LeanCompCert.Ports.TGLadder.ladderProgram_denote
+#print axioms LeanCompCert.Ports.TGLadder.covers_of_accepts

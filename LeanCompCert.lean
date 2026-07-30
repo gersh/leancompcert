@@ -38,6 +38,9 @@ import LeanCompCert.Verified.Segment
 import LeanCompCert.Verified.FoldBridge
 import LeanCompCert.Ports.RS62Increments
 import LeanCompCert.Ports.RS62LoopE
+import LeanCompCert.Ports.TGSieveTable
+import LeanCompCert.Ports.TGSieve
+import LeanCompCert.Ports.TGLadder
 import LeanCompCert.LCNF.View
 import LeanCompCert.LCNF.AdapterV4_32
 import LeanCompCert.LCNF.Validate
