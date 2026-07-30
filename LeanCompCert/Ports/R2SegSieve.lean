@@ -382,14 +382,31 @@ def windowStats (S w len root : Nat) : Nat × Nat := Id.run do
       rounds := rounds + (if big == 1 then S else 1)
   return (points, rounds)
 
-/-- The configuration at `(lo, segLen, segCount)`, with both budgets set from
-the **first** window — the densest, since both test-point densities decrease —
-plus a `10%` margin.  Both budgets are checked in the loop. -/
+/-- Windows to probe when sizing the two budgets.  Neither density is
+monotone in `w`, and in opposite ways: the mode-`2`/`3` cells (both primes
+below the *fixed* `√hi`) thin out as `w` grows, while the mode-`0`/`1` cells —
+the ones that cost `S` rounds each — start almost absent just above
+`lo ≈ √hi`, where a prime factor above `√hi` barely fits, and rise to their
+asymptotic density.  The round count therefore *peaks a window or two in*.
+Probing only the first window under-budgets the log phase by 1.3% at
+`hi = 10⁷`, which the drain guard catches — it is not silently wrong — but
+which costs a run.  These seven probes bracket the peak. -/
+def probeWindows (segCount : Nat) : List Nat :=
+  ([0, 1, 2, segCount / 4, segCount / 2, 3 * segCount / 4, segCount - 1].map
+    (fun i => min i (segCount - 1))).eraseDups
+
+/-- The configuration at `(lo, segLen, segCount)`, with both budgets set to
+the maximum over the probe windows plus a `10%` margin.  Both budgets are
+checked in the loop, so a mis-sized one reports a failure rather than a wrong
+answer. -/
 def R2Cfg.ofScale (S lo segLen segCount : Nat) : R2Cfg :=
   let hi := lo + segLen * segCount - 1
   let root := Nat.sqrt hi
   let tab := markTable S hi
-  let st := windowStats S lo segLen root
+  let st := (probeWindows segCount).foldl
+    (fun acc i =>
+      let r := windowStats S (lo + i * segLen) segLen root
+      (max acc.1 r.1, max acc.2 r.2)) (0, 0)
   { lo := lo, segLen := segLen, segCount := segCount, sc := S
     markSteps := markBudget tab segLen
     logSteps := st.2 * 110 / 100 + 128
