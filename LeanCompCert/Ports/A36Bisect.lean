@@ -185,13 +185,24 @@ def leafDataAt (d i : Nat) : Leaf :=
 /-- The chain on cell `i` at the shipped depth. -/
 def leafData (i : Nat) : Leaf := leafDataAt depth i
 
-/-- The leaf test at depth `d`: the three root checks, and the residual's
-lower bound. -/
+/-- The leaf test at depth `d`: the three root checks, the two ordering checks
+that make the differences exact, and the residual's lower bound.
+
+The ordering checks are the reason no nonnegativity assumption is needed
+anywhere.  `Nat` subtraction truncates at zero, so an interval difference whose
+operands overlap would report a lower endpoint of `0` where the true value is
+negative — sound only if the quantity is known nonnegative in advance.  Here
+`υ ≥ 1` and `√(1 + x²) ≥ x` are both true, but rather than assume them the leaf
+*checks* `(kC 1).hi ≤ v.lo` and `x.hi ≤ w.lo`, which is exactly the hypothesis
+of `Dyadic.DInt.sub_no_truncation`: the difference is then the exact one and
+`sub_encloses` needs no side condition. -/
 def leafOKAt (d i : Nat) : Bool :=
   let L := leafDataAt d i
   sqrtOK L.rad1 L.j.lo L.j.hi &&
   sqrtOK L.rad2 L.v.lo L.v.hi &&
   sqrtOK L.rad3 L.w.lo L.w.hi &&
+  decide ((kC 1).hi ≤ L.v.lo) &&
+  decide (L.x.hi ≤ L.w.lo) &&
   decide (L.b.hi ≤ L.a.lo)
 
 /-- The leaf test at the shipped depth. -/
@@ -226,9 +237,11 @@ theorem leafOKAt_sound (d i : Nat) (h : leafOKAt d i = true) :
     sqrtOK (leafDataAt d i).rad1 (leafDataAt d i).j.lo (leafDataAt d i).j.hi = true ∧
     sqrtOK (leafDataAt d i).rad2 (leafDataAt d i).v.lo (leafDataAt d i).v.hi = true ∧
     sqrtOK (leafDataAt d i).rad3 (leafDataAt d i).w.lo (leafDataAt d i).w.hi = true ∧
+    (kC 1).hi ≤ (leafDataAt d i).v.lo ∧
+    (leafDataAt d i).x.hi ≤ (leafDataAt d i).w.lo ∧
     (leafDataAt d i).b.hi ≤ (leafDataAt d i).a.lo := by
   simp only [leafOKAt, Bool.and_eq_true, decide_eq_true_eq] at h
-  exact ⟨h.1.1.1, h.1.1.2, h.1.2, h.2⟩
+  exact ⟨h.1.1.1.1.1, h.1.1.1.1.2, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
 
 /-- The three roots are verified and the residual's lower bound holds, for
 every cell.  This is the whole interface. -/
@@ -236,8 +249,18 @@ theorem leaf_sound (i : Nat) (hi : i < leaves) :
     sqrtOK (leafData i).rad1 (leafData i).j.lo (leafData i).j.hi = true ∧
     sqrtOK (leafData i).rad2 (leafData i).v.lo (leafData i).v.hi = true ∧
     sqrtOK (leafData i).rad3 (leafData i).w.lo (leafData i).w.hi = true ∧
+    (kC 1).hi ≤ (leafData i).v.lo ∧
+    (leafData i).x.hi ≤ (leafData i).w.lo ∧
     (leafData i).b.hi ≤ (leafData i).a.lo :=
   leafOKAt_sound depth i (leaf_passes i hi)
+
+/-- Both interval differences are *exact*: the checked ordering is the
+hypothesis of `Dyadic.DInt.sub_no_truncation`, so `υ − 1` and `√(1 + x²) − x`
+lose nothing at the bottom and need no nonnegativity assumption. -/
+theorem differences_exact (i : Nat) (hi : i < leaves) {a b : Nat}
+    (ha : (leafData i).w.mem a) (hb : (leafData i).x.mem b) :
+    b + (a - b) = a :=
+  DInt.sub_no_truncation ha hb (leaf_sound i hi).2.2.2.2.1
 
 /-- Consequence of the first check, in enclosure form: for every mantissa `m`
 of `1 + ρ²` inside `rad1`, the root's mantissa is bracketed by `j`. -/

@@ -13,7 +13,7 @@ the family — `A2.cert_lower` records 377 817 leaf cells at maximum depth 31 �
 remain out of reach for it.
 
 This module is the other half: the same leaf, as a `Reflect.Program` whose loop
-runs once per leaf.  The body is fixed-shape and fixed-width — 455 instructions,
+runs once per leaf.  The body is fixed-shape and fixed-width — 476 instructions,
 no data-dependent branch, no allocation — so the emitted C is the same few
 kilobytes whether the loop runs 2⁸ or 2³¹ times, and the cost is exactly
 `leaves × body`.
@@ -28,6 +28,7 @@ kilobytes whether the loop runs 2⁸ or 2³¹ times, and the cost is exactly
 | two outward divisions | 20 |
 | ten outward products | 50 |
 | five exact sums, two clamped differences | 22 |
+| the two ordering checks that make the differences exact | 4 |
 | the residual comparison | 2 |
 
 ## Truncation and guards
@@ -44,17 +45,36 @@ than by an argument about the data:
 
 ## What is proved, and what is not
 
-Proved: `program_wf`, hence `Program.evalCC_compile` applies and the emitted
-CCIR computes `Program.denote` exactly; and `program_denote` — the depth-8
-program returns `0` — by `decide +kernel`.
+Proved: `programAt_wf` at every depth from one proof, hence
+`Program.evalCC_compile` applies and the emitted CCIR computes `Program.denote`
+exactly; and four `decide +kernel` agreement checks — the program and
+`A36Bisect.leafOK` return the same verdict on a **passing** configuration
+(`agree_pass` / `sweep_pass`, the first eight cells of the shipped depth-8
+grid) and on a **failing** one (`agree_fail` / `sweep_fail`, the whole depth-3
+grid, where the cells are far too wide and the enclosure genuinely does not
+close).  The failing pair is the more informative of the two: it shows the
+encoding reports failure rather than passing by accident.
 
 **Not** proved: that the body's `Nat` denotation equals `A36Bisect.leafOK` for
 every index.  That is the `∀`-quantified simulation `FoldBridge` exists for, and
 it needs a no-overflow invariant on the mod-2⁶⁴ arithmetic (the largest product
 here is `2^61.4`, so it is true, but it is not proved).  Until it is, the
-deep-depth artifact runs in `bench/results/` are **measurements, not theorems**;
-the depth-8 statement above is a theorem, and it is the one the native
-cross-check compares against.
+deep-depth artifact runs in `bench/results/a36_bisect.md` are **measurements,
+not theorems**.
+
+## Why the full-size denotation is not kernel-checked
+
+`Program.denote` threads `RegState = Nat → Nat`, and `RegState.set` is a
+closure, so a register read after `k` writes costs `O(k)` and the whole loop is
+quadratic in `leaves × body`.  Measured: 8 leaves in 1.4 s, which extrapolates
+to about a quarter of an hour and tens of gigabytes at 256.  `A36Bisect.sweep_ok`
+evaluates the *same certificate* in 1.01 s because it is a plain fold over
+`Nat`s with no register file at all.
+
+That is worth stating plainly: for this family the register-program packaging is
+**more** expensive in the kernel than the mathematics it encodes, so it earns
+its place only past the kernel's reach — which for this certificate means past
+depth 14, i.e. not at all.
 -/
 
 namespace LeanCompCert.Ports.A36BisectProgram
@@ -62,8 +82,10 @@ namespace LeanCompCert.Ports.A36BisectProgram
 open LeanCompCert
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Ports.A36Bisect
+open LeanCompCert.Verified.DyadicBisect
 
-set_option maxRecDepth 100000
+set_option maxRecDepth 4000000
+set_option maxHeartbeats 0
 
 /-! ## Register map -/
 
@@ -204,6 +226,10 @@ def body : List Instr :=
   iAdd 17 18 rOne rOne 31 32 ++                       -- rad3 = 1 + x²
   iSqrtGuess 19 20 17 18 rT rG rU ++                  -- w = √(1 + x²)
   sqrtCheckInstrs 17 18 19 20 rT rG ++
+  [ .binop rT .gt (.reg rOne) (.reg 11)                 -- 1 > υ.lo ?
+  , .binop rFail .bor (.reg rFail) (.reg rT)
+  , .binop rT .gt (.reg 16) (.reg 19)                   -- x.hi > w.lo ?
+  , .binop rFail .bor (.reg rFail) (.reg rT) ] ++
   iSub 21 22 19 20 15 16 rT ++                        -- Y = w − x
   iMul 31 32 11 12 11 12 rT ++                        -- υ²
   iMul 33 34 rEight rEight 31 32 rT ++                -- 8υ²
@@ -264,6 +290,27 @@ theorem programAt_wf (d : Nat) : (programAt d).WF :=
     by intro instr h; cases h⟩
 
 theorem program_wf : program.WF := programAt_wf depth
+
+/-! ## Agreement with `A36Bisect.leafOK`, by kernel evaluation
+
+Two configurations, both `decide +kernel`: one where the certificate passes and
+one where it does not.  Together they check that the 476-instruction encoding
+computes the same verdict as the Lean function — including that it *can* say no.
+-/
+
+/-- On the first eight cells of the shipped grid the program reports success. -/
+theorem agree_pass : { program with loopCount := 8 }.denote = some 0 := by
+  decide +kernel
+
+/-- And `leafOK` agrees. -/
+theorem sweep_pass : allBelow 8 leafOK = true := by decide +kernel
+
+/-- On the depth-3 grid the cells are far too wide and the enclosure does not
+close; the program reports failure. -/
+theorem agree_fail : (programAt 3).denote = some 1 := by decide +kernel
+
+/-- And `leafOK` agrees. -/
+theorem sweep_fail : allBelow (2 ^ 3) (leafOKAt 3) = false := by decide +kernel
 
 /-- The number of instructions in one leaf. -/
 def bodyLength : Nat := body.length

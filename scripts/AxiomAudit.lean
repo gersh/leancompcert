@@ -283,3 +283,8 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.A36BisectProgram.init_wf
 #print axioms LeanCompCert.Ports.A36BisectProgram.programAt_wf
 #print axioms LeanCompCert.Ports.A36BisectProgram.program_wf
+#print axioms LeanCompCert.Ports.A36BisectProgram.agree_pass
+#print axioms LeanCompCert.Ports.A36BisectProgram.sweep_pass
+#print axioms LeanCompCert.Ports.A36BisectProgram.agree_fail
+#print axioms LeanCompCert.Ports.A36BisectProgram.sweep_fail
+#print axioms LeanCompCert.Ports.A36Bisect.differences_exact
