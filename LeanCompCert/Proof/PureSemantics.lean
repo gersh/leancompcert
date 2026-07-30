@@ -1006,14 +1006,79 @@ def evalCSequence (env : CEnv) : List C.CStmt → Option CEnv
       let env ← evalCStmt env stmt
       evalCSequence env rest
 
-def lowerSequence
-    (fn : CCIR.Function) :
-    List StraightInstruction → Except Lower.LowerError (List C.CStmt)
-  | [] => .ok []
-  | instruction :: rest => do
+/-! ### Lowering a whole trace
+
+The natural non-tail-recursive shape keeps one interpreter frame alive per
+instruction, and the Lean interpreter's recursion guard fires at roughly ten
+thousand frames — a hard ceiling on the size of an emitted translation unit.
+`lowerSequenceAux` accumulates the statements in reverse so the recursive
+call is a tail call; `lowerSequence_nil` and `lowerSequence_cons` recover the
+two equations every proof below uses, so nothing downstream changes. -/
+
+/-- Tail-recursive worker: `acc` holds the statements emitted so far, in
+reverse order. -/
+def lowerSequenceAux (fn : CCIR.Function) :
+    List StraightInstruction → List C.CStmt →
+      Except Lower.LowerError (List C.CStmt)
+  | [], acc => .ok acc.reverse
+  | instruction :: rest, acc => do
       let stmt ← lowerStraight fn instruction
-      let statements ← lowerSequence fn rest
-      pure (stmt :: statements)
+      lowerSequenceAux fn rest (stmt :: acc)
+
+def lowerSequence
+    (fn : CCIR.Function) (instructions : List StraightInstruction) :
+    Except Lower.LowerError (List C.CStmt) :=
+  lowerSequenceAux fn instructions []
+
+/-- The accumulator only prefixes the result. -/
+theorem lowerSequenceAux_eq (fn : CCIR.Function) :
+    ∀ (instructions : List StraightInstruction) (acc : List C.CStmt),
+      lowerSequenceAux fn instructions acc =
+        Except.map (fun ss => acc.reverse ++ ss)
+          (lowerSequenceAux fn instructions []) := by
+  intro instructions
+  induction instructions with
+  | nil =>
+      intro acc
+      show Except.ok acc.reverse = Except.map _ (Except.ok ([] : List C.CStmt))
+      simp [Except.map]
+  | cons instruction rest ih =>
+      intro acc
+      show (lowerStraight fn instruction).bind
+            (fun stmt => lowerSequenceAux fn rest (stmt :: acc)) =
+        Except.map _ ((lowerStraight fn instruction).bind
+            (fun stmt => lowerSequenceAux fn rest (stmt :: [])))
+      cases hHead : lowerStraight fn instruction with
+      | error e => rfl
+      | ok stmt =>
+          show lowerSequenceAux fn rest (stmt :: acc) =
+            Except.map _ (lowerSequenceAux fn rest (stmt :: []))
+          rw [ih (stmt :: acc), ih (stmt :: [])]
+          cases lowerSequenceAux fn rest [] <;> simp [Except.map]
+
+theorem lowerSequence_nil (fn : CCIR.Function) :
+    lowerSequence fn [] = .ok [] := rfl
+
+theorem lowerSequence_cons (fn : CCIR.Function)
+    (instruction : StraightInstruction) (rest : List StraightInstruction) :
+    lowerSequence fn (instruction :: rest) =
+      (do
+        let stmt ← lowerStraight fn instruction
+        let statements ← lowerSequence fn rest
+        pure (stmt :: statements)) := by
+  show (lowerStraight fn instruction).bind
+      (fun stmt => lowerSequenceAux fn rest (stmt :: [])) =
+    (lowerStraight fn instruction).bind (fun stmt =>
+      (lowerSequenceAux fn rest []).bind
+        (fun statements => pure (stmt :: statements)))
+  cases hHead : lowerStraight fn instruction with
+  | error e => rfl
+  | ok stmt =>
+      show lowerSequenceAux fn rest (stmt :: []) =
+        (lowerSequenceAux fn rest []).bind
+          (fun statements => pure (stmt :: statements))
+      rw [lowerSequenceAux_eq fn rest (stmt :: [])]
+      cases lowerSequenceAux fn rest [] <;> rfl
 
 /--
 Every element of a successfully lowered trace is exactly the singleton
@@ -1040,12 +1105,12 @@ theorem lowerSequence_is_lowerInstructions
     InstructionLoweringRel fn block index instructions statements := by
   induction instructions generalizing index statements with
   | nil =>
-      simp only [lowerSequence] at hLower
+      rw [lowerSequence_nil] at hLower
       injection hLower with hStatements
       subst statements
       trivial
   | cons instruction rest ih =>
-      simp only [lowerSequence] at hLower
+      rw [lowerSequence_cons] at hLower
       generalize hHead : lowerStraight fn instruction = headResult at hLower
       cases headResult with
       | error error =>
@@ -1085,12 +1150,12 @@ theorem lowerSequence_correct
       (evalCSequence cEnv statements) := by
   induction instructions generalizing statements ccEnv cEnv with
   | nil =>
-      simp only [lowerSequence] at hLower
+      rw [lowerSequence_nil] at hLower
       injection hLower with hStatements
       subst statements
       simpa [evalCCSequence, evalCSequence, ResultsRel] using hEnv
   | cons instruction rest ih =>
-      simp only [lowerSequence] at hLower
+      rw [lowerSequence_cons] at hLower
       generalize hHead : lowerStraight fn instruction = headResult at hLower
       cases headResult with
       | error error =>
@@ -1148,12 +1213,12 @@ theorem lowerSequence_append
       .ok (firstStatements ++ restStatements) := by
   induction first generalizing firstStatements with
   | nil =>
-      simp only [lowerSequence] at hFirst
+      rw [lowerSequence_nil] at hFirst
       injection hFirst with hStatements
       subst firstStatements
       simpa using hRest
   | cons instruction tail ih =>
-      simp only [lowerSequence] at hFirst
+      rw [lowerSequence_cons] at hFirst
       generalize hHead : lowerStraight fn instruction = headResult at hFirst
       cases headResult with
       | error error =>
@@ -1172,7 +1237,7 @@ theorem lowerSequence_append
               injection hFirst with hStatements
               subst firstStatements
               show lowerSequence fn (instruction :: (tail ++ rest)) = _
-              simp only [lowerSequence]
+              rw [lowerSequence_cons]
               rw [hHead, ih tailStatements hTail]
               rfl
 

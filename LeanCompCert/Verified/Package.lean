@@ -421,11 +421,8 @@ private theorem lowerSequence_of_pointwise (fn : CCIR.Function) :
   | nil => intro _; rfl
   | cons si rest ih =>
       intro h
-      show (do
-        let stmt ← lowerStraight fn si
-        let statements ← lowerSequence fn rest
-        pure (stmt :: statements)) = _
-      rw [h si (by simp), ih (fun x hx => h x (by simp [hx]))]
+      rw [lowerSequence_cons, h si (by simp),
+        ih (fun x hx => h x (by simp [hx]))]
       rfl
 
 /-- **M1, lowering half**: a compiled program always lowers, to exactly

@@ -1,0 +1,22 @@
+INVOCATION CONSTRAINT (cost two failed runs to find)
+
+  bench/seg_chain.sh MODE LO HI RATIO SEGLEN [CC]
+
+SEGLEN must divide LO, or at least satisfy  ceil((LO-1)/SEGLEN) * SEGLEN <= LO.
+
+The script seeds the chain with `prime_cnt = ceil((LO-1)/SEGLEN)` windows of
+SEGLEN each, whose thresholds are deliberately ignored, to build the carry-in
+for the first checked window.  If SEGLEN > LO those seed windows cover MORE
+than [1, LO], the first checked window starts in the wrong place, and the run
+fails immediately at that window with a spurious violation -- not a
+mathematical result.
+
+  LO=33     SEGLEN=1000000  -> seeds cover [1,1000000]  OVERSHOOTS, desyncs
+  LO=10000  SEGLEN=1000000  -> seeds cover [1,1000000]  OVERSHOOTS, desyncs
+  LO=10000  SEGLEN=200      -> seeds cover [1,10000]    OK
+
+Also: LO must be at or above the range where the majorant holds (the script's
+default LO=9243 is not arbitrary).  A violation reported below that range is
+an invocation error, not a counterexample.
+
+Known-good: bench/seg_chain.sh plattstrong 10000 300000 1.02 200  -> 0 violations

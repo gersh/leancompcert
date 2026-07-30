@@ -544,16 +544,88 @@ def evalMCSequence (t : MCState) : List C.CStmt → Option MCState
   | stmt :: rest =>
       Option.bind (evalMC t stmt) fun next => evalMCSequence next rest
 
+/-! ### Lowering a whole trace
+
+The obvious shape,
+
+```
+  | [] => .ok []
+  | mi :: rest => do let stmt ← lowerM fn mi
+                     let statements ← lowerMSequence fn rest
+                     pure (stmt :: statements)
+```
+
+is not tail-recursive: the `pure (stmt :: statements)` after the recursive
+call keeps one frame alive per instruction.  Emission runs in the Lean
+interpreter, whose recursion guard fires at roughly ten thousand frames, so
+that shape caps a translation unit at about `10⁴` instructions — which the
+segmented sieve's prime table reaches at `hi ≈ 2·10⁸`.
+
+`lowerMAux` carries the statements emitted so far in a reversed accumulator,
+so the recursive call is in tail position and the interpreter reuses the
+frame.  The two equations of the naive definition are recovered as
+`lowerMSequence_nil` and `lowerMSequence_cons`, which is all the correctness
+proof below ever used; nothing downstream sees the difference. -/
+
+/-- Tail-recursive worker: `acc` holds the statements emitted so far, in
+reverse order. -/
+def lowerMAux (fn : CCIR.Function) :
+    List MInstr → List C.CStmt → Except Lower.LowerError (List C.CStmt)
+  | [], acc => .ok acc.reverse
+  | mi :: rest, acc => do
+      let stmt ← lowerM fn mi
+      lowerMAux fn rest (stmt :: acc)
+
 /-- Lower a memory-extended straight-line trace, one statement per
 instruction, with the production helpers. -/
 def lowerMSequence
-    (fn : CCIR.Function) :
-    List MInstr → Except Lower.LowerError (List C.CStmt)
-  | [] => .ok []
-  | mi :: rest => do
-      let stmt ← lowerM fn mi
-      let statements ← lowerMSequence fn rest
-      pure (stmt :: statements)
+    (fn : CCIR.Function) (instructions : List MInstr) :
+    Except Lower.LowerError (List C.CStmt) :=
+  lowerMAux fn instructions []
+
+/-- The accumulator only prefixes the result. -/
+theorem lowerMAux_eq (fn : CCIR.Function) :
+    ∀ (instructions : List MInstr) (acc : List C.CStmt),
+      lowerMAux fn instructions acc =
+        Except.map (fun ss => acc.reverse ++ ss) (lowerMAux fn instructions []) := by
+  intro instructions
+  induction instructions with
+  | nil =>
+      intro acc
+      show Except.ok acc.reverse = Except.map _ (Except.ok ([] : List C.CStmt))
+      simp [Except.map]
+  | cons mi rest ih =>
+      intro acc
+      show (lowerM fn mi).bind (fun stmt => lowerMAux fn rest (stmt :: acc)) =
+        Except.map _ ((lowerM fn mi).bind (fun stmt => lowerMAux fn rest (stmt :: [])))
+      cases hHead : lowerM fn mi with
+      | error e => rfl
+      | ok stmt =>
+          show lowerMAux fn rest (stmt :: acc) =
+            Except.map _ (lowerMAux fn rest (stmt :: []))
+          rw [ih (stmt :: acc), ih (stmt :: [])]
+          cases lowerMAux fn rest [] <;> simp [Except.map]
+
+theorem lowerMSequence_nil (fn : CCIR.Function) :
+    lowerMSequence fn [] = .ok [] := rfl
+
+theorem lowerMSequence_cons (fn : CCIR.Function) (mi : MInstr)
+    (rest : List MInstr) :
+    lowerMSequence fn (mi :: rest) =
+      (do
+        let stmt ← lowerM fn mi
+        let statements ← lowerMSequence fn rest
+        pure (stmt :: statements)) := by
+  show (lowerM fn mi).bind (fun stmt => lowerMAux fn rest (stmt :: [])) =
+    (lowerM fn mi).bind (fun stmt =>
+      (lowerMAux fn rest []).bind (fun statements => pure (stmt :: statements)))
+  cases hHead : lowerM fn mi with
+  | error e => rfl
+  | ok stmt =>
+      show lowerMAux fn rest (stmt :: []) =
+        (lowerMAux fn rest []).bind (fun statements => pure (stmt :: statements))
+      rw [lowerMAux_eq fn rest (stmt :: [])]
+      cases lowerMAux fn rest [] <;> rfl
 
 /--
 Semantic preservation for any successfully lowered memory-extended
@@ -574,12 +646,12 @@ theorem lowerMSequence_correct
       (evalMCSequence t statements) := by
   induction instructions generalizing statements s t with
   | nil =>
-      simp only [lowerMSequence] at hLower
+      rw [lowerMSequence_nil] at hLower
       injection hLower with hStatements
       subst statements
       simpa [evalMCCSequence, evalMCSequence, MResultsRel] using hRel
   | cons mi rest ih =>
-      simp only [lowerMSequence] at hLower
+      rw [lowerMSequence_cons] at hLower
       generalize hHead : lowerM fn mi = headResult at hLower
       cases headResult with
       | error error =>
