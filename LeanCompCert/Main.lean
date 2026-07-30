@@ -8,6 +8,7 @@ import LeanCompCert.Testing.FixedPointCertificate
 import LeanCompCert.Testing.RolledFixedPoint
 import LeanCompCert.Verified.ClightEmit
 import LeanCompCert.Testing.SquarefreeMertensCertificate
+import LeanCompCert.Testing.ProthCertificate
 import LeanCompCert.NativeCheck
 
 open LeanCompCert
@@ -31,9 +32,13 @@ private def usage : String :=
   "                       write the 128-bit-product fixed-point certificate\n" ++
   "  emit-rolled-10m-c FILE\n" ++
   "                       write the rolled 10^7-iteration fixed-point checker\n" ++
-  "  check-native [--force] [--dir DIR]\n" ++
+  "  check-native [--force] [--dir DIR] [--hosted] [--start-dir DIR]\n" ++
   "                       compile every certificate with CompCert and run the\n" ++
-  "                       native cross-check; cached by generated-C content hash\n" ++
+  "                       native cross-check; cached by generated-C content hash.\n" ++
+  "                       Links freestanding (no libc) via runtime/start/<arch>.S;\n" ++
+  "                       --hosted restores the old ccomp/glibc link.\n" ++
+  "                       Exit 0 = agrees, 1 = disagrees, other = abnormal\n" ++
+  "                       termination (never reported as a disagreement)\n" ++
   "  mangle NAME...       print stable C symbols\n" ++
   "  abi-manifest         print the active ABI manifest\n" ++
   "  version              print backend and compiler versions\n\n" ++
@@ -116,7 +121,8 @@ private def nativeCerts : List NativeCheck.Cert := [
   ⟨"squarefree-mertens", Testing.SquarefreeMertensCertificate.emittedC⟩,
   ⟨"reflected", Testing.ReflectedCertificate.emittedC⟩,
   ⟨"fixedpoint", Testing.FixedPointCertificate.emittedC⟩,
-  ⟨"rolled-10m", Testing.RolledFixedPoint.emittedC⟩
+  ⟨"rolled-10m", Testing.RolledFixedPoint.emittedC⟩,
+  ⟨"proth", Testing.ProthCertificate.emittedC⟩
 ]
 
 def main (args : List String) : IO UInt32 :=

@@ -15,7 +15,7 @@ load average near 50.
 | stage | expressible in the proved `u64` fragment | share of reference cost |
 |---|---|---|
 | (a) progression sieve | **yes, as a different algorithm** — same predicate, trial division instead of block sieving | 22.6 % |
-| (b) Proth test | **no** — see the obstruction below | 75.1 % |
+| (b) Proth test | ~~**no**~~ → **yes** — the obstruction below was removed; see `tg_proth.md` | 75.1 % |
 | (c) ladder assembly | **yes, exactly** — and the whole gap condition turns out to be a `u64` bound on the delta stream already on the wire | 2.4 % |
 
 The stage that does not port is the one that costs three quarters of the
@@ -155,6 +155,15 @@ verdict is not overstated:
 Verdict: **not expressible today.**  The single thing that would change the
 answer is a proved 128 ÷ 64 division (or a proved two-limb Montgomery
 reduction) in the fragment.
+
+> **Superseded.**  The proved two-limb Montgomery reduction now exists
+> (`Verified/Montgomery.lean`, `Verified/Mont2.lean`), so stage (b) *is*
+> expressible, and at 2.25× GMP with CompCert.  See
+> `bench/results/tg_proth.md`.  The three secondary obstructions above
+> also dissolve, because they belong to the *producer's* witness search,
+> not to the verifier: the checker is handed the witness and only has to
+> check one modular exponentiation.  The Jacobi loop, the early exits and
+> the nested inner loops are all producer-side.
 
 ## Stage (c) — ladder assembly: ported exactly
 

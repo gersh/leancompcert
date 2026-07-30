@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+- **Verified multi-precision modular arithmetic** — the binding
+  obstruction across the ternary-Goldbach corpus is gone.  The fragment's
+  only division is `udiv`/`urem` at 64 ÷ 64 → 64, so `x·y mod N` for a
+  ~90-bit `N` (a 128 ÷ 64 division) was inexpressible.  Montgomery
+  reduction needs **no division at all**:
+  - `Verified/Montgomery.lean` — the algebra over `Nat`: exactness of the
+    Montgomery shift (`redcStep_mul`, the reduction-side analogue of
+    `MulWide.hl_spec`), `montMul_spec`, cancellation of `Bˢ` modulo an odd
+    modulus, square-and-multiply in the Montgomery domain, and the
+    end-to-end `montExp_spec : montExp … = a ^ e % N`.
+  - `Verified/Mont2.lean` — its two-limb realization in the fragment's own
+    instruction set (`montMul2_val`), plus division-free entry into the
+    domain by doubling (`dblIter_val`).  Every machine form is `+`, `-`,
+    `*`, `&`, `<<`, `>>` and the proved `<`; the emitted C contains zero
+    divisions.
+  - `Verified/InstrBlock.lean`, `Verified/Straight.lean` — total
+    straight-line block layers, so a 30 000-instruction body is reasoned
+    about by composition, never by unfolding.
+  - `Ports/TGProth.lean`, `Testing/ProthCertificate.lean` — stage (b) of
+    the Helfgott–Platt Goldbach ladder, previously recorded as **not
+    expressible** and 75.1 % of the reference producer's cost.  The
+    emitted artifact is 33 KB of C, 3 744 bytes linked, branchless, and
+    costs **2.25× GMP's `mpz_powm`** (1.57× with gcc) on the same 91-bit
+    modulus.  `prothProgram_denote` proves the artifact's denotation is `0`
+    exactly when `a^((N−1)/2) mod N = N − 1`.  Registered as the `proth`
+    native certificate.  See `bench/results/tg_proth.md`.
+- **Freestanding artifact emission**: emitted artifacts no longer link
+  glibc.  A CompCert object for an emitted artifact has zero undefined
+  symbols; the dependency was entirely gcc's startup glue.  `ccomp -c` +
+  a checked-in `_start` (`runtime/start/`) + `ld` gives a static binary
+  with zero undefined dynamic symbols, 70 504 → 1 472 bytes for
+  `rolled-10m`.  `check-native` links this way by default (`--hosted`
+  restores the old path), and its exit-code classification now
+  distinguishes a value disagreement (exit 1, the only such status) from
+  abnormal termination (128 + signal), which is never reported as a
+  disagreement.  The spurious `#include <lean/lean.h>` is gone.
+
 - **Verification-gate hardening** (audit follow-up):
   - `check-runtime` now fails with status `runtime-missing` when no
     runtime C sources are found, instead of reporting `compatible`

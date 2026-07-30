@@ -28,6 +28,11 @@ import LeanCompCert.Ports.RS62Increments
 import LeanCompCert.Ports.RS62LoopE
 import LeanCompCert.Ports.TGSieve
 import LeanCompCert.Ports.TGLadder
+import LeanCompCert.Verified.Montgomery
+import LeanCompCert.Verified.Mont2
+import LeanCompCert.Verified.Straight
+import LeanCompCert.Verified.InstrBlock
+import LeanCompCert.Ports.TGProth
 
 
 /-!
@@ -135,3 +140,37 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.TGLadder.ladderProgram_denote_mod
 #print axioms LeanCompCert.Ports.TGLadder.ladderProgram_denote
 #print axioms LeanCompCert.Ports.TGLadder.covers_of_accepts
+
+-- Verified multi-precision modular arithmetic: the Nat-level algebra
+#print axioms LeanCompCert.Verified.Montgomery.cancel_B_pow
+#print axioms LeanCompCert.Verified.Montgomery.redcStep_mul
+#print axioms LeanCompCert.Verified.Montgomery.redcIter_mul
+#print axioms LeanCompCert.Verified.Montgomery.redcIter_lt
+#print axioms LeanCompCert.Verified.Montgomery.montMul_lt
+#print axioms LeanCompCert.Verified.Montgomery.montMul_spec
+#print axioms LeanCompCert.Verified.Montgomery.montMul_rep
+#print axioms LeanCompCert.Verified.Montgomery.montPow_rep
+#print axioms LeanCompCert.Verified.Montgomery.montExp_spec
+-- ... its two-limb realization in the 64-bit instruction set
+#print axioms LeanCompCert.Verified.Mont2.addcW_eq
+#print axioms LeanCompCert.Verified.Mont2.sbbcW_eq
+#print axioms LeanCompCert.Verified.Mont2.hlW_eq
+#print axioms LeanCompCert.Verified.Mont2.hlW_spec
+#print axioms LeanCompCert.Verified.Mont2.mul2_val
+#print axioms LeanCompCert.Verified.Mont2.redcStep2_val
+#print axioms LeanCompCert.Verified.Mont2.condSub2_val
+#print axioms LeanCompCert.Verified.Mont2.montMul2_val
+#print axioms LeanCompCert.Verified.Mont2.dbl2_val
+#print axioms LeanCompCert.Verified.Mont2.dblIter_val
+-- Straight-line block layers
+#print axioms LeanCompCert.Verified.Straight.block_correct
+#print axioms LeanCompCert.Verified.Straight.block_wf
+#print axioms LeanCompCert.Verified.InstrBlock.srun_correct
+#print axioms LeanCompCert.Verified.InstrBlock.srun_append
+#print axioms LeanCompCert.Verified.InstrBlock.srun_untouched
+#print axioms LeanCompCert.Verified.InstrBlock.srun_lt
+-- Helfgott--Platt Goldbach ladder port: stage (b), the Proth test
+#print axioms LeanCompCert.Ports.TGProth.prothProgram_denote_fold
+#print axioms LeanCompCert.Ports.TGProth.prothProgram_wf
+#print axioms LeanCompCert.Ports.TGProth.body_step
+#print axioms LeanCompCert.Ports.TGProth.prothProgram_denote

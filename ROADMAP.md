@@ -106,6 +106,28 @@ theorem and a DSL realization:
 *Acceptance:* a certificate whose per-element work includes a 128-bit
 product and a dyadic division, axiom-free and CompCert-executed.
 
+**M2b — modular arithmetic ✅ (implemented).**  Wide *multiplication* was
+delivered above; wide *reduction* was the missing half, and it was the
+binding obstruction on the ternary-Goldbach corpus (the Proth test, 75.1 %
+of the ladder producer's cost; `checkAllPsiLeMul`; the exact-ℚ families).
+The fragment's only division is `udiv`/`urem` at 64 ÷ 64 → 64, so `x·y mod
+N` for a wide `N` — a 128 ÷ 64 division — could not be written.
+`Verified/Montgomery.lean` supplies the algebra (`redcStep_mul`: the
+Montgomery shift is *exact*; `montMul_spec`; `montExp_spec`) and needs no
+division at all; `Verified/Mont2.lean` realizes it at two limbs in the
+fragment's instruction set (`montMul2_val`), with division-free entry into
+the Montgomery domain by doubling (`dblIter_val`).
+
+`Montgomery.lean` is stated for an arbitrary number of reduction steps `s`,
+so widening past 128 bits is a machine-layer exercise only: an `n`-limb
+`mulN`/`redcN` over the existing `Limb.mulLimbs_val` carry theorems, in the
+same proof shape as `Mont2`.  That is the route to `checkAllPsiLeMul`'s
+~950-bit operands.
+
+*Acceptance (met):* `Ports/TGProth.lean` — a modular exponentiation at a
+91-bit modulus, emitted, CompCert-compiled, cross-checked against Python,
+and costing 2.25× GMP's `mpz_powm` (`bench/results/tg_proth.md`).
+
 ### M3 — Combinator and equivalence library ✅ (implemented; one noted refinement)
 
 The monadic-recursion interface: consumers write natural recursive

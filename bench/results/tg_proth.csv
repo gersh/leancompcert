@@ -1,0 +1,5 @@
+engine,us_per_proth_test,ratio_vs_gmp
+gmp mpz_powm,1.336,1.00
+this port, gcc -O2,2.100,1.57
+this port, ccomp,3.000,2.25
+# artifact: 33467 bytes C, 3744 bytes exe, 0 undefined dynamic symbols, ccomp+ld 73 ms
