@@ -125,6 +125,16 @@ The emit-time reference `Ref` below folds the same residue in Lean and was
 checked against the same oracle at three small configurations.  It is not
 usable above `W ≈ 10⁸`, because its `⌈W/√k⌉` is a deliberate linear descent
 rather than the artifact's bisection.
+
+There is no kernel-evaluation check of `denote`, and that is a real gap rather
+than an oversight.  `AProgram.denote` threads the register file as a closure
+chain, one link per register write; this body writes `378` registers per
+iteration, and the smallest configuration that is not vacuous (the residue is
+identically zero below `K`) still needs `351` iterations, so the chain is about
+`1.3·10⁵` deep — an order of magnitude past what `ArraySegSieve` and
+`R2SegSieve` ask of the kernel, and past what the interpreter's stack holds.
+The oracle agreement is run at the production `W` and `K` instead of at a toy
+configuration, which is the compensating strength.
 -/
 
 namespace LeanCompCert.Ports.CDEMAbelScan

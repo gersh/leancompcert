@@ -122,6 +122,16 @@ v    = 52·2⁶⁴ + 4326638605017328058
 tv   = 868448      F = −61      G = 62      ⌊√HI⌋ = 1414
 ```
 
+There is deliberately **no kernel-evaluation check** of `denote` here, unlike
+`ArraySegSieve` and `R2SegSieve`.  `AProgram.denote` threads the register file
+as a closure chain, one link per register write, and this body writes `378`
+registers per iteration: even the smallest non-vacuous configuration (`W = 64`,
+`K = 8`, `HI = 12`) needs `351` iterations and so a chain about `1.3·10⁵` deep,
+which overflows the interpreter stack outright and does not reduce in the
+kernel within any budget worth spending.  Both sieves above stay under
+`3·10⁴`.  The check that replaces it is §5's oracle agreement, which is run at
+the production parameters rather than at a toy configuration.
+
 The Lean-side emit-time reference `Ports.CDEMAbelScan.Ref.fold` was separately
 checked against the same oracle at `(W, K, HI) = (10⁶, 30, 40)`,
 `(10⁶, 60, 120)` and `(10⁸, 200, 400)`; it is not usable above `W ≈ 10⁸`
