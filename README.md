@@ -39,6 +39,9 @@ implemented, with per-milestone evidence recorded there.
 
 ## Documentation
 
+**Setting up?** [Installation](docs/installation.md) — building CompCert,
+verifying it, and requiring this package from your `lakefile.toml`.
+
 **New here, or holding a slow `native_decide`?** Start with
 **[Choosing a strategy for a finite computation](docs/choosing-a-strategy.md)**.
 It routes you to the right approach — kernel, compiled artifact, or attested
@@ -84,6 +87,13 @@ Requirements:
 - Lean 4.30 or newer (the repository pins Lean 4.32.1);
 - Python 3.11 or newer;
 - CompCert's `ccomp` on `PATH`, or an explicit `--ccomp` path.
+
+`ccomp` is not packaged by most distributions and has no official binaries, so
+it must be built from source — see **[Installation](docs/installation.md)** for
+the build, the two configure traps that cost an afternoon (Menhir discovery,
+and the absence of any `-target` flag), how to add this package to a Lean
+project, and how to wire the `check-native` cross-check. Run
+`./bin/lean-compcert doctor` to confirm the pieces line up.
 
 Build and differentially test a Lean executable directly from a checkout:
 
