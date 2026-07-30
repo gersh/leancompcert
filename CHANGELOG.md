@@ -2,6 +2,78 @@
 
 ## Unreleased
 
+- **The last 3 204 integers of Platt's stronger range — and the discovery that
+  the family's endpoint clause is false.**  `PlattStrongerRangeNatFamily` is a
+  conjunction: clause 1 is `|Σ_{m≤n} μ(m)/m| ≤ 1/(2√(n+1))` for
+  `3 ≤ n ≤ 7 727 068 586`, clause 2 is the single extra assertion
+  `|Σ_{m≤7727068587} μ(m)/m| ≤ 1/(2√7727068587)`.  The windowed chain certifies
+  clause 1 only to `7 727 065 383`, a window boundary.  Three separate things
+  were in the way, with three different answers.
+  - **Window granularity, 3 178 integers.**  One threshold per artifact means
+    the threshold is the majorant at the window's worst point, which for an
+    *antitone* majorant is the right end, so the chain must stop at a boundary
+    the whole window survives.  `mobiusLiveResidue` tests at every integer
+    instead — but not by the trick `mertensLiveResidue` uses, because `⌊√n⌋` is
+    a register and `2⁶¹/√(n+1)` is a *reciprocal* square root and is not.  It
+    keeps `c = ⌈√(n+1)⌉` (rises exactly when `n ≥ c²`, and then `c²` rises by
+    `2c − 1`) and **divides**: `|V| + budget + 1 ≤ ⌊2⁶¹/c⌋`, one `udiv`,
+    nothing above `2⁶³`, and sound because `⌊2⁶¹/c⌋ ≤ 2⁶¹/c ≤ 2⁶¹/√(n+1)`.
+    That reaches `7 727 068 561`.
+  - **The rounding budget, 25 more.**  `round(2⁶²/m)` costs half an ulp per
+    term, so the test subtracts `⌈n/2⌉` — `1.47·10⁻⁴` of the threshold at
+    `7.7·10⁹`, about six steps of `μ(n)/n`, and the family is tighter than that
+    at the top.  The accumulator now runs at scale `2⁷⁸` in **two limbs** (the
+    `Verified/AddWide.lean` shape) and is shifted back to scale `2⁶²` for the
+    comparison, which replaces the budget by `⌈n/2¹⁷⌉ + 1` — **65 536×**
+    smaller, `2.25·10⁻⁹` of the threshold.  That completes clause 1.  The
+    two-limb weight `round(2⁷⁸/m)` is built with no 128 ÷ 64 division, which
+    the fragment does not have: `q₁ = ⌊2⁶³/m⌋`, `r₁ = 2⁶³ mod m`, then
+    `2⁷⁸/m = 2¹⁵q₁ + (2¹⁵r₁)/m` with `2¹⁵r₁` inside a word for every
+    `m < 2⁴⁹`.
+  - **Clause 2 is false.**  At `n = 7 727 068 587` the sum is
+    `5.688085403150·10⁻⁶` and the majorant `1/(2√n) = 5.688039724193·10⁻⁶`:
+    exceeded by `4.57·10⁻¹¹`, a relative `8.0·10⁻⁶`.  `bench/ref_mob_margin.c`
+    computes the sum at scale `2⁹²`, where its own rounding budget is nine
+    orders below the gap, and the exact integer inequality `4n·A² ≤ 2¹⁸⁴`
+    fails — and still fails with `A` moved by the full `±n/2`.  At
+    `7 727 068 586` it holds with relative slack `2.9·10⁻⁵`.  So
+    `PlattStrongerRangeNatFamily` is false in its second conjunct, and so is
+    `residual_platt_stronger_range` as stated on the **closed** interval
+    `[3, 7 727 068 587]`, because at `x = 7 727 068 587` the sum includes
+    `m = 7 727 068 587`.  What is true is clause 1 alone, equivalently the
+    real-variable statement on `x < 7 727 068 587`.  The off-by-one is the
+    `x <` versus `x ≤` convention at Platt's endpoint, and it is the one thing
+    in the gap that no amount of computation fixes.
+  - **The `⌈·⌉` relaxation costs exactly one integer, `n = 4`.**  Replacing
+    `√(n+1)` by `⌈√(n+1)⌉` is stricter than the family by a relative
+    `1/√(n+1)` — `3·10⁻⁶` at the top, 34 % at `n = 4`, where
+    `Σ_{m≤4} μ(m)/m = 1/6` is an *exact* tie with `1/(2⌈√5⌉)`.  Swept
+    exhaustively, `n = 4` is the only integer in `[3, 7.727·10⁹]` where the
+    relaxation costs anything; the windowed mode covers it with an exact
+    emit-time threshold.
+  - Cost, at `lo = 10¹⁰` over `10⁸` integers: `plattstronglive` is 6.34 s
+    (gcc) / 8.00 s (ccomp) against 5.95 / 6.94 for the windowed residue —
+    **+6.6 % and +15.3 %**, i.e. 78.9 ns/integer under CompCert.  Projected
+    over `[1, 7.727·10⁹]` as one artifact: **10.2 min** on one core, against
+    8.8 min windowed.  Body 161 instructions against 130; shift counts in the
+    emitted C are `1, 15, 16, 17, 48, 49`, all below 64, which is what pins
+    `1 ≤ mobWideBits ≤ 15`.
+  - **A chain driver that checks only the violation count is not sound.**  A
+    link run with the wrong carry-in computes a wrong accumulator, and a wrong
+    accumulator sits comfortably under the threshold and reports zero.
+    Measured: moving link 3's carry-in by **one ulp** leaves every link at
+    `violations=0` — `seg_chain.sh` would have accepted the chain — while
+    `bench/moblive_chain.sh`, which compares the count **and all four result
+    slots** of every link against a manifest, rejects at link 3 and again at
+    link 4.  It also feeds link `i` literally the slots link `i−1` printed,
+    clamps the last link to stop at exactly `HI` rather than overshooting the
+    claimed range, and requires the first link's count to be exactly the three
+    known non-defects at `n = 1, 2, 4`.
+  - Kernel checks against trial division for the new residue: both accumulator
+    limbs, `⌈√25⌉` and its square, and the whole program's denotation against
+    `refWideViol` — a count of `3`, so the check is not vacuous.  All new
+    theorems `[propext]` or the base trio; `check-native --force` 10/10.
+
 - **`interval_bisect` was never blocked on leaf count** — it was blocked on
   `ℚ`.  `MathExtras/Analysis/HelfgottThm31/C1Bound/A36Bisection.lean`'s
   `lowBranch_nonneg_mid_low_hi` is **256 leaves** and Lean's kernel still could

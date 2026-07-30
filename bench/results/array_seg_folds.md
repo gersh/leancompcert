@@ -17,7 +17,7 @@ natural-number families.  Read literally, those families are:
 | `MertensHurstNatFamily` | `M(n) = Σ_{m≤n} μ(m)` | `33 ≤ n ≤ 10¹⁶` | `0.571·√n` | increasing |
 | `ReproducibleSquarefreeFiniteHeadNatFamily b t` | `Q(n) = Σ_{m≤n} \|μ(m)\|` | `t ≤ n ≤ 10¹⁶`, `t ∈ {9243, 438429}` | `b·√n`, `b ∈ {0.0755, 0.0285}`, against `(6/π²)·n` | increasing |
 | `PlattEq211NatFamily` | `S(n) = Σ_{m≤n} μ(m)/m` | `1 ≤ n ≤ 10¹²` | `√(2/(n+1))` | decreasing |
-| `PlattStrongerRangeNatFamily` | `S(n)` | `3 ≤ n ≤ 7 727 068 587` | `1/(2√(n+1))` | decreasing |
+| `PlattStrongerRangeNatFamily` | `S(n)` | `3 ≤ n ≤ 7 727 068 586`, **plus a separate clause at `n = 7 727 068 587`** | `1/(2√(n+1))`; the extra clause `1/(2√n)` | decreasing |
 | `ChirreHelfgottLemma92NatFamily` | `ψ(n) = Σ_{p^k≤n} log p` | `1 ≤ n ≤ 10¹³` | `(−√2, 0.79059276]` for `(ψ(n)−n)/√n` | — |
 | `RamareZunigaLemma62NatFamily` | `R₂*(n) = Σ_{m≤n} [(Λ*Λ)(m) − Λ(m)log m + 2γ]` | `3 ≤ n ≤ 2.1·10¹⁰` | `1.93·√n·log n` | increasing |
 
@@ -162,7 +162,7 @@ Mertens/squarefree residue under `ccomp` (`14.27` under gcc), `18.90` for
 
 | axiom | range | sieve, 1 core | notes |
 | --- | --- | --- | --- |
-| `residual_platt_stronger_range` | `7.727·10⁹` | **9.0 min** | **done — the chain runs to completion, 663 windows, 0 violations, 2 h 23 min wall at `SEGLEN = 200`** |
+| `residual_platt_stronger_range` | `7.727·10⁹` | **9.0 min** windowed, **10.2 min** per-integer | **done — but the range is `n ≤ 7 727 068 586`, not `7 727 068 587`: the family is false at the stated endpoint (see "The last 3 204 integers" below).**  Windowed: 663 windows, 0 violations, 2 h 23 min wall at `SEGLEN = 200`; per-integer with the two-limb accumulator: one artifact, no window loss, no boundary |
 | `residual_platt_2_11` | `10¹²` | **20.4 h** | same program, longer walk; supersedes the row above (a `10¹²` pass computes the `7.7·10⁹` range on the way).  Emits in 0.8 s, `ccomp` takes it in 0.06 s |
 | `mertensM_hurst_sqrt` | `10¹⁶` | **24.1 core-years** | one pass; 24.6 with per-integer thresholds.  Emits in 62 s, `ccomp` in 0.53 s |
 | `reproducibleSquarefree` | `10¹⁶` | **free, same pass** | `Q` and `M` ride the same sieve; both thresholds are in the same residue |
@@ -320,12 +320,180 @@ bench/seg_chain.sh plattstrong     4      10001 1.02   1 ccomp
 
 Together these cover `[3, 7.727·10⁹]` — the second chain's first artifact
 carries `S(3)` in as its seed, and the seed is inside the extremum the
-epilogue tests, so `n = 3` is checked.  `PlattStrongerRangeNatFamily` is
-stated on `3 ≤ n ≤ 7 727 068 587`, so the last 68 587 integers are not in
-this run; the schedule reaches them by raising `HI`.
+epilogue tests, so `n = 3` is checked.
 
 Before the emitter was made tail-recursive this chain died at `1.95·10⁸`
 with a `deep recursion` in the Lean interpreter.
+
+### The last 3 204 integers, and what is actually at the top
+
+`PlattStrongerRangeNatFamily` is, literally, a **conjunction of two clauses**:
+
+```
+(∀ n : ℕ, 3 ≤ n → n + 1 ≤ 7727068587 →
+     |Σ_{m≤n} μ(m)/m| ≤ 1/(2√(n+1)))            -- clause 1, i.e. n ≤ 7 727 068 586
+∧    |Σ_{m≤7727068587} μ(m)/m| ≤ 1/(2√7727068587)   -- clause 2, the endpoint
+```
+
+The windowed chain above legitimately certifies clause 1 only to
+**7 727 065 383** — a window boundary — so 3 204 integers were outstanding.
+Three separate things were in the way, and they have three different answers.
+
+**(1) Window granularity — 3 178 integers, no new mathematics.**  One
+comparison per artifact means one threshold per artifact, taken at the
+window's worst point; for the antitone majorant `1/(2√(n+1))` that is the
+window's right end, so the chain has to stop at a boundary the whole window
+survives.  `mobiusLiveResidue` removes it as `mertensLiveResidue` does for the
+increasing majorants — except that the trick is not the same one.  `⌊√n⌋` is a
+register, but `2⁶¹/√(n+1)` is a *reciprocal* square root and is not; so the
+residue keeps `c = ⌈√(n+1)⌉` (it rises exactly when `n ≥ c²`, and then `c²`
+rises by `2c − 1`) and **divides**: the in-loop test is
+
+```
+|V| + budget + 1  ≤  ⌊2⁶¹/c⌋          one udiv, nothing above 2⁶³
+```
+
+and `⌊2⁶¹/c⌋ ≤ 2⁶¹/c ≤ 2⁶¹/√(n+1)` makes it a sound test of `1/(2√(n+1))`.
+With it the sweep runs to **7 727 068 561** — the first genuinely uncertifiable
+integer at accumulator scale `2⁶²` is `7 727 068 562`, twenty-five short of the
+endpoint.
+
+**(2) The rounding budget — 25 more integers, by widening the accumulator.**
+`round(2⁶²/m)` costs half an ulp per term, so the test subtracts `⌈n/2⌉`,
+which at `n = 7.7·10⁹` is `1.47·10⁻⁴` of the threshold — six steps of
+`μ(n)/n`, and the family is tighter than that at the top.  Carrying the
+accumulator at scale `2⁷⁸` in **two limbs** (the shape `Verified/AddWide.lean`
+proves) and shifting back to scale `2⁶²` for the comparison replaces the
+budget by `⌈n/2¹⁷⌉ + 1`, i.e. `2.25·10⁻⁹` of the threshold — **65 536×**
+smaller.  That recovers `7 727 068 562 … 7 727 068 586`, i.e. **all of clause
+1**.
+
+**(3) Clause 2 is false, and no accumulator width reaches it.**  At
+`n = 7 727 068 587`,
+
+```
+|Σ_{m≤n} μ(m)/m| = 5.688085403150·10⁻⁶
+      1/(2√n)    = 5.688039724193·10⁻⁶
+```
+
+so the majorant is exceeded by `4.57·10⁻¹¹`, a relative `8.0·10⁻⁶`.  This is
+not a precision artifact.  `bench/ref_mob_margin.c` computes the sum at scale
+`2⁹²`, where its own accumulated round-to-nearest budget is `≤ n/2` ulps —
+nine orders below the gap — and the exact integer inequality
+
+```
+4·n·A²  ≤  2¹⁸⁴          (equivalent to |A/2⁹²| ≤ 1/(2√n))
+```
+
+fails by a relative `1.6·10⁻⁵`, and *still* fails when `A` is moved by the
+full `±n/2` in either direction.  Clause 1 at `n = 7 727 068 586` — the same
+inequality with `n+1` in place of `n` — holds with relative slack `2.9·10⁻⁵`,
+and also survives `A ± n/2`.
+
+So `PlattStrongerRangeNatFamily` **is false**, in its second conjunct, and so
+is the real-variable statement it reduces to
+(`∀ x ∈ [3, 7 727 068 587], |Σ_{m≤x} μ(m)/m| ≤ 1/(2√x)`), because at
+`x = 7 727 068 587` the sum includes `m = 7 727 068 587`.  What is true is
+clause 1 alone,
+
+```
+|Σ_{m≤n} μ(m)/m| ≤ 1/(2√(n+1))     for   3 ≤ n ≤ 7 727 068 586,
+```
+
+equivalently `|Σ_{m≤x} μ(m)/m| ≤ 1/(2√x)` for real `x < 7 727 068 587`.  The
+off-by-one is the `x <` versus `x ≤` convention at the endpoint of Platt's
+range; an axiom that closes the interval is false as encoded, and this is the
+one thing in the gap that no amount of computation fixes.
+
+`bench/ref_mob_margin.c` sweeps `[1, 7.7272·10⁹]` in 3 m 33 s on 18 cores and
+prints, per integer, the true margin and the verdict of both scales:
+
+```
+per-integer test fails: S=62 21 162 times, S=78 18 475 times over [3, 7.7272·10⁹]
+                        both first at n = 4, the tie discussed next;
+                        first real failure S=62 at 7 727 068 562,
+                                           S=78 at 7 727 068 587
+min true margin = −1.597·10⁻⁸ at n = 7 727 085 914
+```
+
+The per-integer verdicts are exactly what the two artifacts report; the margins
+are the mathematics, independent of either.
+
+**The one place the `⌈·⌉` relaxation costs anything: `n = 4`.**  Replacing
+`√(n+1)` by `c = ⌈√(n+1)⌉` makes the test stricter than the family by a
+relative `1/√(n+1)`, which is `3·10⁻⁶` at the top and 34 % at `n = 4`.  There
+`Σ_{m≤4} μ(m)/m = 1/6` exactly and `⌈√5⌉ = 3`, so `|V|` lands exactly on
+`⌊2⁶¹/3⌋` and the `+1` for the shift's truncation tips it over — while the
+family holds with enormous room (`1/6` against `1/(2√5) = 0.224`).  Swept
+exhaustively, **`n = 4` is the only integer in `[3, 7.727·10⁹]` where the
+relaxation costs anything**; `bench/seg_chain.sh plattstrong` covers it with an
+exact emit-time threshold, and `bench/moblive_chain.sh` asserts the first
+link's failure count to be exactly `3` (`n = 1, 2` where the family is
+genuinely false, and `n = 4`).
+
+### The per-integer `Σ μ(m)/m` artifact
+
+```
+lake env lean --run bench/ArraySegEmit.lean plattstronglive LO SEGLEN CNT OUT - [TLO THI]
+bench/moblive_chain.sh HI SEGLEN LINKLEN [CC] [MANIFEST] [--corrupt K]
+```
+
+Body 161 instructions against the windowed residue's 130.  Agreement, exact,
+on every one of the five numbers an artifact prints:
+
+| range | failed tests | slot0 (limb lo) | slot1 (limb hi) | slot2 `⌈√(hi+1)⌉` | slot3 |
+| --- | --- | --- | --- | --- | --- |
+| `[1, 10⁵]` | 3 | 318441023180074197 | 32760 | 317 | 100489 |
+| `[1, 2·10⁷]` | 3 | 3923701836270913649 | 32767 | 4473 | 20007729 |
+
+against `bench/ref_moblive.py` (a Python linear sieve, same fixed point) at
+`10⁵` and an independent C sieve at `2·10⁷`.  The three failures are `n = 1`
+and `n = 2`, where the family is genuinely false, and `n = 4`, the `⌈·⌉` tie
+above; a run that reported `0` there would mean the artifact was not testing
+what it claims, so the chain driver **requires** the count to be `3` on the
+first link and `0` on every later one.
+
+Cost, measured at `lo = 10¹⁰` over `10⁸` integers, `375 739 392` iterations:
+
+| residue | gcc | ccomp |
+| --- | --- | --- |
+| `plattstrong` (windowed) | 5.95 s = 15.84 ns/iter = **58.7 ns/integer** | 6.94 s = 18.47 ns/iter = **68.5 ns/integer** |
+| `plattstronglive` (per integer, two limbs) | 6.34 s = 16.87 ns/iter = **62.6 ns/integer** | 8.00 s = 21.29 ns/iter = **78.9 ns/integer** |
+
+so per-integer testing plus the wide accumulator costs **+6.6 % under gcc and
++15.3 % under CompCert**.  Projected over `[1, 7.727·10⁹]` — one artifact,
+`28 646 119 488` iterations — that is **10.2 min** under `ccomp` and **8.1
+min** under gcc on one core, against 8.8 / 7.6 min for the windowed residue.
+The whole coverage gap is bought for about ninety seconds of CPU.
+
+Shift counts in the emitted C are `1, 15, 16, 17, 48, 49` — all below 64, so
+no shift is undefined; that is what pins `1 ≤ mobWideBits ≤ 15`.
+
+### Why a chain driver must check more than the violation count
+
+`bench/seg_chain.sh` accepts a window when its artifact reports zero
+violations.  For a *chain* that is not sound: a link run with the wrong
+carry-in computes a wrong accumulator, and a wrong accumulator can sit
+comfortably under the threshold and report zero.  Measured, on a four-link
+chain over `[1, 2·10⁷]` with the carry-in of link 3 moved by **one ulp**:
+
+```
+link 3: [10000001, 15000000] violations=0 slots=(12992314015720698035,...)
+MANIFEST MISMATCH at link 3
+  expected: ... 0 12992314015720698034 32768 3873 15000129
+  got:      ... 0 12992314015720698035 32768 3873 15000129
+link 4: [15000001, 20000000] violations=0 ...
+MANIFEST MISMATCH at link 4
+chain REJECTED   (exit 1)
+```
+
+Every link still reports zero violations — the old check passes, and the
+chain would have been accepted having proved nothing.  `bench/moblive_chain.sh`
+compares the violation count **and all four result slots** of every link
+against a manifest, feeds link `i` literally the slots link `i−1` printed, and
+clamps the last link so the walk stops at exactly `HI` rather than
+overshooting past the range the family claims (the fourth hazard recorded in
+`bench/seg_chain.sh.README`).
 
 ### The other three families over the initial stretch
 
