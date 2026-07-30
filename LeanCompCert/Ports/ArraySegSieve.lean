@@ -268,7 +268,17 @@ def Cfg.ofRange (lo segLen segCount : Nat) : Cfg :=
   let rootCap := Nat.sqrt hi
   let rootCount := max 1 ((rootCap + segLen - 1) / segLen)
   let rootLen := rootCount * segLen
-  let boot := Nat.sqrt rootLen
+  -- `max … 2` is load-bearing, not cosmetic.  The window-start reset installs
+  -- the literal `firstPrime = 2` and *its* first multiple, and the mark step
+  -- that follows uses them before the cursor-exhausted test can intervene —
+  -- so the table's entry 0 must be `2`, i.e. `bootPrimes` must be non-empty.
+  -- `⌊√rootLen⌋ ≤ 1` happens whenever `rootLen ≤ 3`, i.e. `segLen ≤ 3` and
+  -- `hi ≤ 15`, and there the empty bootstrap list made the root phase mark
+  -- cell `0` with a prime it had not tabulated, miss collecting `2`, and
+  -- leave a `0` in the table for the main phase to take a `urem` by.
+  -- Widening the bootstrap list is sound: it only marks more, and
+  -- `(boot+1)² > rootLen ≥ rootCap` still holds.
+  let boot := max (Nat.sqrt rootLen) 2
   let (cnt, sum) := primeStats (max boot rootCap) segLen
   { lo := lo, segLen := segLen, segCount := segCount
     rootCount := rootCount

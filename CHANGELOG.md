@@ -84,6 +84,21 @@
     that no verified compiler on this machine could get past.  The cost table
     is otherwise unchanged: `7.7·10⁹` is 9.0 minutes, `10¹²` is 20.4 hours,
     `10¹⁶` is 24.1 core-years.
+  - With both walls gone, `bench/seg_chain.sh plattstrong 10000 7727000000
+    1.02 200 ccomp` **runs to completion**: 663 windows, 0 violations,
+    `[10001, 7 727 000 000]`, 2 h 23 min on one core, every artifact compiled
+    by CompCert 3.17.  A second chain covers `[4, 10001]`.  That is the finite
+    content of `residual_platt_stronger_range` computed end to end through the
+    verified-compilation path.
+  - One corner found and fixed on the way: at `segLen ≤ 3` *and* `hi ≤ 15` the
+    root sweep is at most three integers, the bootstrap prime list came out
+    empty, and the window-start reset — which installs the literal `2` before
+    the cursor-exhausted test can intervene — marked with a prime the table did
+    not contain and left a `0` for the main phase to `urem` by.  `denote` is
+    `none` there so no theorem was affected, but the artifact returned a wrong
+    number quietly.  `Cfg.ofRange` now takes `max (⌊√rootLen⌋) 2`, and
+    `bench/seg_sweep.sh` checks 98 `(lo, segLen, segCount)` configurations
+    against `bench/ref_seg.c` so the corner stays checked.
 
 - **Verified multi-precision modular arithmetic** — the binding
   obstruction across the ternary-Goldbach corpus is gone.  The fragment's

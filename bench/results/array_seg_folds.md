@@ -154,7 +154,7 @@ Mertens/squarefree residue under `ccomp` (`14.27` under gcc), `18.90` for
 
 | axiom | range | sieve, 1 core | notes |
 | --- | --- | --- | --- |
-| `residual_platt_stronger_range` | `7.727·10⁹` | **9.0 min** | **build-time wall removed; the chain runs** |
+| `residual_platt_stronger_range` | `7.727·10⁹` | **9.0 min** | **done — the chain runs to completion, 663 windows, 0 violations, 2 h 23 min wall at `SEGLEN = 200`** |
 | `residual_platt_2_11` | `10¹²` | **20.4 h** | same program, longer walk; supersedes the row above (a `10¹²` pass computes the `7.7·10⁹` range on the way).  Emits in 0.8 s, `ccomp` takes it in 0.06 s |
 | `mertensM_hurst_sqrt` | `10¹⁶` | **24.1 core-years** | one pass; 24.6 with per-integer thresholds.  Emits in 62 s, `ccomp` in 0.53 s |
 | `reproducibleSquarefree` | `10¹⁶` | **free, same pass** | `Q` and `M` ride the same sieve; both thresholds are in the same residue |
@@ -297,19 +297,47 @@ threshold is a division rather than a multiply, and it was not done.
 
 `bench/seg_chain.sh` walks a geometric schedule, chaining each window's
 carry-out into the next window's seed, and fails on the first window whose
-artifact reports a violated threshold.  With ratio 1.02:
+artifact reports a violated threshold.
+
+### Platt's stronger range, whole
+
+```
+bench/seg_chain.sh plattstrong 10000 7727000000 1.02 200 ccomp
+  -> 663 windows, chain complete over [10001, 7 727 000 000], 0 violations
+     2 h 23 min wall, single core, every artifact compiled by CompCert 3.17
+
+bench/seg_chain.sh plattstrong     4      10001 1.02   1 ccomp
+  -> chain complete over [4, 10001], 0 violations
+```
+
+Together these cover `[3, 7.727·10⁹]` — the second chain's first artifact
+carries `S(3)` in as its seed, and the seed is inside the extremum the
+epilogue tests, so `n = 3` is checked.  `PlattStrongerRangeNatFamily` is
+stated on `3 ≤ n ≤ 7 727 068 587`, so the last 68 587 integers are not in
+this run; the schedule reaches them by raising `HI`.
+
+Before the emitter was made tail-recursive this chain died at `1.95·10⁸`
+with a `deep recursion` in the Lean interpreter.
+
+### The other three families over the initial stretch
 
 ```
 bench/seg_chain.sh mertens     9243  300000 1.02 200   ->  0 violations
+bench/seg_chain.sh mertens2  438429 3000000 1.02 5000  ->  0 violations
 bench/seg_chain.sh platt211       3  300000 1.02 200   ->  0 violations
 bench/seg_chain.sh plattstrong 10000 300000 1.02 200   ->  0 violations
 ```
 
-i.e. Hurst's `|M(n)| ≤ 0.571√n`, both CDEM squarefree clauses with
-`b = 0.0755`, Platt's `(2.11)` and Platt's stronger range all **hold and are
-computed** over the initial stretch, by artifacts CompCert compiles.  Nothing
-here is a theorem: exit status never is.  What is a theorem is that the
-artifact computes `denote`.
+i.e. Hurst's `|M(n)| ≤ 0.571√n`, both CDEM squarefree clauses at both
+constants, Platt's `(2.11)` and Platt's stronger range all **hold and are
+computed**, by artifacts CompCert compiles.  Nothing here is a theorem: exit
+status never is.  What is a theorem is that the artifact computes `denote`.
+
+One thing the extremum residue does that is worth knowing: it seeds the
+running extrema with the carry-in, so an artifact over `[lo, hi]` really tests
+`[lo−1, hi]`.  A chain must therefore start at a `lo` where the family already
+holds at `lo−1`; `plattstrong` from `lo = 3` fails on `|S(2)| = 0.5`, which is
+true and is not a statement about the range `n ≥ 3`.
 
 Independent agreement at scale: at `10⁸` the artifact and `bench/ref_seg.c`
 produce identical values for all seven result slots, with
@@ -317,6 +345,21 @@ produce identical values for all seven result slots, with
 `lo = 10¹⁰` over `10⁸` integers the two agree slot for slot as well.  Both
 residues, and the per-integer variant, were re-checked against the oracle
 after the root-sieve phase landed.
+
+`bench/seg_sweep.sh` does the same comparison over a grid — `segLen` from 1 to
+10 000, `hi` from 3 to `10¹⁰ + 10⁶`, both residues, 98 configurations, all
+agreeing.  The grid exists because of one corner that did not: at
+`segLen ≤ 3` **and** `hi ≤ 15` the root sweep is at most three integers, so
+`⌊√rootLen⌋ ≤ 1` and the bootstrap prime list came out empty — while the
+window-start reset installs the literal `2` and *its* first multiple, and the
+mark step that follows uses them before the cursor-exhausted test can
+intervene.  The root phase then marked a cell with a prime it had not
+tabulated, failed to collect `2`, and left a `0` in the table for the main
+phase to take a `urem` by.  `denote` is `none` there, so no theorem was
+affected, but the artifact computed a wrong number quietly and
+`seg_chain.sh plattstrong 4 10001 1.02 1` reported a violation at `n = 13`
+that does not exist.  `Cfg.ofRange` now takes `max (⌊√rootLen⌋) 2`, which is
+sound because a longer bootstrap list only marks more.
 
 The invocation of `seg_chain.sh` has two constraints, both of which produce a
 **spurious** violation — one that looks like a counterexample and is not — when
