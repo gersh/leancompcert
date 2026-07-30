@@ -103,6 +103,16 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Verified.Frontend.compileExpr_correct
 #print axioms LeanCompCert.Verified.ArrayState.sieveSweep_cell
 #print axioms LeanCompCert.Verified.MemFragment.lowerMSequence_correct
+-- Tail-recursive trace lowering: the two equations the correctness proofs use
+#print axioms LeanCompCert.Verified.MemFragment.lowerMAux_eq
+#print axioms LeanCompCert.Verified.MemFragment.lowerMSequence_nil
+#print axioms LeanCompCert.Verified.MemFragment.lowerMSequence_cons
+#print axioms LeanCompCert.Proof.lowerSequenceAux_eq
+#print axioms LeanCompCert.Proof.lowerSequence_nil
+#print axioms LeanCompCert.Proof.lowerSequence_cons
+#print axioms LeanCompCert.Proof.lowerSequence_correct
+#print axioms LeanCompCert.Proof.lowerSequence_append
+#print axioms LeanCompCert.Proof.lowerSequence_is_lowerInstructions
 -- M6: the array bridge (AProgram -> CCIR -> generated C)
 #print axioms LeanCompCert.Verified.ArrayState.evalMCCSequence_straight
 #print axioms LeanCompCert.Verified.ArrayState.evalCCStraight_frame

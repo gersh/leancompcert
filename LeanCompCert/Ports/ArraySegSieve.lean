@@ -13,19 +13,55 @@ no matter how long the walk is.
 
 ## What changes against `ArrayMobius`
 
-Three things, all inside the program; the bridge is untouched.
+Four things, all inside the program; the bridge is untouched.
 
 * **The offset.**  The first multiple of `p` inside the window `[w, w+L)` is at
   cell `(p − w mod p) mod p`, one `urem` when the prime cursor advances.  The
   square test `p² ∣ n` likewise reads `n = w + tgt` rather than `tgt`.
-* **The segment walk.**  The single loop is `segCount · (T + L)` iterations
-  long; the position `r` inside a window and the window base `w` are ordinary
-  registers advanced by a branchless wrap at the end of every body.  At `r = 0`
-  the prime cursor is reset, again branchlessly.
+* **The segment walk.**  The single loop is `(rootCount + segCount) · (T + L)`
+  iterations long; the position `r` inside a window and the window base `w` are
+  ordinary registers advanced by a branchless wrap at the end of every body.
+  At `r = 0` the prime cursor is reset, again branchlessly.
 * **No clear pass.**  The accumulation phase writes `0` back into the two cells
   it has just read, so the next window starts from a zero array — which is
   exactly the state the bridge's `initialMem` hands to the first window.  A
   separate clear phase would have cost another `L` iterations per window.
+* **The root phase.**  The prime table is *computed by the program*, not
+  carried by it.  See below.
+
+## The root phase: why the artifact no longer carries a prime table
+
+Marking a window inside `[2, hi]` needs every prime `p ≤ √hi`.  Writing them
+into the array from the init block costs three straight-line instructions per
+prime, i.e. `3·π(√hi)` statements in one C function: 28 779 at `hi = 10¹⁰`,
+235 497 at `10¹²`, 17 284 368 at `10¹⁶`.  Measured, `ccomp -O2` segfaults on
+the `10¹²` translation unit at the default stack and reaches 30.5 GB with an
+unlimited one, so past roughly `10¹⁰` no verified compiler accepts the
+artifact.  The table is the whole obstruction, and the fix is to delete it.
+
+The loop therefore runs `rootCount` **root windows** before the `segCount`
+ordinary ones.  The root windows walk `[1, rootCount·L]` with the *same*
+instructions — same marking, same accumulation pass — and differ only in what
+the two phase selectors gate:
+
+* the mark cursor stops after `π(⌊√(rootCount·L)⌋)` entries rather than
+  `π(⌊√hi⌋)`, so a root window is sieved by the small **bootstrap** primes the
+  init block does spell out;
+* the accumulation pass, instead of feeding the residue, appends `n` to the
+  prime table exactly when the cell was never marked and `2 ≤ n ≤ ⌊√hi⌋` —
+  which for `n ≤ rootCount·L` says precisely that `n` is a prime larger than
+  every bootstrap prime, because a composite that size has a prime factor at
+  most `⌊√(rootCount·L)⌋`.
+
+Bootstrap primes then main primes, both in increasing order, is exactly the
+table the main phase reads.  What the init block spells out is
+`π(⌊√(rootCount·L)⌋) ≈ π(hi^{1/4})` primes — 168 at `hi = 10¹²` and 1 229 at
+`10¹⁶` — so the emitted C stops growing with `hi`.
+
+The prices are honest and small: `rootCount·L ≈ √hi` extra integers swept
+(one part in `√hi`), and nineteen extra instructions in a body of 93, since
+the root machinery, like everything else here, executes on every iteration
+and is multiplied by zero when idle.
 
 ## The residues
 
@@ -102,6 +138,38 @@ def primesBelow (n : Nat) : List Nat := Id.run do
 `[2, hi]` has to sieve by. -/
 def sievingPrimes (hi : Nat) : List Nat := primesBelow (Nat.sqrt hi + 1)
 
+/-- `(π(x), Σ_{p ≤ x} (⌊len/p⌋ + 2))` — the size of the prime table and the
+mark budget a window of `len` cells needs — by a **segmented** sieve, so that
+emit-time memory is `O(√x + block)` rather than `O(x)`.  At `hi = 10¹⁶` the
+argument is `x = 10⁸`, where an unsegmented `Array Bool` would be 100 MB and
+the list of primes 5.8 million entries; neither is ever built, because the
+artifact now computes the table itself and only these two counts are needed.
+Emit-time only: never compiled, never kernel-reduced. -/
+def primeStats (x len : Nat) : Nat × Nat := Id.run do
+  if x < 2 then return (0, 0)
+  let base := primesBelow (Nat.sqrt x + 1)
+  let block := 1 <<< 18
+  let mut cnt := 0
+  let mut sum := 0
+  let mut lo := 2
+  while lo ≤ x do
+    let top := min x (lo + block - 1)
+    let width := top + 1 - lo
+    let mut mark : Array Bool := Array.replicate width false
+    for p in base do
+      if p * p ≤ top then
+        let first := max (p * p) (((lo + p - 1) / p) * p)
+        let mut m := first
+        while m ≤ top do
+          mark := mark.set! (m - lo) true
+          m := m + p
+    for i in [0:width] do
+      if !mark[i]! then
+        cnt := cnt + 1
+        sum := sum + len / (lo + i) + 2
+    lo := top + 1
+  return (cnt, sum)
+
 /-! ### `π` in integer arithmetic
 
 `⌊π · 2^N⌋` to within a handful of ulps, by Machin's formula
@@ -152,54 +220,99 @@ def sixOverPiSqScaled (k : Nat) : Nat :=
 `μ(n)/n` residue divides by `n`, and the "one large prime factor" decoding of
 the sieve is wrong at `n = 0` (which would be read as `μ(0) = −1`).  At
 `n = 1` it is right — the cell is never marked, `prod` reads back as the empty
-product `1`, and `1 = n` gives no extra sign flip. -/
+product `1`, and `1 = n` gives no extra sign flip.
+
+`bootPrimes`, `mainCount` and `markSteps` are numbers computed at emit time by
+`Cfg.ofRange`; only `bootPrimes` becomes instructions, and its length is
+`π(hi^{1/4})`. -/
 structure Cfg where
-  /-- First integer covered. -/
+  /-- First integer covered by the main phase. -/
   lo : Nat
-  /-- Cells per window. -/
+  /-- Cells per window, root and main alike. -/
   segLen : Nat
-  /-- Number of windows. -/
+  /-- Number of main windows. -/
   segCount : Nat
-  /-- Primes `p` with `p² ≤ lo + segLen·segCount − 1`. -/
-  primes : List Nat
+  /-- Number of leading root windows: they walk `[1, rootCount·segLen]` and
+  fill the prime table.  `rootCount · segLen ≥ ⌊√hi⌋` is required. -/
+  rootCount : Nat
+  /-- Primes `p ≤ ⌊√(rootCount·segLen)⌋`, spelled out by the init block.
+  These are the primes a root window is sieved by, and the prefix of the
+  table the root phase extends. -/
+  bootPrimes : List Nat
+  /-- `π(⌊√hi⌋)` — the whole table's length, and the cursor limit of a main
+  window.  Taken as `π(max(⌊√(rootCount·segLen)⌋, ⌊√hi⌋))` so that the
+  degenerate configurations where the bootstrap list already overshoots stay
+  consistent. -/
+  mainCount : Nat
+  /-- `⌊√hi⌋`: the largest prime the root phase collects.  A field and not a
+  `Nat.sqrt` call, because the body carries it as a literal and `Nat.sqrt` is
+  defined by well-founded recursion, which the kernel does not unfold. -/
+  rootCap : Nat
+  /-- Mark steps budgeted per window: one per multiple of each prime inside
+  the window, one per prime to advance the cursor, and slack.  Too small
+  silently truncates the sieve (the kernel checks below catch that); too large
+  only wastes iterations. -/
+  markSteps : Nat
   deriving Repr
 
 /-- Last integer covered. -/
 def Cfg.hi (c : Cfg) : Nat := c.lo + c.segLen * c.segCount - 1
 
+/-- Integers the root phase sweeps: `[1, rootLen]`. -/
+def Cfg.rootLen (c : Cfg) : Nat := c.rootCount * c.segLen
+
+def Cfg.bootCount (c : Cfg) : Nat := c.bootPrimes.length
+
 def Cfg.ofRange (lo segLen segCount : Nat) : Cfg :=
+  let hi := lo + segLen * segCount - 1
+  let rootCap := Nat.sqrt hi
+  let rootCount := max 1 ((rootCap + segLen - 1) / segLen)
+  let rootLen := rootCount * segLen
+  let boot := Nat.sqrt rootLen
+  let (cnt, sum) := primeStats (max boot rootCap) segLen
   { lo := lo, segLen := segLen, segCount := segCount
-    primes := sievingPrimes (lo + segLen * segCount - 1) }
+    rootCount := rootCount
+    bootPrimes := primesBelow (boot + 1)
+    mainCount := cnt
+    rootCap := rootCap
+    markSteps := sum + 16 }
 
-def Cfg.tableLen (c : Cfg) : Nat := c.primes.length
-
-/-- Mark steps budgeted per window: one per multiple of each prime inside the
-window, one per prime to advance the cursor, and slack.  Too small silently
-truncates the sieve (the kernel checks below catch that); too large only wastes
-iterations. -/
-def Cfg.markSteps (c : Cfg) : Nat :=
-  (c.primes.map (fun p => c.segLen / p + 2)).foldl (· + ·) 0 + 16
+def Cfg.tableLen (c : Cfg) : Nat := c.mainCount
 
 /-- Iterations per window: the mark phase then the accumulation phase.  There
 is no clear phase — accumulation zeroes the cells it reads. -/
 def Cfg.period (c : Cfg) : Nat := c.markSteps + c.segLen
 
+/-- The first iteration index of the main phase. -/
+def Cfg.rootSpan (c : Cfg) : Nat := c.rootCount * c.period
+
 def Cfg.sinkProd (c : Cfg) : Nat := 2 * c.segLen
 def Cfg.primeBase (c : Cfg) : Nat := 3 * c.segLen + 1
 def Cfg.resultBase (c : Cfg) : Nat := 3 * c.segLen + c.tableLen + 2
+/-- Scratch cell the prime-collecting store aims at when it is not
+collecting.  It is never read. -/
+def Cfg.primeSink (c : Cfg) : Nat := c.resultBase + 7
 def Cfg.arrayLen (c : Cfg) : Nat := c.resultBase + 8
 def Cfg.sentinel (c : Cfg) : Nat := c.segLen + 1
-def Cfg.firstPrime (c : Cfg) : Nat := c.primes.headD 2
+def Cfg.firstPrime (c : Cfg) : Nat := c.bootPrimes.headD 2
 
-/-- The prime table as written into the array: the primes, then a sentinel
-value (only its being `≥ 2` matters; the cursor position, not the value, is
-what stops the marking). -/
-def Cfg.table (c : Cfg) : List Nat := c.primes ++ [c.sentinel]
+/-- The bootstrap table as written into the array: the bootstrap primes, then
+a guard value.  Only its being nonzero matters — the cursor position, not the
+value, is what stops the marking, but the value is still fed to a `urem`.
+The root phase overwrites this cell with the first prime it collects. -/
+def Cfg.bootTable (c : Cfg) : List Nat := c.bootPrimes ++ [c.sentinel]
+
+/-- The constant the window base jumps by at the root-to-main transition:
+`lo − (1 + rootLen)` in two's complement, so that one `add` retargets the walk
+from `[1, rootLen]` to `[lo, hi]`. -/
+def Cfg.wDelta (c : Cfg) : Nat :=
+  (c.lo + Verified.Reflect.M - (1 + c.rootLen) % Verified.Reflect.M) %
+    Verified.Reflect.M
 
 /-! ## Register allocation
 
 `0`–`7` persistent, `8`–`99` recomputed every iteration, `100`–`127` the
-residue's own persistent state.
+residue's own persistent state, `128`–`145` the root phase.
 -/
 
 def rPi : Nat := 2      -- prime-table cursor
@@ -209,14 +322,18 @@ def rR : Nat := 5       -- position inside the window
 def rW : Nat := 6       -- window base (the integer cell 0 stands for)
 def rZero : Nat := 7    -- constant 0, for the clearing stores
 
-def regCount : Nat := 128
+def rLimit : Nat := 128 -- prime-table cursor limit for the current phase
+def rWrite : Nat := 129 -- prime-table write cursor, as an absolute cell index
+
+def regCount : Nat := 160
 
 /-! ## The core loop body
 
 Leaves, for the accumulation phase, `pos` in `79`, `neg` in `80`, `|μ|` in
-`81`, the current integer `n` in `65`, and the phase selector `inAcc` in `9`.
-All four are already gated: during the mark phase they are `0` (and `n` is the
-window base, which is `≥ 2`, so the residue may divide by it unconditionally).
+`81`, the current integer `n` in `65`, and the phase selector `inAccMain` in
+`133`.  All four are already gated: during the mark phase and throughout the
+root phase they are `0`.  `n` is never `0` — the root walk opens at `1`, and
+`lo ≥ 1` — so the residue may divide by it unconditionally.
 -/
 
 def Cfg.coreBody (c : Cfg) : List AInstr :=
@@ -228,6 +345,12 @@ def Cfg.coreBody (c : Cfg) : List AInstr :=
   [ -- phase selectors
     .scalar (.binop 8 .lt (.reg rR) (.lit T))            -- inMark
   , .scalar (.binop 9 .sub (.lit 1) (.reg 8))            -- inAcc
+    -- root phase selector, and the cursor limit it chooses
+  , .scalar (.binop 130 .lt .idx (.lit c.rootSpan))      -- inRoot
+  , .scalar (.binop 131 .mul (.reg 130) (.lit (K - c.bootCount)))
+  , .scalar (.binop rLimit .sub (.lit K) (.reg 131))
+  , .scalar (.binop 132 .mul (.reg 9) (.reg 130))        -- inAccRoot
+  , .scalar (.binop 133 .sub (.reg 9) (.reg 132))        -- inAccMain
     -- window start: reset the prime cursor, branchlessly
   , .scalar (.binop 10 .eq (.reg rR) (.lit 0))           -- isStart
   , .scalar (.binop 11 .sub (.lit 1) (.reg 10))
@@ -267,10 +390,10 @@ def Cfg.coreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 39 .sub (.lit 1) (.reg 21))
   , .scalar (.binop 40 .mul (.reg 8) (.reg 39))          -- advance
   , .scalar (.binop 41 .add (.reg rPi) (.reg 40))
-  , .scalar (.binop 42 .gt (.reg 41) (.lit K))
+  , .scalar (.binop 42 .gt (.reg 41) (.reg rLimit))
   , .scalar (.binop 43 .sub (.lit 1) (.reg 42))
   , .scalar (.binop 44 .mul (.reg 43) (.reg 41))
-  , .scalar (.binop 45 .mul (.reg 42) (.lit K))
+  , .scalar (.binop 45 .mul (.reg 42) (.reg rLimit))
   , .scalar (.binop rPi .add (.reg 44) (.reg 45))
   , .scalar (.binop 46 .add (.reg rPi) (.lit c.primeBase))
   , .load 47 46
@@ -282,7 +405,7 @@ def Cfg.coreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 52 .urem (.reg rW) (.reg rP))
   , .scalar (.binop 53 .sub (.reg rP) (.reg 52))
   , .scalar (.binop 54 .urem (.reg 53) (.reg rP))        -- first cell of new p
-  , .scalar (.binop 55 .eq (.reg rPi) (.lit K))          -- table exhausted
+  , .scalar (.binop 55 .eq (.reg rPi) (.reg rLimit))     -- table exhausted
   , .scalar (.binop 56 .sub (.lit 1) (.reg 55))
   , .scalar (.binop 57 .mul (.reg 55) (.lit (L + 1)))
   , .scalar (.binop 58 .mul (.reg 56) (.reg 54))
@@ -308,9 +431,9 @@ def Cfg.coreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 76 .sub (.lit 1) (.reg 74))
   , .scalar (.binop 77 .mul (.reg 75) (.reg 76))
   , .scalar (.binop 78 .mul (.reg 75) (.reg 74))
-  , .scalar (.binop 79 .mul (.reg 9) (.reg 77))          -- μ = +1
-  , .scalar (.binop 80 .mul (.reg 9) (.reg 78))          -- μ = −1
-  , .scalar (.binop 81 .mul (.reg 9) (.reg 75))          -- |μ|
+  , .scalar (.binop 79 .mul (.reg 133) (.reg 77))        -- μ = +1
+  , .scalar (.binop 80 .mul (.reg 133) (.reg 78))        -- μ = −1
+  , .scalar (.binop 81 .mul (.reg 133) (.reg 75))        -- |μ|
     -- zero the two cells just read, so the next window starts clean
   , .scalar (.binop 82 .sub (.lit 1) (.reg 9))
   , .scalar (.binop 83 .mul (.reg 82) (.lit c.sinkProd))
@@ -318,22 +441,44 @@ def Cfg.coreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 85 .add (.reg 84) (.lit L))
   , .store 84 rZero
   , .store 85 rZero
-    -- advance the window position, and the window base at the wrap
+    -- root phase: append n to the prime table when it is an uncrossed cell
+    -- with 2 ≤ n ≤ ⌊√hi⌋, i.e. exactly a prime above every bootstrap prime
+  , .scalar (.binop 134 .sub (.reg 65) (.lit 2))
+  , .scalar (.binop 135 .lt (.reg 134) (.lit (c.rootCap - 1)))
+  , .scalar (.binop 136 .mul (.reg 135) (.reg 67))
+  , .scalar (.binop 137 .mul (.reg 136) (.reg 132))      -- collect
+  , .scalar (.binop 138 .mul (.reg 137) (.reg rWrite))
+  , .scalar (.binop 139 .sub (.lit 1) (.reg 137))
+  , .scalar (.binop 140 .mul (.reg 139) (.lit c.primeSink))
+  , .scalar (.binop 141 .add (.reg 138) (.reg 140))
+  , .store 141 65
+  , .scalar (.binop rWrite .add (.reg rWrite) (.reg 137))
+    -- advance the window position, and the window base at the wrap; the
+    -- transition iteration additionally retargets the walk from the root
+    -- sweep `[1, rootLen]` to `[lo, hi]`
   , .scalar (.binop 86 .add (.reg rR) (.lit 1))
   , .scalar (.binop 87 .eq (.reg 86) (.lit P))
   , .scalar (.binop 88 .sub (.lit 1) (.reg 87))
   , .scalar (.binop rR .mul (.reg 88) (.reg 86))
   , .scalar (.binop 89 .mul (.reg 87) (.lit L))
-  , .scalar (.binop rW .add (.reg rW) (.reg 89))
+  , .scalar (.binop 142 .eq .idx (.lit (c.rootSpan - 1)))
+  , .scalar (.binop 143 .mul (.reg 142) (.lit c.wDelta))
+  , .scalar (.binop 144 .add (.reg 89) (.reg 143))
+  , .scalar (.binop rW .add (.reg rW) (.reg 144))
   ]
 
-/-- Write the prime table, then set the window base to `lo`. -/
+/-- Write the bootstrap prime table and the table-end guard, open the walk at
+`1`, and point the collection cursor just past the bootstrap primes. -/
 def Cfg.coreInit (c : Cfg) : List AInstr :=
-  (c.table.zipIdx.flatMap fun (v, t) =>
+  (c.bootTable.zipIdx.flatMap fun (v, t) =>
     [ AInstr.scalar (.mov 90 (.lit (c.primeBase + t)))
     , AInstr.scalar (.mov 91 (.lit v))
     , AInstr.store 90 91 ]) ++
-  [ .scalar (.mov rW (.lit c.lo)) ]
+  [ .scalar (.mov 90 (.lit (c.primeBase + c.tableLen)))
+  , .scalar (.mov 91 (.lit c.sentinel))
+  , .store 90 91
+  , .scalar (.mov rW (.lit 1))
+  , .scalar (.mov rWrite (.lit (c.primeBase + c.bootCount))) ]
 
 /-! ## Residue: Mertens and the squarefree count
 
@@ -381,7 +526,7 @@ def mertensResidue : List AInstr :=
     -- Q, and G = Q·2^k − c·n
   , .scalar (.binop rQ .add (.reg rQ) (.reg 81))
   , .scalar (.binop 113 .shl (.reg 81) (.lit cdemScale))
-  , .scalar (.binop 114 .mul (.reg 9) (.lit cdemC))
+  , .scalar (.binop 114 .mul (.reg 133) (.lit cdemC))
   , .scalar (.binop 115 .add (.reg rG) (.reg 113))
   , .scalar (.binop rG .sub (.reg 115) (.reg 114))
     -- running extrema of G
@@ -472,7 +617,7 @@ def outputReg : Nat := 92
 def Cfg.program (c : Cfg) (residue init epilogue : List AInstr) : AProgram := {
   regCount := regCount
   arrayLen := c.arrayLen
-  loopCount := c.period * c.segCount
+  loopCount := c.period * (c.rootCount + c.segCount)
   init := c.coreInit ++ init
   body := c.coreBody ++ residue
   epilogue := epilogue
@@ -815,27 +960,36 @@ def refT (lo hi : Nat) : Nat :=
 accumulator, so a single residue register can be read off. -/
 def probe (c : Cfg) (residue init : List AInstr) (out : Nat) : AProgram :=
   { regCount := regCount, arrayLen := c.arrayLen
-    loopCount := c.period * c.segCount
+    loopCount := c.period * (c.rootCount + c.segCount)
     init := c.coreInit ++ init
     body := c.coreBody ++ residue
     epilogue := [], output := out }
 
-/-- Three windows of eight cells covering `[1, 24]`; the prime list is spelled
-out because the emit-time sieve is not a kernel-reducible definition. -/
-def cfg : Cfg := { lo := 1, segLen := 8, segCount := 3, primes := [2, 3] }
+/-- Three main windows of eight cells covering `[1, 24]`, behind one root
+window covering `[1, 8]`.  The counts are spelled out because the emit-time
+sieve is not a kernel-reducible definition; they are what `Cfg.ofRange 1 8 3`
+computes — `⌊√24⌋ = 4`, so the root sweep must reach `4`, one window of eight
+cells does, `⌊√8⌋ = 2` leaves `[2]` as the bootstrap table, and the root phase
+collects the one remaining prime `3` into a table of `π(4) = 2` entries. -/
+def cfg : Cfg :=
+  { lo := 1, segLen := 8, segCount := 3, rootCount := 1
+    bootPrimes := [2], mainCount := 2, rootCap := 4, markSteps := 26 }
 
 def mertensProbe (out : Nat) : AProgram :=
   probe cfg mertensResidue (mertensInit ⟨mertensBias, 0, gBias⟩) out
 
 def mobiusProbe : AProgram := probe cfg mobiusOverNResidue (mobiusInit tBias) rT
 
-set_option maxRecDepth 4000000 in
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
 example : (mertensProbe rM).denote = some (refM 1 24) := by decide
 
-set_option maxRecDepth 4000000 in
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
 example : (mertensProbe rQ).denote = some (refQ 1 24) := by decide
 
-set_option maxRecDepth 4000000 in
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
 example : mobiusProbe.denote = some (refT 1 24) := by decide
 
 end Check

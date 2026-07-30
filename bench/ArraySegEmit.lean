@@ -87,6 +87,7 @@ def main (args : List String) : IO UInt32 := do
           IO.FS.writeFile out (src ++ driver)
           IO.println s!"mode={mode} lo={lo} L={len} S={cnt} hi={c.hi}"
           IO.println s!"  primes={c.tableLen} markSteps={c.markSteps} period={c.period}"
+          IO.println s!"  rootCount={c.rootCount} rootLen={c.rootLen} rootCap={c.rootCap} boot={c.bootCount} initLen={c.coreInit.length}"
           IO.println s!"  loopCount={p.loopCount} arrayLen={p.arrayLen} bodyLen={p.body.length}"
           IO.println s!"  memoryBytes={8 * p.arrayLen}"
           IO.println s!"  cdemC={cdemC} hurstThr={hurstThreshold c.lo}"
