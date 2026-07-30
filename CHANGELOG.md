@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- **A logarithm for the fragment, and the two families that need one** — two
+  of the six reduced on-cone families are not integer folds: `ψ(n)` and
+  `R₂*(n)` sum logarithms of primes, which the Möbius sieve does not produce.
+  `Verified/LogFixed.lean` supplies the missing primitive.  `logFix S n` is
+  `⌊2^S·log₂ n⌋` by repeated squaring of a 62-bit mantissa, one emitted bit
+  per round, and its correctness is an **integer** statement —
+  `2^logFix S n ≤ n^(2^S) < 2^(logFix S n + 2)` — because this repository has
+  no Mathlib and `Real.log` cannot be written here.  That turns out to be the
+  right formulation rather than a workaround: nothing is rounded, and because
+  the bracket *multiplies*, the accumulation theorem is exact.
+  `logFold_bracket` reads
+  `2^(Σ logFix S p) ≤ (Π p)^(2^S) ≤ 2^(Σ logFix S p + 2·#terms)`, so the
+  accumulated error is the literal subterm `2 * l.length` — two units in the
+  last place per factor, with no hidden `ε` and no independence assumption.
+  - The squaring step is exact and division-free: `sq62_eq` proves the
+    32-bit half-limb circuit computes `⌊x²/2⁶²⌋` on the nose.  The
+    relative-error budget, which squaring doubles, is defined by its own
+    recursion `D ↦ 2D + D²/2⁶² + 9` so that the induction step is
+    definitional and the quantitative claim collapses to one `decide`:
+    `errB 48 = 2 533 970 701 664 099`, five ten-thousandths of a mantissa
+    unit.
+  - `Ports/LogFixPort.lean` is the round as a `Reflect.Program`: **21
+    instructions, no division of any width**, the renormalising shift an
+    `lshr` by a register.  Kernel checks tie its `denote` to `logFrac` and to
+    `logFix 20 999999937 = 31 349 646`.
+  - **A single 64-bit accumulator cannot carry `ψ` to `10¹³`.**  In residual
+    form the family's own bound `|ψ(n) − n| ≤ √2·√n` caps `S` at 40; the
+    enclosure width there is `4·π*(10¹³)/2⁴⁰ = 1.26`, i.e. `4.0·10⁻⁷` in a
+    ratio the paper prints to eight decimals.  The margin behind
+    `0.79059276` is at most `10⁻⁸`, which needs `S ≥ 45.32`: **one word is
+    short by a factor of 40**, and `ψ` requires 128-bit accumulation (71 bits
+    at `S = 48`, so two words and a carry).  `R₂*` is the opposite case — one
+    word at `S = 24` sits forty times inside its margin, and its obstruction
+    is that `Λ∗Λ` is a Dirichlet convolution needing a factorisation sieve,
+    not a logarithm.  Full arithmetic, the prime-power treatment, and the
+    extrapolated cost (`138 ns/integer`, 16 days at `10¹³`; `1.2 hours` for
+    `R₂*`) are in `bench/results/psi_fold.md`; `bench/ref_psi.c` is the
+    oracle and the speed line, reproducing `ψ(10⁶) = 999 586.597496` and
+    `ψ(10⁸) = 99 998 242.796627`.
+  - `Ports/ArraySegSieve.lean` is untouched, so the `mertens` artifact still
+    agrees with `bench/ref_seg.c` slot for slot on all seven slots and
+    `check-native` still passes.
+
 - **The reduced cite families, computed** — the one-shot `[0, L)` Möbius
   sieve of `Ports/ArrayMobius.lean` needs the whole range resident, so `10¹²`
   would be 24 TB.  `Ports/ArraySegSieve.lean` is its offset, multi-window
