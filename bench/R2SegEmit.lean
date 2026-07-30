@@ -29,6 +29,7 @@ Emission only; no proof obligation is discharged here.
 open LeanCompCert
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Ports.R2SegSieve
+open LeanCompCert.Ports.PsiSegSieve (lnFix)
 
 namespace Bench.R2SegEmit
 
@@ -65,6 +66,9 @@ def main (args : List String) : IO UInt32 := do
       -- the previous link's carry-out is what a production chain would pass.
       -- Such a run measures cost at `n ≈ TABLEHI`; its slots are not a
       -- verification of anything.
+      -- An empty positional argument is "absent": the reference fold below
+      -- builds a smallest-prime-factor table of size `hi`, which at `hi = 2.1
+      -- ⋅ 10¹⁰` is not a thing one asks for by accident.
       let chain := rest[3]?.bind String.toNat?
       let c := match chain with
         | some th => R2Cfg.ofChain scale lo len cnt th
@@ -105,7 +109,7 @@ def main (args : List String) : IO UInt32 := do
           IO.println s!"  iterPerInteger={(1000 * p.loopCount) / (len * cnt)}e-3"
           IO.println s!"  head d={seed.d} err={seed.err} prev={seed.prev} terms={seed.terms} sq={seed.sq} ex={seed.ex} ln={seed.ln} thr={seed.thr} viol={seed.viol}"
           IO.println s!"  bias={biasOf scale} gammaStep={gammaStep scale} ln2Up={ln2Up scale} a193={a193}"
-          if (rest[2]?).isSome then
+          if rest[2]?.getD "" ≠ "" then
             let r := refR2 scale lo c.hi root seed
             IO.println s!"  refD={r.1} refErr={r.2.1} refTerms={r.2.2.1} refPrev={r.2.2.2}"
           return 0

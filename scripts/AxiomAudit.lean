@@ -42,6 +42,7 @@ import LeanCompCert.Verified.AddWide
 import LeanCompCert.Verified.LogAccum
 import LeanCompCert.Ports.AddWidePort
 import LeanCompCert.Ports.PsiSegSieve
+import LeanCompCert.Ports.R2SegSieve
 import LeanCompCert.Testing.ArraySegCertificate
 
 
@@ -254,3 +255,15 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.PsiSegSieve.epilogue_all
 #print axioms LeanCompCert.Ports.PsiSegSieve.psiProgram_wf
 #print axioms LeanCompCert.Ports.PsiSegSieve.psiProgram_compiled
+
+-- The segmented factorisation sieve, and the R2* residue
+#print axioms LeanCompCert.Ports.R2SegSieve.storeLit_all
+#print axioms LeanCompCert.Ports.R2SegSieve.storeResult_all
+#print axioms LeanCompCert.Ports.R2SegSieve.storeLits_all
+#print axioms LeanCompCert.Ports.R2SegSieve.seedRegs_all
+#print axioms LeanCompCert.Ports.R2SegSieve.seedList_ok
+#print axioms LeanCompCert.Ports.R2SegSieve.body_all
+#print axioms LeanCompCert.Ports.R2SegSieve.init_all
+#print axioms LeanCompCert.Ports.R2SegSieve.epilogue_all
+#print axioms LeanCompCert.Ports.R2SegSieve.r2Program_wf
+#print axioms LeanCompCert.Ports.R2SegSieve.r2Program_compiled
