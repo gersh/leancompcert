@@ -43,6 +43,8 @@ import LeanCompCert.Verified.LogAccum
 import LeanCompCert.Ports.AddWidePort
 import LeanCompCert.Ports.PsiSegSieve
 import LeanCompCert.Ports.R2SegSieve
+import LeanCompCert.Ports.CDEMAbelScan
+import LeanCompCert.Testing.AbelScanCertificate
 import LeanCompCert.Testing.ArraySegCertificate
 import LeanCompCert.Verified.DyadicBisect
 import LeanCompCert.Ports.A36Bisect
@@ -301,3 +303,23 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.R2SegSieve.epilogue_all
 #print axioms LeanCompCert.Ports.R2SegSieve.r2Program_wf
 #print axioms LeanCompCert.Ports.R2SegSieve.r2Program_compiled
+
+-- The CDEM Abel increment scan, and its certificate
+#print axioms LeanCompCert.Ports.CDEMAbelScan.storeLit_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.storeLits_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.seedRegs_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.seedList_ok
+#print axioms LeanCompCert.Ports.CDEMAbelScan.storeResult_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.selectors_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.sieveBody_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.markBody_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.accHead_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.accProd_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.accBisect_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.tailBody_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.body_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.init_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.epilogue_all
+#print axioms LeanCompCert.Ports.CDEMAbelScan.abelProgram_wf
+#print axioms LeanCompCert.Ports.CDEMAbelScan.abelProgram_compiled
+#print axioms LeanCompCert.Testing.AbelScanCertificate.program_wf
