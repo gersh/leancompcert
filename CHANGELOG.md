@@ -39,7 +39,7 @@
     instead — the hypothesis of `Dyadic.DInt.sub_no_truncation` — so the
     differences are exact and no side condition is inherited
     (`differences_exact`).
-  - **`Ports/A36BisectProgram.lean`** is the same leaf as a 476-instruction
+  - **`Ports/A36BisectProgram.lean`** is the same leaf as a 478-instruction
     fixed-shape loop body, well-formed at every depth from one proof.  It is
     checked against `leafOK` on a configuration where the certificate **fails**
     (the depth-3 grid) as well as one where it passes: a passing-only check
@@ -48,8 +48,8 @@
     four per level in both time and memory (1.06 s at depth 8, 101.6 s and
     16.6 GB at 14), so its reach is about 2·10⁴ leaves — which covers *every*
     uniform-depth site in the family, whose maximum depth is 14.  The artifact
-    covers what is past that: 177.8 ns per leaf, 3.7 kB freestanding at every
-    depth, 2³¹ leaves in 382.4 s.  `bench/results/a36_bisect.md` has the
+    covers what is past that: 177.6 ns per leaf, 3.8 kB freestanding at every
+    depth, 2³¹ leaves in 381.4 s.  `bench/results/a36_bisect.md` has the
     tables, the survey of all 143 sites, and what is *not* proved — the
     analytic step to `ℝ` (no Mathlib here) and the body/`leafOK` simulation.
 

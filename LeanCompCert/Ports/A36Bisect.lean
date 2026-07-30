@@ -185,8 +185,9 @@ def leafDataAt (d i : Nat) : Leaf :=
 /-- The chain on cell `i` at the shipped depth. -/
 def leafData (i : Nat) : Leaf := leafDataAt depth i
 
-/-- The leaf test at depth `d`: the three root checks, the two ordering checks
-that make the differences exact, and the residual's lower bound.
+/-- The leaf test at depth `d`: the three root checks, the divisor check, the
+two ordering checks that make the differences exact, and the residual's lower
+bound.
 
 The divisor check is the side condition of `Dyadic.DInt.div_encloses`: at
 `den.lo = 0` the ceiling division would return `0` and the enclosure's upper

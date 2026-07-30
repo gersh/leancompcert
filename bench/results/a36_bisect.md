@@ -33,20 +33,21 @@ intermediate product `2^61.4` — one machine word, at every depth, forever.
 
 | depth | leaves | kernel `decide +kernel` | kernel peak RSS | artifact run | artifact exe |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 8 | 256 | **1.06 s** | 0.64 GB | 0.0010 s | 3 744 B |
-| 10 | 1 024 | 5.21 s | 1.4 GB | — | — |
-| 12 | 4 096 | 19.8 s | 4.4 GB | 0.0019 s | 3 744 B |
+| 8 | 256 | **1.06 s** | 0.64 GB | 0.0018 s | 3 752 B |
+| 10 | 1 024 | 5.21 s | 1.39 GB | — | — |
+| 12 | 4 096 | 19.8 s | 4.37 GB | 0.0029 s | 3 752 B |
 | 14 | 16 384 | 101.6 s | 16.6 GB | — | — |
-| 16 | 65 536 | (≈ 6 min, ≈ 65 GB — not run) | | 0.0126 s | 3 744 B |
-| 20 | 1 048 576 | out of reach | | 0.188 s | 3 744 B |
-| 24 | 16 777 216 | out of reach | | 2.989 s | 3 760 B |
-| 28 | 268 435 456 | out of reach | | 47.73 s | 3 760 B |
-| 31 | 2 147 483 648 | out of reach | | 382.4 s | 3 768 B |
+| 16 | 65 536 | (≈ 7 min, ≈ 66 GB — not run) | | 0.0185 s | 3 752 B |
+| 20 | 1 048 576 | out of reach | | 0.200 s | 3 752 B |
+| 24 | 16 777 216 | out of reach | | 2.985 s | 3 768 B |
+| 28 | 268 435 456 | out of reach | | 47.74 s | 3 768 B |
+| 31 | 2 147 483 648 | out of reach | | 381.4 s | 3 776 B |
 
 (`user` time throughout; kernel column is `lean` on the sweep alone, artifact
 column is CompCert-compiled freestanding, `bench/a36_bisect.sh`, shipped
-476-instruction body.  Every artifact row exits `0`: every leaf passes its
-three root checks, its two ordering checks and its residual comparison.)
+478-instruction body.  Every artifact row exits `0`: every leaf passes its
+three root checks, its divisor check, its two ordering checks and its
+residual comparison.)
 
 **Depth 8 goes from "13.2 GB, unfinished at 22 minutes" to "1.06 s, 0.64 GB,
 `decide +kernel`, and `#print axioms` reports no axioms at all."**  That is the
@@ -60,11 +61,11 @@ The kernel's cost is a clean factor of four per level of depth, in time and in
 memory alike, and memory binds first: depth 14 is 16.6 GB.  Call the kernel's
 reach **2·10⁴ leaves**.
 
-The artifact's cost is `leaves × body`, at a measured **177.8 ns per leaf**
-(depth 20/24/28/31: 179.5, 178.2, 177.8, 178.1 — the depth-8 and depth-12
-figures are process startup, not work).  The emitted C is 20.9 kB and the
-freestanding binary 3.7 kB *at every depth*, because emission is rolled: only
-the loop bound in the `while` changes.  CompCert compiles it in 54–80 ms
+The artifact's cost is `leaves × body`, at a measured **177.6 ns per leaf**
+(depth 20/24/28/31: 190.6, 177.9, 177.9, 177.6 — the depth-8 and depth-12
+figures are process startup, not work).  The emitted C is 21.0 kB and the
+freestanding binary 3.8 kB *at every depth*, because emission is rolled: only
+the loop bound in the `while` changes.  CompCert compiles it in 57–91 ms
 regardless.
 
 So the two paths do not compete; they partition the family:
@@ -75,7 +76,7 @@ So the two paths do not compete; they partition the family:
   once the arithmetic is fixed point;
 * the deep outliers that are *not* uniform-depth `interval_bisect` — the
   adaptive `A2.cert_lower`, 377 817 leaf cells at maximum depth 31 — are the
-  artifact's.  Measured: 2³¹ uniform leaves, 382.4 s, exit 0.
+  artifact's.  Measured: 2³¹ uniform leaves, 381.4 s, exit 0.
 
 ## What the rest of the family would cost
 
@@ -165,8 +166,8 @@ usually far less:
 
 * `A36Bisect.sweep_ok` — all 256 leaves pass, `decide +kernel`. **No axioms.**
 * `A36Bisect.leaf_sound`, `j_encloses`, `v_encloses`, `w_encloses`,
-  `differences_exact` — the six inequalities each passing leaf exports,
-  `∀`-quantified over the index.
+  `den_pos`, `differences_exact` — the seven inequalities each passing leaf
+  exports, `∀`-quantified over the index.
 * `A36Bisect.cells_chain` / `cells_cover` — the grid has no gaps, at every
   depth.
 * `A36BisectProgram.programAt_wf` — the fragment obligation, at every depth
@@ -178,10 +179,11 @@ Not proved, and named as such:
 * **The analytic step.**  From "the mantissa interval `B` lies below `A`" to
   "`0 ≤ 8υ²(υ−1) + …` for real `ρ`" needs `Real.sqrt` monotonicity and ordered
   field arithmetic, and this package has no Mathlib.  The interface that step
-  consumes is the six exported inequalities plus the generic transfer lemmas,
+  consumes is the seven exported inequalities plus the generic transfer
+  lemmas,
   all already cross-multiplied and quantified over enclosed mantissas.  It is
   one lemma per kernel *shape*, not one per site.
-* **The body/`leafOK` simulation.**  That the 476-instruction loop body's `Nat`
+* **The body/`leafOK` simulation.**  That the 478-instruction loop body's `Nat`
   denotation equals `A36Bisect.leafOK` at every index.  `FoldBridge` exists for
   exactly this and it needs a no-overflow invariant on the mod-2⁶⁴ arithmetic
   (true — the largest product is `2^61.4` — but not proved).  Until it is, the
