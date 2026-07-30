@@ -18,6 +18,9 @@ lake env lean \
   -c "$output/Capture.lean.c" \
   tests/fixtures/Capture.lean
 
+# Only Lean-generated C (the LCNF harness objects below) needs <lean/lean.h>
+# and hence the <stdatomic.h> shim.  The emitted certificate units include
+# just <stdint.h>/<stddef.h> and are compiled with no -I at all.
 lean_prefix=$(lean --print-prefix)
 include_runtime="-I$project_root/runtime/include"
 include_lean="-I$lean_prefix/include"
@@ -35,43 +38,37 @@ ccomp -o "$output/lcnf-integration" \
 verified_decide_c="$output/verified-decide.c"
 verified_decide_exe="$output/verified-decide"
 .lake/build/bin/lean-compcert emit-verified-decide-c "$verified_decide_c"
-ccomp "$include_runtime" "$include_lean" \
-  -o "$verified_decide_exe" "$verified_decide_c"
+ccomp -o "$verified_decide_exe" "$verified_decide_c"
 "$verified_decide_exe"
 
 mertens_cert_c="$output/mertens-cert.c"
 mertens_cert_exe="$output/mertens-cert"
 .lake/build/bin/lean-compcert emit-mertens-cert-c "$mertens_cert_c"
-ccomp "$include_runtime" "$include_lean" \
-  -o "$mertens_cert_exe" "$mertens_cert_c"
+ccomp -o "$mertens_cert_exe" "$mertens_cert_c"
 "$mertens_cert_exe"
 
 wide_mertens_cert_c="$output/wide-mertens-cert.c"
 wide_mertens_cert_exe="$output/wide-mertens-cert"
 .lake/build/bin/lean-compcert emit-wide-mertens-cert-c "$wide_mertens_cert_c"
-ccomp "$include_runtime" "$include_lean" \
-  -o "$wide_mertens_cert_exe" "$wide_mertens_cert_c"
+ccomp -o "$wide_mertens_cert_exe" "$wide_mertens_cert_c"
 "$wide_mertens_cert_exe"
 
 squarefree_cert_c="$output/squarefree-mertens-cert.c"
 squarefree_cert_exe="$output/squarefree-mertens-cert"
 .lake/build/bin/lean-compcert emit-squarefree-mertens-cert-c "$squarefree_cert_c"
-ccomp "$include_runtime" "$include_lean" \
-  -o "$squarefree_cert_exe" "$squarefree_cert_c"
+ccomp -o "$squarefree_cert_exe" "$squarefree_cert_c"
 "$squarefree_cert_exe"
 
 fixedpoint_cert_c="$output/fixedpoint-cert.c"
 fixedpoint_cert_exe="$output/fixedpoint-cert"
 .lake/build/bin/lean-compcert emit-fixedpoint-cert-c "$fixedpoint_cert_c"
-ccomp "$include_runtime" "$include_lean" \
-  -o "$fixedpoint_cert_exe" "$fixedpoint_cert_c"
+ccomp -o "$fixedpoint_cert_exe" "$fixedpoint_cert_c"
 "$fixedpoint_cert_exe"
 
 reflected_cert_c="$output/reflected-cert.c"
 reflected_cert_exe="$output/reflected-cert"
 .lake/build/bin/lean-compcert emit-reflected-cert-c "$reflected_cert_c"
-ccomp "$include_runtime" "$include_lean" \
-  -o "$reflected_cert_exe" "$reflected_cert_c"
+ccomp -o "$reflected_cert_exe" "$reflected_cert_c"
 "$reflected_cert_exe"
 
 ./bin/lean-compcert-probe tests/fixtures/Hello.lean \
@@ -94,8 +91,7 @@ ccomp "$include_runtime" "$include_lean" \
 rolled_10m_c="$output/rolled-10m.c"
 rolled_10m_exe="$output/rolled-10m"
 .lake/build/bin/lean-compcert emit-rolled-10m-c "$rolled_10m_c"
-ccomp "$include_runtime" "$include_lean" \
-  -o "$rolled_10m_exe" "$rolled_10m_c"
+ccomp -o "$rolled_10m_exe" "$rolled_10m_c"
 "$rolled_10m_exe"
 
 native_check_dir="$output/native-check"
@@ -114,7 +110,7 @@ if command -v clightgen >/dev/null 2>&1; then
   for cert_c in "$verified_decide_c" "$mertens_cert_c" \
       "$wide_mertens_cert_c" "$squarefree_cert_c" \
       "$reflected_cert_c" "$fixedpoint_cert_c"; do
-    clightgen "$include_runtime" "$include_lean" -normalize "$cert_c"
+    clightgen -normalize "$cert_c"
     cert_v="${cert_c%.c}.v"
     test -s "$cert_v"
   done

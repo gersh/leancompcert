@@ -16,3 +16,12 @@ symbols:
   lean_spawn_task:
     status: unsupported
     reason: requires threads and synchronization
+  _start:
+    status: external_trusted
+    source: runtime/start/aarch64.S, runtime/start/x86_64.S
+    reason: >-
+      Hand-written freestanding process entry point for emitted certificate
+      artifacts: calls main and issues the exit syscall with main's return
+      value.  Outside CompCert's proof, and assembled by GNU as rather than
+      by CompCert.  aarch64.S has been assembled and run; x86_64.S has not.
+      See runtime/start/README.md for the exit-status contract.

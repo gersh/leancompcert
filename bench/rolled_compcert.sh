@@ -7,7 +7,9 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/bench/results"
 mkdir -p "$OUT"
-INC="-Iruntime/include -I$(lean --print-prefix)/include"
+. "$ROOT/bench/freestanding.sh"
+fs_init "$ROOT" || exit 1
+trap fs_cleanup EXIT
 REPS=5
 cd "$ROOT"
 
@@ -30,7 +32,7 @@ for spec in "$@"; do
   exe="$OUT/rolled_$n.bin"
   ct=()
   for _ in $(seq $REPS); do
-    s=$(date +%s%N); ccomp $INC -o "$exe" "$c" >/dev/null 2>&1; e=$(date +%s%N)
+    s=$(date +%s%N); fs_cc "$exe" "$c"; e=$(date +%s%N)
     ct+=( $(( (e-s)/1000 )) )
   done
   cm=$(python3 -c "print('%.3f' % ($(median "${ct[@]}")/1000.0))")

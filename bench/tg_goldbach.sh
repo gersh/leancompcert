@@ -13,6 +13,11 @@
 #   3. the emitted stage-(c) ladder-gap checker on the reference's own
 #      delta stream, plus two fail-closed rejections.
 #
+# The CompCert arm links freestanding (bench/freestanding.sh: ccomp -c +
+# runtime/start/<arch>.S + ld, no libc); the gcc arm keeps its ordinary
+# hosted link, so binary sizes are not comparable between the two.  The
+# ccomp_s column therefore covers CompCert compilation plus the ld step.
+#
 # CPU (user) time is reported throughout: this box is shared.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +26,9 @@ WORK="${TMPDIR:-/tmp}/tg_goldbach.$$"
 REF="${1:?usage: tg_goldbach.sh REFERENCE_CPP}"
 mkdir -p "$OUT" "$WORK"
 cd "$ROOT"
-INC="-Iruntime/include -I$(lean --print-prefix)/include"
+. "$ROOT/bench/freestanding.sh"
+FS_WORK="$WORK" fs_init "$ROOT" || exit 1
+trap fs_cleanup EXIT
 ANCHOR=4000000000000000000
 
 cpu() { /usr/bin/time -f '%U' "$@" 2>&1 >/dev/null | tail -1; }
@@ -61,9 +68,9 @@ for n in 20000 100000 500000; do
     "$WORK/s_$n.c" "$value" > /dev/null || continue
   e=$(date +%s%N); emit=$(( (e-s)/1000000 ))
   bytes=$(stat -c %s "$WORK/s_$n.c")
-  s=$(date +%s%N); ccomp $INC -o "$WORK/s_$n.cc" "$WORK/s_$n.c" > /dev/null 2>&1
+  s=$(date +%s%N); fs_cc "$WORK/s_$n.cc" "$WORK/s_$n.c"
   e=$(date +%s%N); comp=$(( (e-s)/1000000 ))
-  gcc -O2 $INC -o "$WORK/s_$n.gc" "$WORK/s_$n.c" > /dev/null 2>&1
+  fs_gcc "$WORK/s_$n.gc" "$WORK/s_$n.c"
   s=$(date +%s%N); "$WORK/s_$n.cc"; code=$?; e=$(date +%s%N)
   r1=$(( (e-s)/1000 ))
   s=$(date +%s%N); "$WORK/s_$n.gc"; e=$(date +%s%N); r2=$(( (e-s)/1000 ))
@@ -87,7 +94,7 @@ for n in 1000 5000 10275; do
     "$WORK/l_$n.c" > /dev/null || continue
   e=$(date +%s%N); emit=$(( (e-s)/1000000 ))
   bytes=$(stat -c %s "$WORK/l_$n.c")
-  s=$(date +%s%N); ccomp $INC -o "$WORK/l_$n.bin" "$WORK/l_$n.c" > /dev/null 2>&1
+  s=$(date +%s%N); fs_cc "$WORK/l_$n.bin" "$WORK/l_$n.c"
   e=$(date +%s%N); comp=$(( (e-s)/1000000 ))
   s=$(date +%s%N); "$WORK/l_$n.bin"; code=$?; e=$(date +%s%N); r=$(( (e-s)/1000 ))
   printf '%s,%s,%s.%03d,%s.%03d,%s.%03d,%s\n' "$n" "$bytes" \
@@ -106,11 +113,11 @@ PY
 sum=$(python3 -c "print(sum(int(x) for x in open('$WORK/d_1000.txt')))")
 lake env lean --run bench/TGLadderEmit.lean "$WORK/d_bad.txt" 888 "$sum" \
   "$WORK/l_bad.c" > /dev/null
-ccomp $INC -o "$WORK/l_bad.bin" "$WORK/l_bad.c" > /dev/null 2>&1
+fs_cc "$WORK/l_bad.bin" "$WORK/l_bad.c"
 "$WORK/l_bad.bin"; echo "out-of-range delta -> exit $? (expect nonzero)"
 lake env lean --run bench/TGLadderEmit.lean "$WORK/d_1000.txt" 888 \
   "$((sum + 1))" "$WORK/l_badsum.c" > /dev/null
-ccomp $INC -o "$WORK/l_badsum.bin" "$WORK/l_badsum.c" > /dev/null 2>&1
+fs_cc "$WORK/l_badsum.bin" "$WORK/l_badsum.c"
 "$WORK/l_badsum.bin"; echo "wrong running total -> exit $? (expect nonzero)"
 
 rm -rf "$WORK"

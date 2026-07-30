@@ -375,7 +375,10 @@ def lowerProgram (program : CCIR.Program) : Except (Array LowerError) C.CTransla
         for external in usedExternals do
           externals := addExternal externals external
   pure {
-    includes := #["stdint.h", "stddef.h", "lean/lean.h"]
+    -- The emitted unit makes no `lean_*` call, so `<lean/lean.h>` is not
+    -- included: dropping it also drops the `<stdatomic.h>` shim and the
+    -- `-I$(lean --print-prefix)/include` flag from every compile line.
+    includes := #["stdint.h", "stddef.h"]
     externals
     functions
   }

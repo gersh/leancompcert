@@ -2,13 +2,17 @@
 # Per-certificate CompCert compile and native run timing for the
 # certificates registered with `lean-compcert check-native`.
 # Usage: bench/percert_native.sh [REPS]
+# Artifacts link freestanding via bench/freestanding.sh (no libc), matching
+# what `check-native` itself does; compile_ms_median covers ccomp -c + ld.
 set -u
 REPS="${1:-5}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIR="$ROOT/.lake/build/native-check"
 OUT="$ROOT/bench/results"
 mkdir -p "$OUT"
-INC="-Iruntime/include -I$(lean --print-prefix)/include"
+. "$ROOT/bench/freestanding.sh"
+fs_init "$ROOT" || exit 1
+trap fs_cleanup EXIT
 
 printf 'cert,bytes,compile_ms_median,run_ms_median,exe_bytes,exit\n' > "$OUT/percert_native.csv"
 
@@ -27,7 +31,7 @@ for c in "$DIR"/*.c; do
   ctimes=()
   for _ in $(seq "$REPS"); do
     s=$(date +%s%N)
-    ccomp $INC -o "$exe" "$c" > /dev/null 2>&1
+    fs_cc "$exe" "$c"
     e=$(date +%s%N)
     ctimes+=( $(( (e-s)/1000 )) )   # microseconds
   done

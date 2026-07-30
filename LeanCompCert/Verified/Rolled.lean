@@ -856,7 +856,9 @@ def emitRolled (p : Program) (name : String) : Except (Array String) String := d
   | none => throw #["rolled lowering failed"]
   | some fn =>
       match C.emitChecked .portable {
-        includes := #["stdint.h", "stddef.h", "lean/lean.h"]
+        -- No `lean_*` call is emitted, so `<lean/lean.h>` is omitted; see
+        -- the note in `LeanCompCert/Lower/Pure.lean`.
+        includes := #["stdint.h", "stddef.h"]
         functions := #[fn]
         externals := #[{
           name := fn.name

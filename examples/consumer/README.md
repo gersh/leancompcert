@@ -45,8 +45,12 @@ verified Lean-to-machine-code pipeline.
 cd examples/consumer
 lake build                       # proves the certificate; zero errors expected
 ./.lake/build/bin/consumer demo.c   # write the emitted C (function + main)
-ccomp -I../../runtime/include -I"$(lean --print-prefix)/include" -o demo demo.c
+ccomp -c -o demo.o demo.c        # no -I needed: only <stdint.h>/<stddef.h>
+as -o start.o ../../runtime/start/$(uname -m).S
+ld -o demo start.o demo.o        # freestanding: no libc, static, 0 undef syms
 ./demo; echo $?                  # 0: the native run reproduces 28707
+                                 # 1 would mean a value disagreement;
+                                 # anything else is abnormal termination
 ```
 
 Or let the cached pipeline do the emit/compile/run loop (this is the
