@@ -43,6 +43,9 @@ import LeanCompCert.Verified.LogAccum
 import LeanCompCert.Ports.AddWidePort
 import LeanCompCert.Ports.PsiSegSieve
 import LeanCompCert.Testing.ArraySegCertificate
+import LeanCompCert.Verified.DyadicBisect
+import LeanCompCert.Ports.A36Bisect
+import LeanCompCert.Ports.A36BisectProgram
 
 
 /-!
@@ -254,3 +257,29 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.PsiSegSieve.epilogue_all
 #print axioms LeanCompCert.Ports.PsiSegSieve.psiProgram_wf
 #print axioms LeanCompCert.Ports.PsiSegSieve.psiProgram_compiled
+
+-- Interval bisection in dyadic fixed point, and the Helfgott A.36 low branch
+#print axioms LeanCompCert.Verified.DyadicBisect.chain_cover
+#print axioms LeanCompCert.Verified.DyadicBisect.sqrtI_encloses
+#print axioms LeanCompCert.Verified.DyadicBisect.sqrtOK_encloses
+#print axioms LeanCompCert.Verified.DyadicBisect.sqrtOK_wf
+#print axioms LeanCompCert.Verified.DyadicBisect.allBelow_iff
+#print axioms LeanCompCert.Verified.DyadicBisect.sweepFold_eq_zero_iff
+#print axioms LeanCompCert.Verified.DyadicBisect.Grid.chain
+#print axioms LeanCompCert.Verified.DyadicBisect.Grid.cell_wf
+#print axioms LeanCompCert.Verified.DyadicBisect.Grid.loM_mul_le
+#print axioms LeanCompCert.Verified.DyadicBisect.Grid.le_hiM_mul
+#print axioms LeanCompCert.Ports.A36Bisect.sweep_ok
+#print axioms LeanCompCert.Ports.A36Bisect.leaf_passes
+#print axioms LeanCompCert.Ports.A36Bisect.leaf_sound
+#print axioms LeanCompCert.Ports.A36Bisect.leafOKAt_sound
+#print axioms LeanCompCert.Ports.A36Bisect.j_encloses
+#print axioms LeanCompCert.Ports.A36Bisect.v_encloses
+#print axioms LeanCompCert.Ports.A36Bisect.w_encloses
+#print axioms LeanCompCert.Ports.A36Bisect.cells_chain
+#print axioms LeanCompCert.Ports.A36Bisect.cells_wf
+#print axioms LeanCompCert.Ports.A36Bisect.cells_cover
+#print axioms LeanCompCert.Ports.A36BisectProgram.body_wf
+#print axioms LeanCompCert.Ports.A36BisectProgram.init_wf
+#print axioms LeanCompCert.Ports.A36BisectProgram.programAt_wf
+#print axioms LeanCompCert.Ports.A36BisectProgram.program_wf

@@ -36,6 +36,9 @@ import LeanCompCert.Verified.AddWide
 import LeanCompCert.Verified.LogAccum
 import LeanCompCert.Ports.AddWidePort
 import LeanCompCert.Ports.PsiSegSieve
+import LeanCompCert.Verified.DyadicBisect
+import LeanCompCert.Ports.A36Bisect
+import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Testing.ArrayMobiusCertificate
 import LeanCompCert.Testing.ArraySegCertificate
 import LeanCompCert.Verified.Limb
