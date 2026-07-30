@@ -10,8 +10,8 @@
   first multiple of `p` inside a window is one `urem` when the prime cursor
   advances; the accumulation phase zeroes the two cells it has just read, so
   no clear pass is needed and the bridge's zero-filled initial memory is
-  exactly the state every window wants.  Measured at `lo = 10¹⁰`: `16.6 MB`
-  resident against `1.56 GB` for the one-shot form, at a 4% cost.
+  exactly the state every window wants.  Measured at `lo = 10¹⁰`: `16.9 MB`
+  resident against `1.56 GB` for the one-shot form, and faster.
   - Two residue blocks ride on the sieve.  `mertensResidue` carries
     `M(n) = Σ μ(m)`, `Q(n) = Σ |μ(m)|` and the CDEM fixed-point discrepancy
     `G(n) = Q(n)·2³⁶ − ⌊(6/π²)·2³⁶⌋·n` with their running extrema — the
@@ -27,7 +27,7 @@
     words.
   - `segProgram_wf` proves well-formedness at every `(lo, L, segCount)` and
     either residue — by a `Bool` mirror that reduces definitionally, so the
-    proof is `rfl` and does not grow with the 146-instruction body.
+    proof is `rfl` and does not grow with the body.
     `mertensProgram_compiled` / `mobiusProgram_compiled` instantiate
     `AProgram.evalCC_compile`.  Base trio.
   - Corroboration: kernel evaluation against trial division at `[1, 24]`;

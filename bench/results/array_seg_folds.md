@@ -61,20 +61,24 @@ arithmetic for `⌊(6/π²)·2³⁶⌋ = 41 776 432 333` (exact — the true val
 
 `M(n)`/`Q(n)` residue, `10⁸` integers, `L·segCount = 10⁸`:
 
-| `L` | `segCount` | max RSS | gcc | ccomp |
-| --- | --- | --- | --- | --- |
-| `10⁶` | 100 | 16.6 MB | 4.43 s | — |
-| `10⁷` | 10 | 157 MB | 4.31 s | 5.50 s |
-| `10⁸` | 1 | 1.56 GB | 4.27 s | — |
+| `L` | `segCount` | max RSS | gcc |
+| --- | --- | --- | --- |
+| `10⁶` | 100 | 16.9 MB | 4.54 s |
+| `10⁷` | 10 | 158 MB | 4.81 s |
+| `10⁸` | 1 | 1.56 GB | 8.49 s |
 
-Segmentation is free: `16.6 MB` costs 4% over `1.56 GB`.  This is the whole
+Segmentation is free, and now slightly better than free: `16.9 MB` beats
+`1.56 GB`.  The last row is the root phase showing through — `rootCount` is at
+least one window, so at `segCount = 1` the root sweep *doubles* the work.  It
+is a fixed `⌈√hi / L⌉` windows against `segCount`, so it disappears as soon as
+the walk is long, which is the case every real run is in.  This is the whole
 point — the one-shot `[0,L)` sieve of `Ports/ArrayMobius` needs 24 bytes per
 integer of the *range*, which is 24 TB at `10¹²`; here it is 24 bytes per
 integer of the *window*, and the window can be a megabyte.
 
 At `lo = 10¹⁰` (prime table 9 632 entries, `L = 10⁶`, `segCount = 100`,
-`10⁸` integers, 24 MB resident, `loopCount = 375 739 392` — one root window
-and a hundred main ones):
+`10⁸` integers, a 24 MB array and 16.9 MB resident,
+`loopCount = 375 739 392` — one root window and a hundred main ones):
 
 | residue | gcc | ccomp | gcc ns/integer | ccomp ns/integer | ns/iteration |
 | --- | --- | --- | --- | --- | --- |
@@ -93,25 +97,29 @@ sieve plus per-integer thresholds costs **6% under gcc and 4% under ccomp**:
 | root sieve, one threshold per artifact | 138 | 375 739 392 | 5.36 s | 6.65 s |
 | root sieve, threshold at every integer | 142 | 375 739 392 | 5.40 s | 6.81 s |
 
-The fragment is **5.2×** the hand-written C for the sieve residues.  That is
+The fragment is **5.3×** the hand-written C for the sieve residues.  That is
 worse than the 1.5–1.7× the one-shot sieve showed, and the reason is
 structural, not the bridge: an `AProgram` body is data-independent, so the mark
-phase, the accumulation phase, the window bookkeeping and the residue all
-execute on every one of the 3.72 iterations per integer, with the inactive ones
-multiplied by zero.
+phase, the accumulation phase, the window bookkeeping, the root machinery and
+the residue all execute on every one of the 3.76 iterations per integer, with
+the inactive ones multiplied by zero.
 
 ### The rate law
 
-Iterations per integer are `1 + Σ_{p ≤ √hi} (1/p + 2/L)`, i.e.
-`1 + log log √hi + 0.2615 + 2·π(√hi)/L`.  Predicted 3.72 at `hi = 10¹⁰`,
-`L = 10⁶`; measured `372 019 200 / 10⁸ = 3.72`.  The law is used below.
+Iterations per integer are
+`(1 + rootCount/segCount) · (1 + Σ_{p ≤ √hi} (1/p + 2/L))`, i.e.
+`1 + log log √hi + 0.2615 + 2·π(√hi)/L` with the root windows on top.  The
+root term is `rootCount/segCount ≈ √hi/(L·segCount) = √hi/(hi−lo)`, so it is
+one part in `√hi` for a full-range pass and vanishes from the table; at
+`L = 10⁶`, `segCount = 100` it is the 1% by which `375 739 392` exceeds
+`372 019 200`.
 
 | `hi` | iterations/integer (`L = 10⁸`) | gcc ns/integer | ccomp ns/integer |
 | --- | --- | --- | --- |
-| `10¹⁰` | 3.72 (measured) | 52.6 | 68.0 |
-| `10¹²` | 3.89 | 55 | 71 |
-| `10¹³` | 3.97 | 56 | 73 |
-| `10¹⁶` | 4.29 | 60 | 79 |
+| `10¹⁰` | 3.76 (measured) | 53.6 | 66.5 |
+| `10¹²` | 3.89 | 56 | 69 |
+| `10¹³` | 3.97 | 57 | 70 |
+| `10¹⁶` | 4.29 | 61 | 76 |
 
 ### Artifact
 
@@ -232,7 +240,7 @@ after 282 s having reached **30.5 GB** resident, at which point it was killed.
 The root-sieve phase described above deletes the table.  What the init block
 spells out is now the primes below `√L`, a function of the window size:
 `10¹²` and `10¹⁰` emit *the same 45 KB of C*, and `ccomp -O2` takes it in
-0.06 s at 24 MB resident.  The full table is in the table above.
+0.06 s at 24 MB resident.  The numbers are in the artifact table above.
 
 The costs are `rootCount·L ≈ √hi` extra integers swept and 18 extra body
 instructions, together 5.5% (gcc) / 1.4% (ccomp) — measured, not estimated.
