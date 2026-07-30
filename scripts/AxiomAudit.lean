@@ -49,6 +49,8 @@ import LeanCompCert.Testing.ArraySegCertificate
 import LeanCompCert.Verified.DyadicBisect
 import LeanCompCert.Ports.A36Bisect
 import LeanCompCert.Ports.A36BisectProgram
+import LeanCompCert.Verified.ExpFixed
+import LeanCompCert.Ports.ExpFixPort
 
 
 /-!
@@ -329,3 +331,16 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.CDEMAbelScan.abelProgram_wf
 #print axioms LeanCompCert.Ports.CDEMAbelScan.abelProgram_compiled
 #print axioms LeanCompCert.Testing.AbelScanCertificate.program_wf
+#print axioms LeanCompCert.Verified.ExpFixed.bit_split
+#print axioms LeanCompCert.Verified.ExpFixed.expIter_range
+#print axioms LeanCompCert.Verified.ExpFixed.expIter_spec
+#print axioms LeanCompCert.Verified.ExpFixed.expFix_bracket
+#print axioms LeanCompCert.Verified.ExpFixed.expFix_rel_width
+#print axioms LeanCompCert.Verified.ExpFixed.expIter_fits_64
+#print axioms LeanCompCert.Verified.ExpFixed.expOK_sound
+#print axioms LeanCompCert.Verified.ExpFixed.rpow_bracket
+#print axioms LeanCompCert.Ports.ExpFixPort.rootDigits_length
+#print axioms LeanCompCert.Ports.ExpFixPort.roundBody_length
+#print axioms LeanCompCert.Ports.ExpFixPort.expCfg_fits
+#print axioms LeanCompCert.Ports.ExpFixPort.expProgram_wf
+#print axioms LeanCompCert.Ports.ExpFixPort.expProgram_compiled
