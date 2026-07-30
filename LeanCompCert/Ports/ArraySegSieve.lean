@@ -565,6 +565,12 @@ carry-in, so a chain of these is serial where a chain of the extremum version
 is not (there, every window can run with a zero carry-in and the prefix sums
 are applied afterwards).  Both are provided; which one is right depends on
 whether the run is one core or a thousand.
+
+Range of validity of the word arithmetic: `⌊b·2³⁶⌋·⌊√n⌋ < 2⁶⁴` needs
+`n < 1.2·10¹⁹`, and `⌊0.571·√n⌋ < 2⁴⁰` — the Mertens bias — needs
+`n < 3.7·10²⁴`.  Both hold with room to spare at `10¹⁶`; the first is the
+binding one and it is where the fixed-point scale `cdemScale = 36` would have
+to drop if the range ever grew past `10¹⁹`.
 -/
 
 def rS : Nat := 146      -- ⌊√n⌋
