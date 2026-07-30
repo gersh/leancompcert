@@ -29,6 +29,7 @@ import LeanCompCert.Verified.Frontend
 import LeanCompCert.Verified.ArrayState
 import LeanCompCert.Verified.MemFragment
 import LeanCompCert.Verified.ArrayBridge
+import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Verified.Limb
 import LeanCompCert.Verified.EarlyExit
 import LeanCompCert.Verified.Packed
