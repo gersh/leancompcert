@@ -59,14 +59,35 @@ def main (args : List String) : IO UInt32 := do
       let some len := lenS.toNat? | do IO.eprintln "bad SEGLEN"; return 1
       let some cnt := cntS.toNat? | do IO.eprintln "bad SEGCOUNT"; return 1
       let scale := (rest[0]?.bind String.toNat?).getD defaultS
-      let c := R2Cfg.ofScale scale lo len cnt
-      if lo ≤ c.root then
-        IO.eprintln s!"LO={lo} must exceed floor(sqrt(hi))={c.root}"
+      -- A fourth optional argument makes this a *chained* artifact: the mark
+      -- table and the budgets are those of the global sweep to TABLEHI, the
+      -- swept range is only `[lo, lo+L·N−1]`, and the carry-in is synthetic —
+      -- the previous link's carry-out is what a production chain would pass.
+      -- Such a run measures cost at `n ≈ TABLEHI`; its slots are not a
+      -- verification of anything.
+      let chain := rest[3]?.bind String.toNat?
+      let c := match chain with
+        | some th => R2Cfg.ofChain scale lo len cnt th
+        | none => R2Cfg.ofScale scale lo len cnt
+      let root := match chain with
+        | some th => Nat.sqrt th
+        | none => c.root
+      if lo ≤ root then
+        IO.eprintln s!"LO={lo} must exceed floor(sqrt(hi))={root}"
         return 1
       if c.hi ≥ 2 ^ valBits then
         IO.eprintln s!"hi={c.hi} exceeds the entry value field, 2^{valBits}"
         return 1
-      let seed := headFold scale (lo - 1) c.root
+      let s0 := Nat.sqrt (lo - 1)
+      let seed := match chain with
+        | some _ =>
+            { d := biasOf scale, err := 0, prev := lo - 1, terms := 0
+              sq := s0, sq2 := (s0 + 1) * (s0 + 1)
+              ex := Nat.log2 (lo - 1), th := 2 ^ (Nat.log2 (lo - 1) + 1)
+              ln := lnFix scale (lo - 1)
+              thr := a193 * s0 * lnFix scale (lo - 1) / 2 ^ 16
+              viol := 0 : R2Seed }
+        | none => headFold scale (lo - 1) root
       let p := r2Program c seed
       let name := s!"R2s{scale}L{lo}S{len}N{cnt}"
       let driver :=
@@ -85,9 +106,9 @@ def main (args : List String) : IO UInt32 := do
           IO.println s!"  head d={seed.d} err={seed.err} prev={seed.prev} terms={seed.terms} sq={seed.sq} ex={seed.ex} ln={seed.ln} thr={seed.thr} viol={seed.viol}"
           IO.println s!"  bias={biasOf scale} gammaStep={gammaStep scale} ln2Up={ln2Up scale} a193={a193}"
           if (rest[2]?).isSome then
-            let r := refR2 scale lo c.hi c.root seed
+            let r := refR2 scale lo c.hi root seed
             IO.println s!"  refD={r.1} refErr={r.2.1} refTerms={r.2.2.1} refPrev={r.2.2.2}"
           return 0
   | _ => do
-      IO.eprintln "usage: LO SEGLEN SEGCOUNT OUT [S] [EXPECTED] [ref]"
+      IO.eprintln "usage: LO SEGLEN SEGCOUNT OUT [S] [EXPECTED] [ref] [TABLEHI]"
       return 1

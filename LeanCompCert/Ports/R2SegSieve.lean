@@ -416,6 +416,29 @@ def R2Cfg.ofScale (S lo segLen segCount : Nat) : R2Cfg :=
 def R2Cfg.ofRange (lo segLen segCount : Nat) : R2Cfg :=
   R2Cfg.ofScale defaultS lo segLen segCount
 
+/-- A **chained** artifact: it sweeps `[lo, lo + segLen·segCount − 1]`, but its
+mark table and its budgets are those of the global sweep to `tableHi`.  This is
+what a production chain looks like — one artifact per slice, all of them
+carrying the primes of the whole range — and it is also the only way to
+measure the cost of the artifact at `n ≈ 10¹⁰` without sweeping `10¹⁰`
+integers.
+
+`lo > ⌊√tableHi⌋` is the precondition, and it is the *global* one: an unmarked
+cell is a prime because a composite `n ≤ tableHi` has a prime factor at most
+`⌊√tableHi⌋`, all of which the table carries. -/
+def R2Cfg.ofChain (S lo segLen segCount tableHi : Nat) : R2Cfg :=
+  let root := Nat.sqrt tableHi
+  let tab := markTable S tableHi
+  let st := (probeWindows segCount).foldl
+    (fun acc i =>
+      let r := windowStats S (lo + i * segLen) segLen root
+      (max acc.1 r.1, max acc.2 r.2)) (0, 0)
+  { lo := lo, segLen := segLen, segCount := segCount, sc := S
+    markSteps := markBudget tab segLen
+    logSteps := st.2 * 110 / 100 + 128
+    streamCap := st.1 * 110 / 100 + 128
+    table := tab }
+
 /-! ### Array layout
 
 Three planes of `L` cells, their three sinks at `3L`, `4L` and `5L` — the gap

@@ -150,6 +150,27 @@ static uint64_t D, err, terms, prev, sq, sq2, ex, th, lnlo, thr, viol;
 static double   worst;
 static uint64_t worst_n;
 
+/* Published cross-check.  Ramare--Zuniga Alterman 2024 (arXiv:2408.05969v2)
+ * Lemma 7.1, and Ramare 2013 (Acta Arith. 157) Lemma 7.1, print bounds for
+ *
+ *   sum_{k<=K} |Lambda*Lambda - Lambda.log + 2 gamma|(k)/k  +  2|R2*(K)|/K
+ *
+ * namely <= 4345 * c with c = 0.0374 at K = 462848 (2013 and 2024), and
+ * c = 0.0422, 0.0579, 0.0762 at K = 1e6, 1e7, 1e8 (2024 only).  Those are the
+ * only numbers in the literature that this computation's summand appears in,
+ * so they are the only published check available; they are upper bounds, so
+ * they can refute but not confirm.  Accumulated in double, as a diagnostic:
+ * nothing the artifact certifies depends on it. */
+static double lem71;
+
+static void lem71_add(uint64_t n, int mode, uint64_t term)
+{
+    double c = (mode < 0) ? (double)GSTEP
+             : (mode & 1) ? (double)GSTEP + (double)term
+                          : (double)GSTEP - (double)term;
+    lem71 += fabs(c) / (double)(UINT64_C(1) << S) / (double)n;
+}
+
 /* apply one test point: n, mode, and the two factors of the jump */
 static void jump(uint64_t n, int mode, uint64_t u, uint64_t v, uint64_t lnn)
 {
@@ -165,6 +186,7 @@ static void jump(uint64_t n, int mode, uint64_t u, uint64_t v, uint64_t lnn)
     if (mode < 2) lnlo = lnn;
     thr = (A193 * sq * lnlo) >> 16;
     uint64_t t = (u * v) << (mode & 1) >> S;
+    lem71_add(n, mode, t);
     if (mode & 1) D += t; else D -= t;
     err += (((ex + 1) * LN2UP) >> (S - 4)) + 2;
     terms++;
@@ -184,7 +206,7 @@ static void jump(uint64_t n, int mode, uint64_t u, uint64_t v, uint64_t lnn)
 static void head(uint64_t top, uint64_t root)
 {
     D = BIAS; err = terms = prev = 0; sq = 0; sq2 = 1; ex = 0; th = 2;
-    lnlo = thr = viol = 0; worst = 0; worst_n = 0;
+    lnlo = thr = viol = 0; worst = 0; worst_n = 0; lem71 = 0;
     for (uint64_t n = 1; n <= top; n++) {
         D += GSTEP;
         while (n >= sq2) { sq++; sq2 = (sq + 1) * (sq + 1); }
@@ -206,10 +228,13 @@ static void head(uint64_t top, uint64_t root)
                 mode = 3; u = lnFix(ps[0]); v = lnFix(ps[1]);
             }
             uint64_t t = (u * v) << (mode & 1) >> S;
+            lem71_add(n, mode, t);
             if (mode & 1) D += t; else D -= t;
             err += (((ex + 1) * LN2UP) >> (S - 4)) + 2;
             terms++;
             prev = n;
+        } else {
+            lem71_add(n, -1, 0);
         }
         lnlo = lnFix(n);
         thr = (A193 * sq * lnlo) >> 16;
@@ -292,7 +317,7 @@ int main(int argc, char **argv)
             else if (d == 1 && big)  mode = 1;
             else if (d == 1 && !big) mode = 2;
             else if (d == 2 && !big) mode = 3;
-            if (mode < 0) continue;
+            if (mode < 0) { lem71_add(n, -1, 0); continue; }
             stream++;
             logrounds += (mode < 2) ? S : 1;
             uint64_t aux = (mode == 3) ? w2 : lsum[i];
@@ -330,5 +355,8 @@ int main(int argc, char **argv)
            (unsigned long long)worst_n);
     printf("maxstream %llu\nlogrounds %llu\n",
            (unsigned long long)maxstream, (unsigned long long)logrounds);
+    printf("lemma71 %.6f\n",
+           lem71 + 2.0 * fabs((double)(int64_t)(D - BIAS))
+                       / (double)(UINT64_C(1) << S) / (double)hi);
     return 0;
 }
