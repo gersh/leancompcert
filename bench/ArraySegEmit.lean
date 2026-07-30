@@ -10,8 +10,14 @@ lake env lean --run bench/ArraySegEmit.lean MODE LO SEGLEN SEGCOUNT OUT [EXPECTE
 `MODE` is one of
 
 * `mertens`  — the Mertens / squarefree residue, thresholds from Hurst
-               (`|M| ≤ 0.571√n`) and CDEM (`b = 755/10⁴`);
+               (`|M| ≤ 0.571√n`) and CDEM (`b = 755/10⁴`), compared **once**
+               in the epilogue against the majorant at the window's worst
+               endpoint;
 * `mertens2` — the same with the second CDEM threshold `b = 285/10⁴`;
+* `mertenslive`, `mertenslive2` — the same two, with all four clauses tested
+               **at every integer** against `⌊α·⌊√n⌋⌋`, so no window schedule
+               and no `√(hi/lo) − 1` weakening.  Result slots are
+               `M, Q, G, ⌊√hi⌋`;
 * `platt211` — the `Σ μ(m)/m` residue against `√(2/(n+1))`;
 * `plattstrong` — the same against `1/(2√(n+1))`.
 
@@ -72,6 +78,12 @@ def main (args : List String) : IO UInt32 := do
             pure (mertensProgram c ⟨seedA, seedB, seedC⟩ 755 10000)
         | "mertens2" =>
             pure (mertensProgram c ⟨seedA, seedB, seedC⟩ 285 10000)
+        | "mertenslive" =>
+            pure (mertensLiveProgram c (Nat.sqrt (lo - 1))
+              ⟨seedA, seedB, seedC⟩ 755 10000)
+        | "mertenslive2" =>
+            pure (mertensLiveProgram c (Nat.sqrt (lo - 1))
+              ⟨seedA, seedB, seedC⟩ 285 10000)
         | "platt211" =>
             pure (mobiusProgram c seedT (platt211Threshold c.hi))
         | "plattstrong" =>

@@ -325,7 +325,7 @@ def rZero : Nat := 7    -- constant 0, for the clearing stores
 def rLimit : Nat := 128 -- prime-table cursor limit for the current phase
 def rWrite : Nat := 129 -- prime-table write cursor, as an absolute cell index
 
-def regCount : Nat := 160
+def regCount : Nat := 192
 
 /-! ## The core loop body
 
@@ -542,6 +542,89 @@ def mertensResidue : List AInstr :=
   , .scalar (.binop rGmin .add (.reg 125) (.reg 126))
   ]
 
+/-! ## Residue: Mertens and squarefree, tested per integer
+
+The residue above keeps four running extrema and leaves the comparison to the
+epilogue.  One comparison per artifact means one threshold per artifact, so
+the threshold has to be the majorant at the window's *worst* endpoint, and a
+window `[lo, hi]` therefore tests a family with an increasing majorant
+`√(hi/lo) − 1` more strictly than the family states.  Windows must then be
+geometric — 1 684 of them at ratio 1.02 to cover `[33, 10¹⁶]` — and a family
+whose constant is nearly tight can fail a test it should pass.
+
+The weakening is removable, and cheaply.  `⌊√n⌋` increases by at most one per
+integer, so it is a register and three instructions; every majorant here is
+`α·√n` for a rational `α`, so `⌊α·⌊√n⌋⌋` — sound, since `⌊√n⌋ ≤ √n` and each
+`α` is rounded down to a dyadic — is one multiply and one shift.  Testing all
+four clauses per integer then makes the *running extrema unnecessary*: this
+residue is 31 instructions against the 27 of the extremum version, a 1%
+body-size increase, and it removes the schedule loss entirely.
+
+What it costs instead is that the artifact needs the true `M(lo−1)` as its
+carry-in, so a chain of these is serial where a chain of the extremum version
+is not (there, every window can run with a zero carry-in and the prefix sums
+are applied afterwards).  Both are provided; which one is right depends on
+whether the run is one core or a thousand.
+-/
+
+def rS : Nat := 146      -- ⌊√n⌋
+def rSq : Nat := 147     -- (rS + 1)², the next square
+def rViol : Nat := 148   -- running count of failed per-integer tests
+
+/-- `⌊0.571·2³²⌋` — Hurst's constant as a dyadic rational, rounded **down**,
+so that `(hurstA·s) >>> 32 ≤ 0.571·s ≤ 0.571·√n`. -/
+def hurstA : Nat := 571 * 2 ^ 32 / 1000
+
+/-- `⌊b·2^cdemScale⌋` for `b = bNum/bDen`, rounded **down**: it multiplies
+`⌊√n⌋` to give a threshold at or below `b·2^k·√n`, which is the safe side for
+both CDEM clauses. -/
+def cdemB (bNum bDen : Nat) : Nat := bNum * 2 ^ cdemScale / bDen
+
+/-- Mertens and squarefree with the four clauses tested at every integer.
+Register `65` holds `n`, `133` gates the main accumulation phase; the count
+of failed tests accumulates in `rViol`, which the epilogue moves to the
+output. -/
+def mertensLiveResidue (bNum bDen : Nat) : List AInstr :=
+  [ -- M, Q and G = Q·2^k − c·n, exactly as above
+    .scalar (.binop 101 .add (.reg rM) (.reg 79))
+  , .scalar (.binop rM .sub (.reg 101) (.reg 80))
+  , .scalar (.binop rQ .add (.reg rQ) (.reg 81))
+  , .scalar (.binop 113 .shl (.reg 81) (.lit cdemScale))
+  , .scalar (.binop 114 .mul (.reg 133) (.lit cdemC))
+  , .scalar (.binop 115 .add (.reg rG) (.reg 113))
+  , .scalar (.binop rG .sub (.reg 115) (.reg 114))
+    -- s = ⌊√n⌋: at most one increment per integer, and then the next square
+    -- moves by 2s+1
+  , .scalar (.binop 149 .ge (.reg 65) (.reg rSq))
+  , .scalar (.binop 150 .mul (.reg 149) (.reg 133))
+  , .scalar (.binop rS .add (.reg rS) (.reg 150))
+  , .scalar (.binop 151 .shl (.reg rS) (.lit 1))
+  , .scalar (.binop 152 .add (.reg 151) (.lit 1))
+  , .scalar (.binop 153 .mul (.reg 150) (.reg 152))
+  , .scalar (.binop rSq .add (.reg rSq) (.reg 153))
+    -- Hurst: |M(n)| ≤ 0.571·√n
+  , .scalar (.binop 154 .mul (.reg rS) (.lit hurstA))
+  , .scalar (.binop 155 .lshr (.reg 154) (.lit 32))
+  , .scalar (.binop 156 .add (.lit mertensBias) (.reg 155))
+  , .scalar (.binop 157 .sub (.lit mertensBias) (.reg 155))
+  , .scalar (.binop 158 .gt (.reg rM) (.reg 156))
+  , .scalar (.binop 159 .lt (.reg rM) (.reg 157))
+    -- CDEM clause 1, `G ≤ b·2^k·√n`, and clause 2,
+    -- `G ≥ c + n + 1 − b·2^k·√n`
+  , .scalar (.binop 160 .mul (.reg rS) (.lit (cdemB bNum bDen)))
+  , .scalar (.binop 161 .add (.lit gBias) (.reg 160))
+  , .scalar (.binop 162 .add (.lit (gBias + cdemC + 1)) (.reg 65))
+  , .scalar (.binop 163 .sub (.reg 162) (.reg 160))
+  , .scalar (.binop 164 .gt (.reg rG) (.reg 161))
+  , .scalar (.binop 165 .lt (.reg rG) (.reg 163))
+    -- one counter, gated to the main accumulation phase
+  , .scalar (.binop 166 .add (.reg 158) (.reg 159))
+  , .scalar (.binop 167 .add (.reg 164) (.reg 165))
+  , .scalar (.binop 168 .add (.reg 166) (.reg 167))
+  , .scalar (.binop 169 .mul (.reg 168) (.reg 133))
+  , .scalar (.binop rViol .add (.reg rViol) (.reg 169))
+  ]
+
 /-! ## Residue: the fixed-point `Σ μ(m)/m`
 
 `T(n) = Σ_{m≤n} μ(m)·round(2⁶²/m)`, biased by `2⁶³`.  Round-to-nearest keeps
@@ -677,6 +760,32 @@ def mertensEpilogue (c : Cfg) (bNum bDen : Nat) : List AInstr :=
 reproducible squarefree head, on one sieve pass. -/
 def mertensProgram (c : Cfg) (s : MertensSeed) (bNum bDen : Nat) : AProgram :=
   c.program mertensResidue (mertensInit s) (mertensEpilogue c bNum bDen)
+
+/-! ### The per-integer Mertens / squarefree program
+
+Same sieve, same accumulators, but every clause is tested at every integer
+against `⌊α·⌊√n⌋⌋`, so no window schedule and no `√(hi/lo) − 1` loss.  The
+seeds are the same three carry-ins; `⌊√(lo−1)⌋` and its next square are
+computed at emit time from `lo`, so nothing extra is chained. -/
+
+/-- `s0` is `⌊√(lo−1)⌋`, an emit-time `Nat.sqrt`; it is a parameter and not a
+call here because `Nat.sqrt` is well-founded recursion, which the kernel
+checks below cannot unfold. -/
+def mertensLiveInit (s0 : Nat) (s : MertensSeed) : List AInstr :=
+  seed rM s.m ++ seed rQ s.q ++ seed rG s.g ++
+  seed rS s0 ++ seed rSq ((s0 + 1) * (s0 + 1))
+
+/-- The output is the running count of failed per-integer tests; the three
+carry-outs and the final `⌊√hi⌋` go to the result cells. -/
+def mertensLiveEpilogue (c : Cfg) : List AInstr :=
+  [ .scalar (.mov outputReg (.reg rViol)) ] ++
+  storeResult c 0 rM ++ storeResult c 1 rQ ++ storeResult c 2 rG ++
+  storeResult c 3 rS
+
+def mertensLiveProgram (c : Cfg) (s0 : Nat) (s : MertensSeed)
+    (bNum bDen : Nat) : AProgram :=
+  c.program (mertensLiveResidue bNum bDen) (mertensLiveInit s0 s)
+    (mertensLiveEpilogue c)
 
 /-! ### The `Σ μ(m)/m` program
 
@@ -850,6 +959,25 @@ theorem mertensEpilogue_all (c : Cfg) (bNum bDen : Nat) :
       (storeResult_all c 5 rGmax (by decide)))
       (storeResult_all c 6 rGmin (by decide))
 
+theorem mertensLiveResidue_all (bNum bDen : Nat) :
+    (mertensLiveResidue bNum bDen).all (ainstrWFB regCount) = true := by
+  rfl
+
+theorem mertensLiveInit_all (s0 : Nat) (s : MertensSeed) :
+    (mertensLiveInit s0 s).all (ainstrWFB regCount) = true :=
+  all_append (all_append (all_append (all_append
+    (seed_all rM s.m (by decide)) (seed_all rQ s.q (by decide)))
+    (seed_all rG s.g (by decide)))
+    (seed_all rS _ (by decide))) (seed_all rSq _ (by decide))
+
+theorem mertensLiveEpilogue_all (c : Cfg) :
+    (mertensLiveEpilogue c).all (ainstrWFB regCount) = true :=
+  all_append (all_append (all_append (all_append
+    (by rfl) (storeResult_all c 0 rM (by decide)))
+    (storeResult_all c 1 rQ (by decide)))
+    (storeResult_all c 2 rG (by decide)))
+    (storeResult_all c 3 rS (by decide))
+
 theorem mobiusInit_all (t : Nat) :
     (mobiusInit t).all (ainstrWFB regCount) = true :=
   all_append (all_append (seed_all rT t (by decide)) (seed_all rTmax t (by decide)))
@@ -867,6 +995,11 @@ theorem mertensProgram_wf (c : Cfg) (s : MertensSeed) (bNum bDen : Nat) :
     (mertensProgram c s bNum bDen).WF :=
   segProgram_wf c mertensResidue_all (mertensInit_all s)
     (mertensEpilogue_all c bNum bDen)
+
+theorem mertensLiveProgram_wf (c : Cfg) (s0 : Nat) (s : MertensSeed)
+    (bNum bDen : Nat) : (mertensLiveProgram c s0 s bNum bDen).WF :=
+  segProgram_wf c (mertensLiveResidue_all bNum bDen) (mertensLiveInit_all s0 s)
+    (mertensLiveEpilogue_all c)
 
 theorem mobiusProgram_wf (c : Cfg) (t thr : Nat) :
     (mobiusProgram c t thr).WF :=
@@ -890,6 +1023,23 @@ theorem mertensProgram_compiled (c : Cfg) (s : MertensSeed) (bNum bDen : Nat)
         (fun m : Verified.MemFragment.MCCState =>
           m.env ⟨(mertensProgram c s bNum bDen).output + 1⟩) = some ((n : Nat) : Int) :=
   AProgram.evalCC_compile _ (mertensProgram_wf c s bNum bDen) base hBase n hDenote
+
+/-- **The bridge, instantiated for the per-integer Mertens / squarefree
+residue.**  The denotation is the number of integers in `[lo, hi]` at which
+one of the four clauses fails. -/
+theorem mertensLiveProgram_compiled (c : Cfg) (s0 : Nat) (s : MertensSeed)
+    (bNum bDen : Nat) (base : Int)
+    (hBase : BaseOk (mertensLiveProgram c s0 s bNum bDen).arrayLen base)
+    (n : Nat) (hDenote : (mertensLiveProgram c s0 s bNum bDen).denote = some n) :
+    Option.bind
+        (Verified.MemFragment.evalMCCSequence
+          ((mertensLiveProgram c s0 s bNum bDen).initialMCC base)
+          (mertensLiveProgram c s0 s bNum bDen).compile)
+        (fun m : Verified.MemFragment.MCCState =>
+          m.env ⟨(mertensLiveProgram c s0 s bNum bDen).output + 1⟩) =
+      some ((n : Nat) : Int) :=
+  AProgram.evalCC_compile _ (mertensLiveProgram_wf c s0 s bNum bDen) base hBase
+    n hDenote
 
 /-- **The bridge, instantiated for the `Σ μ(m)/m` residue.** -/
 theorem mobiusProgram_compiled (c : Cfg) (t thr : Nat) (base : Int)
@@ -980,6 +1130,12 @@ def mertensProbe (out : Nat) : AProgram :=
 
 def mobiusProbe : AProgram := probe cfg mobiusOverNResidue (mobiusInit tBias) rT
 
+/-- The per-integer residue at the same configuration.  `lo = 1`, so the
+`⌊√n⌋` register starts at `⌊√0⌋ = 0` and must reach `⌊√24⌋ = 4`. -/
+def liveProbe (out : Nat) : AProgram :=
+  probe cfg (mertensLiveResidue 755 10000)
+    (mertensLiveInit 0 ⟨mertensBias, 0, gBias⟩) out
+
 set_option maxRecDepth 20000000 in
 set_option maxHeartbeats 4000000 in
 example : (mertensProbe rM).denote = some (refM 1 24) := by decide
@@ -991,6 +1147,24 @@ example : (mertensProbe rQ).denote = some (refQ 1 24) := by decide
 set_option maxRecDepth 20000000 in
 set_option maxHeartbeats 4000000 in
 example : mobiusProbe.denote = some (refT 1 24) := by decide
+
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
+example : (liveProbe rM).denote = some (refM 1 24) := by decide
+
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
+example : (liveProbe rQ).denote = some (refQ 1 24) := by decide
+
+-- `G` is not kernel-checked here: `cdemC` is a Machin computation of `π` at
+-- 128 bits, and reducing it once per fold step costs more than the check is
+-- worth.  `G` is checked instead against `bench/ref_seg.c`, which carries the
+-- identical fixed-point convention, at `10⁸` and at `lo = 10¹⁰` (slot 2).
+
+-- The incrementally maintained `⌊√n⌋` reaches `⌊√24⌋ = 4`.
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
+example : (liveProbe rS).denote = some 4 := by decide
 
 end Check
 

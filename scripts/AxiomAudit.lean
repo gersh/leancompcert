@@ -211,4 +211,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusProgram_wf
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensProgram_compiled
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusProgram_compiled
+-- the per-integer threshold variant
+#print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveResidue_all
+#print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveInit_all
+#print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveEpilogue_all
+#print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveProgram_wf
+#print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveProgram_compiled
 #print axioms LeanCompCert.Testing.ArraySegCertificate.program_wf
