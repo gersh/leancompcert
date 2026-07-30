@@ -20,3 +20,18 @@ default LO=9243 is not arbitrary).  A violation reported below that range is
 an invocation error, not a counterexample.
 
 Known-good: bench/seg_chain.sh plattstrong 10000 300000 1.02 200  -> 0 violations
+
+FOURTH HAZARD: the last window overshoots HI.
+
+  hi = min(HI, ...) is computed correctly, but then
+  cnt = ceil((hi-lo+1)/SEGLEN)  and the artifact covers cnt*SEGLEN integers.
+
+So whenever (hi-lo+1) is not a multiple of SEGLEN, the final artifact tests
+PAST HI.  Running plattstrong to its stated bound 7,727,068,587 made the last
+window cover to 7,727,068,600 -- 13 integers beyond where the majorant is
+claimed to hold -- and it duly reported a violation there.  663 earlier
+windows were clean.  That is the tool overshooting, not a counterexample.
+
+Choose HI so the final span is a whole number of segments:
+  k = (HI - lo_final + 1) / SEGLEN   (floor);   HI' = lo_final + k*SEGLEN - 1
+or fix the emitter to clamp the last segment.
