@@ -2294,11 +2294,24 @@ theorem pval_inj (x0 x1 y0 y1 : Nat) (hx0 : x0 < M) (hy0 : y0 < M)
   rw [hM] at h' hx0 hy0
   omega
 
+set_option linter.unusedVariables false in
 /--
 **The bridge.**  The program's denotation is `0` exactly when the witness
 `a` certifies `N = k·2ⁿ + 1` by Proth's criterion.  Combined with the
 exit-code contract of the emitted `main`, the artifact exits `0` exactly on
 that congruence.
+
+`hk64 : kbits ≤ 64` is **not** cosmetic.  Operand literals denote modulo
+`2⁶⁴` (`Reflect.denoteOperand`), so without it `initInstrs` would load
+`k % 2⁶⁴` into the window register and the head's `2 ^ kbits - 1` mask
+would denote `(2 ^ kbits - 1) % 2⁶⁴`.  Concretely, at `n = 32`,
+`kbits = 65`, `k = 2⁶⁴ + 1` every other hypothesis holds (`N ≈ 2⁹⁶`) and
+the statement is false: the loop would exponentiate by the wrong exponent.
+`1 ≤ kbits` is derived, not assumed.
+
+`ha : 0 < a` is in fact unnecessary — at `a = 0` both sides are `1`, since
+`0 ^ e mod N ≠ N − 1` for `N > 1` — but it is kept because every intended
+caller supplies it and it guards future edits.
 -/
 theorem prothProgram_denote (n kbits k a : Nat)
     (hn : 32 ≤ n) (hk64 : kbits ≤ 64) (hkb : 0 < k) (hkw : k < 2 ^ kbits)

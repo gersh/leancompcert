@@ -86,6 +86,14 @@ with `u = k·2ⁿ`, and it is the reason the whole setup fits in twelve `mov`s.
 | `TGProth.prothProgram_wf` | well-formedness, program-sized and decidable |
 | **`TGProth.prothProgram_denote`** | **the bridge**: the program's denotation is `0` iff `a^((N−1)/2) mod N = N − 1` |
 
+One precondition is worth naming because it was found the hard way, by the
+statement being false without it: **`kbits ≤ 64`**.  Operand literals denote
+modulo `2⁶⁴`, so a wider window would load `k mod 2⁶⁴` into the window
+register and mask with `(2^kbits − 1) mod 2⁶⁴` — at `n = 32`, `kbits = 65`,
+`k = 2⁶⁴ + 1` every other hypothesis holds and the loop exponentiates by
+the wrong exponent.  The shipped certificate uses `kbits = 39`.  A ladder
+needing `k ≥ 2⁶⁴` would need a two-limb window, not just a bigger literal.
+
 All on `propext` / `Classical.choice` / `Quot.sound` or fewer.  No `sorry`,
 no `native_decide`.  `scripts/AxiomAudit.lean` covers all of them.
 
