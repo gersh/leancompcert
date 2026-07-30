@@ -38,7 +38,7 @@ loop body reading the per-`n` signals the core leaves in registers:
   of `G(n) = Q(n)·2³⁶ − c·n` (`c = ⌊(6/π²)·2³⁶⌋`).  These are the residues of
   `mertensM_hurst_sqrt` and of the CDEM reproducible squarefree head.
 * `mobiusOverNResidue` — the fixed-point partial sum
-  `T(n) = Σ_{m≤n} μ(m)·round(2⁶³/m)`, whose extrema are the residue of Platt's
+  `T(n) = Σ_{m≤n} μ(m)·round(2⁶²/m)`, whose extrema are the residue of Platt's
   (2.11) and of Platt's stronger rigorously-computed range.
 
 Every comparison against a real-valued majorant happens **once per artifact**,
@@ -536,7 +536,7 @@ def mertensProgram (c : Cfg) (s : MertensSeed) (bNum bDen : Nat) : AProgram :=
 /-! ### The `Σ μ(m)/m` program
 
 `|Σ_{m≤n} μ(m)/m| ≤ g(n)` with `g` antitone, so the window's **right** end is
-the worst point.  The threshold is `⌊2⁶³·g(hi)⌋ − ⌈hi/2⌉`: the subtraction is
+the worst point.  The threshold is `⌊2⁶²·g(hi)⌋ − ⌈hi/2⌉`: the subtraction is
 the accumulated round-to-nearest budget, which makes the integer test a bound
 on the real sum.
 -/
