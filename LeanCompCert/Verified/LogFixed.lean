@@ -228,9 +228,359 @@ def errB : Nat → Nat
   | 0 => 0
   | k + 1 => 2 * errB k + errB k * errB k / B62 + 9
 
+theorem errB_zero : errB 0 = 0 := rfl
+
+theorem errB_succ (k : Nat) :
+    errB (k + 1) = 2 * errB k + errB k * errB k / B62 + 9 := rfl
+
 /-- The budget after 48 rounds is far below the `2⁶²` the bracket needs: the
 recursion is `D ↦ 2D + D²/2⁶² + 9`, so `D_k` tracks `9·(2^k − 1)` until the
 second-order term switches on near `k = 28`, and `D₄₈ ≈ 9·2⁴⁸ = 2⁵¹·⁴`. -/
 theorem errB_le_48 : errB 48 ≤ B62 := by decide
+
+/-- **The budget absorbs one round.**  This is the whole quantitative content
+of the error analysis: a mantissa known to within a relative `D/M` is, after
+squaring and renormalising, known to within `(2D + D²/M + 9)/M`.  The `2D` is
+the relative error doubling under squaring, `D²/M` its second-order feedback,
+and the `9` covers the two downward truncations with room to spare. -/
+theorem budget_core (X D q M : Nat) (hX : M ≤ X) (hD : D ≤ M)
+    (hq : D * D + 1 ≤ (q + 1) * M) :
+    (X + 1) * ((M + D) * (M + D)) ≤ X * ((M + (2 * D + q + 9)) * M) := by
+  have hcomm : M * D = D * M := Nat.mul_comm M D
+  have hassoc : 2 * D * M = 2 * (D * M) := Nat.mul_assoc 2 D M
+  -- The new budget buys `8M` of headroom over the squared mantissa…
+  have hi : (M + D) * (M + D) + 8 * M ≤ (M + (2 * D + q + 9)) * M := by
+    simp only [Nat.add_mul, Nat.mul_add, Nat.one_mul] at hq ⊢
+    omega
+  -- …and `X` copies of that headroom already cover one extra squared mantissa.
+  have hii : (M + D) * (M + D) ≤ X * (8 * M) := by
+    have h1 : (M + D) * (M + D) ≤ (M + M) * (M + M) :=
+      Nat.mul_le_mul (by omega) (by omega)
+    have h2 : (M + M) * (M + M) = 4 * (M * M) := by
+      simp only [Nat.add_mul, Nat.mul_add]; omega
+    have h3 : M * M ≤ X * M := Nat.mul_le_mul_right M hX
+    have h4 : X * (8 * M) = 8 * (X * M) := Nat.mul_left_comm X 8 M
+    omega
+  calc (X + 1) * ((M + D) * (M + D))
+      = X * ((M + D) * (M + D)) + (M + D) * (M + D) := by
+        simp only [Nat.add_mul, Nat.one_mul]
+    _ ≤ X * ((M + D) * (M + D)) + X * (8 * M) := Nat.add_le_add_left hii _
+    _ = X * ((M + D) * (M + D) + 8 * M) := (Nat.mul_add _ _ _).symm
+    _ ≤ X * ((M + (2 * D + q + 9)) * M) := Nat.mul_le_mul_left X hi
+
+/-! ## Carrying the bracket across one round
+
+The two lemmas below are pure `Nat` algebra: squaring both sides of the
+invariant, substituting the round's truncation bound, and cancelling the
+`2¹²⁴` that squaring introduced.  Isolating them keeps the induction itself
+free of associativity bookkeeping.
+-/
+
+/-- Lower half of the round: squaring the under-estimate and inserting
+`logMant_lower` reproduces the under-estimate one level up. -/
+theorem bracket_lower_step {x x' P G Bb : Nat}
+    (hlo : x * G * B62 ≤ P * (B62 * B62))
+    (hm : x' * Bb * B62 ≤ x * x) :
+    x' * (G * G * Bb) * B62 ≤ P * P * (B62 * B62) := by
+  have h1 : (x * G * B62) * (x * G * B62) ≤ (P * (B62 * B62)) * (P * (B62 * B62)) :=
+    Nat.mul_le_mul hlo hlo
+  have h2 : x' * (G * G * Bb) * B62 * (B62 * B62)
+      = (x' * Bb * B62) * (G * G * B62 * B62) := by
+    simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+  have h3 : (x * x) * (G * G * B62 * B62) = (x * G * B62) * (x * G * B62) := by
+    simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+  have h4 : (P * (B62 * B62)) * (P * (B62 * B62))
+      = P * P * (B62 * B62) * (B62 * B62) := by
+    simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+  refine Nat.le_of_mul_le_mul_right ?_ (by decide : 0 < B62 * B62)
+  rw [h2, ← h4]
+  calc (x' * Bb * B62) * (G * G * B62 * B62)
+      ≤ (x * x) * (G * G * B62 * B62) := Nat.mul_le_mul_right _ hm
+    _ = (x * G * B62) * (x * G * B62) := h3
+    _ ≤ (P * (B62 * B62)) * (P * (B62 * B62)) := h1
+
+/-- Upper half of the round: squaring the over-estimate, inserting
+`logMant_upper`, and paying `budget_core` for the new budget. -/
+theorem bracket_upper_step {x x' P G Bb D D' : Nat}
+    (hhi : P * (B62 * B62) ≤ x * (B62 + D) * G)
+    (hm : x * x ≤ (x' + 1) * Bb * B62)
+    (hb : (x' + 1) * ((B62 + D) * (B62 + D)) ≤ x' * ((B62 + D') * B62)) :
+    P * P * (B62 * B62) ≤ x' * (B62 + D') * (G * G * Bb) := by
+  have h1 : (P * (B62 * B62)) * (P * (B62 * B62))
+      ≤ (x * (B62 + D) * G) * (x * (B62 + D) * G) := Nat.mul_le_mul hhi hhi
+  have h2 : (P * (B62 * B62)) * (P * (B62 * B62))
+      = P * P * (B62 * B62) * (B62 * B62) := by
+    simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+  have h3 : (x * (B62 + D) * G) * (x * (B62 + D) * G)
+      = (x * x) * (((B62 + D) * (B62 + D)) * (G * G)) := by
+    simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+  have h4 : ((x' + 1) * Bb * B62) * (((B62 + D) * (B62 + D)) * (G * G))
+      = ((x' + 1) * ((B62 + D) * (B62 + D))) * (Bb * B62 * (G * G)) := by
+    simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+  have h5 : (x' * ((B62 + D') * B62)) * (Bb * B62 * (G * G))
+      = x' * (B62 + D') * (G * G * Bb) * (B62 * B62) := by
+    simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+  refine Nat.le_of_mul_le_mul_right ?_ (by decide : 0 < B62 * B62)
+  rw [← h2, ← h5]
+  calc (P * (B62 * B62)) * (P * (B62 * B62))
+      ≤ (x * (B62 + D) * G) * (x * (B62 + D) * G) := h1
+    _ = (x * x) * (((B62 + D) * (B62 + D)) * (G * G)) := h3
+    _ ≤ ((x' + 1) * Bb * B62) * (((B62 + D) * (B62 + D)) * (G * G)) :=
+        Nat.mul_le_mul_right _ hm
+    _ = ((x' + 1) * ((B62 + D) * (B62 + D))) * (Bb * B62 * (G * G)) := h4
+    _ ≤ (x' * ((B62 + D') * B62)) * (Bb * B62 * (G * G)) := Nat.mul_le_mul_right _ hb
+
+/-! ## The bracket
+
+`logIter_spec` is the single induction.  The two order clauses are the exact
+statement that the running mantissa under-estimates and over-estimates the
+true `x₀^(2^k)` by at most the budget; the range clause is what keeps the
+next round's squaring inside `[2⁶², 2⁶⁴)`.
+-/
+
+/-- **The invariant.**  After `k` rounds from the normalised mantissa `x₀`, the
+state `(x, a)` satisfies
+
+```
+x · 2^(a + 62·2^k) · 2^62  ≤  x₀^(2^k) · 2^124  ≤  x · (2^62 + errB k) · 2^(a + 62·2^k)
+```
+
+so `a/2^k` is the base-2 logarithm of `x₀/2^62` to within `errB k / 2^62`
+of a mantissa unit.  Both bounds are exact `Nat` inequalities; the huge
+powers are never evaluated. -/
+theorem logIter_spec (x0 : Nat) (h1 : B62 ≤ x0) (h2 : x0 < B63) (k : Nat)
+    (hk : errB k ≤ B62) :
+    B62 ≤ (logIter x0 k).1 ∧ (logIter x0 k).1 < B63
+    ∧ (logIter x0 k).1 * 2 ^ ((logIter x0 k).2 + 62 * 2 ^ k) * B62
+        ≤ x0 ^ 2 ^ k * (B62 * B62)
+    ∧ x0 ^ 2 ^ k * (B62 * B62)
+        ≤ (logIter x0 k).1 * (B62 + errB k) * 2 ^ ((logIter x0 k).2 + 62 * 2 ^ k) := by
+  induction k with
+  | zero =>
+      refine ⟨h1, h2, ?_, ?_⟩ <;>
+        simp only [logIter, errB_zero, Nat.pow_zero, Nat.pow_one, Nat.mul_one,
+          Nat.zero_add, Nat.add_zero, B62_eq] <;>
+        simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+  | succ k ih =>
+      have hmono : errB k ≤ errB (k + 1) := by
+        rw [errB_succ]; simp only [B62]; omega
+      obtain ⟨hr1, hr2, hlo, hhi⟩ := ih (Nat.le_trans hmono hk)
+      have hDle : errB k ≤ B62 := Nat.le_trans hmono hk
+      -- `2^(k+1) = 2^k + 2^k` is the only exponent fact the step needs.
+      have hpow : (2 : Nat) ^ (k + 1) = 2 ^ k + 2 ^ k := by
+        rw [Nat.pow_succ]; omega
+      have hP : x0 ^ 2 ^ (k + 1) = x0 ^ 2 ^ k * x0 ^ 2 ^ k := by
+        rw [hpow, Nat.pow_add]
+      have hE : 2 ^ (2 * (logIter x0 k).2 + logBit (logIter x0 k).1 + 62 * 2 ^ (k + 1))
+          = 2 ^ ((logIter x0 k).2 + 62 * 2 ^ k) * 2 ^ ((logIter x0 k).2 + 62 * 2 ^ k)
+            * 2 ^ logBit (logIter x0 k).1 := by
+        have hsplit : 2 * (logIter x0 k).2 + logBit (logIter x0 k).1 + 62 * 2 ^ (k + 1)
+            = ((logIter x0 k).2 + 62 * 2 ^ k) + ((logIter x0 k).2 + 62 * 2 ^ k)
+              + logBit (logIter x0 k).1 := by
+          rw [hpow]; omega
+        rw [hsplit, Nat.pow_add, Nat.pow_add]
+      -- The budget's own step, in the shape `budget_core` wants.
+      have hquot : errB k * errB k + 1 ≤ (errB k * errB k / B62 + 1) * B62 := by
+        have hd : errB k * errB k
+            = B62 * (errB k * errB k / B62) + errB k * errB k % B62 :=
+          (Nat.div_add_mod _ _).symm
+        have hm : errB k * errB k % B62 < B62 := Nat.mod_lt _ (by decide)
+        simp only [B62] at hd hm ⊢
+        omega
+      have hbudget : (logMant (logIter x0 k).1 + 1)
+            * ((B62 + errB k) * (B62 + errB k))
+          ≤ logMant (logIter x0 k).1 * ((B62 + errB (k + 1)) * B62) := by
+        have := budget_core (logMant (logIter x0 k).1) (errB k)
+          (errB k * errB k / B62) B62
+          (logMant_range hr1 hr2).1 hDle hquot
+        rw [errB_succ]; exact this
+      refine ⟨(logMant_range hr1 hr2).1, (logMant_range hr1 hr2).2, ?_, ?_⟩
+      · show logMant (logIter x0 k).1
+            * 2 ^ (2 * (logIter x0 k).2 + logBit (logIter x0 k).1 + 62 * 2 ^ (k + 1))
+            * B62 ≤ _
+        rw [hP, hE]
+        exact bracket_lower_step hlo (logMant_lower (logIter x0 k).1)
+      · show _ ≤ logMant (logIter x0 k).1 * (B62 + errB (k + 1))
+            * 2 ^ (2 * (logIter x0 k).2 + logBit (logIter x0 k).1 + 62 * 2 ^ (k + 1))
+        rw [hP, hE]
+        exact bracket_upper_step hhi (logMant_upper (logIter x0 k).1) hbudget
+
+/-! ## `logFix`: the fixed-point base-2 logarithm of an integer
+
+`Nat.log2 n` supplies the integer part (`Verified/Log2Fixed.lean` realises it
+in the fragment in 64 branch-free rounds); the normalising shift `n <<< (62−e)`
+is *exact*, so all of the approximation lives in `logFrac`.
+-/
+
+/-- `⌊2^S · log₂ n⌋` to within two units in the last place, for
+`1 ≤ n < 2⁶³`.  The integer part is `Nat.log2 n`, the `S` fractional bits come
+from the squaring loop. -/
+def logFix (S n : Nat) : Nat :=
+  Nat.log2 n * 2 ^ S + logFrac S (n <<< (62 - Nat.log2 n))
+
+/-- **The bracket.**  `logFix S n` is the base-2 logarithm of `n` at scale
+`2^S`, from both sides, with a two-ulp window:
+
+```
+2 ^ logFix S n  ≤  n ^ (2 ^ S)  <  2 ^ (logFix S n + 2).
+```
+
+Divide the exponents by `2^S` and read it as
+`logFix S n / 2^S ≤ log₂ n < (logFix S n + 2)/2^S`.  Nothing here is a
+real number and nothing is evaluated: the two powers are astronomically
+large terms that occur only inside the inequality. -/
+theorem logFix_bracket (S n : Nat) (hS : errB S ≤ B62) (h1 : 1 ≤ n) (h2 : n < B63) :
+    2 ^ logFix S n ≤ n ^ 2 ^ S ∧ n ^ 2 ^ S < 2 ^ (logFix S n + 2) := by
+  have hn : n ≠ 0 := by omega
+  have he : Nat.log2 n < 63 := (Nat.log2_lt hn).mpr (by rw [← B63_eq]; exact h2)
+  have hlo : 2 ^ Nat.log2 n ≤ n := Nat.log2_self_le hn
+  have hhi : n < 2 ^ (Nat.log2 n + 1) := (Nat.log2_lt hn).mp (Nat.lt_succ_self _)
+  -- The shift is exact, and lands the mantissa in `[2⁶², 2⁶³)`.
+  have hshift : n <<< (62 - Nat.log2 n) = n * 2 ^ (62 - Nat.log2 n) := Nat.shiftLeft_eq _ _
+  have hsplit : Nat.log2 n + (62 - Nat.log2 n) = 62 := by omega
+  have hx1 : B62 ≤ n * 2 ^ (62 - Nat.log2 n) := by
+    calc B62 = 2 ^ Nat.log2 n * 2 ^ (62 - Nat.log2 n) := by
+            rw [← Nat.pow_add, hsplit, B62_eq]
+      _ ≤ n * 2 ^ (62 - Nat.log2 n) := Nat.mul_le_mul_right _ hlo
+  have hx2 : n * 2 ^ (62 - Nat.log2 n) < B63 := by
+    calc n * 2 ^ (62 - Nat.log2 n) < 2 ^ (Nat.log2 n + 1) * 2 ^ (62 - Nat.log2 n) :=
+          Nat.mul_lt_mul_of_lt_of_le hhi (Nat.le_refl _) (Nat.two_pow_pos _)
+      _ = B63 := by rw [← Nat.pow_add]; rw [B63_eq]; congr 1; omega
+  obtain ⟨hr1, hr2, hL, hU⟩ :=
+    logIter_spec (n * 2 ^ (62 - Nat.log2 n)) hx1 hx2 S hS
+  -- The mantissa power splits back off both sides.
+  have hpow : (n * 2 ^ (62 - Nat.log2 n)) ^ 2 ^ S
+      = n ^ 2 ^ S * 2 ^ ((62 - Nat.log2 n) * 2 ^ S) := by
+    rw [Nat.mul_pow, ← Nat.pow_mul]
+  have hexp : logFrac S (n <<< (62 - Nat.log2 n)) + 62 * 2 ^ S
+      = logFix S n + (62 - Nat.log2 n) * 2 ^ S := by
+    simp only [logFix, hshift]
+    have : 62 * 2 ^ S = Nat.log2 n * 2 ^ S + (62 - Nat.log2 n) * 2 ^ S := by
+      rw [← Nat.add_mul, hsplit]
+    omega
+  simp only [logFrac, hshift] at hexp
+  constructor
+  · -- Lower: `2^62 ≤ x` turns the invariant into the bracket.
+    have step : B62 * 2 ^ ((logIter (n * 2 ^ (62 - Nat.log2 n)) S).2 + 62 * 2 ^ S) * B62
+        ≤ (n * 2 ^ (62 - Nat.log2 n)) ^ 2 ^ S * (B62 * B62) :=
+      Nat.le_trans (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ hr1)) hL
+    rw [hpow] at step
+    have step' : 2 ^ (logFix S n + (62 - Nat.log2 n) * 2 ^ S) * (B62 * B62)
+        ≤ n ^ 2 ^ S * 2 ^ ((62 - Nat.log2 n) * 2 ^ S) * (B62 * B62) := by
+      rw [← hexp]
+      calc 2 ^ ((logIter (n * 2 ^ (62 - Nat.log2 n)) S).2 + 62 * 2 ^ S) * (B62 * B62)
+          = B62 * 2 ^ ((logIter (n * 2 ^ (62 - Nat.log2 n)) S).2 + 62 * 2 ^ S) * B62 := by
+            simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+        _ ≤ _ := step
+    have step'' : 2 ^ (logFix S n + (62 - Nat.log2 n) * 2 ^ S)
+        ≤ n ^ 2 ^ S * 2 ^ ((62 - Nat.log2 n) * 2 ^ S) :=
+      Nat.le_of_mul_le_mul_right step' (by decide : 0 < B62 * B62)
+    rw [Nat.pow_add] at step''
+    exact Nat.le_of_mul_le_mul_right step'' (Nat.two_pow_pos _)
+  · -- Upper: `x < 2⁶³` and `errB S ≤ 2⁶²` cost exactly the two ulps.
+    have hbound : (logIter (n * 2 ^ (62 - Nat.log2 n)) S).1 * (B62 + errB S)
+        < 4 * (B62 * B62) := by
+      have hxx : (logIter (n * 2 ^ (62 - Nat.log2 n)) S).1 < 2 * B62 := by
+        simp only [B62, B63] at hr2 ⊢; omega
+      have hbb : B62 + errB S ≤ 2 * B62 := by omega
+      calc (logIter (n * 2 ^ (62 - Nat.log2 n)) S).1 * (B62 + errB S)
+          < (2 * B62) * (2 * B62) :=
+            Nat.mul_lt_mul_of_lt_of_le hxx hbb (by decide)
+        _ = 4 * (B62 * B62) := by simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+    have step : (n * 2 ^ (62 - Nat.log2 n)) ^ 2 ^ S * (B62 * B62)
+        < 4 * (B62 * B62)
+          * 2 ^ ((logIter (n * 2 ^ (62 - Nat.log2 n)) S).2 + 62 * 2 ^ S) :=
+      Nat.lt_of_le_of_lt hU
+        (Nat.mul_lt_mul_of_lt_of_le hbound (Nat.le_refl _) (Nat.two_pow_pos _))
+    rw [hpow, hexp] at step
+    have hfour : 4 * (B62 * B62) * 2 ^ (logFix S n + (62 - Nat.log2 n) * 2 ^ S)
+        = 2 ^ (logFix S n + 2 + (62 - Nat.log2 n) * 2 ^ S) * (B62 * B62) := by
+      rw [show logFix S n + 2 + (62 - Nat.log2 n) * 2 ^ S
+            = 2 + (logFix S n + (62 - Nat.log2 n) * 2 ^ S) by omega]
+      simp only [Nat.pow_add]
+      simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+    rw [hfour] at step
+    have step'' : n ^ 2 ^ S * 2 ^ ((62 - Nat.log2 n) * 2 ^ S)
+        < 2 ^ (logFix S n + 2 + (62 - Nat.log2 n) * 2 ^ S) :=
+      Nat.lt_of_mul_lt_mul_right step
+    rw [Nat.pow_add] at step''
+    exact Nat.lt_of_mul_lt_mul_right step''
+
+/-! ## Accumulation
+
+The bracket multiplies.  Summing `logFix` over a list of prime powers gives an
+enclosure of `2^S · log₂ (Π p)` whose width is **exactly two ulps per term** —
+the accumulated error appears in the statement as `2 * l.length`, not as an
+assumption.
+-/
+
+/-- `Σ logFix S p` over a list: the artifact's accumulator. -/
+def logFold (S : Nat) (l : List Nat) : Nat := (l.map (logFix S)).sum
+
+@[simp] theorem logFold_nil (S : Nat) : logFold S [] = 0 := rfl
+
+@[simp] theorem logFold_cons (S n : Nat) (l : List Nat) :
+    logFold S (n :: l) = logFix S n + logFold S l := rfl
+
+/-- **The accumulation theorem.**  For any multiset of integers in
+`[1, 2⁶³)`,
+
+```
+2 ^ (Σ logFix S p)  ≤  (Π p) ^ (2 ^ S)  ≤  2 ^ (Σ logFix S p + 2·(#terms)).
+```
+
+Read at scale `2^S`, the enclosure of `log₂ (Π p) = Σ log₂ p` has width
+`2·(#terms)/2^S`.  That is the entire error analysis: the per-term two-ulp
+window and the term count are both literal subterms, so there is nothing to
+assume about how the individual errors interact. -/
+theorem logFold_bracket (S : Nat) (hS : errB S ≤ B62) :
+    ∀ l : List Nat, (∀ n ∈ l, 1 ≤ n ∧ n < B63) →
+      2 ^ logFold S l ≤ l.prod ^ 2 ^ S
+      ∧ l.prod ^ 2 ^ S ≤ 2 ^ (logFold S l + 2 * l.length) := by
+  intro l
+  induction l with
+  | nil => intro _; simp
+  | cons n t ih =>
+      intro hmem
+      obtain ⟨hn1, hn2⟩ := hmem n (List.mem_cons_self ..)
+      obtain ⟨hlo, hhi⟩ := logFix_bracket S n hS hn1 hn2
+      obtain ⟨tlo, thi⟩ := ih (fun m hm => hmem m (List.mem_cons_of_mem _ hm))
+      refine ⟨?_, ?_⟩
+      · calc 2 ^ logFold S (n :: t) = 2 ^ logFix S n * 2 ^ logFold S t := by
+              rw [logFold_cons, Nat.pow_add]
+          _ ≤ n ^ 2 ^ S * t.prod ^ 2 ^ S := Nat.mul_le_mul hlo tlo
+          _ = (n :: t).prod ^ 2 ^ S := by rw [List.prod_cons, Nat.mul_pow]
+      · calc (n :: t).prod ^ 2 ^ S = n ^ 2 ^ S * t.prod ^ 2 ^ S := by
+              rw [List.prod_cons, Nat.mul_pow]
+          _ ≤ 2 ^ (logFix S n + 2) * 2 ^ (logFold S t + 2 * t.length) :=
+              Nat.mul_le_mul (Nat.le_of_lt hhi) thi
+          _ = 2 ^ (logFold S (n :: t) + 2 * (n :: t).length) := by
+              rw [← Nat.pow_add, logFold_cons, List.length_cons]
+              congr 1
+              omega
+
+/-! ## Kernel checks
+
+The bracket says `logFix` is within two ulps.  In fact it lands on the nose:
+these are `⌊2²⁰·log₂ n⌋` for the four primes and the two nine-digit numbers
+below, checked by kernel evaluation of the squaring loop (twenty rounds of
+62-bit arithmetic each).  They are evidence that the loop is the logarithm and
+not merely *near* one; the bracket is what makes the artifact sound.
+-/
+
+namespace Check
+
+example : logFix 20 2 = 1048576 := by decide
+example : logFix 20 3 = 1661953 := by decide
+example : logFix 20 5 = 2434718 := by decide
+example : logFix 20 7 = 2943724 := by decide
+example : logFix 20 1000003 = 20899768 := by decide
+example : logFix 20 999999937 = 31349646 := by decide
+
+/-- The budget really is `≈ 9·2⁴⁸`: `2.53·10¹⁵`, i.e. `5.5·10⁻⁴` of a mantissa
+unit, so the `+2` of the bracket has three orders of magnitude of slack. -/
+example : errB 48 = 2533970701664099 := by decide
+
+end Check
 
 end LeanCompCert.Verified.LogFixed
