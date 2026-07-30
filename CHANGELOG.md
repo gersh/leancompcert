@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+- **`interval_bisect` was never blocked on leaf count** — it was blocked on
+  `ℚ`.  `MathExtras/Analysis/HelfgottThm31/C1Bound/A36Bisection.lean`'s
+  `lowBranch_nonneg_mid_low_hi` is **256 leaves** and Lean's kernel still could
+  not do it: 13.2 GB, unfinished at 22 minutes.  The reason is that
+  `interval_bisect`'s kernel is exact rational arithmetic and
+  `sqrtTight_enclose_interval` is a Newton iteration that *squares the
+  denominator* every step, three roots deep, so the last leaf drags
+  tens-of-thousands-of-bit numerators through every comparison.
+  - **`Verified/DyadicBisect.lean`** puts the same bisection in `2⁻²⁴` fixed
+    point on top of `Verified/Dyadic.lean`: a cell grid whose endpoints round
+    outward (`Grid.loM_mul_le`, `Grid.le_hiM_mul`) and therefore overlap
+    (`Grid.chain`), the combinatorial cover that follows (`chain_cover`), an
+    outward square root (`sqrtI_lo_sq_le`, `sqrtI_lt_hi_sq`), and a **checked**
+    square root (`sqrtOK_encloses`) that lets a fixed-shape program guess the
+    root by any means and prove nothing about the guess.  The root's
+    correctness is stated squared — `lo² ≤ m·2^p < hi²` — so it pins the value
+    without naming a real number.
+  - **`Ports/A36Bisect.lean`** is the certificate.  `sweep_ok`: all 256 leaves
+    pass, **`decide +kernel`, 1.06 s, 0.64 GB**, and `#print axioms` reports
+    *no axioms at all*.  Against 13.2 GB and unfinished, that is the result —
+    and it means this family does not have to be traded for an attested
+    artifact, because the kernel can simply do it.
+  - **Depth, not precision, is what the enclosure needs.**  Margin at depth 8
+    is `2.0668` at `p = 20` and `2.0674` at `p = 28`; the limit is interval
+    dependency, not rounding.  Depth 6 fails (−0.33), depth 8 passes (+2.07) —
+    which is why the source file chose 8, and why the fixed-point form needs no
+    more depth than the rational one.  Nothing was tuned.
+  - **The side conditions are checked, not inherited.**  `divHi` at a zero
+    divisor returns `0`, which would make the enclosure's upper endpoint
+    *tighter* than the truth — the one direction that can let a false claim
+    pass — so the leaf checks `0 < den.lo` (`den_pos`) rather than relying on
+    `2υ(υ + j) ≥ 2`.  Likewise for the differences:  `Nat`
+    `Nat` subtraction truncates at zero, so `υ − 1` and `√(1+x²) − x` would be
+    sound only given `υ ≥ 1` and `√(1+x²) ≥ x`.  The leaf checks the ordering
+    instead — the hypothesis of `Dyadic.DInt.sub_no_truncation` — so the
+    differences are exact and no side condition is inherited
+    (`differences_exact`).
+  - **`Ports/A36BisectProgram.lean`** is the same leaf as a 476-instruction
+    fixed-shape loop body, well-formed at every depth from one proof.  It is
+    checked against `leafOK` on a configuration where the certificate **fails**
+    (the depth-3 grid) as well as one where it passes: a passing-only check
+    cannot distinguish a correct encoding from one that always returns zero.
+  - **The wall moved, it did not vanish.**  The kernel is a clean factor of
+    four per level in both time and memory (1.06 s at depth 8, 101.6 s and
+    16.6 GB at 14), so its reach is about 2·10⁴ leaves — which covers *every*
+    uniform-depth site in the family, whose maximum depth is 14.  The artifact
+    covers what is past that: 177.8 ns per leaf, 3.7 kB freestanding at every
+    depth, 2³¹ leaves in 382.4 s.  `bench/results/a36_bisect.md` has the
+    tables, the survey of all 143 sites, and what is *not* proved — the
+    analytic step to `ℝ` (no Mathlib here) and the body/`leafOK` simulation.
+
 - **The two-limb accumulator, and the `ψ` residue it makes runnable** — the
   one thing between the design of the previous entry and an artifact.
   `Verified/AddWide.lean` supplies the missing primitive:

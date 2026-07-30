@@ -58,7 +58,7 @@ failure rather than a wrong answer.
   `native_decide`, no compiler, no runtime.  This is the headline: the
   fixed-point form of the certificate is not merely artifact-sized, it is
   *kernel*-sized, which the rational form is not.
-* `leaf_sound` — for every leaf index below `2^depth`, the four checked
+* `leaf_sound` — for every leaf index below `2^depth`, the seven checked
   inequalities hold; stated `∀`-quantified over the index, with no dependence
   on the depth.
 * `cells_chain`, `cells_cover` — the 256 cells have no gaps.
@@ -69,7 +69,7 @@ That the fixed-point residual bound is the analytic statement: the step from
 "the mantissa interval `bI i` lies below `aI i`" to "`0 ≤ 8υ²(υ−1) + …` for
 real `ρ`" needs `Real.sqrt` monotonicity and the ordered-field arithmetic of
 `ℝ`, and this package does not depend on Mathlib.  The interface that step
-consumes is exactly the four exported inequalities plus the generic transfer
+consumes is exactly the seven exported inequalities plus the generic transfer
 lemmas `Dyadic.mul_encloses` / `div_encloses` / `add_encloses` /
 `sub_encloses` and `DyadicBisect.sqrtOK_encloses`, each of which is already
 stated cross-multiplied and quantified over all enclosed mantissas.  See the
@@ -188,6 +188,12 @@ def leafData (i : Nat) : Leaf := leafDataAt depth i
 /-- The leaf test at depth `d`: the three root checks, the two ordering checks
 that make the differences exact, and the residual's lower bound.
 
+The divisor check is the side condition of `Dyadic.DInt.div_encloses`: at
+`den.lo = 0` the ceiling division would return `0` and the enclosure's upper
+endpoint would collapse to something *tighter* than the truth, which is the one
+direction that could let a false claim pass.  `2υ(υ + j)` is bounded below by
+`2` for real reasons, but the leaf checks it rather than inheriting it.
+
 The ordering checks are the reason no nonnegativity assumption is needed
 anywhere.  `Nat` subtraction truncates at zero, so an interval difference whose
 operands overlap would report a lower endpoint of `0` where the true value is
@@ -201,6 +207,7 @@ def leafOKAt (d i : Nat) : Bool :=
   sqrtOK L.rad1 L.j.lo L.j.hi &&
   sqrtOK L.rad2 L.v.lo L.v.hi &&
   sqrtOK L.rad3 L.w.lo L.w.hi &&
+  decide (0 < L.den.lo) &&
   decide ((kC 1).hi ≤ L.v.lo) &&
   decide (L.x.hi ≤ L.w.lo) &&
   decide (L.b.hi ≤ L.a.lo)
@@ -226,22 +233,23 @@ theorem leaf_passes (i : Nat) (hi : i < leaves) : leafOK i = true :=
 
 /-! ## What each passing leaf gives
 
-Unpacked into the four separate inequalities, each in the cross-multiplied form
+Unpacked into the seven separate inequalities, each in the cross-multiplied form
 the generic transfer lemmas of `Verified/DyadicBisect.lean` consume.  Nothing
 below re-runs the computation.
 -/
 
-/-- Unpacking, at every depth: a passing leaf is exactly the four
+/-- Unpacking, at every depth: a passing leaf is exactly the seven
 inequalities. -/
 theorem leafOKAt_sound (d i : Nat) (h : leafOKAt d i = true) :
     sqrtOK (leafDataAt d i).rad1 (leafDataAt d i).j.lo (leafDataAt d i).j.hi = true ∧
     sqrtOK (leafDataAt d i).rad2 (leafDataAt d i).v.lo (leafDataAt d i).v.hi = true ∧
     sqrtOK (leafDataAt d i).rad3 (leafDataAt d i).w.lo (leafDataAt d i).w.hi = true ∧
+    0 < (leafDataAt d i).den.lo ∧
     (kC 1).hi ≤ (leafDataAt d i).v.lo ∧
     (leafDataAt d i).x.hi ≤ (leafDataAt d i).w.lo ∧
     (leafDataAt d i).b.hi ≤ (leafDataAt d i).a.lo := by
   simp only [leafOKAt, Bool.and_eq_true, decide_eq_true_eq] at h
-  exact ⟨h.1.1.1.1.1, h.1.1.1.1.2, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+  exact ⟨h.1.1.1.1.1.1, h.1.1.1.1.1.2, h.1.1.1.1.2, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
 
 /-- The three roots are verified and the residual's lower bound holds, for
 every cell.  This is the whole interface. -/
@@ -249,10 +257,16 @@ theorem leaf_sound (i : Nat) (hi : i < leaves) :
     sqrtOK (leafData i).rad1 (leafData i).j.lo (leafData i).j.hi = true ∧
     sqrtOK (leafData i).rad2 (leafData i).v.lo (leafData i).v.hi = true ∧
     sqrtOK (leafData i).rad3 (leafData i).w.lo (leafData i).w.hi = true ∧
+    0 < (leafData i).den.lo ∧
     (kC 1).hi ≤ (leafData i).v.lo ∧
     (leafData i).x.hi ≤ (leafData i).w.lo ∧
     (leafData i).b.hi ≤ (leafData i).a.lo :=
   leafOKAt_sound depth i (leaf_passes i hi)
+
+/-- The divisor interval is positive, so `Dyadic.DInt.div_encloses` applies to
+`x = ρ / (2υ(υ + j))` with no hypothesis left over. -/
+theorem den_pos (i : Nat) (hi : i < leaves) : (leafData i).den.lo ≠ 0 :=
+  by have h := (leaf_sound i hi).2.2.2.1; omega
 
 /-- Both interval differences are *exact*: the checked ordering is the
 hypothesis of `Dyadic.DInt.sub_no_truncation`, so `υ − 1` and `√(1 + x²) − x`
@@ -260,7 +274,7 @@ lose nothing at the bottom and need no nonnegativity assumption. -/
 theorem differences_exact (i : Nat) (hi : i < leaves) {a b : Nat}
     (ha : (leafData i).w.mem a) (hb : (leafData i).x.mem b) :
     b + (a - b) = a :=
-  DInt.sub_no_truncation ha hb (leaf_sound i hi).2.2.2.2.1
+  DInt.sub_no_truncation ha hb (leaf_sound i hi).2.2.2.2.2.1
 
 /-- Consequence of the first check, in enclosure form: for every mantissa `m`
 of `1 + ρ²` inside `rad1`, the root's mantissa is bracketed by `j`. -/

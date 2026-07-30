@@ -21,8 +21,12 @@ mkdir -p "$OUT"
 fs_init "$ROOT" || exit 1
 cd "$ROOT"
 
+# Appended, not truncated: a full sweep is usually several invocations because
+# the deep rows take minutes.  Delete the file to start over.
 CSV="$OUT/a36_bisect.csv"
-printf 'depth,leaves,body_instrs,c_bytes,exe_bytes,ccomp_ms,run_s,ns_per_leaf,exit\n' > "$CSV"
+if [ ! -f "$CSV" ]; then
+  printf 'depth,leaves,body_instrs,c_bytes,exe_bytes,ccomp_ms,run_s,ns_per_leaf,exit\n' > "$CSV"
+fi
 
 for d in "$@"; do
   c="$OUT/a36_bisect_$d.c"

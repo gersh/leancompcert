@@ -13,7 +13,7 @@ the family — `A2.cert_lower` records 377 817 leaf cells at maximum depth 31 �
 remain out of reach for it.
 
 This module is the other half: the same leaf, as a `Reflect.Program` whose loop
-runs once per leaf.  The body is fixed-shape and fixed-width — 476 instructions,
+runs once per leaf.  The body is fixed-shape and fixed-width — 478 instructions,
 no data-dependent branch, no allocation — so the emitted C is the same few
 kilobytes whether the loop runs 2⁸ or 2³¹ times, and the cost is exactly
 `leaves × body`.
@@ -28,7 +28,7 @@ kilobytes whether the loop runs 2⁸ or 2³¹ times, and the cost is exactly
 | two outward divisions | 20 |
 | ten outward products | 50 |
 | five exact sums, two clamped differences | 22 |
-| the two ordering checks that make the differences exact | 4 |
+| the divisor check and the two ordering checks | 6 |
 | the residual comparison | 2 |
 
 ## Truncation and guards
@@ -226,7 +226,9 @@ def body : List Instr :=
   iAdd 17 18 rOne rOne 31 32 ++                       -- rad3 = 1 + x²
   iSqrtGuess 19 20 17 18 rT rG rU ++                  -- w = √(1 + x²)
   sqrtCheckInstrs 17 18 19 20 rT rG ++
-  [ .binop rT .gt (.reg rOne) (.reg 11)                 -- 1 > υ.lo ?
+  [ .binop rT .eq (.reg 13) (.lit 0)                    -- den.lo = 0 ?
+  , .binop rFail .bor (.reg rFail) (.reg rT)
+  , .binop rT .gt (.reg rOne) (.reg 11)                 -- 1 > υ.lo ?
   , .binop rFail .bor (.reg rFail) (.reg rT)
   , .binop rT .gt (.reg 16) (.reg 19)                   -- x.hi > w.lo ?
   , .binop rFail .bor (.reg rFail) (.reg rT) ] ++
@@ -294,7 +296,7 @@ theorem program_wf : program.WF := programAt_wf depth
 /-! ## Agreement with `A36Bisect.leafOK`, by kernel evaluation
 
 Two configurations, both `decide +kernel`: one where the certificate passes and
-one where it does not.  Together they check that the 476-instruction encoding
+one where it does not.  Together they check that the 478-instruction encoding
 computes the same verdict as the Lean function — including that it *can* say no.
 -/
 

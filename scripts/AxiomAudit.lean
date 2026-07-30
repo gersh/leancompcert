@@ -288,3 +288,4 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.A36BisectProgram.agree_fail
 #print axioms LeanCompCert.Ports.A36BisectProgram.sweep_fail
 #print axioms LeanCompCert.Ports.A36Bisect.differences_exact
+#print axioms LeanCompCert.Ports.A36Bisect.den_pos
