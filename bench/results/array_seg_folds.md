@@ -151,12 +151,23 @@ The prime table is written by the init block, three instructions per prime, so
 | `10⁹` | 3 401 | 10 206 | 3.7 s (needs `ulimit -s unlimited`) |
 | `10¹⁰` | 9 592 | 28 779 | 24.3 s (1.7 MB of C) |
 | `10¹¹` | 27 293 | 81 879 | 243 s (4.8 MB of C) |
-| `10¹²` | 78 498 | 235 497 | ≈ 40 min extrapolated (`K^{2.2}` over the last two points) |
+| `10¹²` | 78 498 | 235 497 | **1 972 s**, 1.19 GB, 13.9 MB of C |
 | `10¹⁶` | 5 761 455 | 17 284 368 | out of the question |
 
 Below about 8 600 instructions the default interpreter stack suffices; above
-it, `ulimit -s unlimited` is required and the time grows like `K^{1.9}` or
-worse.  Two fixes, neither of which touches the bridge or the fragment:
+it, `ulimit -s unlimited` is required and the time grows like `K^{2.2}`.
+
+**And CompCert cannot compile the result.**  The `10¹²` artifact does emit —
+13.9 MB of C, one function with 235 497 straight-line statements before the
+loop — but `ccomp -O2 -c` segfaults on it in 3.9 s with the default 8 MB
+stack, and with `ulimit -s unlimited` it was still running after 282 s having
+reached **30.5 GB** resident, at which point it was killed against the memory
+budget.  `gcc -O2` was never reached.  So the emission wall is not merely slow:
+past roughly `hi = 10¹⁰` (1.7 MB of C, `ccomp` in 24 s) the init-block prime
+table produces a translation unit no verified compiler on this machine will
+take.  Redesigning it away is a prerequisite for `10¹²`, not an optimisation.
+
+Two fixes, neither of which touches the bridge or the fragment:
 
 * make `lowerMSequence` (and the rolled lowering around it) tail-recursive and
   linear — an emitter change, and the cheaper one;
