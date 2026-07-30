@@ -98,7 +98,9 @@ Iterations per integer are `1 + Σ_{p ≤ √hi} (1/p + 2/L)`, i.e.
 | emitted C, `10⁸`-scale prime table (1 229 primes) | 231 KB |
 | emitted C, `10¹⁰`-scale prime table (9 592 primes) | 1.7 MB |
 | ccomp `-O2` compile | 0.60 s |
-| ccomp executable, freestanding | 70 560 bytes |
+| ccomp executable, hosted link | 70 560 bytes |
+| ccomp object, freestanding (`mobius-seg` certificate, 32-prime table) | 3 216 bytes |
+| ccomp executable, freestanding (`as` + `ld`, no libc) | 3 288 bytes |
 | x86_64 CompCert 3.17 `-O2 -S` | 438 lines of assembly, accepted |
 
 ## Extrapolated cost per axiom
