@@ -18,6 +18,7 @@ import LeanCompCert.Verified.MulWide
 import LeanCompCert.Verified.Frontend
 import LeanCompCert.Verified.ArrayState
 import LeanCompCert.Verified.MemFragment
+import LeanCompCert.Verified.ArrayBridge
 import LeanCompCert.Verified.Packed
 import LeanCompCert.Verified.PackedTransfer
 import LeanCompCert.Verified.ListFold
@@ -99,6 +100,15 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Verified.Frontend.compileExpr_correct
 #print axioms LeanCompCert.Verified.ArrayState.sieveSweep_cell
 #print axioms LeanCompCert.Verified.MemFragment.lowerMSequence_correct
+-- M6: the array bridge (AProgram -> CCIR -> generated C)
+#print axioms LeanCompCert.Verified.ArrayState.evalMCCSequence_straight
+#print axioms LeanCompCert.Verified.ArrayState.evalCCStraight_frame
+#print axioms LeanCompCert.Verified.ArrayState.addressStraights_correct
+#print axioms LeanCompCert.Verified.ArrayState.compileAInstr_correct
+#print axioms LeanCompCert.Verified.ArrayState.compileAInstrs_correct
+#print axioms LeanCompCert.Verified.ArrayState.foldBodyA_correct
+#print axioms LeanCompCert.Verified.ArrayState.apreamble_correct
+#print axioms LeanCompCert.Verified.ArrayState.AProgram.evalCC_compile
 
 -- Generic segmentation lever
 #print axioms LeanCompCert.Verified.Segment.foldl_range'_split
