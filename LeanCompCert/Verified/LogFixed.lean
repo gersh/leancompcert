@@ -143,12 +143,68 @@ theorem sq62_eq (x : Nat) : sq62 x = x * x / B62 := by
 
 /-! ## The round, and the iterate -/
 
+/-- The bit a round emits: `1` exactly when the square overflowed past `2⁶³`,
+i.e. when the mantissa's square is at least `2`. -/
+def logBit (x : Nat) : Nat := if B63 ≤ sq62 x then 1 else 0
+
+/-- The renormalised mantissa a round produces. -/
+def logMant (x : Nat) : Nat := sq62 x >>> logBit x
+
+theorem logBit_le_one (x : Nat) : logBit x ≤ 1 := by
+  simp only [logBit]; split <;> omega
+
+/-- The renormalised mantissa stays in `[2⁶², 2⁶³)`: squaring a mantissa in
+that window lands in `[2⁶², 2⁶⁴)`, and the emitted bit is exactly the shift
+that brings it back. -/
+theorem logMant_range {x : Nat} (h1 : B62 ≤ x) (h2 : x < B63) :
+    B62 ≤ logMant x ∧ logMant x < B63 := by
+  have hsq := sq62_eq x
+  have hlo : B62 * B62 ≤ x * x := Nat.mul_le_mul h1 h1
+  have hhi : x * x < B63 * B63 := Nat.mul_lt_mul_of_lt_of_lt h2 h2
+  have hy1 : B62 ≤ sq62 x := by
+    rw [hsq]; exact (Nat.le_div_iff_mul_le (by decide : 0 < B62)).mpr hlo
+  have hy2 : sq62 x < B62 * 4 := by
+    rw [hsq]
+    refine (Nat.div_lt_iff_lt_mul (by decide : 0 < B62)).mpr ?_
+    have : B63 * B63 = B62 * 4 * B62 := by decide
+    omega
+  simp only [logMant, logBit, Nat.shiftRight_eq_div_pow]
+  revert hy1 hy2
+  generalize sq62 x = y
+  intro hy1 hy2
+  split <;> simp only [B62, B63] at * <;> omega
+
+/-- Each round truncates downward: the renormalised mantissa, scaled back by
+the emitted bit and the mantissa unit, never exceeds the exact square. -/
+theorem logMant_lower (x : Nat) : logMant x * 2 ^ logBit x * B62 ≤ x * x := by
+  have h1 : sq62 x * B62 ≤ x * x := by
+    rw [sq62_eq x]; exact Nat.div_mul_le_self _ _
+  have h2 : logMant x * 2 ^ logBit x ≤ sq62 x := by
+    simp only [logMant, Nat.shiftRight_eq_div_pow]
+    exact Nat.div_mul_le_self _ _
+  calc logMant x * 2 ^ logBit x * B62 ≤ sq62 x * B62 :=
+        Nat.mul_le_mul_right B62 h2
+    _ ≤ x * x := h1
+
+/-- …and it truncates by less than one unit in each of the two places, which
+is the whole quantitative input to the error budget. -/
+theorem logMant_upper (x : Nat) : x * x ≤ (logMant x + 1) * 2 ^ logBit x * B62 := by
+  have hmain : x * x ≤ (sq62 x + 1) * B62 := by
+    rw [sq62_eq x]
+    have hd : x * x = B62 * (x * x / B62) + x * x % B62 := (Nat.div_add_mod _ _).symm
+    have hm : x * x % B62 < B62 := Nat.mod_lt _ (by decide)
+    simp only [B62] at hd hm ⊢
+    omega
+  have hstep : sq62 x + 1 ≤ (logMant x + 1) * 2 ^ logBit x := by
+    simp only [logMant, logBit, Nat.shiftRight_eq_div_pow]
+    split <;> simp only [Nat.pow_one, Nat.pow_zero, Nat.div_one, Nat.mul_one] <;> omega
+  calc x * x ≤ (sq62 x + 1) * B62 := hmain
+    _ ≤ (logMant x + 1) * 2 ^ logBit x * B62 := Nat.mul_le_mul_right B62 hstep
+
 /-- One round: square, emit the leading bit, renormalise.  The state is
 `(mantissa, bits so far)`. -/
 def logStep (st : Nat × Nat) : Nat × Nat :=
-  let y := sq62 st.1
-  let b := if B63 ≤ y then 1 else 0
-  (y >>> b, 2 * st.2 + b)
+  (logMant st.1, 2 * st.2 + logBit st.1)
 
 /-- `k` rounds from the normalised mantissa `x0`. -/
 def logIter (x0 : Nat) : Nat → Nat × Nat
