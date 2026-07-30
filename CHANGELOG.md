@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- **The reduced cite families, computed** — the one-shot `[0, L)` Möbius
+  sieve of `Ports/ArrayMobius.lean` needs the whole range resident, so `10¹²`
+  would be 24 TB.  `Ports/ArraySegSieve.lean` is its offset, multi-window
+  successor: cell `i` stands for `lo + s·L + i`, one `AProgram` walks
+  `segCount` windows, and memory stays `3L` cells however long the walk.  The
+  first multiple of `p` inside a window is one `urem` when the prime cursor
+  advances; the accumulation phase zeroes the two cells it has just read, so
+  no clear pass is needed and the bridge's zero-filled initial memory is
+  exactly the state every window wants.  Measured at `lo = 10¹⁰`: `16.6 MB`
+  resident against `1.56 GB` for the one-shot form, at a 4% cost.
+  - Two residue blocks ride on the sieve.  `mertensResidue` carries
+    `M(n) = Σ μ(m)`, `Q(n) = Σ |μ(m)|` and the CDEM fixed-point discrepancy
+    `G(n) = Q(n)·2³⁶ − ⌊(6/π²)·2³⁶⌋·n` with their running extrema — the
+    residues of `mertensM_hurst_sqrt` and of the CDEM reproducible squarefree
+    head, on **one** pass.  `mobiusOverNResidue` carries
+    `T(n) = Σ μ(m)·round(2⁶²/m)` — the residue of Platt's (2.11) and of
+    Platt's stronger rigorously-computed range.
+  - Every real-valued majorant is compared once per artifact, in the
+    epilogue, against an exact integer threshold computed in Lean: `Nat.sqrt`
+    of a rational cross-multiplication, and a Machin computation of `π` in
+    integer arithmetic for `⌊(6/π²)·2³⁶⌋ = 41 776 432 333`.  No `√` and no
+    `π` appears in the artifact; the loop body only adds and compares machine
+    words.
+  - `segProgram_wf` proves well-formedness at every `(lo, L, segCount)` and
+    either residue — by a `Bool` mirror that reduces definitionally, so the
+    proof is `rfl` and does not grow with the 146-instruction body.
+    `mertensProgram_compiled` / `mobiusProgram_compiled` instantiate
+    `AProgram.evalCC_compile`.  Base trio.
+  - Corroboration: kernel evaluation against trial division at `[1, 24]`;
+    slot-for-slot agreement with `bench/ref_seg.c` at `10⁸`, where
+    `M(10⁸) = 1928` and `Q(10⁸) = 60 792 694`, and at `lo = 10¹⁰`;
+    `bench/seg_chain.sh` walking a geometric window schedule with zero
+    violations for all four families over the initial stretch.  Registered as
+    the `mobius-seg` native certificate.
+  - Cost, and what is still out of reach, in
+    `bench/results/array_seg_folds.md`: `68 ns` per integer under CompCert,
+    so `7.7·10⁹` is 8.6 minutes, `10¹²` is 19.7 hours and `10¹⁶` is 25
+    core-years (embarrassingly parallel, with no serial carry dependency).
+    Two of the six reduced families — `ch25_lemma_9_2_psi` and
+    `ramare_zuniga_lemma_6_2` — are **not** integer folds: their summands are
+    logarithms of primes, and they are not implemented.  Emission, not
+    execution, is what currently caps `hi` at about `10¹⁰`.
+
 - **Verified multi-precision modular arithmetic** — the binding
   obstruction across the ternary-Goldbach corpus is gone.  The fragment's
   only division is `udiv`/`urem` at 64 ÷ 64 → 64, so `x·y mod N` for a

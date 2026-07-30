@@ -147,8 +147,9 @@ The prime table is written by the init block, three instructions per prime, so
 | --- | --- | --- | --- |
 | `10⁸` | 1 229 | 3 690 | 0.24 s |
 | `10⁹` | 3 401 | 10 206 | 3.7 s (needs `ulimit -s unlimited`) |
-| `10¹⁰` | 9 592 | 28 779 | 24.3 s |
-| `10¹²` | 78 498 | 235 497 | > 70 min, not observed to finish |
+| `10¹⁰` | 9 592 | 28 779 | 24.3 s (1.7 MB of C) |
+| `10¹¹` | 27 293 | 81 879 | 243 s (4.8 MB of C) |
+| `10¹²` | 78 498 | 235 497 | ≈ 40 min extrapolated (`K^{2.2}` over the last two points) |
 | `10¹⁶` | 5 761 455 | 17 284 368 | out of the question |
 
 Below about 8 600 instructions the default interpreter stack suffices; above
