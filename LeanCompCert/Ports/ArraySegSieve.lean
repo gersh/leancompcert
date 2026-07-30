@@ -54,9 +54,10 @@ Proved, `[propext, Classical.choice, Quot.sound]`:
 
 * `segProgram_wf` — every program this file builds is well-formed, at every
   `(lo, L, segCount)` and for either residue;
-* `segProgram_compiled` — hence `AProgram.evalCC_compile` applies: the compiled
-  CCIR trace, and through `MemFragment.lowerMSequence_correct` the emitted C,
-  computes exactly `denote`.
+* `mertensProgram_compiled` and `mobiusProgram_compiled` — hence
+  `AProgram.evalCC_compile` applies: the compiled CCIR trace, and through
+  `MemFragment.lowerMSequence_correct` the emitted C, computes exactly
+  `denote`.
 
 Not proved, exactly as in `ArrayMobius`: that `denote` *is* the residue —
 that the sieve computes `μ`, that the accumulators are `M`, `Q`, `T`, and that

@@ -31,8 +31,8 @@ are implemented here and two are not.
 ## The program
 
 `LeanCompCert/Ports/ArraySegSieve.lean`.  One `AProgram`, `regCount = 128`,
-body of 120 instructions plus 26 (Mertens/squarefree) or 19 (`Σ μ/m`) residue
-instructions.  Cell `i` of the current window stands for `lo + s·L + i`; the
+core body of 93 instructions plus 27 (Mertens/squarefree) or 19 (`Σ μ/m`)
+residue instructions — 120 and 112 in total, constant at every scale.  Cell `i` of the current window stands for `lo + s·L + i`; the
 single loop walks `segCount` windows of `L` cells; the array is `3L` cells plus
 the prime table however long the walk is.  Well-formedness — the bridge's only
 side condition — is proved for every `(lo, L, segCount)` and either residue by
