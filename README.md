@@ -39,7 +39,17 @@ implemented, with per-milestone evidence recorded there.
 
 ## Documentation
 
-Start with the use-case guide that matches your goal:
+**New here, or holding a slow `native_decide`?** Start with
+**[Choosing a strategy for a finite computation](docs/choosing-a-strategy.md)**.
+It routes you to the right approach — kernel, compiled artifact, or attested
+run — with the measured thresholds that separate them, and it catalogues the
+mistakes that have actually produced wrong or vacuous results here. Its first
+section is the one people skip: check whether your computation is slow for the
+*wrong reason* before concluding it is infeasible. Exact `ℚ` in a kernel loop
+turned a 256-leaf certificate from "13.2 GB, unfinished at 22 minutes" into
+1.06 s with no axioms at all.
+
+Then the use-case guide that matches your goal:
 
 - **[Use case 1 — a verified `native_decide`](docs/use-case-1-verified-native-decide.md)**
   — kernel-checked certificates with cached CompCert-compiled native
