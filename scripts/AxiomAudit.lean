@@ -34,6 +34,7 @@ import LeanCompCert.Verified.Mont2
 import LeanCompCert.Verified.Straight
 import LeanCompCert.Verified.InstrBlock
 import LeanCompCert.Ports.TGProth
+import LeanCompCert.Ports.ArrayMobius
 
 
 /-!
@@ -109,6 +110,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Verified.ArrayState.foldBodyA_correct
 #print axioms LeanCompCert.Verified.ArrayState.apreamble_correct
 #print axioms LeanCompCert.Verified.ArrayState.AProgram.evalCC_compile
+#print axioms LeanCompCert.Verified.ArrayState.AProgram.evalC_compile
+-- M6 load: the segmented Mobius sieve in the array fragment
+#print axioms LeanCompCert.Ports.ArrayMobius.mobiusProgram_wf
+#print axioms LeanCompCert.Ports.ArrayMobius.mobiusProgram_compiled
 
 -- Generic segmentation lever
 #print axioms LeanCompCert.Verified.Segment.foldl_range'_split
