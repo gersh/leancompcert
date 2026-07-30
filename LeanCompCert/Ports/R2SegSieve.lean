@@ -216,25 +216,29 @@ def padicValAux (n p : Nat) : Nat → Nat
 
 def padicVal (n p : Nat) : Nat := padicValAux n p 64
 
-/-- Every prime power `p^j ≤ hi` with `p ≤ ⌊√hi⌋`, sorted by `(p, j)`, packed
-one to a cell.  This is the whole mark table; there is no root phase, because
-a root phase can collect prime *values* but not their logarithms. -/
-def markTable (S hi : Nat) : List Nat := Id.run do
-  let mut out : Array Nat := #[]
-  for p in primesBelow (Nat.sqrt hi + 1) do
-    let w := lnFix S p
-    let mut q := p
-    let mut first := 1
-    while q ≤ hi do
-      out := out.push (packEntry q w first)
-      first := 0
-      q := q * p
-  return out.toList
+/-- The mark table: the primes `p ≤ ⌊√hi⌋` with their weights, one cell each.
 
-/-- Mark steps a window of `len` cells needs: one per multiple of each entry,
-one per entry to advance the cursor, and slack. -/
-def markBudget (tab : List Nat) (len : Nat) : Nat :=
-  tab.foldl (fun acc e => acc + len / (e % 2 ^ valBits) + 2) 16
+The higher powers are **not** in the table.  They cost nothing to generate:
+when the multiples of `p^j` run past the window the loop tries `p^{j+1}`
+first, and only steps the cursor when that would exceed `hi`.  Eight
+instructions, and it is what keeps the init block compilable — at
+`hi = 2.1·10¹⁰` the powers are 14 006 of the 27 421 entries, so the emitted C
+halves, from 82 277 statements to 40 261.  There is still no root phase: a
+root phase can collect prime *values* but not their logarithms. -/
+def markTable (S hi : Nat) : List Nat :=
+  (primesBelow (Nat.sqrt hi + 1)).map (fun p => packEntry p (lnFix S p) 1)
+
+/-- Mark steps a window of `len` cells needs: one per multiple of each prime
+**power** `p^j ≤ hi`, one per power to advance the cursor or bump it, and
+slack. -/
+def markBudget (root hi len : Nat) : Nat := Id.run do
+  let mut acc := 16
+  for p in primesBelow (root + 1) do
+    let mut q := p
+    while q ≤ hi do
+      acc := acc + len / q + 2
+      q := q * p
+  return acc
 
 /-! ### Classification, at emit time
 
@@ -408,7 +412,7 @@ def R2Cfg.ofScale (S lo segLen segCount : Nat) : R2Cfg :=
       let r := windowStats S (lo + i * segLen) segLen root
       (max acc.1 r.1, max acc.2 r.2)) (0, 0)
   { lo := lo, segLen := segLen, segCount := segCount, sc := S
-    markSteps := markBudget tab segLen
+    markSteps := markBudget root hi segLen
     logSteps := st.2 * 110 / 100 + 128
     streamCap := st.1 * 110 / 100 + 128
     table := tab }
@@ -434,7 +438,7 @@ def R2Cfg.ofChain (S lo segLen segCount tableHi : Nat) : R2Cfg :=
       let r := windowStats S (lo + i * segLen) segLen root
       (max acc.1 r.1, max acc.2 r.2)) (0, 0)
   { lo := lo, segLen := segLen, segCount := segCount, sc := S
-    markSteps := markBudget tab segLen
+    markSteps := markBudget root (lo + segLen * segCount - 1) segLen
     logSteps := st.2 * 110 / 100 + 128
     streamCap := st.1 * 110 / 100 + 128
     table := tab }
@@ -558,9 +562,16 @@ def R2Cfg.markBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 50 .mul (.reg 49) (.reg rFs))
   , .scalar (.binop 51 .add (.reg 39) (.reg 50))
   , .store 32 51
-    -- advance the cursor when the multiple ran past the window
+    -- the multiples of the current power ran past the window: bump to the
+    -- next power of the same prime if it still fits under `hi`, and only then
+    -- step the cursor.  This is where the `j ≥ 2` entries come from, and why
+    -- the table carries only the primes.
   , .scalar (.binop 52 .mul (.reg 8) (.reg 27))          -- advance
-  , .scalar (.binop 53 .add (.reg rPi) (.reg 52))
+  , .scalar (.binop 150 .mul (.reg rQ) (.reg rBp))       -- p^{j+1}
+  , .scalar (.binop 151 .le (.reg 150) (.lit c.hi))
+  , .scalar (.binop 152 .mul (.reg 52) (.reg 151))       -- bump
+  , .scalar (.binop 153 .sub (.reg 52) (.reg 152))       -- step
+  , .scalar (.binop 53 .add (.reg rPi) (.reg 153))
   , .scalar (.binop 54 .gt (.reg 53) (.lit K))
   , .scalar (.binop 55 .sub (.lit 1) (.reg 54))
   , .scalar (.binop 56 .mul (.reg 55) (.reg 53))
@@ -568,25 +579,25 @@ def R2Cfg.markBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop rPi .add (.reg 56) (.reg 57))
   , .scalar (.binop 58 .add (.reg rPi) (.lit c.tableBase))
   , .load 59 58
-  , .scalar (.binop 60 .band (.reg 59) (.lit maskVal))   -- value
+  , .scalar (.binop 60 .band (.reg 59) (.lit maskVal))   -- the prime
   , .scalar (.binop 61 .lshr (.reg 59) (.lit valBits))
-  , .scalar (.binop 62 .band (.reg 61) (.lit maskWt))    -- weight
-  , .scalar (.binop 63 .lshr (.reg 59) (.lit 63))        -- j = 1 flag
+  , .scalar (.binop 62 .band (.reg 61) (.lit maskWt))    -- its weight
   , .scalar (.binop 64 .sub (.lit 1) (.reg 52))          -- keep
   , .scalar (.binop 65 .add (.reg rJ) (.reg rQ))         -- next multiple, old q
-  , .scalar (.binop 66 .mul (.reg 52) (.reg 60))
-  , .scalar (.binop 67 .mul (.reg 64) (.reg rQ))
-  , .scalar (.binop rQ .add (.reg 66) (.reg 67))
-  , .scalar (.binop 68 .mul (.reg 52) (.reg 62))
-  , .scalar (.binop 69 .mul (.reg 64) (.reg rWt))
-  , .scalar (.binop rWt .add (.reg 68) (.reg 69))
-  , .scalar (.binop 70 .mul (.reg 52) (.reg 63))         -- advance onto a p^1
-  , .scalar (.binop 71 .mul (.reg 64) (.reg rFs))
-  , .scalar (.binop rFs .add (.reg 70) (.reg 71))
-  , .scalar (.binop 72 .mul (.reg 70) (.reg 60))
-  , .scalar (.binop 73 .sub (.lit 1) (.reg 70))
-  , .scalar (.binop 74 .mul (.reg 73) (.reg rBp))
-  , .scalar (.binop rBp .add (.reg 72) (.reg 74))
+  , .scalar (.binop 66 .mul (.reg 152) (.reg 150))
+  , .scalar (.binop 67 .mul (.reg 153) (.reg 60))
+  , .scalar (.binop 68 .mul (.reg 64) (.reg rQ))
+  , .scalar (.binop 69 .add (.reg 66) (.reg 67))
+  , .scalar (.binop rQ .add (.reg 69) (.reg 68))
+  , .scalar (.binop 70 .sub (.lit 1) (.reg 153))
+  , .scalar (.binop 71 .mul (.reg 153) (.reg 60))
+  , .scalar (.binop 72 .mul (.reg 70) (.reg rBp))
+  , .scalar (.binop rBp .add (.reg 71) (.reg 72))
+  , .scalar (.binop 73 .mul (.reg 153) (.reg 62))
+  , .scalar (.binop 74 .mul (.reg 70) (.reg rWt))
+  , .scalar (.binop rWt .add (.reg 73) (.reg 74))
+  , .scalar (.binop 63 .mul (.reg 64) (.reg rFs))        -- `j = 1` is a step
+  , .scalar (.binop rFs .add (.reg 153) (.reg 63))
   , .scalar (.binop 75 .urem (.reg rW) (.reg rQ))
   , .scalar (.binop 76 .sub (.reg rQ) (.reg 75))
   , .scalar (.binop 77 .urem (.reg 76) (.reg rQ))        -- first cell of the entry
@@ -598,6 +609,14 @@ def R2Cfg.markBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 83 .mul (.reg 52) (.reg 82))
   , .scalar (.binop 84 .mul (.reg 64) (.reg 65))
   , .scalar (.binop rJ .add (.reg 83) (.reg 84))
+    -- the mark budget, checked.  `markSteps` too small truncates the sieve
+    -- *silently* — the classification is then wrong, not merely incomplete —
+    -- so the phase's last iteration asserts that the cursor reached the end of
+    -- the table, which it does only after the last prime's last power.
+  , .scalar (.binop 154 .eq (.reg rR) (.lit (T - 1)))
+  , .scalar (.binop 155 .ne (.reg rPi) (.lit K))
+  , .scalar (.binop 156 .mul (.reg 154) (.reg 155))
+  , .scalar (.binop rViol .add (.reg rViol) (.reg 156))
   ]
 
 /-! ## Phase two: classification and compaction -/
@@ -882,12 +901,14 @@ def R2Cfg.body (c : R2Cfg) : List AInstr :=
 
 /-! ## Initialization and epilogue -/
 
-/-- The array cells the init block writes: the mark table, then a sentinel
-whose value is outside every window — so the exhausted cursor marks nothing —
-and whose weight and flag are zero, so no register moves. -/
+/-- The array cells the init block writes: the mark table, then a sentinel of
+value `1`.  The exhausted cursor marks nothing anyway — `rPi = tableLen` sends
+the multiple to `L + 1` — and value `1` makes the bump `1 · 1 = 1` a fixed
+point, so `rQ` can neither reach `0` (the `urem` would be undefined) nor
+overflow. -/
 def R2Cfg.tableCells (c : R2Cfg) : List (Nat × Nat) :=
   (c.table.zipIdx.map fun x => (c.tableBase + x.2, x.1)) ++
-    [(c.tableBase + c.tableLen, packEntry (c.segLen + 1) 0 0)]
+    [(c.tableBase + c.tableLen, packEntry 1 0 0)]
 
 def R2Cfg.seedList (c : R2Cfg) (s : R2Seed) : List (Nat × Nat) :=
   [ (rW, c.lo)
@@ -1117,7 +1138,8 @@ def refHead (S top root : Nat) : Nat × Nat :=
 
 /-- One window of nine cells covering `[6, 14]`, at scale `S = 4`.  The mark
 table is `2, 4, 8, 3, 9` — every prime power `≤ 14` with base `≤ ⌊√14⌋ = 3` —
-and the window exercises all four modes: `6 = 2·3` and `12 = 2²·3` are mode
+— the loop generates `4`, `8` and `9` itself — and the window exercises all
+four modes: `6 = 2·3` and `12 = 2²·3` are mode
 `3`, `8 = 2³` and `9 = 3²` are mode `2`, `10 = 2·5` and `14 = 2·7` are mode
 `1` (`5` and `7` exceed `⌊√14⌋ = 3`), and `7`, `11`, `13` are mode `0`.  The
 three budgets are what `R2Cfg.ofScale 4 6 9 1` computes: `markBudget` is `37`,
@@ -1125,8 +1147,7 @@ and `windowStats 4 6 9 3 = (9, 24)`, nine test points and twenty-four rounds. -/
 def cfg : R2Cfg :=
   { lo := 6, segLen := 9, segCount := 1, sc := 4
     markSteps := 37, logSteps := 40, streamCap := 12
-    table := [ packEntry 2 11 1, packEntry 4 11 0, packEntry 8 11 0
-             , packEntry 3 17 1, packEntry 9 17 0 ] }
+    table := [ packEntry 2 11 1, packEntry 3 17 1 ] }
 
 /-- The head `[1, 5]`, folded at emit time by `headFold 4 5 3`. -/
 def seed : R2Seed :=
@@ -1137,11 +1158,11 @@ def seed : R2Seed :=
 its term count. -/
 example : (seed.d, seed.terms) = refHead 4 5 3 := by decide
 
-/-- The table's weights are `lnFix 4 2 = 11` and `lnFix 4 3 = 17`, and the
-`j = 1` flag is on exactly the two base primes. -/
+/-- The table is the two primes with their weights `lnFix 4 2 = 11` and
+`lnFix 4 3 = 17`; it is what `markTable 4 14` builds. -/
 example : cfg.table.map (fun e =>
       (e % 2 ^ valBits, e / 2 ^ valBits % 2 ^ wtBits, e / 2 ^ 63)) =
-    [(2, 11, 1), (4, 11, 0), (8, 11, 0), (3, 17, 1), (9, 17, 0)] := by decide
+    [(2, 11, 1), (3, 17, 1)] := by decide
 
 /-- A program with the epilogue stripped and the output pointed at one
 accumulator, so a single residue register can be read off. -/

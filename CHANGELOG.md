@@ -2,6 +2,67 @@
 
 ## Unreleased
 
+- **A factorisation sieve, and the `R₂*` residue it makes computable** — the
+  last of the six reduced on-cone families with no working computation.
+  `psi_fold.md` §5 had named the obstruction: `r2Coeff` is a **Dirichlet
+  convolution**, so the residue needs, per cell, the classification "prime
+  power / two distinct prime powers / more" *together with both prime
+  factors*.  That is a factorisation, and no sieve here produced one.
+  `Ports/R2SegSieve.lean` does.
+  - **Three planes, and `p^j` for every `j`.**  The mark table is every prime
+    power `q = p^j ≤ hi` with `p ≤ ⌊√hi⌋`, sorted by `(p, j)`, so a cell
+    divisible by `p^v` is marked `v` times: `prod` (multiplied by the base
+    prime) ends at `Π p^{v_p(n)}`, `lsum` at its fixed-point logarithm, and
+    `W` carries the first two distinct weights with a two-bit saturating
+    count.  `prod ≠ n` is exactly "a prime above `⌊√hi⌋` is left", and for
+    `n ≤ hi` there can be only one, to the first power.  The base prime is
+    never stored — the table is sorted, the `j = 1` entries carry a flag, one
+    register tracks it — so an entry is **one array cell**,
+    `value | lnFix p <<35 | first <<63`.  Marking goes from `L·Σ 1/p = 2.74·L`
+    to `L·Σ 1/(p−1) = 3.51·L`.
+  - **Four modes, two of which pay for a logarithm.**  `−(log n)²` at a prime,
+    `+2 log p log Q` at `p^a·Q`, `−(log p)²` at `p^a`, `+2 log p log q` at
+    `p^a q^b`.  `log Q` is never computed: `log Q = lnFix n − lsum`, one
+    subtraction, which is why the log phase runs on `n` (increasing along the
+    stream, so `⌊log₂ n⌋` stays incremental) and not on `Q` (which jumps
+    around and would want a `clz` the fragment lacks).  The two cheap modes
+    still go through the stream — the running extrema are only right if the
+    jumps are applied in increasing `n` — but finish after one round of `S`.
+  - **One 64-bit accumulator, and `S` capped from above.**  `ψ` needed two
+    limbs; `R₂*` does not.  `2^S·|R₂*| ≤ 1.1·10¹⁴` sits a word deep under the
+    `2⁴⁸` bias, and it is the *jump* that binds: a `64×64` product of two
+    `lnFix` values forces `(2^S log hi)² < 2⁶⁴`, i.e. `S ≤ 27`.  At `S = 24`
+    the carried enclosure — `16·log n + 2` ulps per term, in a register both
+    clause tests add — reaches `8.4·10⁴` over `2.1·10¹⁰` against a margin of
+    `1.65·10⁶`.
+  - **The budgets are not monotone, and the loop said so.**  Mode-2/3 cells
+    thin out with `n` while mode-0/1 cells — the expensive ones — start almost
+    absent just above `lo ≈ √hi` and rise, so the round count *peaks a window
+    or two in*.  Sizing from the first window under-budgeted the log phase by
+    1.3% at `10⁷`; the drain guard reported it as a violation rather than a
+    wrong answer, and `ofScale` now takes the maximum over seven probes.
+  - **It agrees with the oracle bit for bit**, on all ten slots at `10⁶`,
+    `10⁷`, `10⁸`, `ccomp` and `gcc` byte-identical, zero violations; against
+    exact `mpmath` the fixed point is `0.24` low at `10⁶` and `2.52` at `10⁷`,
+    inside carried enclosures of `4.60` and `47.35`; and against the only
+    published numbers this quantity appears in — the `Σ|Λ∗Λ−Λ log+2γ|(k)/k +
+    2|R₂*(K)|/K ≤ 4345·c` of Ramaré 2013 Lemma 7.1 and Ramaré–Zúñiga Alterman
+    2024 Lemma 7.1 — all four values sit `0.3–0.6%` under the printed bounds.
+  - **Cost.**  Body 318 instructions, `κ = 0.1009 ns` (ccomp) fitted to
+    `±0.6%` over the three sizes.  A *chained* artifact at `n ≈ 10¹⁰`,
+    carrying the full `2.1·10¹⁰` mark table, measures **250 ns/integer** (gcc)
+    at `10.459` iterations per integer — so **1.46 core-hours** for the whole
+    sweep, `2.19` under `ccomp`.  No full-scale run was started.
+  - **The wall is the table, not the arithmetic.**  27 421 entries is 82 277
+    init statements and 5.3 MB of C; `gcc` takes 22 s, `ccomp` stack-overflows
+    at the default stack.  Generating the `j ≥ 2` entries inside the artifact
+    would halve it.
+  - `Ports/ArraySegSieve` and `Ports/PsiSegSieve` are **untouched**: the
+    `mertens` artifact still gives `M(10⁷) = 1037`, `Q(10⁷) = 6 079 291`, and
+    `check-native --force` is 10/10.  Full numbers in
+    `bench/results/r2_star.md`, including why a clean run would corroborate
+    Lemma 6.2 without repairing its citation.
+
 - **The two-limb accumulator, and the `ψ` residue it makes runnable** — the
   one thing between the design of the previous entry and an artifact.
   `Verified/AddWide.lean` supplies the missing primitive:
