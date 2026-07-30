@@ -270,6 +270,19 @@ mertens      [9243, 100009242]  -> violations 4   (all four clauses)
 and its three carry-outs agree exactly with `bench/ref_seg.c`, with the
 maintained `⌊√n⌋` coming out at `10 000 = ⌊√10⁸⌋`.
 
+The clauses themselves have their own oracle, `bench/ref_live.py`, which
+sieves `μ` directly and applies the four tests in the residue's arithmetic.
+It agrees with the artifact on the violation count and all four result slots
+for both CDEM constants:
+
+```
+b = 0.0755, [1, 100000]  ->  920 violations, M = −48, Q = 60 794, ⌊√n⌋ = 316
+b = 0.0285, [1,  60000]  ->  17 255 violations, M = −83, Q = 36 473, ⌊√n⌋ = 244
+```
+
+(the violations are all below `n = 33` and `n = 438 429` respectively, which
+is where the two families begin; the `10⁸` run reports the same 920).
+
 The extremum residue is kept, because it buys something the live one cannot:
 its artifacts can be run with a **zero carry-in in any order** and reconciled
 by a prefix pass afterwards, since `max over [1,n] = carry-in + max relative`.
