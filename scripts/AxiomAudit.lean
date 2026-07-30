@@ -227,6 +227,12 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveProgram_wf
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveProgram_compiled
+-- the per-integer Sum mu(m)/m variant, on a two-limb accumulator
+#print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveResidue_all
+#print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
+#print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
+#print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf
+#print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_compiled
 #print axioms LeanCompCert.Testing.ArraySegCertificate.program_wf
 #print axioms LeanCompCert.Verified.LogFixed.sq62_eq
 #print axioms LeanCompCert.Verified.LogFixed.logIter_spec

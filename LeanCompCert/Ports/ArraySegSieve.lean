@@ -686,6 +686,147 @@ def mobiusOverNResidue : List AInstr :=
   , .scalar (.binop rTmin .add (.reg 119) (.reg 120))
   ]
 
+/-! ## Residue: `Σ μ(m)/m` tested per integer, on a two-limb accumulator
+
+`mobiusOverNResidue` above has the same two weaknesses `mertensResidue` has,
+and one more that is peculiar to it.
+
+* **Window granularity.**  One comparison per artifact means one threshold per
+  artifact, evaluated at the window's worst point.  For an *antitone* majorant
+  like `1/(2√n)` the worst point is the window's right end, so a chain can only
+  stop on a window boundary — and a boundary far enough below the true limit
+  that the whole window survives the right end's threshold.
+* **The rounding budget.**  `round(2⁶²/m)` costs half an ulp per term, so the
+  threshold subtracts `⌈n/2⌉`; at `n = 7.7·10⁹` that budget is `1.5·10⁻⁴` of
+  the threshold itself, which is enough to lose an integer where the family is
+  nearly tight.
+* **No `√` in the loop.**  Removing the first weakness the way
+  `mertensLiveResidue` does is not available here: `⌊√n⌋` rises by at most one
+  per integer and is therefore a register, but the threshold wants
+  `2⁶¹/√(n+1)`, a *reciprocal* square root, which is not.
+
+The third point is what this residue is about, and the fix is to divide rather
+than to multiply.  With `c = ⌈√(n+1)⌉ ≥ √(n+1)`, maintained by the same increment
+trick as `⌊√n⌋` (it rises exactly when `n ≥ c²`, and then `c²` rises by
+`2c − 1`), the test
+
+  `|V| + budget + 1 ≤ ⌊2⁶¹/c⌋`
+
+is one `udiv` per integer and implies `|Σ_{m≤n} μ(m)/m| ≤ 1/(2√(n+1))`,
+because `⌊2⁶¹/c⌋ ≤ 2⁶¹/c ≤ 2⁶¹/√(n+1)`.  Nothing here can overflow: every
+quantity is below `2⁶³`.
+
+The second point is fixed by carrying the accumulator at scale `2^(63+k)` in
+**two limbs** — the shape `Verified/AddWide.lean` proves — and shifting it
+back down to scale `2⁶²` for the comparison.  The accumulated round-to-nearest
+error is `n/2` ulps at scale `2^(63+k)`, i.e. `n/2^(k+2)` ulps at scale `2⁶²`,
+and the shift itself costs one more; so the budget is `⌈n/2^(k+2)⌉ + 1` rather
+than `⌈n/2⌉`.  At `k = 15` — scale `2⁷⁸` — that is `65 536×` smaller: at
+`n = 7.7·10⁹` it drops from `1.5·10⁻⁴` of the threshold to `2.2·10⁻⁹`.
+
+Exactly: writing `A = Σ_{m≤n} μ(m)·round(2^(63+k)/m)` and `V = ⌊A/2^(k+1)⌋`,
+
+  `|2⁶²·Σ μ(m)/m| ≤ |V| + 1 + n/2^(k+2)`,
+
+the `1` being the shift's truncation and `n/2^(k+2)` the rescaled rounding.
+
+The two-limb weight `round(2^(63+k)/m)` is built without a 128 ÷ 64 division,
+which the fragment does not have: from `q₁ = ⌊2⁶³/m⌋` and `r₁ = 2⁶³ mod m`,
+
+  `2^(63+k)/m = 2^k·q₁ + (2^k·r₁)/m`,
+
+and `2^k·r₁ < 2^k·m` stays inside a word whenever `m < 2^(64−k)`.  So two
+64-bit divisions, a shift, and a carry.
+
+**Range of validity**, all of it needed and all of it met at `7.7·10⁹`:
+`hi < 2^(64−k)` for the weight (`2⁴⁹` at `k = 15`), and `1 ≤ k ≤ 15` so that
+no shift count reaches 64 — the emitted C would be undefined there.  The
+accumulator itself is safe for every `n < 2^79`, since `|Σ μ(m)/m| ≤ 1` puts
+`U = 2^(64+k) + A` inside `(0, 2^(65+k))`.
+
+The price, as with `mertensLiveResidue`, is that the carry-in must be the true
+`A(lo−1)`, so a chain of these is serial.
+-/
+
+/-- Extra bits the `Σ μ(m)/m` accumulator carries above `2⁶³`: the fixed-point
+scale is `2^(63+k)` and the comparison scale is `2⁶²`.  Must satisfy
+`1 ≤ k ≤ 15`; `15` is the production value and gives scale `2⁷⁸`. -/
+def mobWideBits : Nat := 15
+
+def rTLo : Nat := 100     -- low limb of U = 2^(64+k) + A
+def rTHi : Nat := 101     -- high limb
+def rCeil : Nat := 102    -- ⌈√(n+1)⌉
+def rCeilSq : Nat := 103  -- (⌈√(n+1)⌉)²
+def rMViol : Nat := 104   -- running count of failed per-integer tests
+
+/-- `Σ μ(m)/m` against `1/(2√(n+1))`, tested at **every** integer, with the
+accumulator at scale `2^(63+k)` in two limbs.  Register `65` holds `n`,
+`79`/`80` the two `μ` indicators and `133` the main-accumulation gate; the
+count of failed tests accumulates in `rMViol`. -/
+def mobiusLiveResidue (k : Nat) : List AInstr :=
+  [ -- (A) w = round(2^(63+k)/n), two limbs, from one 2⁶³ division
+    .scalar (.binop 150 .udiv (.lit (2 ^ 63)) (.reg 65))     -- q₁
+  , .scalar (.binop 151 .urem (.lit (2 ^ 63)) (.reg 65))     -- r₁
+  , .scalar (.binop 152 .shl (.reg 151) (.lit k))            -- 2^k·r₁
+  , .scalar (.binop 153 .udiv (.reg 152) (.reg 65))          -- q₂
+  , .scalar (.binop 154 .urem (.reg 152) (.reg 65))          -- r₂
+  , .scalar (.binop 155 .add (.reg 154) (.reg 154))
+  , .scalar (.binop 156 .ge (.reg 155) (.reg 65))            -- round up?
+  , .scalar (.binop 157 .add (.reg 153) (.reg 156))
+  , .scalar (.binop 158 .shl (.reg 150) (.lit k))            -- low of 2^k·q₁
+  , .scalar (.binop 159 .lshr (.reg 150) (.lit (64 - k)))    -- high of 2^k·q₁
+  , .scalar (.binop 160 .add (.reg 158) (.reg 157))          -- wLo
+  , .scalar (.binop 161 .lt (.reg 160) (.reg 157))           -- carry out
+  , .scalar (.binop 162 .add (.reg 159) (.reg 161))          -- wHi
+    -- (B) U += μ(n)·w, as a 128-bit add then a 128-bit subtract; at most one
+    -- of the two is nonzero because `μ = +1` and `μ = −1` are exclusive
+  , .scalar (.binop 150 .mul (.reg 79) (.reg 160))
+  , .scalar (.binop 151 .mul (.reg 79) (.reg 162))
+  , .scalar (.binop 152 .mul (.reg 80) (.reg 160))
+  , .scalar (.binop 153 .mul (.reg 80) (.reg 162))
+  , .scalar (.binop 154 .add (.reg rTLo) (.reg 150))
+  , .scalar (.binop 155 .lt (.reg 154) (.reg 150))
+  , .scalar (.binop 156 .add (.reg rTHi) (.reg 151))
+  , .scalar (.binop 157 .add (.reg 156) (.reg 155))
+  , .scalar (.binop 158 .lt (.reg 154) (.reg 152))           -- borrow
+  , .scalar (.binop rTLo .sub (.reg 154) (.reg 152))
+  , .scalar (.binop 159 .sub (.reg 157) (.reg 153))
+  , .scalar (.binop rTHi .sub (.reg 159) (.reg 158))
+    -- (C) V, biased by 2⁶³: U ≫ (k+1), which fits one word because U < 2^(65+k)
+  , .scalar (.binop 150 .lshr (.reg rTLo) (.lit (k + 1)))
+  , .scalar (.binop 151 .shl (.reg rTHi) (.lit (63 - k)))
+  , .scalar (.binop 152 .bor (.reg 150) (.reg 151))
+    -- (D) |V|, branchlessly
+  , .scalar (.binop 153 .ge (.reg 152) (.lit (2 ^ 63)))
+  , .scalar (.binop 154 .sub (.reg 152) (.lit (2 ^ 63)))
+  , .scalar (.binop 155 .sub (.lit (2 ^ 63)) (.reg 152))
+  , .scalar (.binop 156 .sub (.lit 1) (.reg 153))
+  , .scalar (.binop 157 .mul (.reg 153) (.reg 154))
+  , .scalar (.binop 158 .mul (.reg 156) (.reg 155))
+  , .scalar (.binop 159 .add (.reg 157) (.reg 158))          -- |V|
+    -- (E) c = ⌈√(n+1)⌉: it rises exactly when n+1 > c², i.e. n ≥ c², and then
+    -- c² rises by 2c−1.  `n+1` and not `n` because the reduced family's
+    -- majorant is `1/(2√(n+1))`, which is the majorant of the *real*-variable
+    -- statement at the right end of the interval `[n, n+1)` on which the sum
+    -- is constant; `1/(2√(n+1)) ≤ 1/(2√n)`, so this tests the stronger form.
+  , .scalar (.binop 160 .ge (.reg 65) (.reg rCeilSq))
+  , .scalar (.binop 161 .mul (.reg 160) (.reg 133))
+  , .scalar (.binop rCeil .add (.reg rCeil) (.reg 161))
+  , .scalar (.binop 162 .add (.reg rCeil) (.reg rCeil))
+  , .scalar (.binop 163 .sub (.reg 162) (.lit 1))
+  , .scalar (.binop 164 .mul (.reg 161) (.reg 163))
+  , .scalar (.binop rCeilSq .add (.reg rCeilSq) (.reg 164))
+    -- (F) the test: |V| + ⌈n/2^(k+2)⌉ + 1 ≤ ⌊2⁶¹/c⌋
+  , .scalar (.binop 165 .udiv (.lit (2 ^ 61)) (.reg rCeil))
+  , .scalar (.binop 166 .add (.reg 65) (.lit (2 ^ (k + 2) - 1)))
+  , .scalar (.binop 167 .lshr (.reg 166) (.lit (k + 2)))
+  , .scalar (.binop 168 .add (.reg 159) (.reg 167))
+  , .scalar (.binop 169 .add (.reg 168) (.lit 1))
+  , .scalar (.binop 170 .gt (.reg 169) (.reg 165))
+  , .scalar (.binop 171 .mul (.reg 170) (.reg 133))
+  , .scalar (.binop rMViol .add (.reg rMViol) (.reg 171))
+  ]
+
 /-! ## Programs
 
 A program is the core plus a residue, with an init block seeding the residue's
@@ -837,6 +978,61 @@ def mobiusEpilogue (c : Cfg) (thr : Nat) : List AInstr :=
 `plattStrongerThreshold c.hi`. -/
 def mobiusProgram (c : Cfg) (t thr : Nat) : AProgram :=
   c.program mobiusOverNResidue (mobiusInit t) (mobiusEpilogue c thr)
+
+/-! ### The per-integer `Σ μ(m)/m` program
+
+No threshold literal at all: the majorant `1/(2√n)` is tested inside the loop
+against `⌊2⁶¹/⌈√n⌉⌋`.  What the artifact carries instead is the carry-in — the
+two limbs of `U(lo−1) = 2^(64+k) + A(lo−1)`, and the two registers `⌈√(lo−1)⌉`
+and its square — and what it returns is the number of integers in `[lo, hi]`
+at which the test failed.  All four carry-outs go to the result cells, so a
+chain link is checkable against a manifest and not only against "zero
+violations".
+-/
+
+/-- `⌈√n⌉`, at emit time.  A parameter of `mobiusLiveInit` and not a call
+inside it, for the same reason `mertensLiveInit` takes `s0`: `Nat.sqrt` is
+well-founded recursion and the kernel does not unfold it. -/
+def ceilSqrt (n : Nat) : Nat :=
+  let s := Nat.sqrt n
+  if s * s = n then s else s + 1
+
+/-- The four carry-ins of a per-integer `Σ μ(m)/m` link. -/
+structure MobLiveSeed where
+  /-- Low limb of `U(lo−1) = 2^(64+k) + Σ_{m<lo} μ(m)·round(2^(63+k)/m)`. -/
+  tLo : Nat
+  /-- High limb of the same. -/
+  tHi : Nat
+  /-- `max 1 ⌈√lo⌉` — the value `⌈√(n+1)⌉` takes at `n = lo − 1`, clamped to
+  `1` so the in-loop `udiv` is defined. -/
+  c : Nat
+  /-- The square of the field above. -/
+  cSq : Nat
+  deriving Repr
+
+/-- The seed a link starting at `lo` needs, given the previous link's two
+accumulator limbs.  At `lo = 1` the accumulator is the bare bias `2^(64+k)`,
+i.e. `tLo = 0`, `tHi = 2^k`. -/
+def mobLiveSeed (lo tLo tHi : Nat) : MobLiveSeed :=
+  let c := max 1 (ceilSqrt lo)
+  { tLo := tLo, tHi := tHi, c := c, cSq := c * c }
+
+def mobLiveSeedStart (k : Nat) : MobLiveSeed :=
+  { tLo := 0, tHi := 2 ^ k, c := 1, cSq := 1 }
+
+def mobiusLiveInit (s : MobLiveSeed) : List AInstr :=
+  seed rTLo s.tLo ++ seed rTHi s.tHi ++ seed rCeil s.c ++ seed rCeilSq s.cSq ++
+  seed rMViol 0
+
+def mobiusLiveEpilogue (c : Cfg) : List AInstr :=
+  [ .scalar (.mov outputReg (.reg rMViol)) ] ++
+  storeResult c 0 rTLo ++ storeResult c 1 rTHi ++
+  storeResult c 2 rCeil ++ storeResult c 3 rCeilSq
+
+/-- The per-integer `Σ μ(m)/m` program at accumulator scale `2^(63+k)`.
+Requires `1 ≤ k ≤ 15` and `c.hi < 2^(64−k)`. -/
+def mobiusLiveProgram (c : Cfg) (k : Nat) (s : MobLiveSeed) : AProgram :=
+  c.program (mobiusLiveResidue k) (mobiusLiveInit s) (mobiusLiveEpilogue c)
 
 /-! ## Well-formedness, and the bridge instantiated
 
@@ -1007,6 +1203,26 @@ theorem mobiusEpilogue_all (c : Cfg) (thr : Nat) :
     (storeResult_all c 1 rTmax (by decide)))
     (storeResult_all c 2 rTmin (by decide))
 
+theorem mobiusLiveResidue_all (k : Nat) :
+    (mobiusLiveResidue k).all (ainstrWFB regCount) = true := by
+  rfl
+
+theorem mobiusLiveInit_all (s : MobLiveSeed) :
+    (mobiusLiveInit s).all (ainstrWFB regCount) = true :=
+  all_append (all_append (all_append (all_append
+    (seed_all rTLo s.tLo (by decide)) (seed_all rTHi s.tHi (by decide)))
+    (seed_all rCeil s.c (by decide)))
+    (seed_all rCeilSq s.cSq (by decide)))
+    (seed_all rMViol 0 (by decide))
+
+theorem mobiusLiveEpilogue_all (c : Cfg) :
+    (mobiusLiveEpilogue c).all (ainstrWFB regCount) = true :=
+  all_append (all_append (all_append (all_append
+    (by rfl) (storeResult_all c 0 rTLo (by decide)))
+    (storeResult_all c 1 rTHi (by decide)))
+    (storeResult_all c 2 rCeil (by decide)))
+    (storeResult_all c 3 rCeilSq (by decide))
+
 theorem mertensProgram_wf (c : Cfg) (s : MertensSeed) (bNum bDen : Nat) :
     (mertensProgram c s bNum bDen).WF :=
   segProgram_wf c mertensResidue_all (mertensInit_all s)
@@ -1021,6 +1237,11 @@ theorem mobiusProgram_wf (c : Cfg) (t thr : Nat) :
     (mobiusProgram c t thr).WF :=
   segProgram_wf c mobiusOverNResidue_all (mobiusInit_all t)
     (mobiusEpilogue_all c thr)
+
+theorem mobiusLiveProgram_wf (c : Cfg) (k : Nat) (s : MobLiveSeed) :
+    (mobiusLiveProgram c k s).WF :=
+  segProgram_wf c (mobiusLiveResidue_all k) (mobiusLiveInit_all s)
+    (mobiusLiveEpilogue_all c)
 
 /--
 **The bridge, instantiated for the Mertens / squarefree residue.**  For any
@@ -1068,6 +1289,21 @@ theorem mobiusProgram_compiled (c : Cfg) (t thr : Nat) (base : Int)
         (fun m : Verified.MemFragment.MCCState =>
           m.env ⟨(mobiusProgram c t thr).output + 1⟩) = some ((n : Nat) : Int) :=
   AProgram.evalCC_compile _ (mobiusProgram_wf c t thr) base hBase n hDenote
+
+/-- **The bridge, instantiated for the per-integer `Σ μ(m)/m` residue.**  The
+denotation is the number of integers in `[lo, hi]` at which
+`|Σ_{m≤n} μ(m)/m| ≤ 1/(2√n)` failed the in-loop test. -/
+theorem mobiusLiveProgram_compiled (c : Cfg) (k : Nat) (s : MobLiveSeed)
+    (base : Int)
+    (hBase : BaseOk (mobiusLiveProgram c k s).arrayLen base)
+    (n : Nat) (hDenote : (mobiusLiveProgram c k s).denote = some n) :
+    Option.bind
+        (Verified.MemFragment.evalMCCSequence
+          ((mobiusLiveProgram c k s).initialMCC base)
+          (mobiusLiveProgram c k s).compile)
+        (fun m : Verified.MemFragment.MCCState =>
+          m.env ⟨(mobiusLiveProgram c k s).output + 1⟩) = some ((n : Nat) : Int) :=
+  AProgram.evalCC_compile _ (mobiusLiveProgram_wf c k s) base hBase n hDenote
 
 
 /-! ## Kernel sanity checks
@@ -1121,6 +1357,38 @@ def refT (lo hi : Nat) : Nat :=
     | 1 => (acc + w) % Verified.Reflect.M
     | 2 => (acc + (Verified.Reflect.M - w)) % Verified.Reflect.M
     | _ => acc) tBias
+
+/-- `Σ_{lo ≤ m ≤ hi} μ(m)·round(2^(63+k)/m)`, as a signed integer.  The
+round-to-nearest is `⌊(2^(63+k) + m/2)/m⌋`, which is exactly what the
+residue's two-step division computes: `2^(63+k) = 2^k·q₁·m + 2^k·r₁` and the
+second division carries the same remainder. -/
+def refWideA (k lo hi : Nat) : Int :=
+  (window lo hi).foldl (fun acc n =>
+    let w : Int := ((2 ^ (63 + k) + n / 2) / n : Nat)
+    match refMuCode n with
+    | 1 => acc + w
+    | 2 => acc - w
+    | _ => acc) 0
+
+/-- `U = 2^(64+k) + A`, split into the two limbs the residue keeps. -/
+def refWideLimbs (k lo hi : Nat) : Nat × Nat :=
+  let u := ((2 ^ (64 + k) + refWideA k lo hi) % (2 ^ 128)).toNat
+  (u % Verified.Reflect.M, u / Verified.Reflect.M)
+
+/-- The per-integer test of `mobiusLiveResidue`, run on the reference: the
+number of `n ∈ [lo, hi]` at which `|V| + ⌈n/2^(k+2)⌉ + 1 > ⌊2⁶¹/⌈√(n+1)⌉⌋`, with
+`V = ⌊A(n)/2^(k+1)⌋` the *floor* division of a signed accumulator. -/
+def refWideViol (k lo hi c0 cSq0 : Nat) : Nat :=
+  ((window lo hi).foldl (fun st n =>
+    let (a, c, cq, v) := st
+    let w : Int := ((2 ^ (63 + k) + n / 2) / n : Nat)
+    let a : Int := match refMuCode n with | 1 => a + w | 2 => a - w | _ => a
+    let (c, cq) := if n ≥ cq then (c + 1, cq + 2 * (c + 1) - 1) else (c, cq)
+    let bad :=
+      (Int.fdiv a (2 ^ (k + 1))).natAbs + (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1
+        > 2 ^ 61 / c
+    (a, c, cq, v + (if bad then 1 else 0)))
+    ((0 : Int), c0, cSq0, 0)).2.2.2
 
 /-- A program with the epilogue stripped and the output pointed at one
 accumulator, so a single residue register can be read off. -/
@@ -1181,6 +1449,58 @@ example : (liveProbe rQ).denote = some (refQ 1 24) := by decide
 set_option maxRecDepth 20000000 in
 set_option maxHeartbeats 4000000 in
 example : (liveProbe rS).denote = some 4 := by decide
+
+/-! ### The per-integer `Σ μ(m)/m` residue, at the same configuration
+
+`k = 3` rather than the production `15`, only so that the reference's
+`2^(63+k)` literals stay small enough for the kernel fold to be cheap; every
+instruction exercised is the same one, including the two-limb carry, the
+borrow, the `≫ (k+1)` recombination and the `⌈√n⌉` increment. -/
+
+def mobLiveK : Nat := 3
+
+def mobLiveProbe (out : Nat) : AProgram :=
+  probe cfg (mobiusLiveResidue mobLiveK) (mobiusLiveInit (mobLiveSeedStart mobLiveK))
+    out
+
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
+example : (mobLiveProbe rTLo).denote = some (refWideLimbs mobLiveK 1 24).1 := by
+  decide
+
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
+example : (mobLiveProbe rTHi).denote = some (refWideLimbs mobLiveK 1 24).2 := by
+  decide
+
+-- `⌈√25⌉ = 5`, maintained by the same increment trick as `⌊√n⌋`.
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
+example : (mobLiveProbe rCeil).denote = some 5 := by decide
+
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
+example : (mobLiveProbe rCeilSq).denote = some 25 := by decide
+
+-- The whole program, epilogue included: its denotation is the number of
+-- integers at which the per-integer test failed, and it agrees with the
+-- trial-division reference.  The count on `[1, 24]` is `3`, not `0`, so this
+-- check is not vacuous: `n = 1` and `n = 2` are below the family's range and
+-- genuinely violate it (`1 > 1/(2√2)`, `1/2 > 1/(2√3)`), and `n = 4` is an
+-- exact tie the `⌈·⌉` relaxation cannot resolve — `Σ_{m≤4} μ(m)/m = 1/6` and
+-- `⌈√5⌉ = 3`, so `|V|` lands exactly on `⌊2⁶¹/3⌋` and the `+1` for the
+-- shift's truncation tips it over.  Swept exhaustively, `n = 4` is the only
+-- integer in `[3, 7.727·10⁹]` at which the relaxation costs anything.
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
+example :
+    (mobiusLiveProgram cfg mobLiveK (mobLiveSeedStart mobLiveK)).denote
+      = some (refWideViol mobLiveK 1 24 1 1) := by
+  decide
+
+set_option maxRecDepth 20000000 in
+set_option maxHeartbeats 4000000 in
+example : refWideViol mobLiveK 1 24 1 1 = 3 := by decide
 
 end Check
 
