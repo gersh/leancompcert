@@ -12,6 +12,7 @@ import LeanCompCert.Verified.GcdEquiv
 import LeanCompCert.Verified.SqrtEquiv
 import LeanCompCert.Verified.SignedLimb
 import LeanCompCert.Verified.Log2Fixed
+import LeanCompCert.Verified.LogFixed
 import LeanCompCert.Verified.Sieve
 import LeanCompCert.Verified.Dyadic
 import LeanCompCert.Verified.MulWide
@@ -36,6 +37,7 @@ import LeanCompCert.Verified.InstrBlock
 import LeanCompCert.Ports.TGProth
 import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Ports.ArraySegSieve
+import LeanCompCert.Ports.LogFixPort
 import LeanCompCert.Testing.ArraySegCertificate
 
 
@@ -218,3 +220,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveProgram_wf
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveProgram_compiled
 #print axioms LeanCompCert.Testing.ArraySegCertificate.program_wf
+#print axioms LeanCompCert.Verified.LogFixed.sq62_eq
+#print axioms LeanCompCert.Verified.LogFixed.logIter_spec
+#print axioms LeanCompCert.Verified.LogFixed.logFix_bracket
+#print axioms LeanCompCert.Verified.LogFixed.logFold_bracket
+#print axioms LeanCompCert.Verified.LogFixed.errB_le_48
+#print axioms LeanCompCert.Ports.LogFixPort.logRoundProgram_wf
+#print axioms LeanCompCert.Ports.LogFixPort.logRoundProgram_compiled

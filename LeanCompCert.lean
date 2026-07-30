@@ -22,6 +22,7 @@ import LeanCompCert.Verified.GcdEquiv
 import LeanCompCert.Verified.SqrtEquiv
 import LeanCompCert.Verified.SignedLimb
 import LeanCompCert.Verified.Log2Fixed
+import LeanCompCert.Verified.LogFixed
 import LeanCompCert.Verified.Sieve
 import LeanCompCert.Verified.Dyadic
 import LeanCompCert.Verified.MulWide
@@ -30,6 +31,7 @@ import LeanCompCert.Verified.ArrayState
 import LeanCompCert.Verified.MemFragment
 import LeanCompCert.Verified.ArrayBridge
 import LeanCompCert.Ports.ArrayMobius
+import LeanCompCert.Ports.LogFixPort
 import LeanCompCert.Testing.ArrayMobiusCertificate
 import LeanCompCert.Testing.ArraySegCertificate
 import LeanCompCert.Verified.Limb
