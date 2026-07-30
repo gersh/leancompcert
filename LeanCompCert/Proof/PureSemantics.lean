@@ -9,20 +9,35 @@ open LeanCompCert
 abbrev CCEnv := CCIR.LocalId → Option Int
 abbrev CEnv := String → Option Int
 
+/--
+Machine width of a generated-C scalar type.
+
+Pointer and function-pointer types are modeled as **64-bit machine words**,
+matching `CCIR.CCType.bitWidth`'s `pointerBits := 64` default and the LP64
+targets the emitted artifacts are compiled for (aarch64 and x86_64).  This is
+what makes an address materialization (`(uint64_t *)a`) a value-preserving
+operation in the proved fragment rather than an undefined one; the abstract
+memory of `Verified.MemFragment` is indexed by exactly such integer addresses.
+On a 32-bit target the model would be unfaithful, which is why the artifact
+pipeline targets LP64 only.
+-/
 def bitWidth : C.CType → Option Nat
   | .bool | .u8 | .i8 => some 8
   | .u16 | .i16 => some 16
   | .u32 | .i32 | .f32 => some 32
   | .u64 | .i64 | .f64 => some 64
   | .usize | .isize => some System.Platform.numBits
+  | .ptr _ | .fnPtr _ _ => some 64
   | _ => none
 
+/-- The CCIR-side counterpart of `bitWidth`; `.obj` is a pointer too. -/
 def ccBitWidth : CCIR.CCType → Option Nat
   | .u8 | .i8 => some 8
   | .u16 | .i16 => some 16
   | .u32 | .i32 | .f32 => some 32
   | .u64 | .i64 | .f64 => some 64
   | .usize | .isize => some System.Platform.numBits
+  | .obj | .ptr _ | .fnPtr _ _ => some 64
   | _ => none
 
 def normalize (type : C.CType) (value : Int) : Option Int := do
