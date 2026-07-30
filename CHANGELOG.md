@@ -42,8 +42,48 @@
     core-years (embarrassingly parallel, with no serial carry dependency).
     Two of the six reduced families — `ch25_lemma_9_2_psi` and
     `ramare_zuniga_lemma_6_2` — are **not** integer folds: their summands are
-    logarithms of primes, and they are not implemented.  Emission, not
-    execution, is what currently caps `hi` at about `10¹⁰`.
+    logarithms of primes, and they are not implemented.
+
+- **The build-time wall removed: the artifact no longer carries a prime
+  table, and lowering no longer recurses per instruction.**  Two independent
+  ceilings capped `hi` well below every target, and both are gone.
+  - `MemFragment.lowerMSequence` and `Proof.lowerSequence` built their result
+    on the way *out* of the recursion, keeping one interpreter frame alive per
+    instruction.  Emission runs in the Lean interpreter, whose recursion guard
+    fires at about ten thousand frames, so a `plattstrong` chain died with
+    `deep recursion was detected at 'interpreter'` at `hi = 1.95·10⁸` — forty
+    times below the `7.7·10⁹` target.  Both are now accumulator-passing and
+    tail-recursive; the two equations of the naive definition are recovered as
+    `lowerMSequence_nil`/`_cons` (and the `lowerSequence` pair), so
+    `lowerMSequence_correct` and everything around it is unchanged.  `2·10⁸`
+    went from "deep recursion" to 1.15 s; `7·10⁹` emits in 17.7 s.
+  - The prime table was written by the init block, three instructions per
+    prime: 235 497 statements at `10¹²`, where `ccomp -O2` segfaulted at the
+    default stack and reached **30.5 GB** with an unlimited one.  The program
+    now **computes** the table: `⌈√hi / L⌉` leading root windows sweep
+    `[1, rootCount·L]` with the same instructions, the mark cursor stopping at
+    `π(⌊√(rootCount·L)⌋)` and the accumulation pass appending `n` to the table
+    exactly when its cell was never marked and `2 ≤ n ≤ ⌊√hi⌋` — which at that
+    size says precisely "prime, above every bootstrap prime".  What the init
+    block still spells out is `π(⌊√L⌋)` primes, a function of the window size
+    and not of the range: the `10¹⁰` and `10¹²` artifacts are the *same*
+    45 KB of C, `ccomp -O2` takes either in 0.06 s at 24 MB, and the
+    `10¹⁶`-scale one is 235 KB, `ccomp` 0.53 s.
+  - `mertensLiveResidue` removes the window-schedule weakening.  `⌊√n⌋` rises
+    by at most one per integer, so it is a register and three instructions;
+    each majorant is `α√n`, so `⌊α·⌊√n⌋⌋` is a multiply and a shift, and
+    testing all four clauses per integer makes the four running extrema
+    unnecessary — 31 instructions against 27.  One artifact over
+    `[9243, 100 009 242]`, a range ratio of 10 817, reports 0 violations where
+    the windowed mode on that same window reports 4.  The extremum residue is
+    kept: only it can be run with a zero carry-in in any order and reconciled
+    afterwards, which is what makes the `10¹⁶` pass embarrassingly parallel.
+  - Measured cost of all of it, at `lo = 10¹⁰` over `10⁸` integers: 5.08 s →
+    5.36 s (gcc) and 6.56 s → 6.65 s (ccomp) for the root sieve, 5.40 s /
+    6.81 s with per-integer thresholds — **6% and 4%** for removing a wall
+    that no verified compiler on this machine could get past.  The cost table
+    is otherwise unchanged: `7.7·10⁹` is 9.0 minutes, `10¹²` is 20.4 hours,
+    `10¹⁶` is 24.1 core-years.
 
 - **Verified multi-precision modular arithmetic** — the binding
   obstruction across the ternary-Goldbach corpus is gone.  The fragment's

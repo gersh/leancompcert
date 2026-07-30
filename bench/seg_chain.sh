@@ -15,6 +15,27 @@
 #
 # Prints one line per window and exits non-zero on the first window whose
 # artifact reports a failed threshold test.
+#
+# TWO INVOCATION CONSTRAINTS.  Both produce a SPURIOUS violation -- one that
+# looks like a mathematical counterexample and is not -- when broken.
+#
+#   1. ceil((LO-1)/SEGLEN) * SEGLEN <= LO.  The chain is primed by that many
+#      threshold-ignored windows starting at 1; with SEGLEN > LO the priming
+#      overshoots and the first checked window starts in the wrong place.
+#
+#   2. SEGLEN <= (RATIO-1) * LO.  A window is at least SEGLEN wide, so with
+#      SEGLEN larger than that the *effective* ratio exceeds RATIO and the
+#      single epilogue threshold is taken much too far from the window.  At
+#      LO = 10000, RATIO = 1.02 this means SEGLEN <= 200; SEGLEN = 10000 makes
+#      the first window [10001, 20000], an effective ratio of 2, and
+#      plattstrong fails it.
+#
+# Neither applies to the `mertenslive` modes of ArraySegEmit, which test every
+# clause at every integer and so have no window-ratio loss at all.
+#
+# LO must also be at or above where the family's majorant holds: 33 for
+# Hurst, 9243 or 438429 for the two CDEM constants.  The default 9243 is not
+# arbitrary.
 set -u
 MODE=${1:-mertens}; LO=${2:-9243}; HI=${3:-10000000}
 RATIO=${4:-1.05}; SEGLEN=${5:-100000}; CC=${6:-gcc}

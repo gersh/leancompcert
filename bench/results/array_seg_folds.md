@@ -30,14 +30,24 @@ are implemented here and two are not.
 
 ## The program
 
-`LeanCompCert/Ports/ArraySegSieve.lean`.  One `AProgram`, `regCount = 128`,
-core body of 93 instructions plus 27 (Mertens/squarefree) or 19 (`Σ μ/m`)
-residue instructions — 120 and 112 in total, constant at every scale.  Cell `i` of the current window stands for `lo + s·L + i`; the
-single loop walks `segCount` windows of `L` cells; the array is `3L` cells plus
-the prime table however long the walk is.  Well-formedness — the bridge's only
-side condition — is proved for every `(lo, L, segCount)` and either residue by
-`segProgram_wf`, `[propext, Classical.choice, Quot.sound]`, so
-`AProgram.evalCC_compile` applies and the emitted C computes `denote`.
+`LeanCompCert/Ports/ArraySegSieve.lean`.  One `AProgram`, `regCount = 192`,
+core body of 111 instructions plus 27 (Mertens/squarefree), 31 (the same with
+per-integer thresholds) or 19 (`Σ μ/m`) residue instructions — 138, 142 and
+130 in total, constant at every scale.  Cell `i` of the current window stands
+for `lo + s·L + i`; the single loop walks `rootCount + segCount` windows of
+`L` cells; the array is `3L` cells plus the prime table.  Well-formedness —
+the bridge's only side condition — is proved for every `(lo, L, segCount)` and
+every residue by `segProgram_wf`, `[propext, Classical.choice, Quot.sound]`,
+so `AProgram.evalCC_compile` applies and the emitted C computes `denote`.
+
+**The prime table is computed by the program, not carried by it.**  The first
+`rootCount = ⌈√hi / L⌉` windows sweep `[1, rootCount·L]` with the same
+instructions; two selectors make the mark cursor stop at `π(⌊√(rootCount·L)⌋)`
+rather than `π(⌊√hi⌋)`, and make the accumulation pass append `n` to the table
+instead of feeding the residue, exactly when `n`'s cell was never marked and
+`2 ≤ n ≤ ⌊√hi⌋` — which at that size says precisely that `n` is a prime above
+every bootstrap prime.  What the init block still spells out is `π(⌊√L⌋)`
+primes, a function of the window size and not of the range.
 
 Every real-valued majorant is compared **once per artifact**, in the epilogue,
 against an exact integer threshold computed in Lean: `Nat.sqrt` of a rational
@@ -62,14 +72,26 @@ point — the one-shot `[0,L)` sieve of `Ports/ArrayMobius` needs 24 bytes per
 integer of the *range*, which is 24 TB at `10¹²`; here it is 24 bytes per
 integer of the *window*, and the window can be a megabyte.
 
-At `lo = 10¹⁰` (prime table 9 592 entries, `L = 10⁶`, `segCount = 100`,
-`10⁸` integers, 16.6 MB resident, `loopCount = 372 019 200`):
+At `lo = 10¹⁰` (prime table 9 632 entries, `L = 10⁶`, `segCount = 100`,
+`10⁸` integers, 24 MB resident, `loopCount = 375 739 392` — one root window
+and a hundred main ones):
 
 | residue | gcc | ccomp | gcc ns/integer | ccomp ns/integer | ns/iteration |
 | --- | --- | --- | --- | --- | --- |
-| `M`,`Q` | 5.26 s | 6.80 s | 52.6 | 68.0 | 14.1 / 18.3 |
-| `Σ μ/m` | 5.87 s | 6.67 s | 58.7 | 66.7 | 15.8 / 17.9 |
+| `M`,`Q` | 5.36 s | 6.65 s | 53.6 | 66.5 | 14.3 / 17.7 |
+| `M`,`Q`, per-integer thresholds | 5.40 s | 6.81 s | 54.0 | 68.1 | 14.4 / 18.1 |
 | plain C reference | 1.02 s | — | 10.2 | — | — |
+
+Mean of three, with one core otherwise busy.  Against the same measurement of
+the previous artifact — the one that carried its prime table in the init block
+and could not be built past `10¹⁰` — 5.08 s / 6.56 s, the whole of the root
+sieve plus per-integer thresholds costs **6% under gcc and 4% under ccomp**:
+
+| variant | body | `loopCount` | gcc | ccomp |
+| --- | --- | --- | --- | --- |
+| init-block table, one threshold per artifact | 120 | 372 019 200 | 5.08 s | 6.56 s |
+| root sieve, one threshold per artifact | 138 | 375 739 392 | 5.36 s | 6.65 s |
+| root sieve, threshold at every integer | 142 | 375 739 392 | 5.40 s | 6.81 s |
 
 The fragment is **5.2×** the hand-written C for the sieve residues.  That is
 worse than the 1.5–1.7× the one-shot sieve showed, and the reason is
@@ -93,15 +115,32 @@ Iterations per integer are `1 + Σ_{p ≤ √hi} (1/p + 2/L)`, i.e.
 
 ### Artifact
 
+The emitted C no longer grows with `hi`.  It grows — very slowly — with the
+*window* size `L`, because the bootstrap table the init block spells out is
+the primes below `√L`; `L` is a memory choice, not a range choice.
+
+| `hi` | `L` | init instructions | emit | emitted C | `ccomp -O2` | ccomp peak RSS |
+| --- | --- | --- | --- | --- | --- | --- |
+| `10¹⁰` | `10⁶` | 512 | 0.29 s | 45 463 B | 0.08 s | 23.8 MB |
+| `10¹²` | `10⁶` | 512 | 0.82 s | 45 474 B | 0.06 s | 24.0 MB |
+| `10¹⁶` | `10⁸` | 3 695 | 61.6 s | 234 746 B | 0.53 s | 129 MB |
+
+`10¹²` and `10¹⁰` differ by eleven bytes of C — the loop bound and the
+literals.  The `10¹⁶` emit time is the emit-time `π(10⁸)` count, a segmented
+sieve in Lean; the artifact itself is 235 KB because `L = 10⁸` needs the
+1 229 primes below `10⁴` as bootstrap.
+
+For comparison, the same three configurations on the previous artifact: 1.7 MB
+in 24.3 s, **13.9 MB in 1 972 s which `ccomp` would not compile**, and
+17 284 368 init instructions which was never attempted.
+
 | item | value |
 | --- | --- |
-| emitted C, `10⁸`-scale prime table (1 229 primes) | 231 KB |
-| emitted C, `10¹⁰`-scale prime table (9 592 primes) | 1.7 MB |
-| ccomp `-O2` compile | 0.60 s |
-| ccomp executable, hosted link | 70 560 bytes |
-| ccomp object, freestanding (`mobius-seg` certificate, 32-prime table) | 3 216 bytes |
+| emitted C, `10⁸` scale (`L = 10⁷`) | 94 855 bytes |
+| ccomp executable, hosted link | 70 568 bytes |
+| ccomp object, freestanding (`mobius-seg` certificate) | 3 216 bytes |
 | ccomp executable, freestanding (`as` + `ld`, no libc) | 3 288 bytes |
-| x86_64 CompCert 3.17 `-O2 -S` | 438 lines of assembly, accepted |
+| x86_64 CompCert 3.17 `-O2 -S` | accepted |
 
 ## Extrapolated cost per axiom
 
@@ -109,17 +148,25 @@ Single core, CompCert-compiled, using the rate law above.  "Sieve" is the cost
 of the Möbius pass that produces the residue; "extra" is anything the residue
 needs beyond it.
 
+Rates re-measured on the current program: `17.70` ns/iteration for the
+Mertens/squarefree residue under `ccomp` (`14.27` under gcc), `18.90` for
+`Σ μ/m` (`16.05`), `18.12` for the per-integer Mertens variant (`14.37`).
+
 | axiom | range | sieve, 1 core | notes |
 | --- | --- | --- | --- |
-| `residual_platt_stronger_range` | `7.727·10⁹` | **8.6 min** (at the measured rate) | done — program built, bridge proved, artifact emitted |
-| `residual_platt_2_11` | `10¹²` | **19.7 h** | same program, longer walk; supersedes the row above (a `10¹²` pass computes the `7.7·10⁹` range on the way) |
-| `mertensM_hurst_sqrt` | `10¹⁶` | **25.0 core-years** | one pass |
-| `reproducibleSquarefree` | `10¹⁶` | **free, same pass** | `Q` and `M` ride the same sieve; both thresholds are in one epilogue |
-| `ch25_lemma_9_2_psi` | `10¹³` | 8.4 days *for the sieve alone* | **not implemented** — needs `log p` in 64-bit fixed point |
-| `ramare_zuniga_lemma_6_2` | `2.1·10¹⁰` | 23 min *for the sieve alone* | **not implemented** — needs `log p`, `Λ*Λ`, and `γ` |
+| `residual_platt_stronger_range` | `7.727·10⁹` | **9.0 min** | **build-time wall removed; the chain runs** |
+| `residual_platt_2_11` | `10¹²` | **20.4 h** | same program, longer walk; supersedes the row above (a `10¹²` pass computes the `7.7·10⁹` range on the way).  Emits in 0.8 s, `ccomp` takes it in 0.06 s |
+| `mertensM_hurst_sqrt` | `10¹⁶` | **24.1 core-years** | one pass; 24.6 with per-integer thresholds.  Emits in 62 s, `ccomp` in 0.53 s |
+| `reproducibleSquarefree` | `10¹⁶` | **free, same pass** | `Q` and `M` ride the same sieve; both thresholds are in the same residue |
+| `ch25_lemma_9_2_psi` | `10¹³` | 8.7 days *for the sieve alone* | **not implemented** — needs `log p` in 64-bit fixed point |
+| `ramare_zuniga_lemma_6_2` | `2.1·10¹⁰` | 24 min *for the sieve alone* | **not implemented** — needs `log p`, `Λ*Λ`, and `γ` |
 
-Under gcc the `10¹⁶` figure is 19.0 core-years, the `10¹²` figure 15.3 h, the
-`10¹³` sieve 6.5 days and the `7.7·10⁹` range 7.6 min.
+Under gcc the `10¹⁶` figure is 19.4 core-years, the `10¹²` figure 17.3 h and
+the `7.7·10⁹` range 7.6 min.
+
+The two rows that were "blocked at build time" in the previous revision of
+this document are the first three: all of them now emit in under a minute and
+compile under CompCert in under a second.
 
 ### Parallelism
 
@@ -137,57 +184,66 @@ reproducible squarefree verifier are both cluster computations; this is the
 same order of magnitude, with the loop body machine-checked to be what the
 Lean denotation says.
 
-## The two things that block the full scales
+## The two build-time walls, and how they were removed
 
-### 1. Emission does not scale with the prime table
+Both are gone.  Recorded here because the diagnosis of the first one was
+wrong in a way worth remembering.
 
-The prime table is written by the init block, three instructions per prime, so
-`K = π(√hi)` primes cost `3K` instructions in one straight-line sequence.
-`Proof.lowerMSequence` is not tail-recursive and, measured, superquadratic:
+### 1. The interpreter's recursion guard, at `hi ≈ 2·10⁸`
 
-| `hi` | `K` | init instructions | emit time |
-| --- | --- | --- | --- |
-| `10⁸` | 1 229 | 3 690 | 0.24 s |
-| `10⁹` | 3 401 | 10 206 | 3.7 s (needs `ulimit -s unlimited`) |
-| `10¹⁰` | 9 592 | 28 779 | 24.3 s (1.7 MB of C) |
-| `10¹¹` | 27 293 | 81 879 | 243 s (4.8 MB of C) |
-| `10¹²` | 78 498 | 235 497 | **1 972 s**, 1.19 GB, 13.9 MB of C |
-| `10¹⁶` | 5 761 455 | 17 284 368 | out of the question |
+`MemFragment.lowerMSequence` and `Proof.lowerSequence` built their result on
+the way *out* of the recursion (`pure (stmt :: statements)` after the
+recursive call), so one interpreter frame stayed alive per instruction.
+Emission runs in the Lean interpreter, whose recursion guard fires at roughly
+ten thousand frames.  A `plattstrong` chain died at
 
-Below about 8 600 instructions the default interpreter stack suffices; above
-it, `ulimit -s unlimited` is required and the time grows like `K^{2.2}`.
+```
+deep recursion was detected at 'interpreter'
+#10107 LeanCompCert.Verified.MemFragment.lowerMSequence
+```
 
-**And CompCert cannot compile the result.**  The `10¹²` artifact does emit —
-13.9 MB of C, one function with 235 497 straight-line statements before the
-loop — but `ccomp -O2 -c` segfaults on it in 3.9 s with the default 8 MB
-stack, and with `ulimit -s unlimited` it was still running after 282 s having
-reached **30.5 GB** resident, at which point it was killed against the memory
-budget.  `gcc -O2` was never reached.  So the emission wall is not merely slow:
-past roughly `hi = 10¹⁰` (1.7 MB of C, `ccomp` in 24 s) the init-block prime
-table produces a translation unit no verified compiler on this machine will
-take.  Redesigning it away is a prerequisite for `10¹²`, not an optimisation.
+with `hi = 1.95·10⁸` — the prime table there is 1 650 entries, six `MInstr`
+each, 10 040 frames.  That is **forty times below** the `7.7·10⁹` target and
+four orders of magnitude below where `ccomp` chokes, so it, and not the size
+of the translation unit, was the binding constraint.
 
-Two fixes, neither of which touches the bridge or the fragment:
+Both are now accumulator-passing and tail-recursive, with the two equations of
+the naive definition recovered as `lowerMSequence_nil` / `lowerMSequence_cons`
+(and the `lowerSequence` pair), so `lowerMSequence_correct` and every proof
+around it is unchanged apart from `simp only [...]` becoming `rw`.  Measured
+on `plattstrong` at `SEGLEN = 200`:
 
-* make `lowerMSequence` (and the rolled lowering around it) tail-recursive and
-  linear — an emitter change, and the cheaper one;
-* **generate the prime table inside the program**: a root-sieve phase over
-  `[0, √hi)` marking composites, and let the mark cursor walk every `d` in
-  `[2, √hi)` reading its primality from that region instead of walking a
-  compacted table.  This removes the `O(K)` init entirely at the cost of
-  `√hi` extra iterations per window — negligible at `10¹²` (`10⁶` against
-  `L = 10⁸`), 100% overhead at `10¹⁶` unless `L ≫ 10⁸`.
+| `lo` | before | after |
+| --- | --- | --- |
+| `1.91·10⁸` | 18 s | — |
+| `2.0·10⁸` | deep recursion | 1.15 s, 302 KB of C |
+| `1.0·10⁹` | deep recursion | 3.58 s, 603 KB |
+| `7.0·10⁹` | deep recursion | 17.7 s, 1.43 MB |
 
-Until one of these lands, the emission ceiling is around `hi = 10¹⁰`.  The
-running cost above is unaffected; this is purely a build-time wall.
+### 2. The init-block prime table, at `hi ≈ 10¹⁰`
 
-### 2. The window schedule and its price
+Three instructions per prime, `K = π(√hi)` primes: 28 779 statements at
+`10¹⁰`, 235 497 at `10¹²`, 17 284 368 at `10¹⁶`.  The `10¹²` artifact did
+emit — 13.9 MB of C in 1 972 s — but `ccomp -O2 -c` segfaulted on it in 3.9 s
+at the default 8 MB stack, and with `ulimit -s unlimited` was still running
+after 282 s having reached **30.5 GB** resident, at which point it was killed.
+`gcc -O2` was never reached.
 
-The epilogue compares the window's running extremum against a single threshold,
-so the threshold must be the majorant at the window's *worst* endpoint — the
-left end for an increasing majorant (`M`, `Q`), the right end for a decreasing
-one (`S`).  A window `[lo, hi]` therefore weakens the family by
-`√(hi/lo) − 1`.  Windows must be geometric:
+The root-sieve phase described above deletes the table.  What the init block
+spells out is now the primes below `√L`, a function of the window size:
+`10¹²` and `10¹⁰` emit *the same 45 KB of C*, and `ccomp -O2` takes it in
+0.06 s at 24 MB resident.  The full table is in the table above.
+
+The costs are `rootCount·L ≈ √hi` extra integers swept and 18 extra body
+instructions, together 5.5% (gcc) / 1.4% (ccomp) — measured, not estimated.
+
+### 3. The window schedule, which was a price rather than a wall
+
+The epilogue compares one running extremum against one threshold, so the
+threshold must be the majorant at the window's *worst* endpoint — the left end
+for an increasing majorant (`M`, `Q`), the right end for a decreasing one
+(`S`).  A window `[lo, hi]` therefore tests the family `√(hi/lo) − 1` more
+strictly than it is stated.  Windows must be geometric:
 
 | ratio | weakening | windows to cover `[33, 10¹⁶]` | windows to cover `[3, 10¹²]` |
 | --- | --- | --- | --- |
@@ -195,12 +251,34 @@ one (`S`).  A window `[lo, hi]` therefore weakens the family by
 | 1.02 | 1.0% | 1 684 | 1 340 |
 | 1.001 | 0.05% | 33 362 | 26 546 |
 
-This is not free — at ratio 1.001 the emission alone is 33 362 artifacts — but
-it is a schedule, not an obstruction, and the artifacts are independent.  The
-per-window loss can be removed altogether by maintaining `⌊42√n⌋` in a register
-(it increases by at most 1 per integer for `n ≥ 441`, so it is three
-instructions) and doing the comparison per integer; that was measured as
-roughly a 20% body-size increase and is the natural next step.
+For the two Mertens/squarefree families this is now removable, and the
+`mertenslive` modes remove it.  `⌊√n⌋` rises by at most one per integer, so it
+is a register and three instructions; every majorant here is `α√n`, so
+`⌊α·⌊√n⌋⌋` — sound, since `⌊√n⌋ ≤ √n` and every `α` is rounded down to a
+dyadic — is a multiply and a shift.  Testing all four clauses at every integer
+then makes the four running extrema unnecessary, so the residue is 31
+instructions against 27: **1% of the body, and the schedule loss is zero.**
+
+Demonstrated on one artifact covering `[9243, 100 009 242]`, a range ratio of
+10 817 that the windowed mode would need 470 windows for:
+
+```
+mertenslive  [9243, 100009242]  -> violations 0
+mertens      [9243, 100009242]  -> violations 4   (all four clauses)
+```
+
+and its three carry-outs agree exactly with `bench/ref_seg.c`, with the
+maintained `⌊√n⌋` coming out at `10 000 = ⌊√10⁸⌋`.
+
+The extremum residue is kept, because it buys something the live one cannot:
+its artifacts can be run with a **zero carry-in in any order** and reconciled
+by a prefix pass afterwards, since `max over [1,n] = carry-in + max relative`.
+Per-integer testing needs the true `M(lo−1)` inside the artifact, so a chain
+of live artifacts is serial.  One core wants `mertenslive`; a thousand cores
+want `mertens` and a schedule.
+
+For the two `Σ μ(m)/m` families the majorant is `C/√n`, so the per-integer
+threshold is a division rather than a multiply, and it was not done.
 
 ## Verified end to end
 
@@ -223,7 +301,20 @@ artifact computes `denote`.
 Independent agreement at scale: at `10⁸` the artifact and `bench/ref_seg.c`
 produce identical values for all seven result slots, with
 `M(10⁸) = 1928` and `Q(10⁸) = 60 792 694`, both published values.  At
-`lo = 10¹⁰` over `10⁸` integers the two agree slot for slot as well.
+`lo = 10¹⁰` over `10⁸` integers the two agree slot for slot as well.  Both
+residues, and the per-integer variant, were re-checked against the oracle
+after the root-sieve phase landed.
+
+The invocation of `seg_chain.sh` has two constraints, both of which produce a
+**spurious** violation — one that looks like a counterexample and is not — when
+broken; they are spelled out in the script's header.  Briefly:
+`ceil((LO−1)/SEGLEN)·SEGLEN ≤ LO`, or the threshold-ignored priming windows
+overshoot `LO`; and `SEGLEN ≤ (RATIO−1)·LO`, or the *effective* window ratio
+exceeds `RATIO` and the single epilogue threshold is taken far too far from
+the window.  At `LO = 10000, RATIO = 1.02` the second means `SEGLEN ≤ 200`:
+`SEGLEN = 10000` makes the first window `[10001, 20000]`, an effective ratio
+of 2, and `plattstrong` fails it.  Neither constraint applies to the
+`mertenslive` modes, which have no window-ratio loss at all.
 
 ## What is not implemented, and why
 
@@ -260,11 +351,24 @@ lake env lean --run bench/ArraySegEmit.lean mertens 1 10000000 10 seg.c 4
 gcc -O2 -o seg seg.c ; ccomp -O2 -o segcc seg.c
 /usr/bin/time -v ./segcc
 
+# the artifact against the oracle, slot for slot
+lake env lean --run bench/ArraySegEmit.lean mertens 1 10000000 10 h.c -
+gcc -O2 -o h h.c && ./h && ./ref_seg 1 10000000 10
+
+# the wall that used to be here: a 1e12-scale artifact, emitted and compiled
+lake env lean --run bench/ArraySegEmit.lean mertens 1 1000000 1000000 e12.c 4
+/usr/bin/time -v ccomp -O2 -o e12 e12.c
+
+# per-integer thresholds: one artifact over a range ratio of 10 817
+lake env lean --run bench/ArraySegEmit.lean mertenslive 9243 1000000 100 l.c - \
+    1099511627774 5626 4611686536415883054
+
 bench/seg_chain.sh mertens 9243 300000 1.02 200
 ```
 
 `ArraySegEmit.lean` takes `MODE LO SEGLEN SEGCOUNT OUT [EXPECTED|-] [SEED...]`.
 `-` selects the hosted driver, which prints the result cells (the carry-out a
 chained run needs); a number selects the freestanding driver, which returns `0`
-exactly when the artifact's violation count equals it.  Emissions with a prime
-table above roughly 8 600 init instructions need `ulimit -s unlimited`.
+exactly when the artifact's violation count equals it.  `MODE` is `mertens`,
+`mertens2`, `mertenslive`, `mertenslive2`, `platt211` or `plattstrong`.
+`ulimit -s unlimited` is no longer needed at any scale reached here.
