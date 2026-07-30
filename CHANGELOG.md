@@ -9,17 +9,19 @@
   power / two distinct prime powers / more" *together with both prime
   factors*.  That is a factorisation, and no sieve here produced one.
   `Ports/R2SegSieve.lean` does.
-  - **Three planes, and `p^j` for every `j`.**  The mark table is every prime
-    power `q = p^j ≤ hi` with `p ≤ ⌊√hi⌋`, sorted by `(p, j)`, so a cell
-    divisible by `p^v` is marked `v` times: `prod` (multiplied by the base
-    prime) ends at `Π p^{v_p(n)}`, `lsum` at its fixed-point logarithm, and
-    `W` carries the first two distinct weights with a two-bit saturating
-    count.  `prod ≠ n` is exactly "a prime above `⌊√hi⌋` is left", and for
-    `n ≤ hi` there can be only one, to the first power.  The base prime is
-    never stored — the table is sorted, the `j = 1` entries carry a flag, one
-    register tracks it — so an entry is **one array cell**,
-    `value | lnFix p <<35 | first <<63`.  Marking goes from `L·Σ 1/p = 2.74·L`
-    to `L·Σ 1/(p−1) = 3.51·L`.
+  - **Three planes, and `p^j` for every `j`.**  The table is the primes
+    `p ≤ ⌊√hi⌋`, one cell each — `value | lnFix p <<35 | first <<63` — and the
+    loop generates the higher powers itself: when the multiples of `p^j` run
+    past the window it tries `p^{j+1}` first and steps the cursor only when
+    that would exceed `hi`, eight instructions.  A cell divisible by `p^v` is
+    thus marked `v` times: `prod` (multiplied by the base prime) ends at
+    `Π p^{v_p(n)}`, `lsum` at its fixed-point logarithm, and `W` carries the
+    first two distinct weights with a two-bit saturating count.  `prod ≠ n` is
+    exactly "a prime above `⌊√hi⌋` is left", and for `n ≤ hi` there can be
+    only one, to the first power.  Marking goes from `L·Σ 1/p = 2.74·L` to
+    `L·Σ 1/(p−1) = 3.55·L`, and the mark budget is now **checked** — the
+    phase's last iteration asserts the cursor reached the table's end, so a
+    truncated sieve is reported rather than silently believed.
   - **Four modes, two of which pay for a logarithm.**  `−(log n)²` at a prime,
     `+2 log p log Q` at `p^a·Q`, `−(log p)²` at `p^a`, `+2 log p log q` at
     `p^a q^b`.  `log Q` is never computed: `log Q = lnFix n − lsum`, one
@@ -48,15 +50,21 @@
     published numbers this quantity appears in — the `Σ|Λ∗Λ−Λ log+2γ|(k)/k +
     2|R₂*(K)|/K ≤ 4345·c` of Ramaré 2013 Lemma 7.1 and Ramaré–Zúñiga Alterman
     2024 Lemma 7.1 — all four values sit `0.3–0.6%` under the printed bounds.
-  - **Cost.**  Body 318 instructions, `κ = 0.1009 ns` (ccomp) fitted to
-    `±0.6%` over the three sizes.  A *chained* artifact at `n ≈ 10¹⁰`,
-    carrying the full `2.1·10¹⁰` mark table, measures **250 ns/integer** (gcc)
-    at `10.459` iterations per integer — so **1.46 core-hours** for the whole
-    sweep, `2.19` under `ccomp`.  No full-scale run was started.
-  - **The wall is the table, not the arithmetic.**  27 421 entries is 82 277
-    init statements and 5.3 MB of C; `gcc` takes 22 s, `ccomp` stack-overflows
-    at the default stack.  Generating the `j ≥ 2` entries inside the artifact
-    would halve it.
+  - **Cost.**  Body 326 instructions, `κ = 0.0992 ns` (ccomp) fitted to
+    `±0.6%` over the three sizes.  A *chained* artifact at `n ≈ 10¹⁰`, carrying
+    the whole `2.1·10¹⁰` table, measures **366.5 ns/integer** under `ccomp`
+    and `241.7` under `gcc` at `10.451` iterations per integer — so **2.14
+    core-hours** for the whole sweep, `1.41` under `gcc`.  No full-scale run
+    was started.
+  - **The wall was the table, and generating the powers removed it.**
+    Tabulating every prime power is 27 421 entries, 82 277 init statements and
+    5.3 MB of C: `gcc` compiles that in 22 s, `ccomp` **stack-overflows** at
+    the default stack and was still climbing past 27 GB with an unlimited one.
+    Generating the `j ≥ 2` entries in the loop costs 2.5% of the run and
+    halves the init block to 40 259 statements, at which `ccomp -O2` compiles
+    the production artifact in 104 s and 9.3 GB.  This is the same wall
+    `ArraySegSieve` records at `10¹²` and deletes with a root phase; a root
+    phase cannot be used here, because each entry carries a logarithm.
   - `Ports/ArraySegSieve` and `Ports/PsiSegSieve` are **untouched**: the
     `mertens` artifact still gives `M(10⁷) = 1037`, `Q(10⁷) = 6 079 291`, and
     `check-native --force` is 10/10.  Full numbers in

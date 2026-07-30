@@ -42,9 +42,11 @@ a factorisation, not a primality bit.
 
 ## 2. The sieve: three planes, `p^j` for every `j`, four modes
 
-The mark table is every prime power `q = p^j ≤ hi` with `p ≤ ⌊√hi⌋`, sorted by
-`(p, j)`, so a cell divisible by `p^v` is marked exactly `v` times by `p`'s
-entries.  Each mark writes three planes:
+The table is the primes `p ≤ ⌊√hi⌋`, one cell each; the higher powers the
+loop generates itself — when the multiples of `p^j` run past the window it
+tries `p^{j+1}` first and only steps the cursor when that would exceed `hi`,
+eight instructions.  A cell divisible by `p^v` is therefore marked exactly `v`
+times, and each mark writes three planes:
 
 * `prod` — multiplied by the **base prime**, so it ends at `Π p^{v_p(n)}` over
   the small primes.  `prod ≠ n` is exactly "a prime factor above `⌊√hi⌋` is
@@ -53,9 +55,12 @@ entries.  Each mark writes three planes:
 * `W` — at a `j = 1` mark only: the first two distinct weights and a two-bit
   saturating count, `w1 | w2<<28 | d<<56`.
 
-The base prime is never stored.  The table is sorted by `(p, j)` and the
-`j = 1` entries carry a flag, so one register tracks it, and an entry is
-**one array cell** — `value | lnFix p <<35 | first <<63`.
+An entry is **one array cell**, `value | lnFix p <<35 | first <<63`, and
+generating the powers in the loop rather than tabulating them is what keeps
+the init block compilable: at `hi = 2.1·10¹⁰` the powers would be 14 006 of
+27 421 entries, so the emitted C halves, from 82 277 init statements to
+40 259 — and that is the difference between `ccomp` overflowing its stack and
+`ccomp` compiling the artifact (§6).
 
 | mode | cell | jump | rounds |
 | --- | --- | --- | --- |
@@ -73,8 +78,12 @@ only right if the jumps are applied in increasing `n` — but finish after one
 round instead of `S`.
 
 Costs, at `hi = 2.1·10¹⁰`: the mark budget goes from `L·Σ 1/p = 2.74·L` to
-`L·Σ 1/(p−1) = 3.51·L`, 28% more marking, and the log phase runs on the
-`22.4%` of cells that are mode 0 or 1.
+`L·Σ 1/(p−1) = 3.55·L`, 30% more marking, and the log phase runs on the
+`22.4%` of cells that are mode 0 or 1.  The budget is now *checked*: the mark
+phase's last iteration asserts that the cursor reached the end of the table,
+so a `markSteps` too small — which truncates the sieve and makes the
+classification wrong, not merely incomplete — is reported rather than
+silently believed.
 
 ### The test points are the jumps, not the integers
 
@@ -180,42 +189,41 @@ instructions.
 
 | `hi` | `L` | table | iters/integer | ccomp s | ns/int | gcc s | ns/int |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `10⁶` | 99 900 | 404 | 13.336 | 0.430 | 430.4 | 0.283 | 283.6 |
-| `10⁷` | 99 968 | 1 001 | 12.565 | 4.023 | 402.4 | 2.603 | 260.4 |
-| `10⁸` | 999 900 | 2 633 | 11.909 | 38.02 | 380.2 | 25.29 | 252.9 |
+| `10⁶` | 99 900 | 168 | 13.336 | 0.433 | 433.4 | 0.287 | 287.3 |
+| `10⁷` | 99 968 | 446 | 12.565 | 4.067 | 406.8 | 2.670 | 267.1 |
+| `10⁸` | 999 900 | 1 229 | 11.909 | 38.24 | 382.4 | 25.29 | 253.0 |
 
 The repository's law is `ns/integer = (iterations/integer) × (body) × κ`.
 Fitting `κ` on these three points:
 
 | | `10⁶` | `10⁷` | `10⁸` | mean |
 | --- | --- | --- | --- | --- |
-| `κ` (ccomp) | 0.1015 | 0.1007 | 0.1004 | **0.1009 ns** |
-| `κ` (gcc) | 0.0669 | 0.0652 | 0.0668 | **0.0663 ns** |
+| `κ` (ccomp) | 0.0997 | 0.0993 | 0.0985 | **0.0992 ns** |
+| `κ` (gcc) | 0.0661 | 0.0652 | 0.0652 | **0.0655 ns** |
 
-— consistent to `±0.6%`, and within 6% of the `0.1066`/`0.0655` that
+— consistent to `±0.6%`, and within 7% of the `0.1066`/`0.0655` that
 `psi_fold.md` fitted on a different body.  Artifact size:
 
 | `hi` | C bytes | init statements | ccomp `-O2` | gcc `-O2` |
 | --- | --- | --- | --- | --- |
-| `10⁶` | 112 001 | 1 226 | 0.25 s | 0.13 s |
-| `10⁷` | 225 714 | 3 017 | 0.69 s | 0.29 s |
-| `10⁸` | 539 252 | 7 913 | 3.02 s | 0.93 s |
+| `10⁶` | 67 581 | 518 | 0.18 s | 0.09 s |
+| `10⁷` | 120 690 | 1 352 | 0.27 s | 0.15 s |
+| `10⁸` | 271 525 | 3 701 | 0.78 s | 0.44 s |
 
 ## 6. The `2.1·10¹⁰` configuration, and one measurement at `10¹⁰`
 
 The configuration is computed, not guessed.  At `hi = 2.1·10¹⁰`,
-`⌊√hi⌋ = 144 913`, `π(⌊√hi⌋) = 13 415`, and the mark table is **27 421**
-entries — every prime power `p^j ≤ hi` with `p ≤ 144 913`, one cell each.
-With `L = 10⁶`:
+`⌊√hi⌋ = 144 913`, and the table is the **13 415** primes below it — one cell
+each, the 14 006 higher powers generated in the loop.  With `L = 10⁶`:
 
 ```
-mark budget   3.558 iterations/integer   (2.74 of it the primes, 0.79 the powers)
+mark budget   3.550 iterations/integer   (2.74 of it the primes, 0.81 the powers)
 accumulation  1.000
 log phase     4.14 at the bottom of the range, 6.15 at its peak near 1e9,
               5.90 at 1e10, 5.82 at the top
                                         ------
-total         8.70 / 10.70 / 10.46 / 10.38 iterations per integer
-memory        3L cells of planes + 0.6L of stream + the table = 44 MB
+total         8.69 / 10.70 / 10.45 / 10.37 iterations per integer
+memory        3L cells of planes + 0.5L of stream + the table = 44 MB
 ```
 
 The log-phase density is *not* monotone, and neither budget may be taken from
@@ -232,45 +240,51 @@ probe windows.
 artifact (`R2Cfg.ofChain`) carries the mark table and the budgets of the whole
 sweep to `2.1·10¹⁰` but walks only a slice — which is what a production chain
 looks like, since every link needs every prime.  One such link over
-`[10¹⁰+1, 10¹⁰+2·10⁶]`:
+`[10¹⁰+1, 10¹⁰+2·10⁶]`, at `10.451` iterations per integer, `ccomp` and `gcc`
+byte-identical, zero violations:
 
-| | measured | the law's prediction |
-| --- | --- | --- |
-| gcc `-O2` | **250 ns/integer** (0.50 s for `2·10⁶`) | 220 ns |
-| ccomp `-O2` | 376 ns/integer (by the 1.503 ratio at `10⁸`) | 335 ns |
+| | measured | `κ` implied | vs. the `≤10⁸` fit |
+| --- | --- | --- | --- |
+| ccomp `-O2` | **366.5 ns/integer** | 0.1076 | +8.5% |
+| gcc `-O2` | **241.7 ns/integer** | 0.0709 | +8.2% |
 
-13% above the law, which is the three planes: at `L = 10⁶` they are 24 MB
-against 24 MB of L3.  A production run should measure `L = 2·10⁵` too.
+The 8.5% is the three planes: at `L = 10⁶` they are 24 MB against 24 MB of L3.
+A production run should measure `L = 2·10⁵` too, where they are 4.8 MB and the
+mark budget rises only to 3.82 iterations per integer.
 
-**Cost of the whole sweep**, `[144 914, 2.1·10¹⁰]`, on one core:
+**Cost of the whole sweep**, `[144 914, 2.1·10¹⁰]`, on one core, from that
+measurement rather than from the law:
 
 | | ns/integer | `2.1·10¹⁰` |
 | --- | --- | --- |
-| gcc `-O2` | 250 | **1.46 core-hours** |
-| ccomp `-O2` | 376 | **2.19 core-hours** |
+| gcc `-O2` | 241.7 | **1.41 core-hours** |
+| ccomp `-O2` | 366.5 | **2.14 core-hours** |
 
 **No full-scale run was started.**
 
-### The wall the table hits
+### The wall the table hit, and how it was removed
 
-The full-scale artifact is 5.3 MB of C with **82 266** init statements, one
-per table cell write.  `gcc -O2` compiles it in 22.4 s and 447 MB.
-`ccomp -O2` **stack-overflows** at the default 8 MB stack, in
-`Env.IdentMap.add` — the same wall `ArraySegSieve`'s docstring records at
-`10¹²` for the prime table it deleted, reached here at `2.1·10¹⁰` because each
-entry carries a logarithm the root phase could not have computed.  Two exits,
-neither taken here:
+The first version tabulated every prime power: 27 421 entries, 82 277 init
+statements, 5.3 MB of C.  `gcc -O2` compiled it in 22.4 s and 447 MB;
+**`ccomp -O2` stack-overflowed** in `Env.IdentMap.add` at the default 8 MB
+stack, and with an unlimited stack was still climbing past 27 GB after four
+minutes when it was stopped — the same wall `ArraySegSieve`'s docstring
+records at `10¹²` for the prime table it deleted, reached here at `2.1·10¹⁰`
+because each entry carries a logarithm that a root phase could not have
+computed.
 
-* raise the stack (`ulimit -s unlimited`) — see the note below;
-* generate the `j ≥ 2` entries **in the artifact**: a fixed-length state
-  machine walking the prime table, `v := v·p` while `v ≤ hi`, copying the
-  weight, would halve the init block to the 13 415 `j = 1` entries, which is
-  the size range `ArraySegSieve` already compiles.
+Generating the `j ≥ 2` entries in the loop removes it.  Eight instructions in
+the body — `p^{j+1} = rQ·rBp`, one comparison against `hi`, and the cursor
+steps only when the bump does not fit — cost 2.5% of the run and halve the
+init block:
 
-Emission itself is 7 minutes and 0.5 GB of Lean; the earlier 54 GB was
-`refR2`, the emit-time reference fold, being handed `hi = 2.1·10¹⁰` and
-building a smallest-prime-factor table for it.  The driver now treats an empty
-positional argument as absent.
+| | entries | init statements | C bytes | ccomp `-O2` | gcc `-O2` |
+| --- | --- | --- | --- | --- | --- |
+| tabulated powers | 27 421 | 82 277 | 5 285 979 | stack overflow | 22.4 s, 447 MB |
+| generated in the loop | 13 415 | 40 259 | 2 611 288 | **104.3 s, 9.3 GB** | 8.5 s, 224 MB |
+
+`ccomp` compiles the production artifact.  Emission itself is 4 minutes and
+0.5 GB of Lean.
 
 ## 7. What this establishes, and what it does not
 
@@ -279,7 +293,9 @@ Built and proved (`propext, Classical.choice, Quot.sound`, no `sorry`, no
 
 * `Ports/R2SegSieve.lean` — `r2Program_wf` and `r2Program_compiled`, so
   `AProgram.evalCC_compile` applies and the emitted C computes exactly
-  `denote`; plus the four-mode kernel check against trial division;
+  `denote`; plus the four-mode kernel check against trial division, which the
+  in-loop power generation also exercises (the check's table is `2, 3`, and
+  the loop produces `4`, `8` and `9` itself);
 * `bench/R2SegEmit.lean`, `bench/ref_r2.c`, and the artifacts of §5.
 
 Not proved, exactly as in `ArraySegSieve` and `PsiSegSieve`: that `denote`
