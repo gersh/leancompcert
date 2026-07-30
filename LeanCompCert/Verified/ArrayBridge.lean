@@ -958,4 +958,187 @@ theorem AProgram.evalCC_compile (p : AProgram) (hWF : p.WF) (base : Int)
                           rw [← this]
                           exact hEpiStep.hregs.1 p.output hOutput
 
+/-! ## The generated-C side
+
+`MemFragment.lowerMSequence_correct` carries the bridge across the production
+lowering, so the emitted C function computes the denotation too.
+-/
+
+private theorem obind_some_inv {α β : Type} {o : Option α} {g : α → Option β}
+    {b : β} (h : Option.bind o g = some b) : ∃ a, o = some a ∧ g a = some b := by
+  cases o with
+  | none => rw [obind_none] at h; exact absurd h (by simp)
+  | some a => exact ⟨a, rfl, by rwa [obind_some] at h⟩
+
+/--
+**The bridge, in the generated-C model.**  For any lowering context in which
+the compiled trace lowers, and any C state related to the CCIR initial state,
+the lowered statements leave the program's denotation in the output local.
+-/
+theorem AProgram.evalC_compile (p : AProgram) (hWF : p.WF) (base : Int)
+    (hBase : BaseOk p.arrayLen base) (fn : CCIR.Function)
+    (statements : List C.CStmt)
+    (hFrag : ∀ mi ∈ p.compile, mi.WellFormed fn)
+    (hLower : lowerMSequence fn p.compile = .ok statements)
+    (t : MCState) (hMRel : MRel (p.initialMCC base) t)
+    (n : Nat) (hDenote : p.denote = some n) :
+    Option.bind (evalMCSequence t statements)
+        (fun t => t.env (ABI.localName (p.output + 1))) = some ((n : Nat) : Int) := by
+  have hCC := AProgram.evalCC_compile p hWF base hBase n hDenote
+  obtain ⟨m, hm, hout⟩ := obind_some_inv hCC
+  have hTrace := lowerMSequence_correct fn p.compile statements
+    (p.initialMCC base) t hMRel hFrag hLower
+  rw [hm] at hTrace
+  cases hC : evalMCSequence t statements with
+  | none => rw [hC] at hTrace; exact hTrace.elim
+  | some t' =>
+      rw [hC] at hTrace
+      rw [obind_some]
+      exact (hTrace.1 ⟨p.output + 1⟩).trans hout
+
+/-! ## Emission packaging (artifact path, not a theorem)
+
+`AProgram.compile` and its correctness are proved above; what is missing to
+reach a C file is the packaging into a CCIR function, which `Reflect.Program`
+has as `Program.toFn`.  The definitions below are that packaging for an array
+program.  They carry no proof obligation and no theorem above depends on them:
+the artifact is an independent cross-check, exactly as `emitRolled` is.
+
+The emitted function takes the array base as its single parameter, so a
+driver supplies storage:
+
+```c
+static uint64_t cells[N];
+... l_name((uint64_t)(uintptr_t)cells) ...
+```
+-/
+
+def AProgram.toBlock (p : AProgram) : CCIR.Block := {
+  id := ⟨0⟩
+  instructions := (p.compile.map MInstr.toCCIR).toArray
+  terminator := .return (some (.local ⟨p.output + 1⟩))
+}
+
+def AProgram.toFn (p : AProgram) (name : String) : CCIR.Function := {
+  name := ⟨name⟩
+  params := #[baseDecl p.regCount]
+  result := .u64
+  entry := ⟨0⟩
+  blocks := #[p.toBlock]
+  sourceDecl := some name
+}
+
+/-- Emit the unrolled array program as a checked translation unit. -/
+def AProgram.emitUnrolled (p : AProgram) (name : String) :
+    Except (Array String) String := do
+  let (_, source) ← Lower.compileProgram .portable { functions := #[p.toFn name] }
+  pure source
+
+/-! ### Rolled emission
+
+Unrolling keeps the theorems honest at any size but the emitted C must not be
+gigabytes at 10⁶ cells.  The rolled form mirrors `Verified.Rolled`: the loop
+index lives in a dedicated counter register, the body is compiled **once**
+with `.idx` mapped to that register, and the emitted function is a single
+`while` loop.  As in `Rolled`, this is an emission choice — every theorem
+above flows through the unrolled trace.
+-/
+
+/-- Compile an operand with the loop index read from the counter register. -/
+def compileAOperandVar (p : AProgram) : Reflect.Operand → CCIR.Operand
+  | .reg i => .local ⟨i + 1⟩
+  | .lit value => .uintLit .u64 value
+  | .idx => .local ⟨p.regCount + 1⟩
+
+def compileAInstrVarScalar (p : AProgram) : Instr → List StraightInstruction
+  | .mov dest src => [.assign (regLocal dest) (compileAOperandVar p src)]
+  | .binop dest op lhs rhs =>
+      match op.arithmetic?, op.comparison? with
+      | some arith, _ =>
+          [.binary (regLocal dest) arith
+            (compileAOperandVar p lhs) (compileAOperandVar p rhs)]
+      | none, some comparison =>
+          [.compare scratchLocal comparison
+            (compileAOperandVar p lhs) (compileAOperandVar p rhs),
+           .cast (regLocal dest) (.local ⟨0⟩)]
+      | none, none => []
+
+/-- The counter-augmented register count: one extra register for the index. -/
+def AProgram.augCount (p : AProgram) : Nat := p.regCount + 1
+
+def compileAInstrVar (p : AProgram) : AInstr → List MInstr
+  | .scalar i => (compileAInstrVarScalar p i).map MInstr.straight
+  | .load dest idxReg =>
+      (addressStraights p.augCount idxReg).map MInstr.straight ++
+        [ .load (regLocal dest) (.local (ptrDecl p.augCount).id) ]
+  | .store idxReg srcReg =>
+      (addressStraights p.augCount idxReg).map MInstr.straight ++
+        [ .store (.local (ptrDecl p.augCount).id) (.local ⟨srcReg + 1⟩) ]
+
+def compileAInstrsVar (p : AProgram) (l : List AInstr) : List MInstr :=
+  l.flatMap (compileAInstrVar p)
+
+/-- The counter increment closing each rolled iteration. -/
+def AProgram.incInstr (p : AProgram) : MInstr :=
+  .straight (.binary { id := ⟨p.regCount + 1⟩, type := .u64 } .add
+    (.local ⟨p.regCount + 1⟩) (.uintLit .u64 1))
+
+/-- Typing context for rolled lowering: the counter-augmented program at
+`loopCount := 1`, whose single body copy declares every local. -/
+def AProgram.loweringContext (p : AProgram) (name : String) : CCIR.Function :=
+  AProgram.toFn { p with regCount := p.augCount, loopCount := 1 } name
+
+private def lowerOrNone (fn : CCIR.Function) (l : List MInstr) :
+    Option (List C.CStmt) :=
+  match lowerMSequence fn l with
+  | .ok statements => some statements
+  | .error _ => none
+
+/-- The rolled C function: declarations, init, one `while` loop with a counter
+increment, epilogue, return. -/
+def AProgram.rolledCFunction (p : AProgram) (name : String) : Option C.CFunction := do
+  let ctx := p.loweringContext name
+  let initStatements ← lowerOrNone ctx
+    (apreamble p.augCount ++ compileAInstrs p.augCount 0 p.init)
+  let bodyStatements ← lowerOrNone ctx
+    (compileAInstrsVar p p.body ++ [p.incInstr])
+  let epilogueStatements ← lowerOrNone ctx (compileAInstrs p.augCount 0 p.epilogue)
+  let counter : C.CExpr := .var (ABI.localName (p.regCount + 1)) .u64
+  some {
+    name := ABI.mangle name
+    params := #[{ name := ABI.localName (baseDecl p.augCount).id.value, type := .u64 }]
+    result := .u64
+    body :=
+      #[C.CStmt.decl .u8 (ABI.localName 0) none] ++
+      ((Array.range p.augCount).map fun i =>
+        C.CStmt.decl .u64 (ABI.localName (i + 1)) none) ++
+      #[.decl .u64 (ABI.localName (addrDecl p.augCount).id.value) none,
+        .decl (.ptr .u64) (ABI.localName (ptrDecl p.augCount).id.value) none] ++
+      initStatements.toArray ++
+      #[.assign counter (.uintLit .u64 0)] ++
+      #[.whileLoop (.binary .u8 .lt counter (.uintLit .u64 p.loopCount))
+          bodyStatements.toArray] ++
+      epilogueStatements.toArray ++
+      #[.return (some (.var (ABI.localName (p.output + 1)) .u64))]
+    sourceDecl := some name
+  }
+
+/-- Emit the rolled array program as a checked translation unit. -/
+def AProgram.emitRolled (p : AProgram) (name : String) :
+    Except (Array String) String := do
+  match p.rolledCFunction name with
+  | none => throw #["rolled array lowering failed"]
+  | some fn =>
+      match C.emitChecked .portable {
+        includes := #["stdint.h", "stddef.h"]
+        externals := #[{
+          name := fn.name
+          params := fn.params.map C.CParam.type
+          result := fn.result
+          trusted := true }]
+        functions := #[fn] } with
+      | .ok source => pure source
+      | .error errors => throw (errors.map C.ValidationError.pretty)
+
+
 end LeanCompCert.Verified.ArrayState
