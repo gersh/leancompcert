@@ -38,6 +38,10 @@ import LeanCompCert.Ports.TGProth
 import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Ports.LogFixPort
+import LeanCompCert.Verified.AddWide
+import LeanCompCert.Verified.LogAccum
+import LeanCompCert.Ports.AddWidePort
+import LeanCompCert.Ports.PsiSegSieve
 import LeanCompCert.Testing.ArraySegCertificate
 
 
@@ -227,3 +231,26 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Verified.LogFixed.errB_le_48
 #print axioms LeanCompCert.Ports.LogFixPort.logRoundProgram_wf
 #print axioms LeanCompCert.Ports.LogFixPort.logRoundProgram_compiled
+
+-- The two-limb accumulator, and the psi residue it makes possible
+#print axioms LeanCompCert.Verified.AddWide.carry_bit
+#print axioms LeanCompCert.Verified.AddWide.borrow_bit
+#print axioms LeanCompCert.Verified.AddWide.addWide_spec
+#print axioms LeanCompCert.Verified.AddWide.addWide_exact
+#print axioms LeanCompCert.Verified.AddWide.subWide_exact
+#print axioms LeanCompCert.Verified.AddWide.sumWideFrom_spec
+#print axioms LeanCompCert.Verified.AddWide.sumWide_spec
+#print axioms LeanCompCert.Verified.LogAccum.logFix_lt
+#print axioms LeanCompCert.Verified.LogAccum.logFold_le
+#print axioms LeanCompCert.Verified.LogAccum.logFoldWide
+#print axioms LeanCompCert.Verified.LogAccum.logFoldWide_bracket
+#print axioms LeanCompCert.Ports.AddWidePort.addWideBody_denote
+#print axioms LeanCompCert.Ports.AddWidePort.addWideLoBody_denote
+#print axioms LeanCompCert.Ports.AddWidePort.subWideLoBody_denote
+#print axioms LeanCompCert.Ports.AddWidePort.accProgram_wf
+#print axioms LeanCompCert.Ports.AddWidePort.accProgram_compiled
+#print axioms LeanCompCert.Ports.PsiSegSieve.body_all
+#print axioms LeanCompCert.Ports.PsiSegSieve.init_all
+#print axioms LeanCompCert.Ports.PsiSegSieve.epilogue_all
+#print axioms LeanCompCert.Ports.PsiSegSieve.psiProgram_wf
+#print axioms LeanCompCert.Ports.PsiSegSieve.psiProgram_compiled

@@ -2,6 +2,73 @@
 
 ## Unreleased
 
+- **The two-limb accumulator, and the `ψ` residue it makes runnable** — the
+  one thing between the design of the previous entry and an artifact.
+  `Verified/AddWide.lean` supplies the missing primitive:
+  `addWide`/`subWide` over a pair of `u64` limbs, with the carry recovered by
+  a **proved comparison** (`carry_bit`: for `u, v < 2⁶⁴` the truncated sum is
+  below `v` exactly when the untruncated one overflowed), so no carry flag and
+  no branch is needed.  `addWide_spec` is the `mod 2¹²⁸` statement,
+  `sumWide_spec` the fold: a list of `u64`s whose total is below `2¹²⁸`
+  accumulates *exactly*, with no hypothesis about how the carries interact.
+  - **Four instructions, not six.**  `add`, `lt`, `add`, `add` — the carry
+    test reads the addend, which the first instruction does not touch, so
+    there is no copy and no temporary.  The one-word specializations, which
+    are what the loop runs, are three each.  `Ports/AddWidePort.lean` proves
+    the register file computes them (`addWideBody_denote` and friends), stated
+    in the form a loop body consumes: accumulator limbs out, every other
+    register untouched, under an explicit `WideRegs` separation condition.
+  - **The bracket survives the machine.**  `Verified/LogAccum.lean` restates
+    `logFold_bracket` over `wval (sumWide …)` — the value of the *pair of
+    registers*, not of an idealized `Nat`.  The error term `2·#terms` is
+    unchanged, because `logFoldWide` says the accumulation is exact rather
+    than approximate.  The two side conditions are `logFix_lt`
+    (`logFix S n < 2^(S+6)`, so one term is one word, and `S ≤ 58`) and a size
+    bound on the total which at `S = 48` over `π*(10¹³)` terms leaves 35 bits
+    of headroom.  **`S = 48`** is the choice: `45.32` is the floor the
+    printed constant's margin sets, `58` the ceiling a one-word term sets, and
+    at `48` the enclosure is `1.6·10⁻⁹` — one sixth of the last printed digit.
+  - **A fourth loop phase.**  `Ports/PsiSegSieve.lean` is the residue as an
+    `AProgram`.  A window's period is `markSteps + segLen + logSteps`: the
+    accumulation phase drops the `μ` decoding entirely (nine instructions and
+    a whole array plane), merges the emit-time prime-power table in by one
+    cursor and one comparison, and **compacts** the test points into a stream;
+    the log phase drains it, one squaring round per iteration, `S` per entry,
+    the entry boundary carried by a wrapping counter rather than a division.
+    `logSteps = S·streamCap` is a budget, and both ways it can be wrong — a
+    window over budget, a stream left undrained — are counted as violations by
+    the loop itself.  Four more guards (the prime gap, the `⌊√n⌋` step, the
+    `⌊log₂ n⌋` step, the accumulator's range) mean a zero output is a
+    statement about the run and not only about the mathematics.
+  - **The comparisons are one word.**  A clause's right-hand side is a 70-bit
+    product; both sides are shifted right by 16 first, the constants
+    pre-shifted **downward on both sides** at emit time.  Passing clause 1
+    certifies `(ψ(n) − n)/√n ≤ 0.79059276 + 2.3·10⁻¹⁰/√n` against a margin of
+    `10⁻⁸`, for 7 instructions instead of about 40.
+  - **It agrees with the oracle bit for bit.**  At `hi = 10⁶, 10⁷, 10⁸` the
+    artifact's residual equals `bench/ref_psi.c`'s to the last bit
+    (`D(10⁸) = −494 608 778 557 207 013`), reproducing
+    `ψ(10⁶) = 999 586.597496` and `ψ(10⁸) = 99 998 242.796627`, with zero
+    violations; `ccomp` and `gcc` outputs are byte-identical.  Measured
+    `201.9 ns/integer` under `ccomp` at `10⁸` (`120.9` gcc), a body of 246
+    instructions, and `κ = 0.1066 ns` fitted to `±2%` across the three sizes.
+    At `10¹³` the computed configuration is `6.041` iterations per integer, so
+    **`158 ns/integer` and `18.3 days` on one core** under `ccomp`
+    (`11.3 days` gcc).  No full-scale run was started.
+  - **One fragment question, closed without an extension.**  The mantissa
+    reset shifts by a register, and the fragment's `shl` is total where C's is
+    undefined at width ≥ 64.  The amount is provably in `[0, 62]`, so instead
+    of a checked-shift instruction the emitted amount is masked with `& 63`:
+    one instruction, a no-op under the invariant, and the emitted C becomes
+    total rather than merely correct.  Nothing else wanted an instruction the
+    fragment lacks — the two-limb add needs no carry flag, the `ln 2`
+    conversion no 128-bit multiply (eleven instructions of 32-bit halves,
+    because `logFix < 2⁵⁴`), the clause tests no 128-bit compare.
+  - `Ports/ArraySegSieve` is **untouched**: the `mertens` artifact still
+    agrees with `bench/ref_seg.c` on all seven slots (`M(10⁷) = 1037`,
+    `Q(10⁷) = 6 079 291`) and `check-native --force` is 10/10.  Full numbers
+    in `bench/results/psi_fold.md`.
+
 - **A logarithm for the fragment, and the two families that need one** — two
   of the six reduced on-cone families are not integer folds: `ψ(n)` and
   `R₂*(n)` sum logarithms of primes, which the Möbius sieve does not produce.

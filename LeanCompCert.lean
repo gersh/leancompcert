@@ -32,6 +32,10 @@ import LeanCompCert.Verified.MemFragment
 import LeanCompCert.Verified.ArrayBridge
 import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Ports.LogFixPort
+import LeanCompCert.Verified.AddWide
+import LeanCompCert.Verified.LogAccum
+import LeanCompCert.Ports.AddWidePort
+import LeanCompCert.Ports.PsiSegSieve
 import LeanCompCert.Testing.ArrayMobiusCertificate
 import LeanCompCert.Testing.ArraySegCertificate
 import LeanCompCert.Verified.Limb
