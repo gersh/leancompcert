@@ -946,23 +946,46 @@ def mertensLiveProgram (c : Cfg) (s0 : Nat) (s : MertensSeed)
 
 /-! ### The `Σ μ(m)/m` program
 
-`|Σ_{m≤n} μ(m)/m| ≤ g(n)` with `g` antitone, so the window's **right** end is
-the worst point.  The threshold is `⌊2⁶²·g(hi)⌋ − ⌈hi/2⌉`: the subtraction is
-the accumulated round-to-nearest budget, which makes the integer test a bound
-on the real sum.
+The family these two modes certify is the *cell* family — the one the
+real-variable statement `|Σ_{m≤x} μ(m)/m| ≤ g(x)` on `[a, b)` reduces to.  On
+the unit cell `[n, n+1)` the step `Σ_{m≤x} μ(m)/m` is constant while the
+antitone `g` is falling, so the binding value is `g(n+1)`, not `g(n)`:
+
+  `|Σ_{m≤n} μ(m)/m| ≤ g(n+1)`,   `g = √(2/·)` or `1/(2√·)`.
+
+`g` is antitone, so over a window `[lo, hi]` the worst cell is the last one and
+one threshold per artifact suffices — **provided it is evaluated at `hi + 1`.**
+Evaluating it at `hi` gives a threshold larger by a relative `1/(2·hi)`, which
+is the direction that lets a false claim pass: it is a test *weaker* than the
+family it is supposed to certify, and it is exactly the `x <` versus `x ≤`
+off-by-one that made `residual_platt_stronger_range`'s closed-interval form
+false at its own endpoint.  The per-integer residue `mobiusLiveResidue` has
+always tested the `⌈√(n+1)⌉` form; these two now agree with it.
+
+The threshold is therefore `⌊2⁶²·g(hi+1)⌋ − ⌈hi/2⌉`, the subtraction being the
+accumulated round-to-nearest budget, which makes the integer test a bound on
+the real sum and not merely on its fixed-point image.
+
+The `N + 1` also removes the `N = 0` corner, where `2^e / N` was `0` in `Nat`
+and the threshold silently collapsed to `0`.
 -/
 
-/-- `⌊2⁶²·√(2/N)⌋ − ⌈N/2⌉` — Platt's (2.11) majorant.  The subtracted
-`⌈N/2⌉` is the accumulated round-to-nearest budget, so passing this test
-bounds the *real* `Σ μ(m)/m`, not merely its fixed-point image. -/
+/-- `⌊2⁶²·√(2/(N+1))⌋ − ⌈N/2⌉` — Platt's (2.11) majorant at the worst point of
+the last cell of `[lo, N]`.  The subtracted `⌈N/2⌉` is the accumulated
+round-to-nearest budget, so passing this test bounds the *real* `Σ μ(m)/m`,
+not merely its fixed-point image.
+
+Both roundings go the conservative way: `Nat.sqrt ∘ (· / ·)` is a double floor,
+so `raw ≤ 2⁶²·√(2/(N+1))`, and the budget is `⌈N/2⌉ ≥ n/2` for every `n ≤ N`. -/
 def platt211Threshold (N : Nat) : Nat :=
-  let raw := Nat.sqrt (2 ^ 125 / N)
+  let raw := Nat.sqrt (2 ^ 125 / (N + 1))
   let budget := (N + 1) / 2
   if raw ≤ budget then 0 else raw - budget
 
-/-- `⌊2⁶²/(2√N)⌋ − ⌈N/2⌉` — Platt's stronger rigorously-computed range. -/
+/-- `⌊2⁶²/(2√(N+1))⌋ − ⌈N/2⌉` — Platt's stronger rigorously-computed range,
+again sampled at the worst point `N + 1` of the window's last cell. -/
 def plattStrongerThreshold (N : Nat) : Nat :=
-  let raw := Nat.sqrt (2 ^ 122 / N)
+  let raw := Nat.sqrt (2 ^ 122 / (N + 1))
   let budget := (N + 1) / 2
   if raw ≤ budget then 0 else raw - budget
 
