@@ -47,6 +47,7 @@ import LeanCompCert.Testing.ArraySegCertificate
 import LeanCompCert.Verified.DyadicBisect
 import LeanCompCert.Ports.A36Bisect
 import LeanCompCert.Ports.A36BisectProgram
+import LeanCompCert.Verified.ExpFixed
 
 
 /-!
@@ -301,3 +302,11 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.R2SegSieve.epilogue_all
 #print axioms LeanCompCert.Ports.R2SegSieve.r2Program_wf
 #print axioms LeanCompCert.Ports.R2SegSieve.r2Program_compiled
+#print axioms LeanCompCert.Verified.ExpFixed.bit_split
+#print axioms LeanCompCert.Verified.ExpFixed.expIter_range
+#print axioms LeanCompCert.Verified.ExpFixed.expIter_spec
+#print axioms LeanCompCert.Verified.ExpFixed.expFix_bracket
+#print axioms LeanCompCert.Verified.ExpFixed.expFix_rel_width
+#print axioms LeanCompCert.Verified.ExpFixed.expIter_fits_64
+#print axioms LeanCompCert.Verified.ExpFixed.expOK_sound
+#print axioms LeanCompCert.Verified.ExpFixed.rpow_bracket

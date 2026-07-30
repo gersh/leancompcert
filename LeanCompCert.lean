@@ -37,6 +37,7 @@ import LeanCompCert.Verified.LogAccum
 import LeanCompCert.Ports.AddWidePort
 import LeanCompCert.Ports.PsiSegSieve
 import LeanCompCert.Verified.DyadicBisect
+import LeanCompCert.Verified.ExpFixed
 import LeanCompCert.Ports.A36Bisect
 import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Ports.R2SegSieve
