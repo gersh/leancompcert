@@ -178,11 +178,11 @@ one (`S`).  A window `[lo, hi]` therefore weakens the family by
 
 | ratio | weakening | windows to cover `[33, 10¹⁶]` | windows to cover `[3, 10¹²]` |
 | --- | --- | --- | --- |
-| 1.10 | 4.9% | 377 | 279 |
-| 1.02 | 1.0% | 1 843 | 1 366 |
-| 1.001 | 0.05% | 36 700 | 27 200 |
+| 1.10 | 4.9% | 350 | 278 |
+| 1.02 | 1.0% | 1 684 | 1 340 |
+| 1.001 | 0.05% | 33 362 | 26 546 |
 
-This is not free — at ratio 1.001 the emission alone is 36 700 artifacts — but
+This is not free — at ratio 1.001 the emission alone is 33 362 artifacts — but
 it is a schedule, not an obstruction, and the artifacts are independent.  The
 per-window loss can be removed altogether by maintaining `⌊42√n⌋` in a register
 (it increases by at most 1 per integer for `n ≥ 441`, so it is three
