@@ -26,6 +26,9 @@ import LeanCompCert.Verified.ListFold
 import LeanCompCert.Verified.PackedSieve
 import LeanCompCert.Verified.Segment
 import LeanCompCert.Verified.FoldBridge
+import LeanCompCert.Verified.Prop1224Margin
+import LeanCompCert.Ports.Prop1224Cell
+import LeanCompCert.Ports.Prop1224Row
 import LeanCompCert.Ports.RS62Increments
 import LeanCompCert.Ports.RS62LoopE
 import LeanCompCert.Ports.TGSieve
@@ -354,3 +357,36 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.DirichletLadder.epilogueBlock_wf
 #print axioms LeanCompCert.Ports.DirichletLadder.ainstrWFB_correct
 #print axioms LeanCompCert.Testing.DirichletLadderCertificate.program_wf
+#print axioms LeanCompCert.Verified.Prop1224Margin.le_cdiv_mul
+#print axioms LeanCompCert.Verified.Prop1224Margin.k0_covers
+#print axioms LeanCompCert.Verified.Prop1224Margin.lamCube_ge
+#print axioms LeanCompCert.Verified.Prop1224Margin.lamHi_covers
+#print axioms LeanCompCert.Verified.Prop1224Margin.marginOK_sound
+#print axioms LeanCompCert.Verified.Prop1224Margin.gqTerm_ge
+#print axioms LeanCompCert.Verified.Prop1224Margin.gqTerm_lt
+#print axioms LeanCompCert.Verified.Prop1224Margin.cbrtOK_sound
+#print axioms LeanCompCert.Verified.Prop1224Margin.cbrtOK_mono
+#print axioms LeanCompCert.Verified.Prop1224Margin.envHi_ge
+#print axioms LeanCompCert.Verified.Prop1224Margin.phiLo_le
+#print axioms LeanCompCert.Verified.Prop1224Margin.posLo_le
+#print axioms LeanCompCert.Ports.Prop1224Cell.cbrtStep_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.coprimeBody_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.body_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.init_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.epilogue_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.cellProgram_wf
+#print axioms LeanCompCert.Ports.Prop1224Cell.cellProgram_compiled
+#print axioms LeanCompCert.Ports.Prop1224Row.logRound_all
+#print axioms LeanCompCert.Ports.Prop1224Row.expRound_all
+#print axioms LeanCompCert.Ports.Prop1224Row.logEngine_all
+#print axioms LeanCompCert.Ports.Prop1224Row.expEngine_all
+#print axioms LeanCompCert.Ports.Prop1224Row.markBody_all
+#print axioms LeanCompCert.Ports.Prop1224Row.deriveBody_all
+#print axioms LeanCompCert.Ports.Prop1224Row.latchBody_all
+#print axioms LeanCompCert.Ports.Prop1224Row.finishBody_all
+#print axioms LeanCompCert.Ports.Prop1224Row.tailBody_all
+#print axioms LeanCompCert.Ports.Prop1224Row.body_all
+#print axioms LeanCompCert.Ports.Prop1224Row.init_all
+#print axioms LeanCompCert.Ports.Prop1224Row.epilogue_all
+#print axioms LeanCompCert.Ports.Prop1224Row.rowProgram_wf
+#print axioms LeanCompCert.Ports.Prop1224Row.rowProgram_compiled

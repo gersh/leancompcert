@@ -151,11 +151,158 @@ both enclosures carried.  That is the design a port should start from.
 1. A `Ports/` module for the per-`q` row: three-plane marking to distinct prime
    factors and `φ(q)` (the `R2SegSieve` pattern, whose `prod ≠ n` test for "a
    prime above `√hi` remains" is directly reusable), then the `f₁`, `ϖ`, `λ`
-   pipeline over `ExpFixPort`.
+   pipeline over `ExpFixPort`.  **Landed** as `Ports/Prop1224Row.lean`; see
+   "The row module, measured" below.
 2. A `Ports/` module for the `(q,k)` cell: the coprime squarefree `1/φ(r)`
-   accumulation at `2^62`, and the margin.
+   accumulation and the margin.  **Landed** as
+   `Ports/Prop1224Cell.lean`; see below.
 3. The `claude_math` merge above, so the atom is a hypothesis and not a call.
+   **Not done, deliberately** — the bridge file cannot compile on master
+   without also merging the `SparkInterval → ../gpu_prover_wt_leanbridge` path
+   dependency, which is entangled with in-flight `gpu_prover` consolidation.
 4. The bridge from the artifact's integer margin back to the real-valued
-   statement — the analogue of what `rpow_bracket` already does for one `rpow`.
+   statement.  **Landed** as `Verified/Prop1224Margin.lean`.
 
 None of these is blocked on the exponential any more.
+
+## What the port revised in this note
+
+Three things in the estimate above turned out to be wrong, all in the
+favourable direction.
+
+**`c_E` cancels out of the checked inequality.**  Substituting `κ*` and `err`
+and collecting, the per-cell test is
+
+```
+(φ(q)/q)·[ log k + (1−ω*)·log q + ω*·L(q) + 1.36 ] ≥ G_q(k) + ω*·7.284·(20000k)^{−1/3}·f₁(q)
+```
+
+in which `c_E` does not appear.  It survives only inside the *window*, where it
+is a hypothesis, so its proved bracket `1.3325822 ≤ c_E ≤ 1.3339` costs cells
+(about `16 %` more at `q = 1`) rather than soundness.
+
+**`λ(q)` needs no cube root, and the cell needs no exponential.**  The window
+hypothesis is `k^{1/3}·κ*(q) < B(q)`; cubing gives `k·κ*³ < B³`, which is pure
+integer monotonicity (`Prop1224Margin.lamHi_covers`).  And `(20000k)^{−1/3}`,
+which looked like one `rpow` per cell at `1.34 µs`, is instead a register
+`t = ⌊2^5(20000k)^{1/3}⌋` advanced over consecutive `k` and certified by
+`t³ ≤ 2^15·20000k` (`Prop1224Margin.cbrtOK`).  Measured in the oracle, that
+change alone cut the cell loop `3.0×`.
+
+**The row needs ≈ 4 `rpow`, not 12.**  `f₁`'s per-prime factor depends only on
+`p`, and the `5 820` primes below `⌊√(3.3·10⁹)⌋` fit in an emit-time table, so
+only `q`'s single large prime costs an exponential — and only one, since for
+`P > 57446` the factor is bounded above by `1 + P^{−2/3}`.  What is left is
+`ϖ₀`'s three (`q^τ`, and two integer-base powers that replace fixed-point ones
+via `x^a ≥ ⌊x⌋^a`), plus a fourth for `ϖ`'s third term on the `q < 2^17` rows
+only.  Only `rpowLo` is ever called: `f₁` is wanted from above, and every
+direction inverts to a lower bound on the exponentials.
+
+## Revised projection
+
+Measured on this box (20 cores, `ccomp` 3.17, `gcc -O2`):
+
+| phase | work | measured | source |
+| --- | ---: | ---: | --- |
+| one `rpow` | | `1.34 µs` | `bench/results/exp_fixed.md`, unchanged |
+| `q` rows, oracle C | `3.389·10⁹` | `3142 ns/row` ccomp, `2549` gcc | `bench/ref_p1224.c` |
+| `(q,k)` cells, oracle C | `7.5·10⁷` | `118.9 ns/cell` ccomp, `96.4` gcc | `bench/ref_p1224.c` |
+| `(q,k)` cells, **the artifact** | `4.3·10⁸` instructions | `915 ns/cell` ccomp, `610` gcc | `bench/Prop1224CellEmit.lean` |
+
+The artifact's cell phase is `9.5×` the oracle's, which is the price of
+branchlessness: every phase's instructions execute on every one of the `25`
+loop iterations a cell costs (one accumulate pass and `S = 24` squaring
+rounds), and none of them can be skipped.  It still sustains `7.2·10⁹`
+register-machine instructions per second under `ccomp`, so the whole cell
+phase — `1.2·10⁸` `r`-steps — is **under two minutes**.
+
+The row phase has no artifact yet, so its number is a projection from the
+measured primitive rather than a measurement: `4` `rpow` per row at the
+measured `1.34 µs` is `≈ 5 core-hours` over `3.389·10⁹` rows, plus `≈ 0.5` for
+the segmented factorisation at `R2SegSieve`'s measured `1.5–2·10⁶` rows/s.
+
+| | ccomp artifact |
+| --- | ---: |
+| row transcendentals, `3.389·10⁹ × 4 rpow` | `≈ 5.0` core-hours (projected) |
+| row factorisation | `≈ 0.5` core-hours (projected) |
+| `(q,k)` cells, `1.2·10⁸` `r`-steps | `0.03` core-hours (**measured**) |
+| **total** | **`≈ 5.6` core-hours** |
+
+against the `105–640` core-hours the MPFR campaign budgets — a factor of `19`
+to `115`.  **Still not run.**
+
+## Two emit-time hazards met in practice
+
+*Literal tables overflow `ccomp`.*  The note above records `27 421` entries
+doing it at `27 GB`.  The cell module first initialised its two multiplicative
+planes with `2·segLen` literal stores, which at the production `segLen = 2^16`
+is `131 072` — five times over.  The fix costs two instructions per mark and
+two per cell: the planes start at the array's own zero fill and a zero cell is
+read as the neutral `1`, which is `R2SegSieve`'s `0`-means-`1` correction.
+
+*Emission is quadratic in `arrayLen`.*  `5.9 s` at `16 433` cells, `78 s` at
+`65 607`.  This is emit-time only and does not affect the artifact, but it does
+bound how large a single window can usefully be.
+
+## The row module, measured
+
+`Ports/Prop1224Row.lean` landed; `bench/results/p1224_row.md` has the run log.
+Three things in the revised projection above turned out to be wrong, all in the
+unfavourable direction, and one thing about the *statement* turned out to be
+wrong in the safe direction.
+
+**The row needs five exponentials, not four.**  The optimisation the note
+proposed — bounding the large prime's `f₁` factor by `1 + P^{−2/3}`, one
+`rpow` instead of two — is not what `bench/ref_p1224.c` computes, and the
+oracle is the specification.  The port therefore evaluates `f₁`'s exact factor
+at the large prime, which costs `p^{1/3}` and `p^{2/3}` from below.  It costs
+nothing in *iterations*: the chain
+
+```
+log q → q^τ → (c₂*q^τ) → log w → w^{τ/(1−τ)} → (base) → log b → b^{1/(1−τ)} → ϖ₀
+```
+
+is six stages long whatever else is scheduled, and one logarithm engine plus
+one exponential engine running concurrently leave exactly two exponential slots
+free, which is where the large prime's pair goes.  Six slots of `S = 24`
+rounds, and a seventh only on the `q < 2^17` rows, where `ϖ`'s third term needs
+`rpowHi`.
+
+**The cost is not the exponential, it is the iteration.**  Every phase's
+instructions execute on every iteration of an `AProgram`, so the segmented
+sieve, the slot muxes and the row finish's ten `udiv`s are paid `40` times per
+row, not once.  The module's `expUnroll` parameter — `k` copies of both round
+bodies in the body, `S/k` iterations per slot — is the lever: at `k = 1` a row
+is `147` iterations and `1.3·10⁵` instructions, at `k = 4` it is `41`
+iterations and `6.6·10⁴`, and the wall time follows.
+
+**Measured, at `q ≈ 3·10⁹` with the mark table of the full `3.3·10⁹` sweep:**
+`9.6 µs` per row under `gcc -O2` (`0.63 s` for `65 536` rows) and `1.2–1.6×`
+that under `ccomp`, i.e. `12–15 µs`.  Over `3.389·10⁹` rows:
+
+| | ccomp artifact |
+| --- | ---: |
+| `q` rows, `expUnroll = 4` | `≈ 12` core-hours (**measured** on `2·10⁵` rows) |
+| `(q,k)` cells, `1.2·10⁸` `r`-steps | `0.03` core-hours (**measured**) |
+| **total** | **`≈ 12` core-hours** |
+
+against `105–640` — a factor of `9` to `53`, against the `19`–`115` this note
+projected.  **Still not run at scale.**
+
+## A third emit-time hazard, and one soundness note
+
+*CompCert's compile time, not its stack, is the wall for a big table.*  The
+production mark table is `5 823` primes at two cells each; `ccomp -O` on the
+resulting `2.2 MB` translation unit takes `38` minutes and `6.5 GB`, against
+seconds for gcc.  It succeeds — `11 648` entries is well under the `27 421`
+that overflowed the stack — but it is paid once per emitted slice.
+
+*The oracle's window floor is one cell tighter than the proved guard.*
+`ref_p1224.c` sweeps from `k0 = ⌊ϖ_lo/2^E⌋ + 1`; `Prop1224Margin.k0_covers`
+proves the guard only for `⌊ϖ_lo/2^E⌋`.  The `+1` skips an admissible `k`
+exactly when `ϖ_lo` is an exact multiple of `2^E` and equals `ϖ(q)` — measure
+zero, no counterexample known, but it is the *silent* direction, so
+`Ports/Prop1224Row.lean` reports both counts.  Over `[1, 257)` they differ by
+`256`, one per non-empty window; over the whole range that is `≈ 1.3·10⁶` extra
+cells on `6.7·10⁷`, under two per cent. A production run should take the
+proved floor.
