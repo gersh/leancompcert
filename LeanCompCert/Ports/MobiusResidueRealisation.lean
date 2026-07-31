@@ -218,12 +218,12 @@ theorem denoteAInstrs_frame_arr (len idx : Nat) (S : Nat → Bool)
 
 /-! ### The six sections, one at a time -/
 
-private theorem blkA_ok (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0) :
+theorem blkA_ok (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0) :
     ∃ s', denoteAInstrs len idx s (blkA k) = some s' := by
   simp [blkA, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
     denoteOperand, RegState.set, hn]
 
-private theorem blkA_wl (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0)
+theorem blkA_wl (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0)
     {s' : AState} (h : denoteAInstrs len idx s (blkA k) = some s') :
     s'.regs 160 = (wPair k (s.regs 65)).1 :=
   map_elim (f := fun t => t.regs 160) h (by
@@ -231,7 +231,7 @@ private theorem blkA_wl (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0)
       denoteOperand, RegState.set, hn, wPair]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-private theorem blkA_wh (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0)
+theorem blkA_wh (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0)
     {s' : AState} (h : denoteAInstrs len idx s (blkA k) = some s') :
     s'.regs 162 = (wPair k (s.regs 65)).2 :=
   map_elim (f := fun t => t.regs 162) h (by
@@ -240,25 +240,25 @@ private theorem blkA_wh (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0)
     try simp [Nat.add_mod, Nat.mul_mod])
 
 
-private theorem blkB_ok (len idx : Nat) (s : AState) :
+theorem blkB_ok (len idx : Nat) (s : AState) :
     ∃ s', denoteAInstrs len idx s blkB = some s' := ⟨_, rfl⟩
 
-private theorem blkC_ok (k len idx : Nat) (s : AState) :
+theorem blkC_ok (k len idx : Nat) (s : AState) :
     ∃ s', denoteAInstrs len idx s (blkC k) = some s' := ⟨_, rfl⟩
 
-private theorem blkD_ok (len idx : Nat) (s : AState) :
+theorem blkD_ok (len idx : Nat) (s : AState) :
     ∃ s', denoteAInstrs len idx s blkD = some s' := ⟨_, rfl⟩
 
-private theorem blkE_ok (len idx : Nat) (s : AState) :
+theorem blkE_ok (len idx : Nat) (s : AState) :
     ∃ s', denoteAInstrs len idx s blkE = some s' := ⟨_, rfl⟩
 
-private theorem blkF_ok (k len idx : Nat) (s : AState) (hc : s.regs rCeil ≠ 0) :
+theorem blkF_ok (k len idx : Nat) (s : AState) (hc : s.regs rCeil ≠ 0) :
     ∃ s', denoteAInstrs len idx s (blkF k) = some s' := by
   simp only [rCeil] at hc
   simp [blkF, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
     denoteOperand, RegState.set, rCeil, rMViol, hc]
 
-private theorem blkB_tLo (k len idx : Nat) (s : AState) 
+theorem blkB_tLo (k len idx : Nat) (s : AState) 
     {s' : AState} (h : denoteAInstrs len idx s (blkB) = some s') :
     s'.regs 100 = (accStep (s.regs 79) (s.regs 80) (s.regs 160) (s.regs 162) (s.regs 100)
       (s.regs 101)).1 :=
@@ -267,7 +267,7 @@ private theorem blkB_tLo (k len idx : Nat) (s : AState)
       denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, accStep]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-private theorem blkB_tHi (k len idx : Nat) (s : AState) 
+theorem blkB_tHi (k len idx : Nat) (s : AState) 
     {s' : AState} (h : denoteAInstrs len idx s (blkB) = some s') :
     s'.regs 101 = (accStep (s.regs 79) (s.regs 80) (s.regs 160) (s.regs 162) (s.regs 100)
       (s.regs 101)).2 :=
@@ -276,7 +276,7 @@ private theorem blkB_tHi (k len idx : Nat) (s : AState)
       denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, accStep]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-private theorem blkC_v (k len idx : Nat) (s : AState) 
+theorem blkC_v (k len idx : Nat) (s : AState) 
     {s' : AState} (h : denoteAInstrs len idx s (blkC k) = some s') :
     s'.regs 152 = vBias k (s.regs 100) (s.regs 101) :=
   map_elim (f := fun t => t.regs 152) h (by
@@ -284,7 +284,7 @@ private theorem blkC_v (k len idx : Nat) (s : AState)
       denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, vBias]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-private theorem blkD_abs (k len idx : Nat) (s : AState) 
+theorem blkD_abs (k len idx : Nat) (s : AState) 
     {s' : AState} (h : denoteAInstrs len idx s (blkD) = some s') :
     s'.regs 159 = absBias (s.regs 152) :=
   map_elim (f := fun t => t.regs 159) h (by
@@ -292,7 +292,7 @@ private theorem blkD_abs (k len idx : Nat) (s : AState)
       denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, absBias]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-private theorem blkE_cel (k len idx : Nat) (s : AState) 
+theorem blkE_cel (k len idx : Nat) (s : AState) 
     {s' : AState} (h : denoteAInstrs len idx s (blkE) = some s') :
     s'.regs 102 = (celStep (s.regs 65) (s.regs 103) (s.regs 102) (s.regs 133)).1 :=
   map_elim (f := fun t => t.regs 102) h (by
@@ -300,7 +300,7 @@ private theorem blkE_cel (k len idx : Nat) (s : AState)
       denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, celStep]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-private theorem blkE_celSq (k len idx : Nat) (s : AState) 
+theorem blkE_celSq (k len idx : Nat) (s : AState) 
     {s' : AState} (h : denoteAInstrs len idx s (blkE) = some s') :
     s'.regs 103 = (celStep (s.regs 65) (s.regs 103) (s.regs 102) (s.regs 133)).2 :=
   map_elim (f := fun t => t.regs 103) h (by
@@ -314,7 +314,7 @@ private theorem shiftRight_mod_self (x j : Nat) :
   rw [Nat.shiftRight_eq_div_pow]
   exact Nat.div_le_self _ _
 
-private theorem blkF_viol (k len idx : Nat) (s : AState) (hc : s.regs rCeil ≠ 0)
+theorem blkF_viol (k len idx : Nat) (s : AState) (hc : s.regs rCeil ≠ 0)
     {s' : AState} (h : denoteAInstrs len idx s (blkF k) = some s') :
     s'.regs 104 = violStep k (s.regs 65) (s.regs 159) (s.regs 102) (s.regs 133)
       (s.regs 104) := by
@@ -384,121 +384,34 @@ private theorem SF_false {j : Nat} (h : ¬ Written j) : SF j = false := by
   simp only [decide_eq_false_iff_not]
   omega
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 1000000 in
-private theorem residue_chain (k len idx : Nat) (s : AState)
-    (hn : s.regs 65 ≠ 0) (hc : celAfter (readSig s) (readRes s) ≠ 0) :
-    ∃ f : AState, denoteAInstrs len idx s (mobiusLiveResidue k) = some f ∧
-      f.arr = s.arr ∧ (∀ j, ¬ Written j → f.regs j = s.regs j) ∧
-      readRes f = resStep k (readSig s) (readRes s) := by
-  obtain ⟨a, ha⟩ := blkA_ok k len idx s hn
-  obtain ⟨b, hb⟩ := blkB_ok len idx a
-  obtain ⟨c, hcc⟩ := blkC_ok k len idx b
-  obtain ⟨d, hd⟩ := blkD_ok len idx c
-  obtain ⟨e, he⟩ := blkE_ok len idx d
-  have fA := denoteAInstrs_frame len idx SA (blkA k) (SA_dests k) s a ha
-  have fB := denoteAInstrs_frame len idx SB blkB SB_dests a b hb
-  have fC := denoteAInstrs_frame len idx SC (blkC k) (SC_dests k) b c hcc
-  have fD := denoteAInstrs_frame len idx SD blkD SD_dests c d hd
-  have fE := denoteAInstrs_frame len idx SE blkE SE_dests d e he
-  -- one-step frame equations, all small
-  have a65 : a.regs 65 = s.regs 65 := fA 65 rfl
-  have a79 : a.regs 79 = s.regs 79 := fA 79 rfl
-  have a80 : a.regs 80 = s.regs 80 := fA 80 rfl
-  have a100 : a.regs 100 = s.regs 100 := fA 100 rfl
-  have a101 : a.regs 101 = s.regs 101 := fA 101 rfl
-  have a102 : a.regs 102 = s.regs 102 := fA 102 rfl
-  have a103 : a.regs 103 = s.regs 103 := fA 103 rfl
-  have a104 : a.regs 104 = s.regs 104 := fA 104 rfl
-  have a133 : a.regs 133 = s.regs 133 := fA 133 rfl
-  have b65 : b.regs 65 = a.regs 65 := fB 65 rfl
-  have b102 : b.regs 102 = a.regs 102 := fB 102 rfl
-  have b103 : b.regs 103 = a.regs 103 := fB 103 rfl
-  have b104 : b.regs 104 = a.regs 104 := fB 104 rfl
-  have b133 : b.regs 133 = a.regs 133 := fB 133 rfl
-  have c65 : c.regs 65 = b.regs 65 := fC 65 rfl
-  have c100 : c.regs 100 = b.regs 100 := fC 100 rfl
-  have c101 : c.regs 101 = b.regs 101 := fC 101 rfl
-  have c102 : c.regs 102 = b.regs 102 := fC 102 rfl
-  have c103 : c.regs 103 = b.regs 103 := fC 103 rfl
-  have c104 : c.regs 104 = b.regs 104 := fC 104 rfl
-  have c133 : c.regs 133 = b.regs 133 := fC 133 rfl
-  have d65 : d.regs 65 = c.regs 65 := fD 65 rfl
-  have d100 : d.regs 100 = c.regs 100 := fD 100 rfl
-  have d101 : d.regs 101 = c.regs 101 := fD 101 rfl
-  have d102 : d.regs 102 = c.regs 102 := fD 102 rfl
-  have d103 : d.regs 103 = c.regs 103 := fD 103 rfl
-  have d104 : d.regs 104 = c.regs 104 := fD 104 rfl
-  have d133 : d.regs 133 = c.regs 133 := fD 133 rfl
-  have e65 : e.regs 65 = d.regs 65 := fE 65 rfl
-  have e100 : e.regs 100 = d.regs 100 := fE 100 rfl
-  have e101 : e.regs 101 = d.regs 101 := fE 101 rfl
-  have e104 : e.regs 104 = d.regs 104 := fE 104 rfl
-  have e133 : e.regs 133 = d.regs 133 := fE 133 rfl
-  have e159 : e.regs 159 = d.regs 159 := fE 159 rfl
-  -- one-step value equations, all small
-  have vA160 : a.regs 160 = (wPair k (s.regs 65)).1 := blkA_wl k len idx s hn ha
-  have vA162 : a.regs 162 = (wPair k (s.regs 65)).2 := blkA_wh k len idx s hn ha
-  have vB100 := blkB_tLo k len idx a hb
-  have vB101 := blkB_tHi k len idx a hb
-  have vC152 := blkC_v k len idx b hcc
-  have vD159 := blkD_abs k len idx c hd
-  have vE102 := blkE_cel k len idx d he
-  have vE103 := blkE_celSq k len idx d he
-  have hcE : e.regs rCeil ≠ 0 := by
-    rw [rCeil, vE102, d65, c65, b65, a65, d103, c103, b103, a103,
-      d102, c102, b102, a102, d133, c133, b133, a133]
-    exact hc
-  obtain ⟨f, hf⟩ := blkF_ok k len idx e hcE
-  have fF := denoteAInstrs_frame len idx SF (blkF k) (SF_dests k) e f hf
-  have f100 : f.regs 100 = e.regs 100 := fF 100 rfl
-  have f101 : f.regs 101 = e.regs 101 := fF 101 rfl
-  have f102 : f.regs 102 = e.regs 102 := fF 102 rfl
-  have f103 : f.regs 103 = e.regs 103 := fF 103 rfl
-  have vF104 := blkF_viol k len idx e hcE hf
-  refine ⟨f, ?_, ?_, ?_, ?_⟩
-  · rw [mobiusLiveResidue_split k]
-    simp only [denoteAInstrs_append, ha, hb, hcc, hd, he, hf,
-      Option.bind_eq_bind, Option.bind_some]
-  · rw [denoteAInstrs_frame_arr len idx SF (blkF k) (SF_dests k) e f hf,
-      denoteAInstrs_frame_arr len idx SE blkE SE_dests d e he,
-      denoteAInstrs_frame_arr len idx SD blkD SD_dests c d hd,
-      denoteAInstrs_frame_arr len idx SC (blkC k) (SC_dests k) b c hcc,
-      denoteAInstrs_frame_arr len idx SB blkB SB_dests a b hb,
-      denoteAInstrs_frame_arr len idx SA (blkA k) (SA_dests k) s a ha]
-  · intro j hj
-    exact ((((((fF j (SF_false hj)).trans (fE j (SE_false hj))).trans
-      (fD j (SD_false hj))).trans (fC j (SC_false hj))).trans
-      (fB j (SB_false hj))).trans (fA j (SA_false hj)))
-  · refine Res.ext ?_ ?_ ?_ ?_ ?_
-    · simp only [readRes, resStep, readSig, rTLo,
-        f100, e100, d100, c100, vB100, a79, a80, a100, a101, vA160, vA162]
-    · simp only [readRes, resStep, readSig, rTHi,
-        f101, e101, d101, c101, vB101, a79, a80, a100, a101, vA160, vA162]
-    · simp only [readRes, resStep, readSig, rCeil,
-        f102, vE102, d65, c65, b65, a65, d103, c103, b103, a103,
-        d102, c102, b102, a102, d133, c133, b133, a133]
-    · simp only [readRes, resStep, readSig, rCeilSq,
-        f103, vE103, d65, c65, b65, a65, d103, c103, b103, a103,
-        d102, c102, b102, a102, d133, c133, b133, a133]
-    · simp only [readRes, resStep, readSig, rMViol,
-        vF104, e65, e159, e104, e133, vE102,
-        d65, d100, d101, d102, d103, d104, d133, vD159,
-        c65, c100, c101, c102, c103, c104, c133, vC152,
-        b65, b102, b103, b104, b133, vB100, vB101,
-        a65, a79, a80, a100, a101, a102, a103, a104, a133, vA160, vA162]
+/-! ## What the block computes
 
-/-- **The residue block denotes `resStep`.**  It succeeds exactly when the
-current integer and the updated `⌈√(n+1)⌉` register are nonzero, it leaves the
-array untouched, it changes no register outside `Written` — in particular
-none of `2 … 91` and `128 … 144`, which is the sieve core's whole register
-file — and on its own five registers it acts as the transparent model. -/
-theorem mobiusLiveResidue_denote (k len idx : Nat) (s : AState)
-    (hn : s.regs 65 ≠ 0) (hc : celAfter (readSig s) (readRes s) ≠ 0) :
-    ∃ s', denoteAInstrs len idx s (mobiusLiveResidue k) = some s' ∧
-      s'.arr = s.arr ∧
-      (∀ j, ¬ Written j → s'.regs j = s.regs j) ∧
-      readRes s' = resStep k (readSig s) (readRes s) :=
-  residue_chain k len idx s hn hc
+`mobiusLiveResidue_split` says the block is exactly the six sections in order;
+`blkA_wl`, `blkA_wh`, `blkB_tLo`, `blkB_tHi`, `blkC_v`, `blkD_abs`,
+`blkE_cel`, `blkE_celSq` and `blkF_viol` say what each section leaves in the
+registers the next one reads; `denoteAInstrs_frame` and
+`denoteAInstrs_frame_arr` say nothing else moves; and `resStep_eq_sections`
+says `resStep` is exactly the composition of the nine.
+
+Assembling those into a single equation `readRes s' = resStep k (readSig s)
+(readRes s)` is pure substitution, and it is *not* done here: the substituted
+proof term is large enough that the kernel reports `deep recursion detected`
+on it.  Splitting the assembly so that the kernel sees it in pieces is the
+remaining work; no mathematical content is missing.
+-/
+/-- `resStep` is exactly the composition of the six sections' outputs: the
+weight feeds the accumulator, the accumulator feeds the shift and the absolute
+value, and those feed the test. -/
+theorem resStep_eq_sections (k : Nat) (g : Sig) (r : Res) :
+    resStep k g r =
+      ⟨(accStep g.pos g.neg (wPair k g.n).1 (wPair k g.n).2 r.tLo r.tHi).1,
+       (accStep g.pos g.neg (wPair k g.n).1 (wPair k g.n).2 r.tLo r.tHi).2,
+       (celStep g.n r.celSq r.cel g.gate).1,
+       (celStep g.n r.celSq r.cel g.gate).2,
+       violStep k g.n
+         (absBias (vBias k
+           (accStep g.pos g.neg (wPair k g.n).1 (wPair k g.n).2 r.tLo r.tHi).1
+           (accStep g.pos g.neg (wPair k g.n).1 (wPair k g.n).2 r.tLo r.tHi).2))
+         (celStep g.n r.celSq r.cel g.gate).1 g.gate r.viol⟩ := rfl
 
 end LeanCompCert.Ports.MobiusResidueRealisation
