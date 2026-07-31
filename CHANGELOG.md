@@ -32,6 +32,46 @@
     still completes with 0 violations under the corrected thresholds.
     `lake build` clean, `check-native --force` 10/10, `scripts/AxiomAudit.lean`
     224 declarations all base-trio, no `sorryAx`, no `native_decide`.
+- **One opt-in axiom that admits an artifact run, and a `native_decide`-shaped
+  tactic for it.**  `LeanCompCert/Trusted/` is a separate library that nothing
+  in `LeanCompCert` imports, so a consumer who does not ask for it still gets
+  `[propext, Classical.choice, Quot.sound]` from every certificate.  Importing
+  it buys exactly one thing: the ability to turn a checked *evidence record*
+  into `p.denote = some n`.
+  - **One statement, one axiom per use site.**  `EvidencedRun` is the schema;
+    `evidenced_decide` mints `<declaration>._evidenced.run.ax` of that type per
+    use, mirroring `native_decide`'s per-use `._native.native_decide.ax_1_1`, so
+    `#print axioms` enumerates every admitted execution instead of collapsing a
+    230-shard campaign into one line.
+  - **Evidence is a closed inductive with a computable checker.**  Three
+    constructors — `cachedStamp`, `freshRun`, `tdxAttested` — one `verify`, one
+    axiom.  Adding attestation later is a new case of `verify`, not a new
+    assumption.  `tdxAttested` returns `false` today and
+    `verify_tdxAttested` is that as a theorem: a constructor that honestly
+    refuses beats a stub that passes.
+  - **Fresh versus cached is visible and enforced.**  The challenge nonce is
+    embedded in the compiled C, so the artifact digest is nonce-dependent and no
+    earlier stamp can match a new nonce; `verify` requires the record's echoed
+    nonce to equal the one the claim quotes, and refuses a cache record that
+    claims to have echoed anything.  Evidence under nonce `A` cannot answer a
+    claim quoting nonce `B`.
+  - **Negative theorems, proved at the base trio.**  A wrong artifact digest, a
+    wrong value, a wrong machine, a wrong nonce, a wrong program, a truncated
+    record, an incoherent shard and a non-`agrees` verdict each force
+    `verify = false` — stated generally in `Trusted/Evidence.lean` and exhibited
+    on concrete records in `Trusted/Demo.lean`, against a program whose
+    denotation the kernel independently evaluates.
+  - **Resolution lives outside Lean.**  `leancompcert-evidence.cfg` (project,
+    default `attest, cache`) and `leancompcert-evidence.local.cfg` (developer,
+    default `cache, run`) select the mode; a missing config fails closed.
+    Changing the policy does not change the proof term.
+  - **Build time does not scale with the computation.**  The record carries a
+    digest, a verdict and an identity — never a trace — so verification is a
+    fixed handful of comparisons plus one structural comparison of the program,
+    independent of its `loopCount`.
+  - `scripts/produce-evidence.sh` is the only thing that executes an artifact,
+    and it runs out of band.  `scripts/TrustedAxiomAudit.lean` pins where the
+    new axiom may and may not appear.
 
 - **The last 3 204 integers of Platt's stronger range — and the discovery that
   the family's endpoint clause is false.**  `PlattStrongerRangeNatFamily` is a

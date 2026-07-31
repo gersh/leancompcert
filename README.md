@@ -51,7 +51,17 @@ proves CompCert's own semantics assigns it the certified value (on the
 direct path), and CompCert's machine-checked theorem carries that to
 assembly. → **[How to do it](docs/use-case-2-verified-artifact.md)**
 
-Both guides state exactly *what is proved* and *why the method deserves
+**3. An artifact run admitted into a proof — opt in, and visibly.** When the
+computation is too big for the kernel *and* too expensive for anyone to re-run,
+`LeanCompCert/Trusted/` admits the execution through one statement,
+`EvidencedRun`, instantiated once per use site so that `#print axioms`
+enumerates every admitted run by name. The premise is an inspectable evidence
+record — artifact digest, toolchain, machine, shard, challenge nonce, verdict —
+that Lean's kernel re-checks. Nothing in the `LeanCompCert` library imports it,
+so **depending on this package still adds nothing to your axiom list** unless
+you ask for it. → **[How a computation enters a proof](docs/incorporating-a-computation.md#route-c--admit-the-execution-through-one-opt-in-axiom)**
+
+The guides state exactly *what is proved* and *why the method deserves
 trust*; the boundary is drawn honestly in each.
 
 It does **not** claim end-to-end verified compilation from Lean. When generated

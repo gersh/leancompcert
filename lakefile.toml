@@ -1,9 +1,15 @@
 name = "leancompcert"
 version = "0.2.0"
-defaultTargets = ["LeanCompCert", "lean-compcert", "lean-compcert-tests"]
+defaultTargets = ["LeanCompCert", "LeanCompCertTrusted", "lean-compcert", "lean-compcert-tests"]
 
 [[lean_lib]]
 name = "LeanCompCert"
+
+# Opt-in artifact-run bridge.  A SEPARATE library: nothing in `LeanCompCert`
+# imports it, so depending on this package still adds no axioms.  It is a
+# default target only so that `lake build` type-checks and audits it.
+[[lean_lib]]
+name = "LeanCompCertTrusted"
 
 [[lean_exe]]
 name = "lean-compcert"
