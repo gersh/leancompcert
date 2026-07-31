@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- **The windowed `plattstrong` and `platt211` epilogues were sampling the
+  majorant one integer short, in the anti-conservative direction.**  The family
+  these modes certify is the cell family `|Σ_{m≤n} μ(m)/m| ≤ g(n+1)` — on the
+  unit cell `[n, n+1)` the step is constant while the antitone `g` falls, so
+  the binding value is at `n+1`.  `plattStrongerThreshold` and
+  `platt211Threshold` were computing `g` at `hi`, not at `hi + 1`:
+  `Nat.sqrt (2¹²² / N)` and `Nat.sqrt (2¹²⁵ / N)`.  That is a threshold larger
+  by a relative `1/(2N)`, i.e. a test *weaker* than the family it is meant to
+  certify — the same `x <` versus `x ≤` off-by-one that makes
+  `residual_platt_stronger_range` false on its closed interval, and pointing
+  the same way: the direction that lets a false claim pass.  The per-integer
+  `mobiusLiveResidue` has always tested the `⌈√(n+1)⌉` form; the windowed modes
+  now agree with it.  `N + 1` also removes the `N = 0` corner, where `2^e / N`
+  was `0` in `Nat` and the threshold silently collapsed to `0`.
+  - **The correction does not move the campaign's endpoint.**  It shrinks the
+    threshold by `1 698` units (`plattstrong`) and `4 800` (`platt211`) at
+    `N = 7.727·10⁹` — a relative `6.5·10⁻¹¹`, against `1 152 835 042 699`
+    (relative `5·10⁻⁵`) at `N = 10⁴`, since the correction is `1/(2N)`.
+  - Evaluated exactly and offline against an independently written segmented
+    μ-sieve — division-decoded rather than product-decoded — over the campaign's
+    own schedule (`seg_chain.sh plattstrong 10000 7727000000 1.02 200`,
+    reproduced to the same **663** windows): **0 failures under either
+    threshold**, both modes.  The binding window is the last, #663
+    `[7 612 728 201, 7 727 000 000]`, whose slack under the new threshold is
+    `13 321 587 978` units — `7.8·10⁶` times the `1 698` the correction costs.
+    Relative slack there moves from `5.079205·10⁻⁴` to `5.079204·10⁻⁴`.
+  - End to end: `bench/seg_chain.sh plattstrong 10000 300000 1.02 200 gcc`
+    still completes with 0 violations under the corrected thresholds.
+    `lake build` clean, `check-native --force` 10/10, `scripts/AxiomAudit.lean`
+    224 declarations all base-trio, no `sorryAx`, no `native_decide`.
+
 - **The last 3 204 integers of Platt's stronger range — and the discovery that
   the family's endpoint clause is false.**  `PlattStrongerRangeNatFamily` is a
   conjunction: clause 1 is `|Σ_{m≤n} μ(m)/m| ≤ 1/(2√(n+1))` for
