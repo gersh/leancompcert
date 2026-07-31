@@ -8,23 +8,42 @@ import LeanCompCert.Ports.MobiusResidueTest
 `MobiusResidueRealisation` shows the `mobiusLiveResidue` block denotes
 `resStep`.  `MobiusResidueWeight`, `MobiusResidueAcc` and `MobiusResidueTest`
 show that each section of `resStep` is the arithmetic it claims to be.  This
-file runs the model over a window of consecutive integers and reads off the
-conclusion:
+file supplies the two things the window-level statement needs on top of those:
 
-**a zero violation count over `[lo, hi]`, together with a carry-in that really
-is the accumulator at `lo − 1`, forces the reduced family's inequality at every
-integer of the window** —
+* `accTrue_close` — the **accumulated** round-to-nearest error over `[1, n]`.
+  The fixed-point accumulator tracks `2^(63+k)` times the exact rational
+  partial sum to within `n/2` ulps, cleared of denominators.  This is the
+  hypothesis `happ` of `MobiusResidueTest.sound_of_test`, and it is what makes
+  a passing integer test a bound on the *real* sum rather than on its
+  fixed-point image.
+* `coreBody_regDests_disjoint` / `coreInit_regDests_disjoint` — **the two
+  halves of the loop body do not interact.**  Every register the sieve core
+  writes lies outside `{100,…,104} ∪ {150,…,171}`, and (by
+  `mobiusLiveResidue_denote`) the residue writes nothing else.  So the
+  residue's five accumulators are a function of the four signals in registers
+  `65`, `79`, `80`, `133` alone, and bolting a residue onto the core cannot
+  perturb the sieve.
+
+Together with `sound_of_test` these give, at a single gated integer `n` whose
+carry-in really is the accumulator at `n − 1`,
 
 ```
 4 · (n+1) · (Σ_{m ≤ n} μ(m)·(D/m))² ≤ D²   for every common denominator D,
 ```
 
-which is `|Σ_{m ≤ n} μ(m)/m| ≤ 1/(2·√(n+1))`, i.e.
-`MathExtras.Reductions.PlattStrongerRangeNatFamily` at `n`.
+which is `|Σ_{m ≤ n} μ(m)/m| ≤ 1/(2·√(n+1))` with the denominators cleared,
+i.e. `MathExtras.Reductions.PlattStrongerRangeNatFamily` at `n`.
 
 Nothing here assumes anything about the sieve: `mu` is an arbitrary function
 into `{−1, 0, 1}` and the signals are the ones a correct sieve would present.
 Supplying that the sieve *does* present them is the one remaining premise.
+
+**Not proved here** (and not assumed anywhere either — it is simply absent):
+the induction that chains `ResInv` across a whole window, i.e. that a zero
+violation count at the *end* of the loop forces the per-step hypotheses at
+*every* integer of the window.  The per-step content is complete; what is
+missing is the routine `List.foldl` induction over `resFold`, together with the
+proof that the sieve core emits `muSig mu n` at the gated iterations.
 -/
 
 namespace LeanCompCert.Ports.MobiusResidueRealisation

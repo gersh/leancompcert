@@ -71,6 +71,12 @@ import LeanCompCert.Lower.LCNF
 import LeanCompCert.Proof.PureSemantics
 import LeanCompCert.Verified.Decide
 import LeanCompCert.NativeCheck
+import LeanCompCert.Ports.MobiusResidueModel
+import LeanCompCert.Ports.MobiusResidueRealisation
+import LeanCompCert.Ports.MobiusResidueWeight
+import LeanCompCert.Ports.MobiusResidueAcc
+import LeanCompCert.Ports.MobiusResidueTest
+import LeanCompCert.Ports.MobiusResidueWindow
 
 /-! # LeanCompCert -/
 
@@ -79,9 +85,3 @@ namespace LeanCompCert
 def backendVersion : String := "0.2.0"
 
 end LeanCompCert
-import LeanCompCert.Ports.MobiusResidueModel
-import LeanCompCert.Ports.MobiusResidueRealisation
-import LeanCompCert.Ports.MobiusResidueWeight
-import LeanCompCert.Ports.MobiusResidueAcc
-import LeanCompCert.Ports.MobiusResidueTest
-import LeanCompCert.Ports.MobiusResidueWindow
