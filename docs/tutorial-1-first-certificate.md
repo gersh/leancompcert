@@ -6,6 +6,14 @@
 > say what is proved and why to trust it; this tutorial is the worked
 > example both build on.
 
+> **Vocabulary.** *Denotation* means what a program computes as ordinary
+> Lean arithmetic, defined mathematically rather than by running anything;
+> *reflection* means proving something by computing a `Bool` and appealing
+> to a theorem that says the `Bool` being `true` implies the statement.
+> [What is proved](what-is-proved.md) defines these, says what a *program*
+> is and everything you can write in one, and separates what is proved from
+> what is merely observed.
+
 This walkthrough takes a small computation from nothing to a
 machine-checked theorem plus a CompCert-verified native check. Everything
 here uses only the stable public API (README, "Public API and

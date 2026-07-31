@@ -19,7 +19,13 @@ lake env lean --run bench/ArraySegEmit.lean MODE LO SEGLEN SEGCOUNT OUT [EXPECTE
                and no `√(hi/lo) − 1` weakening.  Result slots are
                `M, Q, G, ⌊√hi⌋`;
 * `platt211` — the `Σ μ(m)/m` residue against `√(2/(n+1))`;
-* `plattstrong` — the same against `1/(2√(n+1))`.
+* `plattstrong` — the same against `1/(2√(n+1))`;
+* `plattstronglive` — the same against `1/(2√(n+1))` tested **at every
+               integer**, on a two-limb accumulator at scale
+               `2^(63+mobWideBits)`.  No window schedule, and a rounding budget
+               `2^(mobWideBits+1)` times smaller.  Result slots are the two
+               accumulator limbs, `⌈√(hi+1)⌉` and its square; the seeds are the
+               two limbs.
 
 Two drivers are emitted.  Without `EXPECTED` the driver is *hosted*: it
 prints the result cells, which is what a chained run needs and what the
@@ -88,6 +94,14 @@ def main (args : List String) : IO UInt32 := do
             pure (mobiusProgram c seedT (platt211Threshold c.hi))
         | "plattstrong" =>
             pure (mobiusProgram c seedT (plattStrongerThreshold c.hi))
+        | "plattstronglive" =>
+            -- carry-in: the two accumulator limbs.  Absent, the walk is
+            -- assumed to open at n = 1 and the accumulator is the bare bias.
+            let k := mobWideBits
+            let dflt := mobLiveSeedStart k
+            let s : MobLiveSeed :=
+              (mobLiveSeed lo (seeds[0]?.getD dflt.tLo) (seeds[1]?.getD dflt.tHi))
+            pure (mobiusLiveProgram c k s)
         | _ => do IO.eprintln "bad MODE"; return 1
       let driver :=
         match expected.bind String.toNat? with

@@ -1,5 +1,36 @@
 # lean-compcert
 
+**In plain terms.** Some proofs need a fact that is finite but enormous —
+"this holds for every integer up to eight billion". A computer checks it. The
+awkward question is why anyone should believe the computer.
+
+Lean's kernel is a small, heavily scrutinised proof checker; if it accepts a
+computation, you are trusting a few thousand lines of well-studied code and
+nothing else. But it is built for trustworthiness rather than speed, and stops
+being practical somewhere around ten thousand items. The usual escape hatch,
+`native_decide`, runs the computation at full speed but records that choice as
+an assumption — you are now trusting Lean's compiler and runtime too.
+
+This package gives you better options than "too slow" and "trust a compiler":
+push far more into the kernel than you would expect, and when that genuinely
+runs out, fall back to a compiled artifact whose translation is *proved*
+faithful rather than assumed.
+
+**→ [Read the complete walkthrough](docs/trust-walkthrough.md)** — two real
+examples followed from a mathematical claim all the way to bytes, assuming no
+familiarity with Lean or CompCert, answering at every step: *what would you
+have to trust for this to be wrong?* Start there if any of the vocabulary
+below is unfamiliar.
+
+One thing worth knowing up front, because it is the most common confusion:
+this package proves that your algorithm is faithfully translated to machine
+code, and separately that your algorithm implies your theorem. **It does not
+prove that any particular run happened.** That comes from re-running the
+computation, or from attested execution. See
+[what is proved](docs/what-is-proved.md).
+
+---
+
 `lean-compcert` turns finite Lean computations into kernel-checked
 theorems and [CompCert](https://compcert.org/)-compiled native
 artifacts. It serves two use cases:
@@ -39,7 +70,42 @@ implemented, with per-milestone evidence recorded there.
 
 ## Documentation
 
-Start with the use-case guide that matches your goal:
+**New to any of this?** [The complete walkthrough](docs/trust-walkthrough.md)
+— no assumed vocabulary, two real examples traced from a mathematical claim to
+bytes, naming what you must trust at each link.
+
+**Ready to write one?** [How to actually write a program](docs/writing-a-program.md)
+— you do not write assembly: arithmetic goes through `expr!( … )` and is
+compiled *with a proof*, and you build the rest from ordinary Lean emitter
+functions. The guide covers what changes when there is no branch and no early
+exit (gates, violation counters, checked budgets), where the word size binds,
+the four proof obligations you owe, and a checklist of the mistakes that have
+actually produced wrong answers here.
+
+**Setting up?** [Installation](docs/installation.md) — building CompCert,
+verifying it, and requiring this package from your `lakefile.toml`.
+
+**Want to know what this actually proves?** Read
+**[What is proved, what is observed, and what "program" means](docs/what-is-proved.md)**
+first. It defines the little register-machine language you write in and lists
+everything it contains; explains *denotation* and the other recurring terms;
+separates the three claims that are easy to conflate — the reduction (proved),
+the compilation (proved), and the run itself (**observed, not proved**);
+explains why `gcc` appears in the pipeline without defeating the purpose; and
+says what `check-native` does, how to wire it in, and why a cached pass is not
+evidence that anything ran.
+
+**New here, or holding a slow `native_decide`?** Start with
+**[Choosing a strategy for a finite computation](docs/choosing-a-strategy.md)**.
+It routes you to the right approach — kernel, compiled artifact, or attested
+run — with the measured thresholds that separate them, and it catalogues the
+mistakes that have actually produced wrong or vacuous results here. Its first
+section is the one people skip: check whether your computation is slow for the
+*wrong reason* before concluding it is infeasible. Exact `ℚ` in a kernel loop
+turned a 256-leaf certificate from "13.2 GB, unfinished at 22 minutes" into
+1.06 s with no axioms at all.
+
+Then the use-case guide that matches your goal:
 
 - **[Use case 1 — a verified `native_decide`](docs/use-case-1-verified-native-decide.md)**
   — kernel-checked certificates with cached CompCert-compiled native
@@ -74,6 +140,13 @@ Requirements:
 - Lean 4.30 or newer (the repository pins Lean 4.32.1);
 - Python 3.11 or newer;
 - CompCert's `ccomp` on `PATH`, or an explicit `--ccomp` path.
+
+`ccomp` is not packaged by most distributions and has no official binaries, so
+it must be built from source — see **[Installation](docs/installation.md)** for
+the build, the two configure traps that cost an afternoon (Menhir discovery,
+and the absence of any `-target` flag), how to add this package to a Lean
+project, and how to wire the `check-native` cross-check. Run
+`./bin/lean-compcert doctor` to confirm the pieces line up.
 
 Build and differentially test a Lean executable directly from a checkout:
 

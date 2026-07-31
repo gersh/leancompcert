@@ -1,5 +1,13 @@
 # Tutorial 4 — The trust chain: what is proved, where, and by whom
 
+> **Vocabulary.** *Denotation* means what a program computes as ordinary
+> Lean arithmetic, defined mathematically rather than by running anything;
+> *reflection* means proving something by computing a `Bool` and appealing
+> to a theorem that says the `Bool` being `true` implies the statement.
+> [What is proved](what-is-proved.md) defines these, says what a *program*
+> is and everything you can write in one, and separates what is proved from
+> what is merely observed.
+
 This package's value is a precisely-drawn trust story. This tutorial
 walks the whole chain and shows how to audit it yourself.
 

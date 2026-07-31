@@ -1,5 +1,13 @@
 # Use case 1 — A verified `native_decide`
 
+> **Vocabulary.** *Denotation* means what a program computes as ordinary
+> Lean arithmetic, defined mathematically rather than by running anything;
+> *reflection* means proving something by computing a `Bool` and appealing
+> to a theorem that says the `Bool` being `true` implies the statement.
+> [What is proved](what-is-proved.md) defines these, says what a *program*
+> is and everything you can write in one, and separates what is proved from
+> what is merely observed.
+
 **You are here because:** you have a finite computation standing in for a
 proof obligation, `native_decide` is not trusted enough for your setting,
 and plain `decide` is too slow at your problem size.
