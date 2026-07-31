@@ -15,9 +15,19 @@ out to be cheap once the representation changed:
 
 | case | before | after |
 | --- | --- | --- |
-| Helfgott A.36 bisection, 256 leaves | 13.2 GB, **unfinished at 22 min**, `native_decide` | **1.06 s, 0.64 GB, `decide +kernel`, no axioms at all** |
+| Helfgott A.36 bisection, 256 leaves | 13.2 GB, **unfinished at 22 min**, `native_decide` | **1.06 s, 0.64 GB, `decide +kernel`**, no axioms† |
 | CH25 Lemma A.7 | modelled as unreachable | 100.2 s, 9.70 GB, `[propext]` |
 | Platt zero enumeration | quoted in core-*years* | 158 s of CPU |
+
+† **Read "no axioms" narrowly.** It compares the *same obligation* under two
+mechanisms — `native_decide` admits Lean's compiler and runtime into the proof;
+`decide +kernel` admits nothing — and that difference is the whole reason to
+prefer the kernel. It is **not** a claim that the mathematics is proved from
+nothing: the axiom-free theorem says a Boolean function returns `true` on 256
+integer inputs, mentions no real numbers, and **cannot tell you whether that
+predicate encodes the bound you meant**. A wrong constant yields a true,
+axiom-free theorem about the wrong predicate. See
+[what `#print axioms` does and does not tell you](what-is-proved.md#1b-what-print-axioms-does-and-does-not-tell-you).
 
 The bisection case is the sharpest. It was never blocked on leaf count — 256
 leaves is nothing. It was blocked on `ℚ`: the enclosure used exact rational

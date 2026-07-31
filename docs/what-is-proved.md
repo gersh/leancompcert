@@ -103,6 +103,57 @@ path exists to avoid.
 If you are here for verified computation, you want the left column. See
 [how to actually write a program](writing-a-program.md).
 
+## 1b. What `#print axioms` does and does not tell you
+
+**`#print axioms` is not a trust metric.** It answers exactly one question:
+*which axioms does this particular proof term use?* It is easy — and this
+documentation has done it — to write a low axiom count in a way that reads as
+a claim about the whole chain. It isn't one.
+
+Take the strongest-looking claim in this repository:
+
+```lean
+theorem sweep_ok : allBelow leaves leafOK = true := by decide +kernel
+```
+
+`#print axioms sweep_ok` reports **no axioms at all**. That is true, and it is
+much narrower than it sounds. Read the statement: it says a *Boolean function*
+returns `true` on 256 integer inputs. It does not mention real numbers, it does
+not mention the analytic bound the certificate exists to support, and it cannot
+tell you whether `leafOK` faithfully encodes that bound.
+
+So here is what a zero-axiom result does **not** establish:
+
+- **Not that the theorem says what you want.** If `leafOK` has an index error, a
+  flipped inequality, or the wrong constant, `sweep_ok` is still true and still
+  axiom-free. It is a true statement about the wrong predicate. **Nothing in an
+  axiom list can detect this** — see §3 on the encoding question, and note that
+  for large ports this repository checks it with an independent oracle rather
+  than in Lean at all.
+- **Not that anything about ℝ has been proved.** This package has no Mathlib
+  dependency, so `Real.sqrt` monotonicity cannot even be *stated* here. The step
+  from these integer inequalities to a real-valued claim lives in the consuming
+  project and is not covered by any axiom count in this one.
+- **Not that a program ran.** For artifact certificates, CompCert's proof, the
+  assembler, the linker, and the fact of execution are all **outside the Lean
+  statement entirely**. They do not appear in `#print axioms` because the
+  theorem does not talk about them — not because they are trusted less.
+
+What it *does* establish is worth having, and is precisely this: the Lean
+kernel accepted this proof using only the listed axioms, so no compiler,
+runtime, or external evaluator was admitted into *that* step. That is a real
+property — it is what distinguishes `decide +kernel` from `native_decide`, and
+it is the reason the distinction matters. It is just not a summary of the trust
+surface.
+
+**The honest way to read the tables in this documentation**: an axiom column
+compares *like with like* — the same certificate under `native_decide` versus
+under the kernel. It is a statement about which mechanism discharged one Lean
+obligation. It is never a statement about the chain from mathematics to bytes.
+For that, read §3 and [the walkthrough](trust-walkthrough.md), which name the
+CompCert proof, the assembler, the linker, and the run explicitly, because none
+of them show up in an axiom list.
+
 ## 2. Vocabulary
 
 Three words appear constantly and are worth pinning down.

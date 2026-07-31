@@ -62,13 +62,33 @@ the answer is never accidentally made to look better than it is — gave:
 | --- | --- | --- |
 | time | **did not finish in 22 min** | **1.06 s** |
 | memory | 13.2 GB | 0.64 GB |
-| assumptions | trusts Lean's compiler and runtime | **none at all** |
+| axioms used by the Lean proof | Lean's compiler and runtime | **none** |
 
-That last row is not a typo. Asking Lean what this theorem depends on returns
-*no assumptions whatsoever* — not even the three standard axioms of ordinary
-mathematics that almost every proof uses.
+That last row is real — Lean reports *no* axioms for this theorem, not even the
+three standard ones almost every proof uses. **But it is narrower than it
+sounds, and it is worth being blunt about how.**
 
-**What you have to trust:** Lean's kernel. That is the entire list.
+The row compares the **same obligation under two mechanisms**. `native_decide`
+admits Lean's compiler and runtime into the proof; `decide +kernel` admits
+nothing. That difference is real and is the entire reason to prefer the kernel.
+
+It is **not** a claim that the mathematics was proved from nothing. The
+axiom-free theorem is:
+
+```lean
+theorem sweep_ok : allBelow leaves leafOK = true
+```
+
+— a *Boolean function* returns `true` on 256 integer inputs. It mentions no
+real numbers (this package has no Mathlib dependency, so it could not), and
+**it cannot tell you whether `leafOK` encodes the bound you meant**. Put a
+wrong constant or a flipped inequality in that predicate and you get a true,
+axiom-free theorem about the wrong thing. No axiom list can detect that.
+
+**What you have to trust for this route:** Lean's kernel — *and* that the
+predicate says what you think it says. The second is a separate obligation,
+discussed in [the honest gap](#one-honest-gap-named) below and in
+[what `#print axioms` does and does not tell you](what-is-proved.md#1b-what-print-axioms-does-and-does-not-tell-you).
 
 **The lesson worth carrying:** before concluding that a computation is too big,
 check whether it is expensive for a *representational* reason rather than a

@@ -74,6 +74,15 @@ implemented, with per-milestone evidence recorded there.
 — no assumed vocabulary, two real examples traced from a mathematical claim to
 bytes, naming what you must trust at each link.
 
+**Have a computation and need it inside a proof?**
+**[How a computation enters a proof](docs/incorporating-a-computation.md)** —
+the three routes, what each requires, and which are complete. The short answer
+most people need: for anything someone can re-run, you do **not** get the run
+into Lean at all. You state the theorem conditionally on the computation's
+verdict and ship a reproducible artifact — which is not a workaround but the
+better shape, since it makes the obligation explicit and lets a sceptic
+discharge it themselves.
+
 **Ready to write one?** [How to actually write a program](docs/writing-a-program.md)
 — you do not write assembly: arithmetic goes through `expr!( … )` and is
 compiled *with a proof*, and you build the rest from ordinary Lean emitter
@@ -103,7 +112,16 @@ mistakes that have actually produced wrong or vacuous results here. Its first
 section is the one people skip: check whether your computation is slow for the
 *wrong reason* before concluding it is infeasible. Exact `ℚ` in a kernel loop
 turned a 256-leaf certificate from "13.2 GB, unfinished at 22 minutes" into
-1.06 s with no axioms at all.
+1.06 s, and moved it off `native_decide` onto the kernel.
+
+**A warning about that second clause, and about every axiom count in these
+docs.** `#print axioms` on that certificate reports no axioms — which is true,
+and much narrower than it sounds. The theorem says a Boolean function returns
+`true` on 256 integer inputs. It does not mention real numbers, and it cannot
+tell you whether the predicate encodes the bound you meant. A low axiom count
+compares *like with like* — the same obligation under `native_decide` versus
+under the kernel — and is **not** a summary of the trust surface. See
+[what `#print axioms` does and does not tell you](docs/what-is-proved.md#1b-what-print-axioms-does-and-does-not-tell-you).
 
 Then the use-case guide that matches your goal:
 
