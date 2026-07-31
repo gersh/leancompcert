@@ -206,15 +206,39 @@ Measured on this box (20 cores, `ccomp` 3.17, `gcc -O2`):
 | one `rpow` | | `1.34 µs` | `bench/results/exp_fixed.md`, unchanged |
 | `q` rows, oracle C | `3.389·10⁹` | `3142 ns/row` ccomp, `2549` gcc | `bench/ref_p1224.c` |
 | `(q,k)` cells, oracle C | `7.5·10⁷` | `118.9 ns/cell` ccomp, `96.4` gcc | `bench/ref_p1224.c` |
-| `(q,k)` cells, **the artifact** | | see below | `bench/Prop1224CellEmit.lean` |
+| `(q,k)` cells, **the artifact** | `4.3·10⁸` instructions | `915 ns/cell` ccomp, `610` gcc | `bench/Prop1224CellEmit.lean` |
 
-so **`≈ 3 core-hours` for the row phase and seconds for the cell phase** in the
-oracle, against the `105–640` core-hours the MPFR campaign budgets.  The
-artifact is slower than the oracle by the price of branchlessness — every
-phase's instructions execute on every loop iteration — and its `rpow` is a
-`231`-instruction restoring digit recurrence where the oracle seeds from
-hardware `sqrt`.  Taking the artifact's `rpow` at its measured `1.34 µs` and
-`4` per row gives `≈ 5 core-hours` for the row transcendentals, plus `≈ 0.5`
-for the factorisation.
+The artifact's cell phase is `9.5×` the oracle's, which is the price of
+branchlessness: every phase's instructions execute on every one of the `25`
+loop iterations a cell costs (one accumulate pass and `S = 24` squaring
+rounds), and none of them can be skipped.  It still sustains `7.2·10⁹`
+register-machine instructions per second under `ccomp`, so the whole cell
+phase — `1.2·10⁸` `r`-steps — is **under two minutes**.
 
-**`≈ 6 core-hours`, against `105–640`.**  Still not run.
+The row phase has no artifact yet, so its number is a projection from the
+measured primitive rather than a measurement: `4` `rpow` per row at the
+measured `1.34 µs` is `≈ 5 core-hours` over `3.389·10⁹` rows, plus `≈ 0.5` for
+the segmented factorisation at `R2SegSieve`'s measured `1.5–2·10⁶` rows/s.
+
+| | ccomp artifact |
+| --- | ---: |
+| row transcendentals, `3.389·10⁹ × 4 rpow` | `≈ 5.0` core-hours (projected) |
+| row factorisation | `≈ 0.5` core-hours (projected) |
+| `(q,k)` cells, `1.2·10⁸` `r`-steps | `0.03` core-hours (**measured**) |
+| **total** | **`≈ 5.6` core-hours** |
+
+against the `105–640` core-hours the MPFR campaign budgets — a factor of `19`
+to `115`.  **Still not run.**
+
+## Two emit-time hazards met in practice
+
+*Literal tables overflow `ccomp`.*  The note above records `27 421` entries
+doing it at `27 GB`.  The cell module first initialised its two multiplicative
+planes with `2·segLen` literal stores, which at the production `segLen = 2^16`
+is `131 072` — five times over.  The fix costs two instructions per mark and
+two per cell: the planes start at the array's own zero fill and a zero cell is
+read as the neutral `1`, which is `R2SegSieve`'s `0`-means-`1` correction.
+
+*Emission is quadratic in `arrayLen`.*  `5.9 s` at `16 433` cells, `78 s` at
+`65 607`.  This is emit-time only and does not affect the artifact, but it does
+bound how large a single window can usefully be.
