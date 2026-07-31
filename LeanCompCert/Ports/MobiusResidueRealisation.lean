@@ -308,6 +308,12 @@ private theorem blkE_celSq (k len idx : Nat) (s : AState)
       denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, celStep]
     try simp [Nat.add_mod, Nat.mul_mod])
 
+private theorem shiftRight_mod_self (x j : Nat) :
+    (x % M) >>> j % M = (x % M) >>> j := by
+  refine Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt ?_ (Nat.mod_lt x M_pos))
+  rw [Nat.shiftRight_eq_div_pow]
+  exact Nat.div_le_self _ _
+
 private theorem blkF_viol (k len idx : Nat) (s : AState) (hc : s.regs rCeil ≠ 0)
     {s' : AState} (h : denoteAInstrs len idx s (blkF k) = some s') :
     s'.regs 104 = violStep k (s.regs 65) (s.regs 159) (s.regs 102) (s.regs 133)
@@ -315,7 +321,8 @@ private theorem blkF_viol (k len idx : Nat) (s : AState) (hc : s.regs rCeil ≠ 
   simp only [rCeil] at hc
   refine map_elim (f := fun t => t.regs 104) h ?_
   simp [blkF, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
-    denoteOperand, RegState.set, rCeil, rMViol, hc, violStep]
+    denoteOperand, RegState.set, rCeil, rMViol, hc, violStep,
+    shiftRight_mod_self]
 
 
 /-! ### Composing the six sections -/
@@ -377,95 +384,81 @@ private theorem SF_false {j : Nat} (h : ¬ Written j) : SF j = false := by
   simp only [decide_eq_false_iff_not]
   omega
 
-/-- **The residue block denotes `resStep`.**  It succeeds exactly when the
-current integer and the updated `⌈√(n+1)⌉` register are nonzero, it leaves the
-array untouched, it changes no register outside `Written`, and on its own five
-registers it acts as the transparent model. -/
-set_option maxRecDepth 40000 in
-set_option maxHeartbeats 4000000 in
-theorem mobiusLiveResidue_denote (k len idx : Nat) (s : AState)
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 1000000 in
+private theorem residue_chain (k len idx : Nat) (s : AState)
     (hn : s.regs 65 ≠ 0) (hc : celAfter (readSig s) (readRes s) ≠ 0) :
-    ∃ s', denoteAInstrs len idx s (mobiusLiveResidue k) = some s' ∧
-      s'.arr = s.arr ∧
-      readRes s' = resStep k (readSig s) (readRes s) ∧
-      ∀ j, ¬ Written j → s'.regs j = s.regs j := by
+    ∃ f : AState, denoteAInstrs len idx s (mobiusLiveResidue k) = some f ∧
+      f.arr = s.arr ∧ (∀ j, ¬ Written j → f.regs j = s.regs j) ∧
+      readRes f = resStep k (readSig s) (readRes s) := by
+  simp only [readSig, readRes, celAfter, rTLo, rTHi, rCeil, rCeilSq, rMViol]
+    at hc
   obtain ⟨a, ha⟩ := blkA_ok k len idx s hn
   obtain ⟨b, hb⟩ := blkB_ok len idx a
   obtain ⟨c, hcc⟩ := blkC_ok k len idx b
   obtain ⟨d, hd⟩ := blkD_ok len idx c
   obtain ⟨e, he⟩ := blkE_ok len idx d
-  -- frames, register by register
   have fA := denoteAInstrs_frame len idx SA (blkA k) (SA_dests k) s a ha
   have fB := denoteAInstrs_frame len idx SB blkB SB_dests a b hb
   have fC := denoteAInstrs_frame len idx SC (blkC k) (SC_dests k) b c hcc
   have fD := denoteAInstrs_frame len idx SD blkD SD_dests c d hd
   have fE := denoteAInstrs_frame len idx SE blkE SE_dests d e he
-  -- section (A)
-  have hA160 : a.regs 160 = (wPair k (s.regs 65)).1 := blkA_wl k len idx s hn ha
-  have hA162 : a.regs 162 = (wPair k (s.regs 65)).2 := blkA_wh k len idx s hn ha
-  have hA65 : a.regs 65 = s.regs 65 := fA 65 rfl
-  have hA79 : a.regs 79 = s.regs 79 := fA 79 rfl
-  have hA80 : a.regs 80 = s.regs 80 := fA 80 rfl
-  have hA100 : a.regs 100 = s.regs 100 := fA 100 rfl
-  have hA101 : a.regs 101 = s.regs 101 := fA 101 rfl
-  have hA102 : a.regs 102 = s.regs 102 := fA 102 rfl
-  have hA103 : a.regs 103 = s.regs 103 := fA 103 rfl
-  have hA104 : a.regs 104 = s.regs 104 := fA 104 rfl
-  have hA133 : a.regs 133 = s.regs 133 := fA 133 rfl
-  -- section (B)
-  have hB100 := blkB_tLo k len idx a hb
-  have hB101 := blkB_tHi k len idx a hb
-  rw [hA79, hA80, hA160, hA162, hA100, hA101] at hB100 hB101
-  have hB65 : b.regs 65 = s.regs 65 := (fB 65 rfl).trans hA65
-  have hB102 : b.regs 102 = s.regs 102 := (fB 102 rfl).trans hA102
-  have hB103 : b.regs 103 = s.regs 103 := (fB 103 rfl).trans hA103
-  have hB104 : b.regs 104 = s.regs 104 := (fB 104 rfl).trans hA104
-  have hB133 : b.regs 133 = s.regs 133 := (fB 133 rfl).trans hA133
-  -- section (C)
-  have hC152 := blkC_v k len idx b hcc
-  rw [hB100, hB101] at hC152
-  have hC65 : c.regs 65 = s.regs 65 := (fC 65 rfl).trans hB65
-  have hC100 : c.regs 100 = b.regs 100 := fC 100 rfl
-  have hC101 : c.regs 101 = b.regs 101 := fC 101 rfl
-  have hC102 : c.regs 102 = s.regs 102 := (fC 102 rfl).trans hB102
-  have hC103 : c.regs 103 = s.regs 103 := (fC 103 rfl).trans hB103
-  have hC104 : c.regs 104 = s.regs 104 := (fC 104 rfl).trans hB104
-  have hC133 : c.regs 133 = s.regs 133 := (fC 133 rfl).trans hB133
-  -- section (D)
-  have hD159 := blkD_abs k len idx c hd
-  rw [hC152] at hD159
-  have hD65 : d.regs 65 = s.regs 65 := (fD 65 rfl).trans hC65
-  have hD100 : d.regs 100 = b.regs 100 := (fD 100 rfl).trans hC100
-  have hD101 : d.regs 101 = b.regs 101 := (fD 101 rfl).trans hC101
-  have hD102 : d.regs 102 = s.regs 102 := (fD 102 rfl).trans hC102
-  have hD103 : d.regs 103 = s.regs 103 := (fD 103 rfl).trans hC103
-  have hD104 : d.regs 104 = s.regs 104 := (fD 104 rfl).trans hC104
-  have hD133 : d.regs 133 = s.regs 133 := (fD 133 rfl).trans hC133
-  -- section (E)
-  have hE102 := blkE_cel k len idx d he
-  have hE103 := blkE_celSq k len idx d he
-  rw [hD65, hD103, hD102, hD133] at hE102 hE103
-  have hE65 : e.regs 65 = s.regs 65 := (fE 65 rfl).trans hD65
-  have hE100 : e.regs 100 = b.regs 100 := (fE 100 rfl).trans hD100
-  have hE101 : e.regs 101 = b.regs 101 := (fE 101 rfl).trans hD101
-  have hE104 : e.regs 104 = s.regs 104 := (fE 104 rfl).trans hD104
-  have hE133 : e.regs 133 = s.regs 133 := (fE 133 rfl).trans hD133
-  have hE159 : e.regs 159 = absBias (vBias k (b.regs 100) (b.regs 101)) := by
-    exact (fE 159 rfl).trans hD159
-  -- section (F)
+  -- one-step frame equations, all small
+  have a65 : a.regs 65 = s.regs 65 := fA 65 rfl
+  have a79 : a.regs 79 = s.regs 79 := fA 79 rfl
+  have a80 : a.regs 80 = s.regs 80 := fA 80 rfl
+  have a100 : a.regs 100 = s.regs 100 := fA 100 rfl
+  have a101 : a.regs 101 = s.regs 101 := fA 101 rfl
+  have a102 : a.regs 102 = s.regs 102 := fA 102 rfl
+  have a103 : a.regs 103 = s.regs 103 := fA 103 rfl
+  have a104 : a.regs 104 = s.regs 104 := fA 104 rfl
+  have a133 : a.regs 133 = s.regs 133 := fA 133 rfl
+  have b65 : b.regs 65 = a.regs 65 := fB 65 rfl
+  have b102 : b.regs 102 = a.regs 102 := fB 102 rfl
+  have b103 : b.regs 103 = a.regs 103 := fB 103 rfl
+  have b104 : b.regs 104 = a.regs 104 := fB 104 rfl
+  have b133 : b.regs 133 = a.regs 133 := fB 133 rfl
+  have c65 : c.regs 65 = b.regs 65 := fC 65 rfl
+  have c100 : c.regs 100 = b.regs 100 := fC 100 rfl
+  have c101 : c.regs 101 = b.regs 101 := fC 101 rfl
+  have c102 : c.regs 102 = b.regs 102 := fC 102 rfl
+  have c103 : c.regs 103 = b.regs 103 := fC 103 rfl
+  have c104 : c.regs 104 = b.regs 104 := fC 104 rfl
+  have c133 : c.regs 133 = b.regs 133 := fC 133 rfl
+  have d65 : d.regs 65 = c.regs 65 := fD 65 rfl
+  have d100 : d.regs 100 = c.regs 100 := fD 100 rfl
+  have d101 : d.regs 101 = c.regs 101 := fD 101 rfl
+  have d102 : d.regs 102 = c.regs 102 := fD 102 rfl
+  have d103 : d.regs 103 = c.regs 103 := fD 103 rfl
+  have d104 : d.regs 104 = c.regs 104 := fD 104 rfl
+  have d133 : d.regs 133 = c.regs 133 := fD 133 rfl
+  have e65 : e.regs 65 = d.regs 65 := fE 65 rfl
+  have e100 : e.regs 100 = d.regs 100 := fE 100 rfl
+  have e101 : e.regs 101 = d.regs 101 := fE 101 rfl
+  have e104 : e.regs 104 = d.regs 104 := fE 104 rfl
+  have e133 : e.regs 133 = d.regs 133 := fE 133 rfl
+  have e159 : e.regs 159 = d.regs 159 := fE 159 rfl
+  -- one-step value equations, all small
+  have vA160 : a.regs 160 = (wPair k (s.regs 65)).1 := blkA_wl k len idx s hn ha
+  have vA162 : a.regs 162 = (wPair k (s.regs 65)).2 := blkA_wh k len idx s hn ha
+  have vB100 := blkB_tLo k len idx a hb
+  have vB101 := blkB_tHi k len idx a hb
+  have vC152 := blkC_v k len idx b hcc
+  have vD159 := blkD_abs k len idx c hd
+  have vE102 := blkE_cel k len idx d he
+  have vE103 := blkE_celSq k len idx d he
   have hcE : e.regs rCeil ≠ 0 := by
-    simp only [rCeil, hE102]
-    simpa [celAfter, readSig, readRes, rTLo, rTHi, rCeil, rCeilSq, rMViol]
-      using hc
+    rw [rCeil, vE102, d65, c65, b65, a65, d103, c103, b103, a103,
+      d102, c102, b102, a102, d133, c133, b133, a133]
+    simp only [celStep]
+    simpa using hc
   obtain ⟨f, hf⟩ := blkF_ok k len idx e hcE
   have fF := denoteAInstrs_frame len idx SF (blkF k) (SF_dests k) e f hf
-  have hF104 := blkF_viol k len idx e hcE hf
-  rw [hE65, hE159, hE102, hE133, hE104] at hF104
-  have hF100 : f.regs 100 = b.regs 100 := (fF 100 rfl).trans hE100
-  have hF101 : f.regs 101 = b.regs 101 := (fF 101 rfl).trans hE101
-  have hF102 : f.regs 102 = _ := (fF 102 rfl).trans hE102
-  have hF103 : f.regs 103 = _ := (fF 103 rfl).trans hE103
-  -- assemble
+  have f100 : f.regs 100 = e.regs 100 := fF 100 rfl
+  have f101 : f.regs 101 = e.regs 101 := fF 101 rfl
+  have f102 : f.regs 102 = e.regs 102 := fF 102 rfl
+  have f103 : f.regs 103 = e.regs 103 := fF 103 rfl
+  have vF104 := blkF_viol k len idx e hcE hf
   refine ⟨f, ?_, ?_, ?_, ?_⟩
   · rw [mobiusLiveResidue_split k]
     simp only [denoteAInstrs_append, ha, hb, hcc, hd, he, hf,
@@ -476,11 +469,29 @@ theorem mobiusLiveResidue_denote (k len idx : Nat) (s : AState)
       denoteAInstrs_frame_arr len idx SC (blkC k) (SC_dests k) b c hcc,
       denoteAInstrs_frame_arr len idx SB blkB SB_dests a b hb,
       denoteAInstrs_frame_arr len idx SA (blkA k) (SA_dests k) s a ha]
-  · simp only [readRes, resStep, readSig, rTLo, rTHi, rCeil, rCeilSq, rMViol,
-      hF100, hF101, hF102, hF103, hF104, hB100, hB101, hE159]
   · intro j hj
     exact ((((((fF j (SF_false hj)).trans (fE j (SE_false hj))).trans
       (fD j (SD_false hj))).trans (fC j (SC_false hj))).trans
       (fB j (SB_false hj))).trans (fA j (SA_false hj)))
+  · simp only [readRes, resStep, readSig, rTLo, rTHi, rCeil, rCeilSq, rMViol,
+      f100, f101, f102, f103, vF104,
+      e65, e100, e101, e104, e133, e159, vE102, vE103,
+      d65, d100, d101, d102, d103, d104, d133, vD159,
+      c65, c100, c101, c102, c103, c104, c133, vC152,
+      b65, b102, b103, b104, b133, vB100, vB101,
+      a65, a79, a80, a100, a101, a102, a103, a104, a133, vA160, vA162]
+
+/-- **The residue block denotes `resStep`.**  It succeeds exactly when the
+current integer and the updated `⌈√(n+1)⌉` register are nonzero, it leaves the
+array untouched, it changes no register outside `Written` — in particular
+none of `2 … 91` and `128 … 144`, which is the sieve core's whole register
+file — and on its own five registers it acts as the transparent model. -/
+theorem mobiusLiveResidue_denote (k len idx : Nat) (s : AState)
+    (hn : s.regs 65 ≠ 0) (hc : celAfter (readSig s) (readRes s) ≠ 0) :
+    ∃ s', denoteAInstrs len idx s (mobiusLiveResidue k) = some s' ∧
+      s'.arr = s.arr ∧
+      (∀ j, ¬ Written j → s'.regs j = s.regs j) ∧
+      readRes s' = resStep k (readSig s) (readRes s) :=
+  residue_chain k len idx s hn hc
 
 end LeanCompCert.Ports.MobiusResidueRealisation
