@@ -1,0 +1,75 @@
+{
+ "atom": "reproducibleTable_abel_verifier_output",
+ "artifact": "LeanCompCert/Ports/CDEMAbelScan.lean :: abelProgram",
+ "family": "CDEMAbelNatFamily at W=10^18, K=199330, N=5e9",
+ "claim": "uPos <= uNeg + 324880457633740 AND v <= 48710223109607260068028",
+ "range": [
+  1,
+  5000000000
+ ],
+ "emit_command": "lake env lean --run bench/AbelEmit.lean 1000000000000000000 199330 1000000 5000 abel_prod.c",
+ "emit_report": "W=1000000000000000000\nK=199330\nHI=5000000000\nPRIMES=86\nBS_STEPS=61\nMARK_STEPS=8845158\nSIEVE_LEN=17142466\nPERIOD=70845158\nLOOP=354242932466\nCELLS=1199430\nBODY=378\nemit wall 3.972 s; C = 44975 bytes, sha256 831d4a845f46f14fd138fa2f2d1b753a57b12741cce1f87edfaa7568306d9dc9\ngcc -O2 compile 0.079 s; ccomp -O2 compile 0.168 s\n",
+ "toolchain": {
+  "compcert": "The CompCert C verified compiler, version 3.17",
+  "gcc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "git_commit": "915e2b5520c58f92e5c7e5b6aefc140516ba5aea",
+  "uname": "Linux 6.17.0-1026-nvidia aarch64",
+  "lean": "leanprover/lean4:v4.32.1"
+ },
+ "runs": {
+  "ccomp": {
+   "violations": 0,
+   "slots": [
+    2037368965713732597,
+    0,
+    2037044085256098857,
+    0,
+    10818755014043801788,
+    2640,
+    1678512305,
+    112,
+    111,
+    70710,
+    199330,
+    0
+   ],
+   "wall": "11:08:21",
+   "user_s": "19897.29",
+   "sys_s": "2016.26",
+   "peak_rss_kb": "12672",
+   "cpu_pct": "54%",
+   "exit_status": "0",
+   "wall_s": 40101.0
+  },
+  "gcc": {
+   "violations": 0,
+   "slots": [
+    2037368965713732597,
+    0,
+    2037044085256098857,
+    0,
+    10818755014043801788,
+    2640,
+    1678512305,
+    112,
+    111,
+    70710,
+    199330,
+    0
+   ],
+   "wall": "10:03:57",
+   "user_s": "15961.61",
+   "sys_s": "2035.60",
+   "peak_rss_kb": "12796",
+   "cpu_pct": "49%",
+   "exit_status": "0",
+   "wall_s": 36237.0
+  }
+ },
+ "cross_compiler_agreement": true,
+ "note": "Not shardable: Cfg has no lo and no carry-in, so this is one process from k=1 to k=5e9. The output register counts failed GUARDS, not the two inequalities; those are applied by bench/abel_check.py from the twelve result cells and BOTH HOLD AS EXACT EQUALITIES (slack 0 on each). Independent oracle bench/ref_abel.c (segmented marking, SEG=4e6, 605.91 s user, 19 MB) agrees on all twelve cells. tv=1678512305, F(N)=112, G(N)=111 independently reproduce fields of ReproducibleTableNativePrefixOutput. Run under a shared cgroup over its memory.high for much of the wall time; user CPU is the meaningful figure and even it carries ~2000 s of system time from forced reclaim.",
+ "raw_output": {
+  "ccomp": "violations 0\nslot0 2037368965713732597\nslot1 0\nslot2 2037044085256098857\nslot3 0\nslot4 10818755014043801788\nslot5 2640\nslot6 1678512305\nslot7 112\nslot8 111\nslot9 70710\nslot10 199330\nslot11 0\n",
+  "gcc": "violations 0\nslot0 2037368965713732597\nslot1 0\nslot2 2037044085256098857\nslot3 0\nslot4 10818755014043801788\nslot5 2640\nslot6 1678512305\nslot7 112\nslot8 111\nslot9 70710\nslot10 199330\nslot11 0\n"
+ }
+}

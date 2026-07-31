@@ -163,7 +163,7 @@ Mertens/squarefree residue under `ccomp` (`14.27` under gcc), `18.90` for
 | axiom | range | sieve, 1 core | notes |
 | --- | --- | --- | --- |
 | `residual_platt_stronger_range` | `7.727·10⁹` | **9.0 min** windowed, **10.2 min** per-integer | **done — but the range is `n ≤ 7 727 068 586`, not `7 727 068 587`: the family is false at the stated endpoint (see "The last 3 204 integers" below).**  Windowed: 663 windows, 0 violations, 2 h 23 min wall at `SEGLEN = 200`; per-integer with the two-limb accumulator: one artifact, no window loss, no boundary |
-| `residual_platt_2_11` | `10¹²` | **20.4 h** | same program, longer walk; supersedes the row above (a `10¹²` pass computes the `7.7·10⁹` range on the way).  Emits in 0.8 s, `ccomp` takes it in 0.06 s |
+| `residual_platt_2_11` | `10¹²` | **20.4 h** projected, **31.3 h measured** | **done — `[1, 10¹²]`, 1092 windows, two phases, zero violations; see "The `10¹²` run" below.**  Supersedes the row above (a `10¹²` pass computes the `7.7·10⁹` range on the way) |
 | `mertensM_hurst_sqrt` | `10¹⁶` | **24.1 core-years** | one pass; 24.6 with per-integer thresholds.  Emits in 62 s, `ccomp` in 0.53 s |
 | `reproducibleSquarefree` | `10¹⁶` | **free, same pass** | `Q` and `M` ride the same sieve; both thresholds are in the same residue |
 | `ch25_lemma_9_2_psi` | `10¹³` | 8.7 days *for the sieve alone* | **not implemented** — needs `log p` in 64-bit fixed point |
@@ -604,3 +604,130 @@ chained run needs); a number selects the freestanding driver, which returns `0`
 exactly when the artifact's violation count equals it.  `MODE` is `mertens`,
 `mertens2`, `mertenslive`, `mertenslive2`, `platt211` or `plattstrong`.
 `ulimit -s unlimited` is no longer needed at any scale reached here.
+
+## The `10¹²` run of `residual_platt_2_11`
+
+`bench/platt211_chain.py`, `bench/ArraySegBatch.lean`,
+`bench/platt211_report.py`, manifest
+`bench/results/manifests/platt211_1e12.json`.
+
+The axiom is, verbatim
+(`MathExtras/NumberTheory/Helfgott/Section24PlattFinite.lean`):
+
+```lean
+axiom residual_platt_2_11 :
+    ∀ x : ℝ, 1 ≤ x → x ≤ (10 : ℝ) ^ (12 : ℕ) →
+      |mobiusOverNSum x| ≤ Real.sqrt (2 / x)
+```
+
+`√(2/x)` is antitone, so on the real cell `[n, n+1)` the binding value is
+`x → n+1`: the integer family is `|S(n)| ≤ √(2/(n+1))`, which is what the
+`(n+1)` column of the table above says and what is tested here.
+
+### Why one pass was not enough
+
+A window's epilogue compares the running extrema of the accumulator, **seeded
+with the carry-in `T(lo−1)`**, against one threshold literal.  Run a window
+with the wrong carry-in and it computes wrong extrema — and wrong extrema can
+sit comfortably under the threshold and report zero.  **For a chain the
+violation count is not the check.**  So:
+
+| phase | carry-in | compiler | what it gives |
+| --- | --- | --- | --- |
+| A | neutral `tBias`, every window independent, any order | `gcc -O2` | per window `(δ, max_rel, min_rel)`; a serial prefix pass then produces the true carry-in of every window, the true extrema, and applies every threshold |
+| B | phase A's reconciled carry-in, baked in as the seed literal | `ccomp -O2` | the **artifact** applies its own threshold test; every slot must equal what phase A predicted and every carry-out must be the next window's seed |
+
+Both phases covered **all 1092 windows**.  A chain is accepted only when every
+phase-B window reproduces the phase-A reconciliation in all three slots, every
+carry-out is the next seed, the violation counts are exactly the expected
+ones, and the windows tile `[1, 10¹²]` with no gap, no overlap and no
+overshoot.  `--corrupt K` perturbs one carry-in by one ulp; run against a good
+chain the corrupted window **still reports `violations 0`** — the exit-code
+check passes — and the manifest comparison rejects on three independent
+grounds (`slot-mismatch`, `seed-mismatch`, `chain-break`).
+
+### Result
+
+```text
+chain accepted: [1, 1000000000000], 1092 windows, every phase-B slot
+reproduces the phase-A reconciliation, carry-outs chain, endpoint exact,
+1 exempted window.
+```
+
+with
+
+```text
+T(10¹²) = 9 223 372 287 158 981 334      S(10¹²) = 5.427607268270948e-08
+```
+
+Three independent confirmations:
+
+1. **An oracle that shares no code with the artifact.**  `bench/ref_seg.c`,
+   run from `n = 1` to `n = 10 091 000 000` (162.90 s user), gives
+   `T = 9 223 359 361 693 643 309`, which is **exactly** the chain's carry-out
+   at window #858.  A wrong prefix anywhere below `10¹⁰` could not survive
+   that.
+2. **A published number.**  The separate axiom
+   `residual_platt_10_pow_12_interval` records
+   `S(10¹²) ∈ [5.42625·10⁻⁸, 5.42898·10⁻⁸]` from Platt's interval arithmetic.
+   The computed `5.4276073·10⁻⁸` **is inside it**, at 50 % of the width.
+3. **The strict `(n+1)` form.**  The artifact's literal is
+   `platt211Threshold(hi) = ⌊2⁶²√(2/hi)⌋ − ⌈hi/2⌉`, the majorant at `hi`; the
+   Nat family wants it at `hi+1`.  Below `hi ≈ 3.4·10⁷` that difference
+   exceeds the `⌈hi/2⌉` the artifact already subtracts, so every window was
+   **re-tested** from the same result cells against the stricter
+   `⌊2⁶²√(2/(hi+1))⌋ − ⌈hi/2⌉`.  Every window clears it except the `n = 1`
+   tie below.
+
+The family is nowhere near tight: the worst window over `n > 2` is
+`[3, 3]` at ratio `0.7071` against the strict threshold, and it is worst only
+because a window's extrema are seeded with `T(lo−1)`.
+
+### The one exact tie, at `n = 1`
+
+`S(1) = 1` and `√(2/(1+1)) = 1`: the integer family is an **equality** at
+`n = 1`, and no floored fixed-point test that subtracts a rounding budget can
+certify an equality.  Concretely:
+
+* window `[1,1]` is tested against `⌊2⁶²√2⌋ − 1 = 6 521 908 912 666 391 105`,
+  which `2⁶²` clears with 41 % to spare — so `n = 1` **passes** under the
+  artifact's own literal;
+* window `[2,2]` inherits the tie, because its running extrema are seeded with
+  `T(1)`.  It is the one exempted window, and the exemption is discharged from
+  the same result cells: it covers a single integer, so `max = min = T(2)`,
+  and `|T(2) − bias| = 2⁶¹ ≤ thr = 2⁶² − 1`.  Its violation count is asserted
+  to be exactly `1` — a `0` there would mean the artifact was not testing what
+  it claims;
+* the **axiom** is unaffected.  It quantifies over reals, and on `x ∈ [1, 2)`
+  it needs `|S(1)| ≤ √(2/x)` where `√(2/x) > 1 = |S(1)|` strictly.
+
+### Cost
+
+| | user/wall | ns/integer | vs projection |
+| --- | --- | --- | --- |
+| phase A, `gcc -O2`, 1092 windows | 167 354 s of summed per-window wall = 46.5 core-h | 167.4 | 17.3 h projected — but this phase ran while the shared cgroup was over its `memory.high`, so the figure is stall, not work |
+| phase B, `ccomp -O2`, 1092 windows | 112 797 s = **31.3 core-h** | 112.8 | **20.4 h projected, +54 %** |
+| emission, 2·1092 artifacts | 18.6 s wall in 4 Lean processes | — | — |
+| compilation, 2·1092 artifacts | 8.5 s wall in 4 streams (unloaded) | — | — |
+
+The `+54 %` is not all artifact: phase B ran with 14 concurrent windows on a
+20-core box, so it includes shared-L3 contention, and the schedule adds a
+`√hi`-integer root sieve per window (0.01 % of the range) plus the
+`2·π(√hi)/L` mark term for windows whose span forces `L < 10⁶`.
+
+**Two operational findings worth keeping**, both of which cost hours before
+they were understood:
+
+* *emit and compile in batches, not per window.*  One `lean --run` per
+  artifact and one `gcc` per artifact are fine on an idle box (0.5 s and
+  0.06 s).  Under memory pressure they are not: a single `gcc -O2` of a 16 kB
+  translation unit was measured at **1166.36 s wall for 0.05 s of user time**
+  — a 23 000× stall.  Batching 1092 emissions into 4 Lean processes and 1092
+  compiles into 4 sequential streams took 18.6 s and 8.5 s respectively.
+* *the stall was `memory.high`, not RAM.*  The host had 40 GB free the whole
+  time.  The shared cgroup was at 57.4 GB against a `memory.high` of 55 GB
+  with swap exhausted, so the kernel put every allocating task in it into
+  forced direct reclaim: `/proc/pressure/memory` read `full avg10=93`.
+  Compute-bound processes with a stable working set were unaffected — which is
+  why the artifacts themselves kept running at full speed while every
+  `fork`/`exec` crawled.

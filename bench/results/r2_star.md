@@ -260,7 +260,8 @@ measurement rather than from the law:
 | gcc `-O2` | 241.7 | **1.41 core-hours** |
 | ccomp `-O2` | 366.5 | **2.14 core-hours** |
 
-**No full-scale run was started.**
+The full-scale run has since been made; it is §8, and it came out **24 %**
+(ccomp) / **31 %** (gcc) above these projections.
 
 ### The wall the table hit, and how it was removed
 
@@ -325,3 +326,98 @@ A clean run of this artifact to `2.1·10¹⁰` would establish the *statement* o
 the *stated* range by machine, independently of what the paper's citation
 supports.  It would not make the paper's citation correct, and the axiom's
 docstring on `claude_math` should keep saying so.
+
+## 8. The full-scale run
+
+`bench/results/manifests/r2star_2p1e10.json`.
+
+### One artifact, not a chain
+
+At two-and-a-bit core-hours the whole sweep fits in a single emitted, single
+compiled, single executed program — so the one thing a chain can get wrong,
+the carry-in, does not exist here.
+
+```
+lake env lean --run bench/R2SegEmit.lean 145000 1000000 21000 r2_prod.c
+gcc   -O2 -o r2_prod_gcc r2_prod.c        #    8.74 s,  224 MB
+ccomp -O2 -o r2_prod_cc  r2_prod.c        #  931.90 s, 9268 MB   (§6's wall, under load)
+```
+
+`lo = 145 000`, `L = 10⁶`, `N = 21 000`, hence `hi = 21 000 144 999`: the swept
+range `[3, 21 000 144 999]` **contains** the axiom's `[3, 2.1·10¹⁰]` with
+144 999 integers to spare.  `lo` has to exceed `⌊√hi⌋ = 144 914`; the head
+`[1, 144 999]` is folded at emit time and reports `viol = 0`.
+
+| | |
+| --- | --- |
+| emitted C | 2 611 275 bytes, 40 259 init statements, SHA-256 `47c92be0…` |
+| emit | 4 min 21 s wall, 455 MB peak, `iterPerInteger = 10.531` |
+| `loopCount` | 221 163 768 000 |
+| array | 5 796 499 cells = 46 371 992 bytes |
+| head carry-in | `d = 281 482 090 345 501`, `err = 10 983 953`, `terms = 61 171`, `viol = 0` |
+
+### Result
+
+**Zero violations, exit status 0, under both compilers, and all ten result
+cells identical between `ccomp -O2`, `gcc -O2` and the oracle
+`bench/ref_r2.c` run over the same range.**
+
+```text
+slot0 D     282 485 210 916 841      slot5 ⌊log₂⌋      34
+slot1 err     1 781 404 027 878      slot6 2^…         34 359 738 368
+slot2 prev   21 000 144 997          slot7 lnLo       398 757 432
+slot3 terms   4 802 318 405          slot8 thr        111 525 658 352 741
+slot4 ⌊√prev⌋   144 914              slot9 violations           0
+```
+
+so `R₂*(2.1·10¹⁰) = (D − 2⁴⁸)/2²⁴ = 60 214.651` with the carried enclosure
+`err/2²⁴ = 106 179.954`, against a threshold `thr/2²⁴ = 6.648·10⁶`.  The
+budget is 1.6 % of the threshold, so the run bounds the **real** `R₂*` with
+two orders of magnitude to spare, exactly as §3 claims.
+
+The oracle additionally reports the tightest point of the whole range:
+
+```text
+worst_ratio 1.452077   at   n = 110 102 617
+```
+
+— `|R₂*(n)|/(√n·log n) ≤ 1.4521` over `[3, 2.1·10¹⁰]`, against the axiom's
+`1.93`.  (§4 saw `1.2574` over `[3, 10⁷]` and `1.3657` over `[3, 10⁸]`; the
+sequence is still climbing, but slowly, and 1.93 is not close.)
+
+### Cost, measured
+
+The box was shared while these ran — load average 24–63 on 20 cores, swap
+exhausted — so **wall time here is not a rate** and only `user` CPU is quoted.
+Even `user` is inflated by shared-L3 contention, which is why the measured
+figures sit above the projections rather than on them.
+
+| | user CPU | ns/integer | ns/iteration | wall (under load) | peak RSS | exit |
+| --- | --- | --- | --- | --- | --- | --- |
+| `gcc -O2` | **6 628.08 s = 1.841 core-h** | 315.6 | 29.97 | 2:31:51 | 31 212 kB | 0 |
+| `ccomp -O2` | **9 586.90 s = 2.663 core-h** | 456.5 | 43.35 | 3:57:15 | 30 552 kB | 0 |
+| `bench/ref_r2.c` (oracle) | 1 019.60 s = 0.283 core-h | 48.6 | — | 50:24 | 27 956 kB | 0 |
+
+against §6's projections of `241.7` ns/integer (1.41 core-h) for gcc and
+`366.5` ns/integer (2.14 core-h) for ccomp: **+31 % and +24 %**.  The ratio
+`ccomp/gcc = 1.446` is within 5 % of §6's `1.516`, which is the part of the
+measurement that contention cannot distort, so the excess is the machine and
+not the artifact.
+
+The oracle is 6.5× faster than the CompCert-compiled artifact per integer.
+That is the price of a data-independent straight-line body, and it is the
+same 5–6× `array_seg_folds.md` records.
+
+### What this establishes
+
+The *statement* of Ramaré–Zúñiga Alterman 2024, Lemma 6.2, now holds by
+machine over the whole of its stated range — `[3, 2.1·10¹⁰]` and 144 999
+integers beyond it — with the loop body machine-checked (`r2Program_wf`,
+`r2Program_compiled`) to be what `denote` says and the compilation performed
+by CompCert.
+
+§7's caveat is unchanged and is the important one: **this corroborates
+Lemma 6.2, it does not discharge it.**  The paper's citation still does not
+support the endpoint it prints, and the axiom's docstring on `claude_math`
+should keep saying so.  What has changed is that the endpoint is no longer
+merely asserted: it is computed.

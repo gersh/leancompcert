@@ -1,10 +1,18 @@
 /* Independent oracle for LeanCompCert/Ports/CDEMAbelScan.lean.
  *
  *   cc -O2 -o ref_abel bench/ref_abel.c -lm
- *   ./ref_abel W K HI [MARK]
+ *   ./ref_abel W K HI [MARK] [SEG]
  *
  * MARK=1 accumulates the divisor sum by walking multiples instead of by the
  * O(HI*K) divisor loop; needed above K ~ 10^4.
+ *
+ * SEG is the length of the marking window, default HI (one window, which at
+ * HI = 5e9 is a 20 GB int32 array).  Any SEG >= 1 gives the same numbers:
+ * the multiples of each squarefree d <= K are walked window by window, at a
+ * cost of one extra cursor per d per window, i.e. ceil(HI/SEG)*K extra steps,
+ * which at SEG = 1e8 and HI = 5e9 is 1e7 against the 4e10 the marking already
+ * costs.  A window that fits in cache also makes the marking several times
+ * faster than the flat array does.
  *
  * Prints the twelve result slots the artifact stores, in the artifact's own
  * order and encoding, so the two can be compared literally:
@@ -96,6 +104,7 @@ int main(int argc, char **argv)
     uint64_t K = argc > 2 ? strtoull(argv[2], NULL, 10) : 199330;
     uint64_t HI = argc > 3 ? strtoull(argv[3], NULL, 10) : 1000000;
     int MARK = argc > 4 ? atoi(argv[4]) : 0;
+    uint64_t SEG = argc > 5 ? strtoull(argv[5], NULL, 10) : 0;
     uint64_t k, d;
     int8_t *mu;
     int64_t F = 0;
@@ -113,23 +122,34 @@ int main(int argc, char **argv)
      * same identity, but it is still not the artifact's algorithm: there is no
      * window, no cursor, no budget, and mu came from a linear sieve. */
     int32_t *acc = NULL;
+    uint64_t seg = 0, segLo = 1, segHi = 0;
     if (MARK) {
-        acc = calloc((size_t)HI + 1, sizeof(int32_t));
+        seg = SEG ? SEG : HI;
+        if (seg > HI) seg = HI;
+        acc = malloc((size_t)(seg + 1) * sizeof(int32_t));
         if (!acc) { fprintf(stderr, "out of memory\n"); exit(2); }
-        for (d = 1; d <= K; d++) {
-            uint64_t m;
-            if (mu[d] == 0) continue;
-            for (m = d; m <= HI; m += d)
-                acc[m] += mu[d];
-        }
+        segHi = 0;                       /* forces a refill at k = 1 */
     }
 
     for (k = 1; k <= HI; k++) {
         int64_t delta = 0;
         uint64_t g, dp, dn;
-        if (MARK)
-            delta = acc[k];
-        else
+        if (MARK) {
+            if (k > segHi) {             /* refill the marking window */
+                uint64_t i, m;
+                segLo = k;
+                segHi = segLo + seg - 1;
+                if (segHi > HI) segHi = HI;
+                for (i = 0; i <= segHi - segLo; i++) acc[i] = 0;
+                for (d = 1; d <= K; d++) {
+                    if (mu[d] == 0) continue;
+                    m = ((segLo + d - 1) / d) * d;
+                    for (; m <= segHi; m += d)
+                        acc[m - segLo] += mu[d];
+                }
+            }
+            delta = acc[k - segLo];
+        } else
             for (d = 1; d <= K; d++)
                 if (k % d == 0)
                     delta += mu[d];
