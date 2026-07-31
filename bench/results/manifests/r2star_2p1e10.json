@@ -1,0 +1,71 @@
+{
+ "atom": "MathExtras.RamareMertens2025.ramare_zuniga_2024_lemma_6_2_source",
+ "artifact": "LeanCompCert/Ports/R2SegSieve.lean :: r2Program (R2Cfg.ofScale)",
+ "family": "RamareZunigaLemma62NatFamily: |R2*(n)| <= 1.93*sqrt(n)*log(n), 3 <= n",
+ "claim": "forall X:Real, 3 <= X <= 21000000000 -> |r2Star (floor X)| <= 1.93 * sqrt X * log X",
+ "range": [
+  3,
+  21000144999
+ ],
+ "emit_command": "lake env lean --run bench/R2SegEmit.lean 145000 1000000 21000 r2_prod.c",
+ "emit_report": "S=24 lo=145000 L=1000000 N=21000 hi=21000144999 root=144914\n  table=13415 markSteps=3558013 logSteps=5973595 streamCap=391534 period=10531608\n  arrayLen=5796499 memoryBytes=46371992\n  loopCount=221163768000 bodyLen=326 initLen=40259\n  iterPerInteger=10531e-3\n  head d=281482090345501 err=10983953 prev=144999 terms=61171 sq=380 ex=17 ln=199388523 thr=146230987829 viol=0\n  bias=281474976710656 gammaStep=19368143 ln2Up=11629080 a193=126484\n",
+ "toolchain": {
+  "compcert": "The CompCert C verified compiler, version 3.17",
+  "gcc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "git_commit": "915e2b5520c58f92e5c7e5b6aefc140516ba5aea",
+  "uname": "Linux 6.17.0-1026-nvidia aarch64",
+  "lean": "leanprover/lean4:v4.32.1"
+ },
+ "runs": {
+  "ccomp": {
+   "violations": 0,
+   "slots": [
+    282485210916841,
+    1781404027878,
+    21000144997,
+    4802318405,
+    144914,
+    34,
+    34359738368,
+    398757432,
+    111525658352741,
+    0
+   ],
+   "wall": "3:57:15",
+   "user_s": "9586.90",
+   "sys_s": "613.79",
+   "peak_rss_kb": "30552",
+   "cpu_pct": "71%",
+   "exit_status": "0",
+   "wall_s": 14235.0
+  },
+  "gcc": {
+   "violations": 0,
+   "slots": [
+    282485210916841,
+    1781404027878,
+    21000144997,
+    4802318405,
+    144914,
+    34,
+    34359738368,
+    398757432,
+    111525658352741,
+    0
+   ],
+   "wall": "2:31:51",
+   "user_s": "6628.08",
+   "sys_s": "392.31",
+   "peak_rss_kb": "31212",
+   "cpu_pct": "77%",
+   "exit_status": "0",
+   "wall_s": 9111.0
+  }
+ },
+ "cross_compiler_agreement": true,
+ "note": "Swept [3, 21000144999], strictly containing the axiom's [3, 2.1e10]. Head [1,144999] folded at emit time, viol=0. ONE artifact, not a chain, so there is no carry-in to get wrong. Independent oracle bench/ref_r2.c over the identical range agrees on all ten slots (1019.60 s user, 27956 kB): worst ratio |R2*(n)|/(sqrt n log n) = 1.452077 at n = 110102617 against the majorant 1.93. Timings taken on a box under 2-3x oversubscription; user CPU is the meaningful figure and is itself inflated by shared-L3 contention.",
+ "raw_output": {
+  "ccomp": "violations 0\nslot0 282485210916841\nslot1 1781404027878\nslot2 21000144997\nslot3 4802318405\nslot4 144914\nslot5 34\nslot6 34359738368\nslot7 398757432\nslot8 111525658352741\nslot9 0\n",
+  "gcc": "violations 0\nslot0 282485210916841\nslot1 1781404027878\nslot2 21000144997\nslot3 4802318405\nslot4 144914\nslot5 34\nslot6 34359738368\nslot7 398757432\nslot8 111525658352741\nslot9 0\n"
+ }
+}

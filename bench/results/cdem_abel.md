@@ -179,7 +179,7 @@ plus `0.7 s` for the μ table, and 9.6 MB resident.  For comparison, the
 unverified production engine `scripts/cdem_repro_table_fast.cpp` takes
 `87.85 s` on eight threads (`≈ 442` core-seconds) and **19.5 GiB**, because it
 materializes `delta[]` for all of `[1, N]`; the artifact is `≈ 31×` slower per
-core and `2000×` smaller.  **No full run has been started.**
+core and `2000×` smaller.  The full run is §7.
 
 The single obvious lever, not taken here: the bisection runs for every integer,
 but `s` is only consumed where `δ(k) ≠ 0`, which is about `27 %` of them
@@ -187,3 +187,102 @@ but `s` is only consumed where `δ(k) ≠ 0`, which is about `27 %` of them
 the way `R2SegSieve` streams its log phase would drop `62` rounds per integer
 to `≈ 17` and the projection to roughly `1.1` hours.  That is a strictly
 mechanical change to the phase schedule and changes nothing proved above.
+
+## 7. The full run at `N = 5·10⁹`
+
+### The oracle first, because it changes what the artifact has to do
+
+`bench/ref_abel.c` now takes a fifth argument, the length of the marking
+window.  The flat version allocates `int32_t[HI+1]` — 20 GB at `N = 5·10⁹`,
+which on a shared box is not a thing to ask for — so the multiples of each
+squarefree `d ≤ K` are walked window by window instead, at a cost of
+`⌈HI/SEG⌉·K` extra cursor initialisations: `2.5·10⁸` against the `4·10¹⁰` the
+marking already costs, i.e. 0.6 %.  At `SEG = 4·10⁶` the window is 16 MB, it
+stays in cache, and the whole oracle runs in **605.91 s user and 19 MB**.  It
+reproduces the flat version and §5's `HI = 2·10⁶` slots exactly.
+
+Run at the production configuration `(W, K, N) = (10¹⁸, 199330, 5·10⁹)`:
+
+```text
+uPos = 2 037 368 965 713 732 597        tv        = 1 678 512 305
+uNeg = 2 037 044 085 256 098 857        F(N)      = 112
+v    = 2640·2⁶⁴ + 10 818 755 014 043 801 788   G(N) = 111
+                                        ⌊√N⌋      = 70 710
+```
+
+and therefore
+
+| the reduction's claim | computed | target | slack |
+| --- | --- | --- | --- |
+| `uPos ≤ uNeg + 324880457633740` | `uPos − uNeg = 324 880 457 633 740` | `324 880 457 633 740` | **0** |
+| `v ≤ 48710223109607260068028` | `48 710 223 109 607 260 068 028` | `48 710 223 109 607 260 068 028` | **0** |
+
+**Both hold, and both hold as exact equalities.**  §2 said this of `v` — "the
+trusted numeral *is* the engine's `Σ|δ(k)|·⌈W/√k⌉`" — and it is now confirmed
+of `uPos − uNeg` as well.  The numerals in
+`MathExtras/NumberTheory/Analysis/CohenDressElMarrakiReproducibleSourceDefs.lean`
+(`ReproducibleTableAbelVerifierOutput`) are not bounds with room in them; they
+are the values.  Three consequences worth stating plainly:
+
+* the artifact has **no margin at all**.  An implementation that rounded
+  `⌈W/√k⌉` one ulp more generously anywhere in `5·10⁹` integers would exceed
+  the numeral and the claim would read as false.  §2's "there is no slack" is
+  literal;
+* `tv = 1 678 512 305`, `F(N) = 112` and `G(N) = 111` independently reproduce
+  the `mobiusPrefixFloorSum` and `reproducibleVerifierGseq` fields of
+  `ReproducibleTableNativePrefixOutput` in the same file, which are separate
+  atoms checked by a different route;
+* the two inequalities are **not** tested by the artifact.  Its output
+  register is the number of failed *guards* (§3).  `bench/abel_check.py`
+  assembles the limb pairs from the twelve result cells and applies the two
+  comparisons, and the manifest records them.
+
+### The artifact, at `N = 5·10⁹`
+
+```
+lake env lean --run bench/AbelEmit.lean 1000000000000000000 199330 1000000 5000 abel_prod.c
+```
+
+`LOOP = 354 242 932 466`, `CELLS = 1 199 430`, body `378`, 44 975 bytes of C
+(SHA-256 `831d4a84…`), emitted in 3.97 s.  The scan is **not** shardable —
+`Cfg` has no `lo` and no carry-in, `F` and `G` are running quantities, and the
+program always opens at `k = 1` — so this is one process, one core, start to
+finish, under each compiler.
+
+**Zero guard failures, exit status 0, and all twelve result cells identical
+between `ccomp -O2`, `gcc -O2` and the oracle.**
+
+| | user CPU | ns/iteration | ns/integer | wall | peak RSS | exit |
+| --- | --- | --- | --- | --- | --- | --- |
+| `gcc -O2` | **15 961.61 s = 4.434 core-h** | 45.1 | 3 192 | 10:03:57 | 12 796 kB | 0 |
+| `ccomp -O2` | **19 897.29 s = 5.527 core-h** | 56.2 | 3 979 | 11:08:21 | 12 672 kB | 0 |
+| `bench/ref_abel.c` | 605.91 s = 0.168 core-h | — | 121 | 32:39 | 18 952 kB | 0 |
+
+against §6's projections of `3.8 h` (gcc) and `4.8 h` (ccomp): **+17 % and
++15 %**.  Both runs also carry about `2 000 s` of *system* time, which is not
+work: for most of their wall clock the shared cgroup they ran in was over its
+`memory.high`, so every allocation went through forced direct reclaim.  Wall
+clock here is meaningless — `%CPU` was 49 % and 54 % — and even the user
+figures are somewhat inflated by shared-L3 contention.  The `ccomp/gcc` ratio
+`1.247` is the part contention cannot distort, and it is within 1 % of §6's
+`1.271`.
+
+The oracle is `26×` faster per integer, which is the usual price of a
+data-independent straight-line body plus a bisection that runs for every
+integer whether or not `δ(k) ≠ 0`.  §6's un-taken lever — streaming the test
+points — would remove about two thirds of that.
+
+Manifest: `bench/results/manifests/cdem_abel_5e9.json`.
+
+### What this establishes
+
+`reproducibleTable_abel_verifier_output` now has a complete computed result:
+its two fields are true at `N = 5·10⁹`, computed twice by the artifact (once
+through CompCert) and once by an oracle sharing no code with it, agreeing on
+every one of the twelve cells.
+
+What it does **not** establish is anything about `denote` being the residue —
+that is still §4's gap, closed only by §5's and §7's agreement — and, because
+the two claims are exact equalities, nothing here has any margin.  A future
+change to the artifact's arithmetic cannot be validated by "it still passes";
+it has to reproduce these twelve integers.
