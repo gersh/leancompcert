@@ -391,8 +391,6 @@ private theorem residue_chain (k len idx : Nat) (s : AState)
     ∃ f : AState, denoteAInstrs len idx s (mobiusLiveResidue k) = some f ∧
       f.arr = s.arr ∧ (∀ j, ¬ Written j → f.regs j = s.regs j) ∧
       readRes f = resStep k (readSig s) (readRes s) := by
-  simp only [readSig, readRes, celAfter, rTLo, rTHi, rCeil, rCeilSq, rMViol]
-    at hc
   obtain ⟨a, ha⟩ := blkA_ok k len idx s hn
   obtain ⟨b, hb⟩ := blkB_ok len idx a
   obtain ⟨c, hcc⟩ := blkC_ok k len idx b
@@ -450,8 +448,7 @@ private theorem residue_chain (k len idx : Nat) (s : AState)
   have hcE : e.regs rCeil ≠ 0 := by
     rw [rCeil, vE102, d65, c65, b65, a65, d103, c103, b103, a103,
       d102, c102, b102, a102, d133, c133, b133, a133]
-    simp only [celStep]
-    simpa using hc
+    exact hc
   obtain ⟨f, hf⟩ := blkF_ok k len idx e hcE
   have fF := denoteAInstrs_frame len idx SF (blkF k) (SF_dests k) e f hf
   have f100 : f.regs 100 = e.regs 100 := fF 100 rfl
@@ -473,13 +470,23 @@ private theorem residue_chain (k len idx : Nat) (s : AState)
     exact ((((((fF j (SF_false hj)).trans (fE j (SE_false hj))).trans
       (fD j (SD_false hj))).trans (fC j (SC_false hj))).trans
       (fB j (SB_false hj))).trans (fA j (SA_false hj)))
-  · simp only [readRes, resStep, readSig, rTLo, rTHi, rCeil, rCeilSq, rMViol,
-      f100, f101, f102, f103, vF104,
-      e65, e100, e101, e104, e133, e159, vE102, vE103,
-      d65, d100, d101, d102, d103, d104, d133, vD159,
-      c65, c100, c101, c102, c103, c104, c133, vC152,
-      b65, b102, b103, b104, b133, vB100, vB101,
-      a65, a79, a80, a100, a101, a102, a103, a104, a133, vA160, vA162]
+  · refine Res.ext ?_ ?_ ?_ ?_ ?_
+    · simp only [readRes, resStep, readSig, rTLo,
+        f100, e100, d100, c100, vB100, a79, a80, a100, a101, vA160, vA162]
+    · simp only [readRes, resStep, readSig, rTHi,
+        f101, e101, d101, c101, vB101, a79, a80, a100, a101, vA160, vA162]
+    · simp only [readRes, resStep, readSig, rCeil,
+        f102, vE102, d65, c65, b65, a65, d103, c103, b103, a103,
+        d102, c102, b102, a102, d133, c133, b133, a133]
+    · simp only [readRes, resStep, readSig, rCeilSq,
+        f103, vE103, d65, c65, b65, a65, d103, c103, b103, a103,
+        d102, c102, b102, a102, d133, c133, b133, a133]
+    · simp only [readRes, resStep, readSig, rMViol,
+        vF104, e65, e159, e104, e133, vE102,
+        d65, d100, d101, d102, d103, d104, d133, vD159,
+        c65, c100, c101, c102, c103, c104, c133, vC152,
+        b65, b102, b103, b104, b133, vB100, vB101,
+        a65, a79, a80, a100, a101, a102, a103, a104, a133, vA160, vA162]
 
 /-- **The residue block denotes `resStep`.**  It succeeds exactly when the
 current integer and the updated `⌈√(n+1)⌉` register are nonzero, it leaves the
