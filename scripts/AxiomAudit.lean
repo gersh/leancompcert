@@ -26,6 +26,8 @@ import LeanCompCert.Verified.ListFold
 import LeanCompCert.Verified.PackedSieve
 import LeanCompCert.Verified.Segment
 import LeanCompCert.Verified.FoldBridge
+import LeanCompCert.Verified.Prop1224Margin
+import LeanCompCert.Ports.Prop1224Cell
 import LeanCompCert.Ports.RS62Increments
 import LeanCompCert.Ports.RS62LoopE
 import LeanCompCert.Ports.TGSieve
@@ -316,3 +318,22 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ExpFixPort.expCfg_fits
 #print axioms LeanCompCert.Ports.ExpFixPort.expProgram_wf
 #print axioms LeanCompCert.Ports.ExpFixPort.expProgram_compiled
+#print axioms LeanCompCert.Verified.Prop1224Margin.le_cdiv_mul
+#print axioms LeanCompCert.Verified.Prop1224Margin.k0_covers
+#print axioms LeanCompCert.Verified.Prop1224Margin.lamCube_ge
+#print axioms LeanCompCert.Verified.Prop1224Margin.lamHi_covers
+#print axioms LeanCompCert.Verified.Prop1224Margin.marginOK_sound
+#print axioms LeanCompCert.Verified.Prop1224Margin.gqTerm_ge
+#print axioms LeanCompCert.Verified.Prop1224Margin.gqTerm_lt
+#print axioms LeanCompCert.Verified.Prop1224Margin.cbrtOK_sound
+#print axioms LeanCompCert.Verified.Prop1224Margin.cbrtOK_mono
+#print axioms LeanCompCert.Verified.Prop1224Margin.envHi_ge
+#print axioms LeanCompCert.Verified.Prop1224Margin.phiLo_le
+#print axioms LeanCompCert.Verified.Prop1224Margin.posLo_le
+#print axioms LeanCompCert.Ports.Prop1224Cell.cbrtStep_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.coprimeBody_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.body_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.init_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.epilogue_all
+#print axioms LeanCompCert.Ports.Prop1224Cell.cellProgram_wf
+#print axioms LeanCompCert.Ports.Prop1224Cell.cellProgram_compiled
