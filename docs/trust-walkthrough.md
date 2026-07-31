@@ -303,11 +303,12 @@ step, and you should weigh it accordingly.
 #print axioms myTheorem
 
 # Recompile every certificate with CompCert and re-run it.
-# Results are cached, but the cache key includes this machine's ccomp binary
-# and its compcert.ini -- so a cache hit means "this install already compiled
-# and ran exactly this C, and it agreed", not merely "someone once did".
-# Read the "0 cached, N run" split rather than the exit code; add --force when
-# you want the run to happen in front of you.
+# Results are cached, but the key includes this machine's ccomp binary, its
+# compcert.ini, and the machine's own identity -- so a cache hit means "this
+# machine already compiled and ran exactly this C, and it agreed", not merely
+# "someone, somewhere, once did".  Copying a build tree to another host will
+# not produce a false pass.  Read the "0 cached, N run" split rather than the
+# exit code; add --force when you want the run to happen in front of you.
 lake exe lean-compcert check-native --force
 
 # Fail the build if any certificate acquires a new assumption.

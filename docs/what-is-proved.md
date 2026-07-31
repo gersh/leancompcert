@@ -264,10 +264,29 @@ a stamp written by one install from being honoured by the other; hashing the
 binary additionally catches a CompCert rebuilt from patched sources at the same
 release number.
 
+**The stamp is also bound to the machine.** Without that, the cache directory
+is portable: copying `.lake/build/native-check/` to another host carries the
+stamps *and* the compiled binaries, so a machine that never ran anything
+reports `cached` and `pass`. A shared Docker layer, a restored backup, or an
+`rsync` of a checkout produces that by accident. The key includes
+`/etc/machine-id` (falling back to dbus's copy, then hostname plus
+`uname -m -s`).
+
 So a `[cached]` line now means: *this machine, with this CompCert install,
 already compiled and ran exactly this generated C, and it agreed.* Change the
-compiler, its target, the stub, the headers, or the program, and the stamp is
-discarded automatically.
+compiler, its target, the stub, the headers, the program, **or the machine**,
+and the stamp is discarded automatically.
+
+**But understand what that is and is not.** This makes the cache *honest*, not
+tamper-proof. The stamp is an unsigned file in a directory you own; anyone who
+can copy it can also edit it. It defends against a build tree arriving from
+somewhere else — the realistic failure — not against someone determined to
+forge a pass. Evidence that survives an adversary has to be re-run, or run
+under attestation.
+
+If you are deliberately sharing a cache between identical containers, set
+`LEAN_COMPCERT_SHARED_CACHE=1` and accept that a hit no longer means "it ran
+here".
 
 **When you still want `--force`:**
 

@@ -147,6 +147,44 @@ private def compcertIdentity : IO String := do
   catch _ =>
     return "compcert-identity-unavailable"
 
+/-- Identity of the machine the check runs on.
+
+Without this, the cache directory is portable: copying
+`.lake/build/native-check/` to another host carries the stamps *and* the
+compiled binaries, so a machine that never ran anything reports
+`cached` and `pass`.  A shared Docker layer, a restored backup, or an
+`rsync` of a checkout is enough to produce that by accident.
+
+Prefers `/etc/machine-id` (persistent per installation, and not secret —
+it is a stable identifier, not a credential), then dbus's copy, then
+hostname plus `uname -m -s`.  The fallback is weaker but still catches
+the common accidents.
+
+**This makes the cache honest, not tamper-proof.** The stamp is an
+unsigned file in a directory you own; anyone who can copy it can also
+edit it. It defends against a build tree arriving from somewhere else,
+which is the realistic failure, not against someone determined to forge
+a pass. For evidence that survives an adversary, the artifact has to be
+re-run — or run under attestation.
+
+Set `LEAN_COMPCERT_SHARED_CACHE=1` to omit this, which is what you want
+if you are deliberately sharing a cache between identical containers and
+accept that a hit no longer means "it ran here". -/
+private def machineIdentity : IO String := do
+  if (← IO.getEnv "LEAN_COMPCERT_SHARED_CACHE") == some "1" then
+    return "machine shared-cache-opt-out"
+  let script :=
+    "if [ -r /etc/machine-id ]; then echo \"id $(cat /etc/machine-id)\"; \
+     elif [ -r /var/lib/dbus/machine-id ]; then echo \"id $(cat /var/lib/dbus/machine-id)\"; \
+     else echo \"host $(uname -n) $(uname -m) $(uname -s)\"; fi"
+  try
+    let out ← IO.Process.output { cmd := "sh", args := #["-c", script] }
+    if out.exitCode == 0 && !out.stdout.trimAscii.isEmpty then
+      return s!"machine {out.stdout.trimAscii}"
+    return "machine unidentified"
+  catch _ =>
+    return "machine unidentified"
+
 /-- Host architecture, normalised to the basename of the startup stub in
 `runtime/start/`.  `System.Platform` exposes OS and word size but not the
 machine type, so this shells out to `uname -m`. -/
@@ -403,8 +441,10 @@ def run (certs : List Cert) (args : List String) : IO UInt32 := do
         setup := { mode := .freestanding, startObject := some startObject }
         linkDescription := s!"freestanding {stubDescription}"
   let compcertId ← compcertIdentity
+  let machineId ← machineIdentity
   let toolchain :=
-    version ++ "\n" ++ compcertId ++ "\n" ++ String.intercalate " " includes
+    version ++ "\n" ++ compcertId ++ "\n" ++ machineId ++ "\n"
+      ++ String.intercalate " " includes
       ++ s!"\n{headerHash}\n{linkDescription}"
   let mut passed := 0
   let mut cached := 0
