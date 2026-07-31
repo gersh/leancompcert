@@ -71,6 +71,8 @@ import LeanCompCert.Lower.LCNF
 import LeanCompCert.Proof.PureSemantics
 import LeanCompCert.Verified.Decide
 import LeanCompCert.NativeCheck
+import LeanCompCert.Ports.DirichletLadder
+import LeanCompCert.Testing.DirichletLadderCertificate
 
 /-! # LeanCompCert -/
 

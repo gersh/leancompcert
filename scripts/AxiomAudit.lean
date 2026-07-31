@@ -36,6 +36,7 @@ import LeanCompCert.Verified.Straight
 import LeanCompCert.Verified.InstrBlock
 import LeanCompCert.Ports.TGProth
 import LeanCompCert.Ports.ArrayMobius
+import LeanCompCert.Testing.DirichletLadderCertificate
 import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Ports.LogFixPort
 import LeanCompCert.Verified.AddWide
@@ -344,3 +345,12 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ExpFixPort.expCfg_fits
 #print axioms LeanCompCert.Ports.ExpFixPort.expProgram_wf
 #print axioms LeanCompCert.Ports.ExpFixPort.expProgram_compiled
+
+-- Dirichlet L zero-ladder checker: the Platt Theorem 7.1 finite content
+#print axioms LeanCompCert.Ports.DirichletLadder.ladderProgram_wf
+#print axioms LeanCompCert.Ports.DirichletLadder.ladderProgram_compiled
+#print axioms LeanCompCert.Ports.DirichletLadder.bodyBlock_wf
+#print axioms LeanCompCert.Ports.DirichletLadder.initBlock_wf
+#print axioms LeanCompCert.Ports.DirichletLadder.epilogueBlock_wf
+#print axioms LeanCompCert.Ports.DirichletLadder.ainstrWFB_correct
+#print axioms LeanCompCert.Testing.DirichletLadderCertificate.program_wf
