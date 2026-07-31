@@ -167,5 +167,54 @@ print(f"axiom audit clean: {len(entries)} theorems, "
       "axioms within {propext, Classical.choice, Quot.sound}")
 EOF
 
+# The axiom PARTITION gate.
+#
+# The recurring public objection to this package is "you say it will have no
+# axioms; I don't understand how that is possible".  The answer is that the
+# claim is a partition, not a blanket, and this gate is its mechanical form:
+#
+#   * `LeanCompCert`        — zero axioms beyond the three standard ones.  The
+#                             kernel route never runs a compiler, so there is
+#                             nothing to admit.  Checked by the block above.
+#   * `LeanCompCertTrusted` — exactly ONE further axiom, by name.  Anything
+#                             else appearing here is a silent widening of the
+#                             trusted base and fails the build.
+trusted_log="$output/trusted-axiom-audit.txt"
+lake env lean scripts/TrustedAxiomAudit.lean > "$trusted_log"
+test -s "$trusted_log"
+python3 - "$trusted_log" <<'EOF'
+import re
+import sys
+
+standard = {"propext", "Classical.choice", "Quot.sound"}
+# The single admitted schema, and the per-use-site axioms the tactic mints,
+# which are all instances of exactly that statement.
+admitted = "LeanCompCert.Trusted.evidencedRun_sound"
+text = open(sys.argv[1]).read()
+entries = re.findall(r"'([^']+)' depends on axioms: \[([^\]]*)\]", text)
+if not entries:
+    sys.exit("error: trusted axiom audit output had no parseable axiom reports")
+
+bad = []
+carriers = set()
+for name, axioms in entries:
+    for axiom in (a.strip() for a in axioms.split(",")):
+        if not axiom or axiom in standard:
+            continue
+        if axiom == admitted or axiom.endswith("._evidenced.run.ax"):
+            carriers.add(name)
+            continue
+        bad.append((name, axiom))
+
+for name, axiom in bad:
+    print(f"error: {name} depends on unexpected trusted axiom {axiom}",
+          file=sys.stderr)
+if bad:
+    sys.exit(1)
+print(f"axiom partition clean: {len(entries)} audited; "
+      f"{len(carriers)} declaration(s) carry {admitted}; "
+      "no other axiom present")
+EOF
+
 python3 -m unittest discover -s tests -v
 echo "CompCert integration tests passed"

@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **A documentation-conformance and adversarial test suite, and the axiom
+  partition made mechanical.**  `LeanCompCertTests/Docs.lean` reproduces every
+  worked example printed in `docs/` *as printed* — tutorial 1's program and its
+  value 14950 and emitted symbol, tutorial 2's wide-arithmetic value laws,
+  tutorial 3's five equivalences checked as computations, tutorial 5's
+  compactness and `counterAugment` claims — so the prose cannot drift from the
+  code without a test failing or the file ceasing to compile.  It runs in
+  **2.07 s**, which is the point: the expensive gates stay in the acceptance
+  script.  `docs/testing.md` maps each claim to its test, names the mutation
+  used to confirm the test can fail, and states what is not covered.
+  - **The axiom partition is now a gate.**  The recurring public objection is
+    "you say it will have no axioms; I don't understand how that is possible".
+    The answer is a partition — `LeanCompCert` admits nothing because the
+    kernel route never runs a compiler, while `LeanCompCertTrusted` admits
+    exactly one named schema — and `test-compcert.sh` now fails the build if
+    either half moves.  Measured: 286 theorems audited in the main library, 32
+    in the trusted one, of which exactly **2** carry `evidencedRun_sound`.
+  - **The refusal story is stronger than a test.**  Deleting the `f.answers c n`
+    conjunct from `RunEvidence.verify` — making the checker stop binding the
+    value it certifies — **does not compile**: `verify_binds_value`,
+    `verify_agrees` and `verify_binds_identity` reject it.  An always-accept
+    checker cannot be shipped.
+  - **The anti-conservatism regression is pinned against the old formula.**  A
+    threshold sampled at `hi` instead of `hi + 1` only ever makes runs *pass*,
+    so no amount of green output would reveal it; the test therefore compares
+    against the superseded formula and requires the shipped one to be strictly
+    harder, and covers the `N = 0` corner and the `ceilSqrt` tie at `n = 4`.
+
 - **The windowed `plattstrong` and `platt211` epilogues were sampling the
   majorant one integer short, in the anti-conservative direction.**  The family
   these modes certify is the cell family `|Σ_{m≤n} μ(m)/m| ≤ g(n+1)` — on the

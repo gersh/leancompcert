@@ -9,6 +9,7 @@ import LeanCompCert.Testing.FixedPointCertificate
 import LeanCompCert.Testing.RolledFixedPoint
 import LeanCompCert.Testing.PackedCoverageCertificate
 import LeanCompCert.Verified.ClightEmit
+import LeanCompCertTests.Docs
 
 open LeanCompCert
 
@@ -264,4 +265,5 @@ def main : IO Unit := do
   testFixedPointCertificate
   testRolledEmission
   testDirectClight
+  LeanCompCertTests.Docs.run
   IO.println "LeanCompCert tests passed"

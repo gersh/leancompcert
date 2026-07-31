@@ -15,6 +15,13 @@ name = "LeanCompCertTrusted"
 name = "lean-compcert"
 root = "LeanCompCert.Main"
 
+# Test-support modules.  A library so that `LeanCompCertTests.*` submodules
+# resolve; the executable below is rooted at the same top module.  This is
+# test-only and is not part of the public API surface.
+[[lean_lib]]
+name = "LeanCompCertTests"
+globs = ["LeanCompCertTests", "LeanCompCertTests.+"]
+
 [[lean_exe]]
 name = "lean-compcert-tests"
 root = "LeanCompCertTests"

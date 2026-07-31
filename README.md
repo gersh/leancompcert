@@ -805,6 +805,17 @@ probe, and both test suites — with:
 The acceptance suite also builds the proof because `LeanCompCert.lean` imports
 the proof module.
 
+The fast inner loop, for iterating without CompCert or Coq installed:
+
+```console
+lake build lean-compcert-tests && ./.lake/build/bin/lean-compcert-tests
+```
+
+It runs in about two seconds and covers every worked example printed in
+`docs/`, plus the adversarial cases. **[What is tested, and where](docs/testing.md)**
+maps each documented claim to the test that pins it, names the mutation used to
+confirm that test can actually fail, and states plainly what is *not* covered.
+
 ## Scope and honest self-description
 
 The roadmap's milestones are implemented (see [ROADMAP.md](ROADMAP.md)
