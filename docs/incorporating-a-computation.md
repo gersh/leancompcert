@@ -115,6 +115,59 @@ one — and that is worth doing, since a mechanically-checkable execution
 assumption beats an unexamined citation, but it must be described as what it
 is.
 
+## Where the loop closes, and where it does not
+
+**This package contains zero axioms.** That is deliberate, and it has a
+consequence people are right to press on: *nothing in leancompcert can admit a
+computation's result into a proof.* There is an interface to run the
+calculations — `check-native` — and its own docstring is explicit about what it
+is not:
+
+> The cross-check is corroboration, never a premise: the theorems are
+> established by `verified_decide` in the kernel, and **nothing here feeds back
+> into Lean's proof state.**
+
+So `check-native` catches a mismatch between what your program means and what
+the artifact does. It does not, and is not meant to, give you a theorem.
+
+Step by step, for the artifact route:
+
+| step | closed inside leancompcert? | by what |
+| --- | --- | --- |
+| real claim → `Nat` family | **yes**, if you prove the reduction | ordinary Lean proof |
+| `Nat` family → program's denotation | **NO** | nothing — see the next section |
+| denotation → compiled C | **yes** | `AProgram.evalCC_compile` |
+| C → assembly | outside Lean | CompCert's Coq proof |
+| assembly → bytes | outside Lean | assembler and linker, trusted |
+| "it ran and returned 0" | **NO, by design** | `check-native` is corroboration only |
+
+**Two gaps remain inside this package**, and they are different in kind:
+
+1. **The encoding gap** — that the program computes the family. Dischargeable
+   in the kernel for small programs; for large ones only empirically, via an
+   independent oracle. See the next section.
+2. **The execution gap** — that a run happened. **Not closable here at all.**
+
+The execution gap closes *in the consumer*, and there are exactly two honest
+ways:
+
+- **Re-run it.** The conditional theorem's hypothesis is discharged by whoever
+  wants the result, outside Lean. Nothing is hidden and nobody is trusted. This
+  is Route B and it is the right default.
+- **A consumer-side axiom.** A project that cannot re-run — hundreds of
+  core-years — may state a named axiom admitting an attested run. The
+  ternary-Goldbach consumer does exactly this with
+  `phalaTdxAttestedEmission_sound` and `accepted_run_certificate_sound`. Those
+  axioms live **there, not here**, and that separation is intentional: this
+  package's guarantee is that using it adds nothing to your axiom list, so the
+  decision to admit an execution is one you make explicitly in your own project
+  and see in your own `#print axioms`.
+
+If you were expecting leancompcert to supply that bridge, it does not, and it
+should not. Its job ends at "here is an artifact whose compilation is proved
+faithful, and a conditional theorem stating exactly what running it would
+give you."
+
 ## The step none of the routes cover
 
 **Nothing above checks that your program computes your mathematics.**
