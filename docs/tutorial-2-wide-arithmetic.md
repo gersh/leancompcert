@@ -1,5 +1,13 @@
 # Tutorial 2 — Wide arithmetic: beyond 64 bits
 
+> **Vocabulary.** *Denotation* means what a program computes as ordinary
+> Lean arithmetic, defined mathematically rather than by running anything;
+> *reflection* means proving something by computing a `Bool` and appealing
+> to a theorem that says the `Bool` being `true` implies the statement.
+> [What is proved](what-is-proved.md) defines these, says what a *program*
+> is and everything you can write in one, and separates what is proved from
+> what is merely observed.
+
 Certificate values routinely exceed the machine word (the goldbach
 Mertens sums are `2⁶⁴`-scaled). This tutorial shows the proved patterns
 for multi-word computation, all built from fragment instructions.

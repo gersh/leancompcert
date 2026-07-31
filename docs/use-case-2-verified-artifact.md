@@ -1,5 +1,13 @@
 # Use case 2 — A compiled artifact you can trust
 
+> **Vocabulary.** *Denotation* means what a program computes as ordinary
+> Lean arithmetic, defined mathematically rather than by running anything;
+> *reflection* means proving something by computing a `Bool` and appealing
+> to a theorem that says the `Bool` being `true` implies the statement.
+> [What is proved](what-is-proved.md) defines these, says what a *program*
+> is and everything you can write in one, and separates what is proved from
+> what is merely observed.
+
 **You are here because:** you want an actual native binary — to ship, to
 schedule, to run at full machine speed — and you want a machine-checked
 account of what it computes, not "the compiler seemed to work".

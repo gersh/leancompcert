@@ -5,6 +5,14 @@
 > [use case 1](use-case-1-verified-native-decide.md); this tutorial is
 > the deep dive on migrating real recursive code.
 
+> **Vocabulary.** *Denotation* means what a program computes as ordinary
+> Lean arithmetic, defined mathematically rather than by running anything;
+> *reflection* means proving something by computing a `Bool` and appealing
+> to a theorem that says the `Bool` being `true` implies the statement.
+> [What is proved](what-is-proved.md) defines these, says what a *program*
+> is and everything you can write in one, and separates what is proved from
+> what is merely observed.
+
 `native_decide` proves finite facts by trusting Lean's compiler, a C
 compiler, and the runtime. This package replaces that trust with kernel
 checking — but naive `decide` fails at production scale. The working

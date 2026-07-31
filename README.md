@@ -42,6 +42,16 @@ implemented, with per-milestone evidence recorded there.
 **Setting up?** [Installation](docs/installation.md) — building CompCert,
 verifying it, and requiring this package from your `lakefile.toml`.
 
+**Want to know what this actually proves?** Read
+**[What is proved, what is observed, and what "program" means](docs/what-is-proved.md)**
+first. It defines the little register-machine language you write in and lists
+everything it contains; explains *denotation* and the other recurring terms;
+separates the three claims that are easy to conflate — the reduction (proved),
+the compilation (proved), and the run itself (**observed, not proved**);
+explains why `gcc` appears in the pipeline without defeating the purpose; and
+says what `check-native` does, how to wire it in, and why a cached pass is not
+evidence that anything ran.
+
 **New here, or holding a slow `native_decide`?** Start with
 **[Choosing a strategy for a finite computation](docs/choosing-a-strategy.md)**.
 It routes you to the right approach — kernel, compiled artifact, or attested
