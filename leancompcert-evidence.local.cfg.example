@@ -1,0 +1,10 @@
+# leancompcert-evidence.local.cfg — developer override (do not check in)
+#
+# Read after leancompcert-evidence.cfg; its keys win.  Copy this file to
+# leancompcert-evidence.local.cfg to use it.
+#
+# The local default: use the stamp if a previous run exists, otherwise run the
+# artifact now.  `cache` precedes `run` on purpose — a build you repeat should
+# stay a stamp check.  Put `run` first only when you want the computation
+# actually performed.
+policy = cache, run

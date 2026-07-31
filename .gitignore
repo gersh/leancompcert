@@ -8,3 +8,8 @@ __pycache__/
 *.out
 build/
 dist/
+
+# Developer override for `evidenced_decide` resolution policy (see
+# docs/incorporating-a-computation.md).  The project policy is checked in;
+# this one is not.
+leancompcert-evidence.local.cfg

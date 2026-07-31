@@ -1,0 +1,3 @@
+# Evidence records are machine-specific and are produced out of band.
+*.evidence
+ledger.log
