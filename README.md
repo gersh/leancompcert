@@ -74,6 +74,14 @@ implemented, with per-milestone evidence recorded there.
 — no assumed vocabulary, two real examples traced from a mathematical claim to
 bytes, naming what you must trust at each link.
 
+**Ready to write one?** [How to actually write a program](docs/writing-a-program.md)
+— you do not write assembly: arithmetic goes through `expr!( … )` and is
+compiled *with a proof*, and you build the rest from ordinary Lean emitter
+functions. The guide covers what changes when there is no branch and no early
+exit (gates, violation counters, checked budgets), where the word size binds,
+the four proof obligations you owe, and a checklist of the mistakes that have
+actually produced wrong answers here.
+
 **Setting up?** [Installation](docs/installation.md) — building CompCert,
 verifying it, and requiring this package from your `lakefile.toml`.
 

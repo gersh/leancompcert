@@ -68,6 +68,41 @@ exponential, each with an exact integer bracket), `Verified/Dyadic.lean` and
 `DyadicBisect.lean` (fixed-point intervals and outward-rounded square roots).
 Worked programs live in `Ports/`.
 
+## 1a. Two pipelines share this repository — do not confuse them
+
+This trips up nearly everyone, because both involve "compiling" and they have
+opposite trust stories.
+
+**The fragment path** is everything above, and everything the mathematics uses.
+A program is a **value you construct** — a piece of data. `p.compile` turns
+that value into C, and `evalCC_compile` *proves* the C computes what the value
+means. **No Lean source is compiled.** Your Lean code *builds* a program; it
+does not *become* one.
+
+That is precisely why it can be proved: the theorem quantifies over every value
+of a datatype with sixteen operations and no recursion.
+
+**The driver path** is `./bin/lean-compcert build Main.lean`, and it does what
+people usually assume. It takes real Lean source, runs `lake env lean -c` to
+get C out of **Lean's own code generator**, normalises that C until CompCert
+accepts it, compiles it with `ccomp` instead of `gcc`, and differentially tests
+the result against Lean's normal build.
+
+That is a **compatibility and hardening tool**. It proves nothing about your
+program. Its trusted set includes Lean's elaborator, its code generator, the
+normaliser, Lean's runtime, and the garbage collector — everything the fragment
+path exists to avoid.
+
+| | fragment certificates | the driver |
+| --- | --- | --- |
+| input | a **value** you construct | a **`.lean` file** |
+| C comes from | `p.compile`, **proved** faithful | Lean's code generator, **unverified** |
+| trusted | kernel + CompCert (+ assembler, linker) | all of that **plus Lean's whole compiler and runtime** |
+| used by | every certificate, all the mathematics | compatibility testing |
+
+If you are here for verified computation, you want the left column. See
+[how to actually write a program](writing-a-program.md).
+
 ## 2. Vocabulary
 
 Three words appear constantly and are worth pinning down.
