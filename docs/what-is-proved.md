@@ -241,22 +241,50 @@ A complete worked consumer, including the five-line wiring, is in
 
 ### Making sure the verification is actually done
 
-**`check-native` is content-hash cached.** A second run reports `[cached]` and
-compiles nothing. That is convenient locally and dangerous in CI, because a
-green `check-native` line does not by itself mean any compiler ran.
+`check-native` is cached, and a second run reports `[cached]` without compiling
+anything. The question is what a cache hit is worth.
 
-Two habits:
+**The stamp is keyed to this machine's toolchain, not just to the source.** It
+covers the generated C, the include configuration, the header directories, the
+link mode, the assembler and linker versions, the startup stub — and the
+**digest of the `ccomp` binary together with the full text of its
+`compcert.ini`**.
 
-- **Pass `--force` in CI** and anywhere you are producing evidence.
-- **Read the summary line, not the exit code.** It reports the split
-  explicitly:
+That last part matters more than it looks. `ccomp -version` prints only
 
-  ```
-  native check: 11 certificates agree ... (0 cached, 11 run, freestanding link)
-  ```
+```
+The CompCert C verified compiler, version 3.17
+```
 
-  `0 cached, 11 run` is a real verification. `11 cached, 0 run` is a cache hit
-  wearing the same colour.
+with **no architecture**. A CompCert configured `aarch64-linux` and one
+configured `x86_64-linux` are indistinguishable by version string, and
+cross-compiling is a normal setup here. `arch`, `abi`, and the
+prepro/asm/linker options all live in `compcert.ini`. Hashing it is what stops
+a stamp written by one install from being honoured by the other; hashing the
+binary additionally catches a CompCert rebuilt from patched sources at the same
+release number.
+
+So a `[cached]` line now means: *this machine, with this CompCert install,
+already compiled and ran exactly this generated C, and it agreed.* Change the
+compiler, its target, the stub, the headers, or the program, and the stamp is
+discarded automatically.
+
+**When you still want `--force`:**
+
+- you are **producing evidence for someone else**, and want the compile and the
+  run to have happened in front of you rather than be attested by a file you
+  also control;
+- you want **real timings**;
+- you suspect the cache directory itself.
+
+**And regardless: read the summary line, not the exit code.**
+
+```
+native check: 11 certificates agree ... (0 cached, 11 run, freestanding link)
+```
+
+`0 cached, 11 run` is a verification you just watched. `11 cached, 0 run` is a
+record that one happened. Both are green.
 
 The same discipline applies to the other gates: `#print axioms` should be read,
 not assumed, and `scripts/AxiomAudit.lean` should be run rather than trusted to

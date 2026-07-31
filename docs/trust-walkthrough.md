@@ -213,21 +213,88 @@ re-checkable answer is stronger evidence than any signature.
 
 ## One honest gap, named
 
-For some programs the *meaning* defined in step 2 cannot be evaluated by Lean's
-kernel either, for a mundane reason: the way the register file is represented
-makes reading a register cost time proportional to the number of writes so far,
-so a long loop becomes quadratic and exhausts the interpreter.
+### The question step 3 does *not* answer
 
-When that happens, the Lean program is not checked against the certificate by
-the kernel. It is checked instead against a C implementation **written
-independently from the mathematical specification**, at full production
-parameters, comparing every output rather than a headline number.
+Look again at what the compilation theorem says:
 
-That is weaker, and the affected modules say so. It is also not nothing: on one
-port, an independent implementation immediately caught a bug where a helper
-wrote to a register before reading it, which silently corrupted a counter and
-produced a confident, badly wrong answer that every self-consistency check had
-happily accepted.
+> if the program's meaning is *n*, then running the compiled C also gives *n*.
+
+It relates **your program** to **the C compiled from it**. It says nothing
+whatever about whether your program computes the mathematical quantity you
+care about.
+
+Those are two different worries, and it is easy to conflate them:
+
+| worry | answered by |
+| --- | --- |
+| Does the machine code do what my *program* says? | step 3's theorem, then CompCert |
+| Does my *program* do what the *mathematics* says? | **not by any of the above** |
+
+The second is a question about your encoding. You wrote a few hundred register
+instructions intending them to compute, say, a Möbius sum. Nothing so far
+checks that they do. Get an index wrong, or a shift, and every proof in the
+chain still goes through — they were never about that.
+
+### How that question is normally answered
+
+By running the program's meaning inside Lean's kernel on a **small
+configuration** and comparing it against a simple, obviously-correct reference
+— typically trial division, written directly from the definition.
+
+If a sieve and trial division agree on every integer up to a few hundred, the
+encoding is almost certainly right. That comparison is a kernel computation, so
+it is a theorem, not a test. `ArraySegSieve`, `R2SegSieve` and `Prop1224Cell`
+all do exactly this, and the practice is to include a configuration where the
+certificate is expected to **fail** as well as one where it passes — otherwise
+you cannot tell a correct encoding from one that always returns zero.
+
+### The gap
+
+For some programs, even the smallest meaningful configuration is too large for
+the kernel to evaluate. The reason is mundane and has nothing to do with the
+mathematics: the register file is represented as a chain of updates, so reading
+a register costs time proportional to the number of writes made so far, and a
+loop becomes quadratic. One port's smallest non-trivial configuration writes
+378 registers across 351 iterations — a chain roughly 10⁵ links deep, which
+exhausts the interpreter.
+
+So for those programs **the encoding question above is never answered inside
+Lean at all.**
+
+### What is done instead, and why it is weaker
+
+The compiled artifact is compared against a C implementation **written
+independently, from the mathematical specification, by someone who never saw
+the register encoding** — at full production parameters, comparing every output
+value rather than a single headline number, under two different compilers.
+
+Why this is weaker, precisely:
+
+- It is **evidence gathered by running**, not a theorem. Agreement on the
+  values tested is not agreement everywhere.
+- It compares the **artifact** to the oracle. The Lean program itself is still
+  never evaluated, so there remains no formal statement about what it means —
+  the chain has a genuine break at exactly that link.
+
+Why it is nonetheless worth a lot: the two implementations share no code and
+were derived from different things — one from the register encoding, one from
+the mathematics — so agreement on every output at production scale is hard to
+achieve by accident.
+
+And it demonstrably works. On one port, a helper that wrote its destination
+register before reading its source silently turned every conditional update
+into garbage; a counter reset each iteration and the artifact reported a value
+off by four orders of magnitude — **confidently, with every self-consistency
+check passing.** The independent implementation caught it on the first
+comparison. Nothing else would have.
+
+### What to do about it as a reader
+
+Check which situation a given port is in — the affected modules say so in their
+docstrings, and `bench/results/` records what was compared against what. A port
+with a kernel-checked encoding *and* an independent oracle is in good shape. A
+port with only the oracle is relying on empirical agreement for the encoding
+step, and you should weigh it accordingly.
 
 ## How to check any of this yourself
 
@@ -236,8 +303,11 @@ happily accepted.
 #print axioms myTheorem
 
 # Recompile every certificate with CompCert and re-run it.
-# --force matters: results are cached, and a cache hit looks identical to a
-# verification. Read the "0 cached, N run" split, not the exit code.
+# Results are cached, but the cache key includes this machine's ccomp binary
+# and its compcert.ini -- so a cache hit means "this install already compiled
+# and ran exactly this C, and it agreed", not merely "someone once did".
+# Read the "0 cached, N run" split rather than the exit code; add --force when
+# you want the run to happen in front of you.
 lake exe lean-compcert check-native --force
 
 # Fail the build if any certificate acquires a new assumption.

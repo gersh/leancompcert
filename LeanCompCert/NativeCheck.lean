@@ -106,6 +106,47 @@ private def toolVersion (cmd : String) (args : Array String) :
 private def ccompVersion : IO (Option String) :=
   toolVersion "ccomp" #["-version"]
 
+/-- Identity of the actual CompCert install: a digest of the `ccomp`
+binary plus the full text of its `compcert.ini`.
+
+This exists because `ccomp -version` is not enough to tell two installs
+apart.  It prints only
+
+    The CompCert C verified compiler, version 3.17
+
+with **no architecture**, so a CompCert configured `aarch64-linux` and one
+configured `x86_64-linux` are indistinguishable by version string — and
+`arch`, `abi`, `prepro_options`, `asm_options` and `linker_options` all
+live in `compcert.ini`, which nothing else here reads.  Cross-compiling is
+routine (an `x86_64` CompCert on an `aarch64` host is a supported setup),
+and the freestanding link description records `uname -m`, the *host*
+machine, not the compiler's *target*.  Without this, a stamp written by
+one install would be silently honoured by the other.
+
+Hashing the binary as well means a CompCert rebuilt from patched sources
+at the same release number also invalidates stamps.
+
+Failure to resolve any of it yields a constant marker rather than an
+error: a missing `compcert.ini` should not break the run, it should just
+stop the stamp from claiming more machine-specificity than it has. -/
+private def compcertIdentity : IO String := do
+  let script :=
+    "p=$(command -v ccomp) || exit 1; \
+     { sha256sum \"$p\" 2>/dev/null || shasum -a 256 \"$p\" 2>/dev/null || echo no-digest; } \
+       | awk '{print \"bin \" $1}'; \
+     for c in \"$(dirname \"$p\")/compcert.ini\" \
+              \"$(dirname \"$(dirname \"$p\")\")/share/compcert.ini\" \
+              /usr/local/share/compcert.ini; do \
+       if [ -f \"$c\" ]; then echo 'ini'; cat \"$c\"; exit 0; fi; \
+     done; echo 'ini absent'"
+  try
+    let out ← IO.Process.output { cmd := "sh", args := #["-c", script] }
+    if out.exitCode == 0 && !out.stdout.trimAscii.isEmpty then
+      return out.stdout.trimAscii.toString
+    return "compcert-identity-unavailable"
+  catch _ =>
+    return "compcert-identity-unavailable"
+
 /-- Host architecture, normalised to the basename of the startup stub in
 `runtime/start/`.  `System.Platform` exposes OS and word size but not the
 machine type, so this shells out to `uname -m`. -/
@@ -157,10 +198,20 @@ private def fileContentHash (path : System.FilePath) : IO UInt64 := do
     pure 0
 
 /-- Stamp recorded after a passing run: generated-C hash plus a
-toolchain hash covering the ccomp version, the include configuration
-(the Lean include path is versioned, so toolchain bumps change it), the
-contents of non-toolchain header directories, the link mode, the
-assembler/linker versions, and the startup stub's contents. -/
+toolchain hash covering the ccomp version, **the `ccomp` binary's digest
+and the full text of its `compcert.ini`** (see `compcertIdentity` — the
+version string alone does not name the target architecture), the include
+configuration (the Lean include path is versioned, so toolchain bumps
+change it), the contents of non-toolchain header directories, the link
+mode, the assembler/linker versions, and the startup stub's contents.
+
+The consequence worth knowing: a `[cached]` result now means *this
+machine, with this CompCert install, already compiled and ran exactly
+this generated C and it agreed*.  Change the compiler, its target, the
+stub, the headers, or the program, and the stamp is discarded.  That
+makes `--force` a deliberate re-verification rather than a routine
+necessity — though it is still what you want when producing evidence,
+because a stamp records that a run happened, not that you watched it. -/
 private def stampFor (source toolchain : String) : String :=
   s!"{hash source} {hash toolchain} pass"
 
@@ -351,8 +402,9 @@ def run (certs : List Cert) (args : List String) : IO UInt32 := do
     | .ok (startObject, stubDescription) =>
         setup := { mode := .freestanding, startObject := some startObject }
         linkDescription := s!"freestanding {stubDescription}"
+  let compcertId ← compcertIdentity
   let toolchain :=
-    version ++ "\n" ++ String.intercalate " " includes
+    version ++ "\n" ++ compcertId ++ "\n" ++ String.intercalate " " includes
       ++ s!"\n{headerHash}\n{linkDescription}"
   let mut passed := 0
   let mut cached := 0

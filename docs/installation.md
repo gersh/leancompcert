@@ -193,9 +193,15 @@ generated C with `ccomp` and run the self-checking binary:
 lake exe lean-compcert check-native
 ```
 
-It is content-hash cached, so a second run reports `[cached]`. **Pass
-`--force` when you want real timings or a genuine re-verification** — a cached
-pass is not evidence that anything ran.
+It is cached, and the cache key includes **this machine's `ccomp` binary digest
+and the full text of its `compcert.ini`** — necessary because `ccomp -version`
+does not name the target architecture, so an `aarch64` and an `x86_64` install
+of the same release look identical by version string alone. Swap CompCert
+installs, or change the target, and every stamp is discarded automatically.
+
+So `[cached]` means *this install already compiled and ran exactly this C and
+it agreed*. Pass `--force` when you want real timings, or when producing
+evidence for someone else and you want the run to happen in front of you.
 
 Note what this is and is not. The compiled binary is a *cross-check*: its exit
 status is never admitted as a theorem. The certificate's own proof stands on
