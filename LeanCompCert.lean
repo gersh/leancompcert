@@ -73,6 +73,12 @@ import LeanCompCert.Verified.Decide
 import LeanCompCert.NativeCheck
 import LeanCompCert.Ports.DirichletLadder
 import LeanCompCert.Testing.DirichletLadderCertificate
+import LeanCompCert.Ports.MobiusResidueModel
+import LeanCompCert.Ports.MobiusResidueRealisation
+import LeanCompCert.Ports.MobiusResidueWeight
+import LeanCompCert.Ports.MobiusResidueAcc
+import LeanCompCert.Ports.MobiusResidueTest
+import LeanCompCert.Ports.MobiusResidueWindow
 
 /-! # LeanCompCert -/
 
