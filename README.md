@@ -1,5 +1,36 @@
 # lean-compcert
 
+**In plain terms.** Some proofs need a fact that is finite but enormous —
+"this holds for every integer up to eight billion". A computer checks it. The
+awkward question is why anyone should believe the computer.
+
+Lean's kernel is a small, heavily scrutinised proof checker; if it accepts a
+computation, you are trusting a few thousand lines of well-studied code and
+nothing else. But it is built for trustworthiness rather than speed, and stops
+being practical somewhere around ten thousand items. The usual escape hatch,
+`native_decide`, runs the computation at full speed but records that choice as
+an assumption — you are now trusting Lean's compiler and runtime too.
+
+This package gives you better options than "too slow" and "trust a compiler":
+push far more into the kernel than you would expect, and when that genuinely
+runs out, fall back to a compiled artifact whose translation is *proved*
+faithful rather than assumed.
+
+**→ [Read the complete walkthrough](docs/trust-walkthrough.md)** — two real
+examples followed from a mathematical claim all the way to bytes, assuming no
+familiarity with Lean or CompCert, answering at every step: *what would you
+have to trust for this to be wrong?* Start there if any of the vocabulary
+below is unfamiliar.
+
+One thing worth knowing up front, because it is the most common confusion:
+this package proves that your algorithm is faithfully translated to machine
+code, and separately that your algorithm implies your theorem. **It does not
+prove that any particular run happened.** That comes from re-running the
+computation, or from attested execution. See
+[what is proved](docs/what-is-proved.md).
+
+---
+
 `lean-compcert` turns finite Lean computations into kernel-checked
 theorems and [CompCert](https://compcert.org/)-compiled native
 artifacts. It serves two use cases:
@@ -38,6 +69,10 @@ non-goals — is in [ROADMAP.md](ROADMAP.md); all seven milestones are
 implemented, with per-milestone evidence recorded there.
 
 ## Documentation
+
+**New to any of this?** [The complete walkthrough](docs/trust-walkthrough.md)
+— no assumed vocabulary, two real examples traced from a mathematical claim to
+bytes, naming what you must trust at each link.
 
 **Setting up?** [Installation](docs/installation.md) — building CompCert,
 verifying it, and requiring this package from your `lakefile.toml`.
