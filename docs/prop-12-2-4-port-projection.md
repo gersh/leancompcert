@@ -151,7 +151,8 @@ both enclosures carried.  That is the design a port should start from.
 1. A `Ports/` module for the per-`q` row: three-plane marking to distinct prime
    factors and `φ(q)` (the `R2SegSieve` pattern, whose `prod ≠ n` test for "a
    prime above `√hi` remains" is directly reusable), then the `f₁`, `ϖ`, `λ`
-   pipeline over `ExpFixPort`.  **Still missing.**
+   pipeline over `ExpFixPort`.  **Landed** as `Ports/Prop1224Row.lean`; see
+   "The row module, measured" below.
 2. A `Ports/` module for the `(q,k)` cell: the coprime squarefree `1/φ(r)`
    accumulation and the margin.  **Landed** as
    `Ports/Prop1224Cell.lean`; see below.
@@ -242,3 +243,66 @@ read as the neutral `1`, which is `R2SegSieve`'s `0`-means-`1` correction.
 *Emission is quadratic in `arrayLen`.*  `5.9 s` at `16 433` cells, `78 s` at
 `65 607`.  This is emit-time only and does not affect the artifact, but it does
 bound how large a single window can usefully be.
+
+## The row module, measured
+
+`Ports/Prop1224Row.lean` landed; `bench/results/p1224_row.md` has the run log.
+Three things in the revised projection above turned out to be wrong, all in the
+unfavourable direction, and one thing about the *statement* turned out to be
+wrong in the safe direction.
+
+**The row needs five exponentials, not four.**  The optimisation the note
+proposed — bounding the large prime's `f₁` factor by `1 + P^{−2/3}`, one
+`rpow` instead of two — is not what `bench/ref_p1224.c` computes, and the
+oracle is the specification.  The port therefore evaluates `f₁`'s exact factor
+at the large prime, which costs `p^{1/3}` and `p^{2/3}` from below.  It costs
+nothing in *iterations*: the chain
+
+```
+log q → q^τ → (c₂*q^τ) → log w → w^{τ/(1−τ)} → (base) → log b → b^{1/(1−τ)} → ϖ₀
+```
+
+is six stages long whatever else is scheduled, and one logarithm engine plus
+one exponential engine running concurrently leave exactly two exponential slots
+free, which is where the large prime's pair goes.  Six slots of `S = 24`
+rounds, and a seventh only on the `q < 2^17` rows, where `ϖ`'s third term needs
+`rpowHi`.
+
+**The cost is not the exponential, it is the iteration.**  Every phase's
+instructions execute on every iteration of an `AProgram`, so the segmented
+sieve, the slot muxes and the row finish's ten `udiv`s are paid `40` times per
+row, not once.  The module's `expUnroll` parameter — `k` copies of both round
+bodies in the body, `S/k` iterations per slot — is the lever: at `k = 1` a row
+is `147` iterations and `1.3·10⁵` instructions, at `k = 4` it is `41`
+iterations and `6.6·10⁴`, and the wall time follows.
+
+**Measured, at `q ≈ 3·10⁹` with the mark table of the full `3.3·10⁹` sweep:**
+`9.6 µs` per row under `gcc -O2` (`0.63 s` for `65 536` rows) and `1.2–1.6×`
+that under `ccomp`, i.e. `12–15 µs`.  Over `3.389·10⁹` rows:
+
+| | ccomp artifact |
+| --- | ---: |
+| `q` rows, `expUnroll = 4` | `≈ 12` core-hours (**measured** on `2·10⁵` rows) |
+| `(q,k)` cells, `1.2·10⁸` `r`-steps | `0.03` core-hours (**measured**) |
+| **total** | **`≈ 12` core-hours** |
+
+against `105–640` — a factor of `9` to `53`, against the `19`–`115` this note
+projected.  **Still not run at scale.**
+
+## A third emit-time hazard, and one soundness note
+
+*CompCert's compile time, not its stack, is the wall for a big table.*  The
+production mark table is `5 823` primes at two cells each; `ccomp -O` on the
+resulting `2.2 MB` translation unit takes `38` minutes and `6.5 GB`, against
+seconds for gcc.  It succeeds — `11 648` entries is well under the `27 421`
+that overflowed the stack — but it is paid once per emitted slice.
+
+*The oracle's window floor is one cell tighter than the proved guard.*
+`ref_p1224.c` sweeps from `k0 = ⌊ϖ_lo/2^E⌋ + 1`; `Prop1224Margin.k0_covers`
+proves the guard only for `⌊ϖ_lo/2^E⌋`.  The `+1` skips an admissible `k`
+exactly when `ϖ_lo` is an exact multiple of `2^E` and equals `ϖ(q)` — measure
+zero, no counterexample known, but it is the *silent* direction, so
+`Ports/Prop1224Row.lean` reports both counts.  Over `[1, 257)` they differ by
+`256`, one per non-empty window; over the whole range that is `≈ 1.3·10⁶` extra
+cells on `6.7·10⁷`, under two per cent. A production run should take the
+proved floor.

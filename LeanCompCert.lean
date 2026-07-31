@@ -44,6 +44,7 @@ import LeanCompCert.Ports.A36Bisect
 import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Ports.R2SegSieve
 import LeanCompCert.Ports.Prop1224Cell
+import LeanCompCert.Ports.Prop1224Row
 import LeanCompCert.Testing.ArrayMobiusCertificate
 import LeanCompCert.Testing.ArraySegCertificate
 import LeanCompCert.Verified.Limb
