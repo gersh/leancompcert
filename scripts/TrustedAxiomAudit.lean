@@ -62,9 +62,20 @@ band and a fresh checkout has none; see `tests/evidenced-decide/`.
 #print axioms LeanCompCert.Trusted.Demo.refuse_bad_shard
 #print axioms LeanCompCert.Trusted.Demo.refuse_tdx
 
--- The two declarations that DO carry the axiom, and nothing else does.
+-- The declarations that DO carry an admission axiom, and nothing else does.
+-- There are now TWO admission schemas, deliberately named apart so that
+-- `#print axioms` distinguishes the regime a theorem rests on:
+--
+--   evidencedRun_sound     — an out-of-band artifact run, evidenced by a record
+--   localSignedRun_admits  — a run receipt signed by a key on the machine that
+--                            ran the binary.  Tamper-evident, NOT attested.
+--
+-- An enclave discharger lives in `gpu_prover` and has a third name.
 #print axioms LeanCompCert.Trusted.denote_of_evidence
 #print axioms LeanCompCert.Trusted.Demo.demo_admitted
+#print axioms LeanCompCert.Trusted.returns_of_localReceipt
+#print axioms LeanCompCert.Trusted.returns_of_localReceipt_proved
+#print axioms LeanCompCert.Trusted.decide_of_localReceipt
 
 -- Regression: pre-existing certificates are untouched by all of the above.
 #print axioms LeanCompCert.Testing.MertensCertificate.referenceSum_eq

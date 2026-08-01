@@ -18,9 +18,13 @@ lake env lean scripts/AxiomAudit.lean
 
 echo
 echo "== 4. where the new axiom may and may not appear =="
-echo "   expected: base trio everywhere EXCEPT denote_of_evidence and"
-echo "   Demo.demo_admitted, which additionally show"
-echo "   LeanCompCert.Trusted.evidencedRun_sound"
+echo "   expected: base trio everywhere EXCEPT"
+echo "     denote_of_evidence, Demo.demo_admitted"
+echo "         -> LeanCompCert.Trusted.evidencedRun_sound"
+echo "     returns_of_localReceipt{,_proved}, decide_of_localReceipt"
+echo "         -> LeanCompCert.Trusted.localSignedRun_admits"
+echo "   The two names are the two regimes.  A locally signed receipt is"
+echo "   TAMPER-EVIDENT, not attested; see Trusted/LocalReceipt.lean."
 lake env lean scripts/TrustedAxiomAudit.lean
 
 echo

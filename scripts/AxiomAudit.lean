@@ -55,6 +55,7 @@ import LeanCompCert.Ports.A36Bisect
 import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Verified.ExpFixed
 import LeanCompCert.Ports.ExpFixPort
+import LeanCompCert.Attest
 
 
 /-!
@@ -390,3 +391,28 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.Prop1224Row.epilogue_all
 #print axioms LeanCompCert.Ports.Prop1224Row.rowProgram_wf
 #print axioms LeanCompCert.Ports.Prop1224Row.rowProgram_compiled
+
+-- The run-receipt standard (`LeanCompCert/Attest/`).  It is in the axiom-free
+-- library on purpose: `RunAdmission` is a HYPOTHESIS here, discharged only by
+-- a consumer who opts into a named axiom.  If any of these ever acquires an
+-- axiom, the composition has stopped being conditional and the gate fails.
+#print axioms LeanCompCert.Attest.receiptBinds_sound
+#print axioms LeanCompCert.Attest.receiptBinds_programHash
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_noEmission
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_programHash_ne
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_paramsHash_ne
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_value_ne
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_verdict_ne
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_nonce_ne
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_badSignature
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_kind_ne
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_route_ne
+#print axioms LeanCompCert.Attest.receiptBinds_false_of_digestName_ne
+#print axioms LeanCompCert.Attest.receiptBindsProved_sound
+#print axioms LeanCompCert.Attest.returns_of_receipt
+#print axioms LeanCompCert.Attest.returns_of_receipt_proved
+#print axioms LeanCompCert.Attest.decide_of_receipt
+#print axioms LeanCompCert.Attest.not_selfTested_of_alwaysTrue
+#print axioms LeanCompCert.Attest.not_selfTested_of_alwaysFalse
+#print axioms LeanCompCert.Attest.not_selfTested_of_messageIgnoring
+#print axioms LeanCompCert.Attest.not_selfTested_of_constantDigest

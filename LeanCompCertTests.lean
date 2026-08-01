@@ -10,6 +10,7 @@ import LeanCompCert.Testing.RolledFixedPoint
 import LeanCompCert.Testing.PackedCoverageCertificate
 import LeanCompCert.Verified.ClightEmit
 import LeanCompCertTests.Docs
+import LeanCompCertTests.Attest
 
 open LeanCompCert
 
@@ -250,6 +251,34 @@ private def testDirectClight : IO Unit := do
       check (!source.contains "goto" && !source.contains "Sgoto")
         "direct Clight emission must be goto-free"
 
+/-- The receipt tool's byte surgery and on-disk format, at run time.
+
+The kernel-checked half is `LeanCompCertTests/Attest.lean`; this exercises the
+same functions compiled, so a divergence between the two evaluators would show
+up here. -/
+private def testAttestTool : IO Unit := do
+  let sig := Attest.p256KatSignature
+  check ((Attest.Tool.signatureDerOfHex sig).bind Attest.Tool.signatureHexOfDer
+      == some sig)
+    "ECDSA signature DER round trip changed"
+  check ((Attest.Tool.publicKeyDerOfHex Attest.p256KatPublicKey).bind
+      Attest.Tool.publicKeyHexOfDer == some Attest.p256KatPublicKey)
+    "SEC1 public key DER round trip changed"
+  check (Attest.Tool.signatureDerOfHex "beef" == none)
+    "a short signature must not encode to DER"
+  check (Attest.Tool.publicKeyDerOfHex (String.ofList (List.replicate 130 '0')) == none)
+    "a public key without the 04 tag must be refused"
+  let text := Attest.Tool.renderReceipt LeanCompCertTests.Attest.receipt
+  check (match Attest.Tool.parseReceipt text with
+      | .ok parsed => parsed == LeanCompCertTests.Attest.receipt
+      | .error _ => false)
+    "receipt file round trip changed"
+  check ((Attest.Tool.parseReceipt (text ++ "extra\n")).toOption.isNone)
+    "a receipt with an extra line must be refused"
+  check (Attest.Tool.renderReceipt LeanCompCertTests.Attest.receipt
+      |>.startsWith Attest.schemaVersion)
+    "the signed payload must be a prefix of the receipt file"
+
 def main : IO Unit := do
   testSymbols
   testInterpreter
@@ -266,4 +295,5 @@ def main : IO Unit := do
   testRolledEmission
   testDirectClight
   LeanCompCertTests.Docs.run
+  testAttestTool
   IO.println "LeanCompCert tests passed"

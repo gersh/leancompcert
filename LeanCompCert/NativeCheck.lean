@@ -1,3 +1,5 @@
+import LeanCompCert.Attest.Tool
+
 /-!
 # Cached native cross-check runner
 
@@ -37,13 +39,49 @@ always retried.
 The cross-check is corroboration, never a premise: the theorems are
 established by `verified_decide` in the kernel, and nothing here feeds
 back into Lean's proof state.
+
+## `--attest`: the same run, with a signed record of it
+
+With `--attest` a passing run additionally writes a **run receipt**
+(`LeanCompCert/Attest/Receipt.lean`): the digest of the exact C text
+compiled, the digest of the inputs, the CompCert identity, the machine
+identity, a nonce, a timestamp and the reported value, all under one
+signature.  The caching is unchanged — a certificate whose C has not
+changed is still not recompiled, and its existing receipt is kept.
+
+A receipt is **not** a premise either.  It becomes one only when a
+consumer imports a discharger and applies `Attest.receiptBinds`; see
+`docs/use-case-3-attested-run-receipts.md`.  With a locally generated
+key it is tamper-evident bookkeeping and nothing stronger — read
+`LeanCompCert/Trusted/LocalReceipt.lean` before relying on one.
 -/
 
 namespace LeanCompCert.NativeCheck
 
+open LeanCompCert.Attest
+
 structure Cert where
   name : String
   emitted : Except (Array String) String
+  /-- Which emitter produced `emitted`.  Must match the `Artifact.route`
+  the consumer's Lean-side check uses, because `receiptBinds` compares
+  the labels; see `Attest.EmissionRoute`. -/
+  routeLabel : String := EmissionRoute.provedStraightLine.label
+  /-- The constant the generated `main` compares against — the value this
+  certificate certifies.
+
+  Required by `--attest` and by nothing else, so registering a
+  certificate for the plain cross-check is unchanged.  A certificate
+  without it cannot be attested, because a receipt that did not name the
+  value would bind a signature to a program and a machine but not to an
+  answer.
+
+  ⚠ Build the `main` from *this* number (`Attest.selfCheckMain`) rather
+  than spelling the literal twice.  If the `main` tests one constant and
+  the receipt records another, the Lean-side check still passes — both
+  sides would agree with each other while the artifact tested something
+  else.  Deriving both from one value closes that by construction. -/
+  certifiedValue : Option Int := none
 
 /-- How the compiled object becomes an executable. -/
 inductive LinkMode where
@@ -66,12 +104,46 @@ structure Options where
   short list of candidates relative to the working directory is tried,
   then `$LEAN_COMPCERT_START_DIR`. -/
   startDir : Option System.FilePath := none
+  /-- Write a signed run receipt for every passing run. -/
+  attest : Bool := false
+  /-- Private signing key.  Defaults to `Attest.Tool.defaultKeyPath`. -/
+  keyPath : Option System.FilePath := none
+  /-- Where receipts are written.  Defaults to `<dir>/receipts`. -/
+  receiptDir : Option System.FilePath := none
+  /-- Campaign label recorded in every receipt. -/
+  campaign : Option String := none
+  /-- Challenge nonce.  When absent, a fresh one is drawn for each
+  certificate that actually runs; an existing receipt is then honoured
+  whatever nonce it quotes.  When present, a receipt quoting a different
+  nonce is discarded and the artifact re-runs. -/
+  nonce : Option String := none
+  /-- File holding the canonical inputs.  Absent means the empty input,
+  which is the right answer for a closed certificate. -/
+  paramsFile : Option System.FilePath := none
 
 private def parseOptions : List String → Except String Options
   | [] => .ok {}
   | "--force" :: rest => do
       let opts ← parseOptions rest
       .ok { opts with force := true }
+  | "--attest" :: rest => do
+      let opts ← parseOptions rest
+      .ok { opts with attest := true }
+  | "--key" :: path :: rest => do
+      let opts ← parseOptions rest
+      .ok { opts with keyPath := some path }
+  | "--receipts" :: path :: rest => do
+      let opts ← parseOptions rest
+      .ok { opts with receiptDir := some path }
+  | "--campaign" :: name :: rest => do
+      let opts ← parseOptions rest
+      .ok { opts with campaign := some name }
+  | "--nonce" :: hex :: rest => do
+      let opts ← parseOptions rest
+      .ok { opts with nonce := some hex }
+  | "--params" :: path :: rest => do
+      let opts ← parseOptions rest
+      .ok { opts with paramsFile := some path }
   | "--hosted" :: rest => do
       let opts ← parseOptions rest
       .ok { opts with linkMode := .hosted }
@@ -301,8 +373,94 @@ private structure Outcome where
   passed : Bool
   cached : Bool
 
+/-! ## Attestation
+
+Everything the receipt writer needs, resolved once before the certificate
+loop.  Assembling it can fail (no key, no `openssl`); when it does, the
+whole run fails rather than quietly checking without attesting. -/
+
+private structure AttestContext where
+  key : System.FilePath
+  publicKey : String
+  scratch : System.FilePath
+  receiptDir : System.FilePath
+  campaign : String
+  paramsHash : String
+  toolchain : Attest.ToolchainId
+  machine : String
+  /-- `some` when the caller pinned a nonce; otherwise one is drawn per run. -/
+  nonce : Option String
+
+private def receiptPath (ctx : AttestContext) (name : String) :
+    System.FilePath :=
+  ctx.receiptDir / s!"{name}.receipt"
+
+/-- Is the receipt already on disk still the right one for this C text?
+
+Requires that it parses, that its verdict is `agrees`, that its
+`programHash` is the digest of the C about to be compiled, and — when the
+caller pinned a nonce — that it quotes that nonce.  Anything else means
+the artifact re-runs and is re-signed, which is the fail-closed
+direction. -/
+private def receiptStillCurrent (ctx : AttestContext) (name source : String) :
+    IO Bool := do
+  let path := receiptPath ctx name
+  if !(← path.pathExists) then return false
+  let text ← try IO.FS.readFile path catch _ => pure ""
+  match Attest.Tool.parseReceipt text with
+  | .error _ => return false
+  | .ok receipt =>
+      if receipt.verdict != Attest.RunVerdict.agrees then return false
+      if let some nonce := ctx.nonce then
+        if receipt.nonce != nonce then return false
+      match ← Attest.Tool.sha256Hex ctx.scratch source with
+      | .error _ => return false
+      | .ok digest => return receipt.programHash == digest
+
+/-- Write a signed receipt for a run that has just agreed. -/
+private def writeReceipt (ctx : AttestContext) (cert : Cert) (source : String)
+    (value : Int) : IO (Except String System.FilePath) := do
+  let programHash ←
+    match ← Attest.Tool.sha256Hex ctx.scratch source with
+    | .error message => return .error s!"digesting the emitted C failed: {message}"
+    | .ok digest => pure digest
+  let nonce ←
+    match ctx.nonce with
+    | some nonce => pure nonce
+    | none =>
+        match ← Attest.Tool.freshNonce with
+        | .error message => return .error s!"drawing a nonce failed: {message}"
+        | .ok nonce => pure nonce
+  let recordedAt ← Attest.Tool.utcNow
+  let unsigned : Attest.RunReceipt := {
+    schema := Attest.schemaVersion
+    attestation := .localSignature
+    routeLabel := cert.routeLabel
+    campaign := ctx.campaign
+    digestName := "sha256"
+    programHash
+    paramsHash := ctx.paramsHash
+    toolchain := ctx.toolchain
+    value
+    verdict := .agrees
+    machine := ctx.machine
+    nonce
+    recordedAt
+    publicKey := ctx.publicKey
+    signature := ""
+  }
+  match ← Attest.Tool.signPayload ctx.key ctx.scratch unsigned.payload with
+  | .error message => return .error s!"signing failed: {message}"
+  | .ok signature =>
+      let receipt := { unsigned with signature }
+      IO.FS.createDirAll ctx.receiptDir
+      let path := receiptPath ctx cert.name
+      IO.FS.writeFile path (Attest.Tool.renderReceipt receipt)
+      return .ok path
+
 private def runOne (opts : Options) (includes : List String)
-    (setup : LinkSetup) (toolchain : String) (cert : Cert) : IO Outcome := do
+    (setup : LinkSetup) (toolchain : String) (attest : Option AttestContext)
+    (cert : Cert) : IO Outcome := do
   match cert.emitted with
   | .error errors =>
       IO.eprintln s!"[FAIL] {cert.name}: C emission failed"
@@ -312,11 +470,26 @@ private def runOne (opts : Options) (includes : List String)
   | .ok source =>
       let stamp := stampFor source toolchain
       let stampPath := opts.dir / s!"{cert.name}.stamp"
+      if attest.isSome && cert.certifiedValue.isNone then
+        IO.eprintln
+          s!"[FAIL] {cert.name}: --attest requires the certificate to declare"
+        IO.eprintln
+          "       `certifiedValue`; a receipt that does not name the value would"
+        IO.eprintln
+          "       bind a signature to a program and a machine but not to an answer."
+        return ⟨false, false⟩
       unless opts.force do
         if (← stampPath.pathExists) then
           if (← IO.FS.readFile stampPath).trimAscii.toString == stamp then
-            IO.println s!"[cached] {cert.name}: C unchanged since last passing run"
-            return ⟨true, true⟩
+            let receiptCurrent ←
+              match attest with
+              | none => pure true
+              | some ctx => receiptStillCurrent ctx cert.name source
+            if receiptCurrent then
+              IO.println s!"[cached] {cert.name}: C unchanged since last passing run"
+              return ⟨true, true⟩
+            IO.println
+              s!"[re-run] {cert.name}: stamp current but no matching receipt"
       let cSource := opts.dir / s!"{cert.name}.c"
       let exe := opts.dir / cert.name
       IO.FS.writeFile cSource source
@@ -360,10 +533,23 @@ private def runOne (opts : Options) (includes : List String)
             "       is evidence of nothing about the certified constant."
           return ⟨false, false⟩
       | .agrees =>
-          IO.FS.writeFile stampPath (stamp ++ "\n")
-          IO.println
-            s!"[run] {cert.name}: compiled with CompCert ({setup.mode.describe}), native check passed"
-          return ⟨true, false⟩
+          match attest, cert.certifiedValue with
+          | some ctx, some value =>
+              match ← writeReceipt ctx cert source value with
+              | .error message =>
+                  IO.eprintln s!"[FAIL] {cert.name}: the run agreed but no receipt was written"
+                  IO.eprintln s!"       {message}"
+                  return ⟨false, false⟩
+              | .ok path =>
+                  IO.FS.writeFile stampPath (stamp ++ "\n")
+                  IO.println
+                    s!"[run] {cert.name}: compiled with CompCert ({setup.mode.describe}), native check passed; receipt {path}"
+                  return ⟨true, false⟩
+          | _, _ =>
+              IO.FS.writeFile stampPath (stamp ++ "\n")
+              IO.println
+                s!"[run] {cert.name}: compiled with CompCert ({setup.mode.describe}), native check passed"
+              return ⟨true, false⟩
 
 /-- Locate `<arch>.S`.  Explicit `--start-dir` wins, then
 `$LEAN_COMPCERT_START_DIR`, then a few directories relative to the
@@ -410,6 +596,59 @@ private def prepareFreestanding (opts : Options) :
   let ldVersion := (← toolVersion "ld" #["--version"]).map firstLine |>.getD "ld?"
   return .ok (startObject, s!"{arch} {stubHash} {asVersion} {ldVersion}")
 
+/-- Resolve everything the receipt writer needs, once.
+
+The toolchain identity written into a receipt is the same material the
+stamp is keyed on: the `ccomp` version line, a digest of the *whole*
+`compcertIdentity` block (the `ccomp` binary's own digest plus the full
+text of its `compcert.ini`), and the link description.  Digesting that
+block keeps the receipt field a fixed 64 hex characters while still
+changing whenever the compiler, its target, or the link does.
+
+Every field is reduced to a single line, because the signed payload is
+newline-separated. -/
+private def prepareAttest (opts : Options) (version compcertId machineId
+    linkDescription : String) : IO (Except String AttestContext) := do
+  let key := opts.keyPath.getD Attest.Tool.defaultKeyPath
+  if !(← key.pathExists) then
+    return .error
+      s!"no signing key at {key}; run `attest-keygen` first (or pass --key PATH)"
+  let scratch := opts.dir / "attest-scratch"
+  let publicKey ←
+    match ← Attest.Tool.publicKeyHex key scratch with
+    | .error message => return .error message
+    | .ok hex => pure hex
+  let params ←
+    match opts.paramsFile with
+    | none => pure ""
+    | some path =>
+        if ← path.pathExists then IO.FS.readFile path
+        else return .error s!"params file {path} does not exist"
+  let paramsHash ←
+    match ← Attest.Tool.sha256Hex scratch params with
+    | .error message => return .error message
+    | .ok digest => pure digest
+  let binaryDigest ←
+    match ← Attest.Tool.sha256Hex scratch compcertId with
+    | .error message => return .error message
+    | .ok digest => pure digest
+  if let some nonce := opts.nonce then
+    if !Attest.isDigest256 nonce then
+      return .error "--nonce must be 64 lowercase hex characters"
+  return .ok {
+    key
+    publicKey
+    scratch
+    receiptDir := opts.receiptDir.getD (opts.dir / "receipts")
+    campaign := opts.campaign.getD "leancompcert-native-check"
+    paramsHash
+    toolchain := {
+      ccompVersion := firstLine version
+      binaryDigest
+      linkDescription := firstLine linkDescription }
+    machine := firstLine machineId
+    nonce := opts.nonce }
+
 def run (certs : List Cert) (args : List String) : IO UInt32 := do
   let opts ←
     match parseOptions args with
@@ -446,11 +685,25 @@ def run (certs : List Cert) (args : List String) : IO UInt32 := do
     version ++ "\n" ++ compcertId ++ "\n" ++ machineId ++ "\n"
       ++ String.intercalate " " includes
       ++ s!"\n{headerHash}\n{linkDescription}"
+  let mut attest : Option AttestContext := none
+  if opts.attest then
+    match ← prepareAttest opts version compcertId machineId linkDescription with
+    | .error message =>
+        IO.eprintln s!"error: {message}"
+        return 2
+    | .ok ctx =>
+        attest := some ctx
+        IO.println
+          s!"attesting with the local key {ctx.key} (public {ctx.publicKey.take 16}…)"
+        IO.println
+          "  a locally signed receipt is TAMPER-EVIDENT, not attested: the key sits"
+        IO.println
+          "  on the machine that ran the binary.  See LeanCompCert/Trusted/LocalReceipt.lean."
   let mut passed := 0
   let mut cached := 0
   let mut failed := 0
   for cert in certs do
-    let outcome ← runOne opts includes setup toolchain cert
+    let outcome ← runOne opts includes setup toolchain attest cert
     if outcome.passed then
       passed := passed + 1
       if outcome.cached then

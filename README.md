@@ -141,6 +141,11 @@ Then the use-case guide that matches your goal:
 - **[Use case 2 — a compiled artifact you can trust](docs/use-case-2-verified-artifact.md)**
   — emission, the verification gates, and the Coq-side semantics
   theorem.
+- **[Use case 3 — attested run receipts](docs/use-case-3-attested-run-receipts.md)**
+  — for computations too large for the kernel: a signed record of a run,
+  bound to the emitted C by a digest the kernel checks, and one named
+  axiom for the one thing no proof establishes.  A locally signed receipt
+  is **tamper-evident, not attested**, and the guide says so throughout.
 
 Deep-dive tutorials in [docs/](docs/):
 

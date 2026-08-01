@@ -2,6 +2,7 @@ import LeanCompCert.Trusted.Evidence
 import LeanCompCert.Trusted.ArtifactRun
 import LeanCompCert.Trusted.Resolve
 import LeanCompCert.Trusted.EvidencedDecide
+import LeanCompCert.Trusted.LocalReceipt
 import LeanCompCert.Trusted.Demo
 
 /-!

@@ -85,6 +85,7 @@ import LeanCompCert.Ports.MobiusResidueWeight
 import LeanCompCert.Ports.MobiusResidueAcc
 import LeanCompCert.Ports.MobiusResidueTest
 import LeanCompCert.Ports.MobiusResidueWindow
+import LeanCompCert.Attest
 
 /-! # LeanCompCert -/
 

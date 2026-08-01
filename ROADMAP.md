@@ -371,9 +371,19 @@ fold, with the denotation-equality theorem carrying the existing chain.
 
 ## Cross-cutting commitments
 
-- **Axiom-free forever**: no run-admission axiom; the native run stays an
-  independent check. Any future "trust the executable" mode would be a
-  different product and is out of scope.
+- **Axiom-free forever**: the `LeanCompCert` library admits nothing. No
+  run-admission axiom lives in it, and the native run stays an independent
+  check. This is a *partition*, and `scripts/test-compcert.sh` enforces it
+  mechanically: `LeanCompCert` shows the base trio everywhere, and
+  `LeanCompCertTrusted` — a separate library nothing in `LeanCompCert`
+  imports — shows exactly two further axioms, by name, one per admission
+  regime (`evidencedRun_sound`, `localSignedRun_admits`).
+
+  The run-receipt standard (`LeanCompCert/Attest/`, M9 below) sits in the
+  axiom-free half on purpose: it defines the receipt, proves what a passing
+  check forces, and takes `RunAdmission` as a **hypothesis** it never
+  discharges. Consumers discharge it, and `#print axioms` names which
+  discharger they used.
 - **Production lowering only**: every theorem targets the shipping
   lowering functions, never a parallel test compiler.
 - **Honest boundaries**: what is and is not covered stays documented in
@@ -382,6 +392,54 @@ fold, with the denotation-equality theorem carrying the existing chain.
   (guarded subtraction over bare `Nat` sub-chains at machine scale — a
   measured failure mode), and keep a small corpus of kernel-reduction
   regression tests.
+
+### M9 — the run-receipt standard ✅ (implemented; one link open)
+
+`LeanCompCert/Attest/` closes the join between the proved forward chain and an
+attested execution:
+
+> `receipt.programHash = digest (the C this package emits for this computation)`
+
+is decidable, and `Attest.returns_of_receipt` composes it with
+`Computation.result_preserved` to give `Computation.Returns value` from
+`receiptBinds … = true` plus `RunAdmission`. Axiom-free in this package —
+`RunAdmission` is a hypothesis, discharged by
+`LeanCompCert.Trusted.localSignedRun_admits` (local key) or by `gpu_prover`
+(enclave), with different `AttestationKind`s so the regimes cannot be confused
+and different axiom names so `#print axioms` tells them apart.
+
+Cryptography is **parameterised**, not vendored: `ReceiptCrypto` is an
+interface with nine known-answer tests (`ReceiptCrypto.SelfTested`), required
+by every discharger so a garbage instance cannot admit a run. `gpu_prover`'s
+`SparkInterval.Certificate.{SHA256,P256}` satisfy it — measured 9.7 s under
+`decide +kernel`, axiom-free. They are not moved here because they begin
+`import Mathlib` and this package has zero dependencies; forking them would put
+two copies of a signature verifier in one system.
+
+Tooling: `lean-compcert attest-keygen`, `attest`, `verify-receipt`, and
+`check-native --attest`, all through `NativeCheck` so an external project gets
+them from the same five-line registration (`examples/consumer/`). The existing
+content-hash caching is unchanged.
+
+*Acceptance (met):* `scripts/test-compcert.sh` generates a key, attests all 14
+certificates, verifies a receipt against freshly emitted C, and requires that a
+receipt bound to another certificate and a receipt with one edited field are
+both rejected.
+
+**⚠ Open link.** `receiptBinds … = true` is not kernel-evaluable today, because
+evaluating `Artifact.source?` needs the C emitter and the C validator, which are
+written with `partial` definitions the kernel will not unfold (`CType.emit`,
+`CExpr.emit`, `emitStatements`, `emitStatement`, `validateType`,
+`validateExpr`, `validateStatements`, `collectLabels`, and
+`CCIR.validateProgram`). Measured: `decide +kernel` on
+`(Lower.compileProgram .portable ⟨#[computation.fn]⟩).toOption.isSome = true`
+does not reduce for a two-instruction program. Consumers therefore discharge it
+with one named axiom per artifact, checked out of band by `verify-receipt`.
+
+*What would close it:* make those definitions structural or fuelled. Nothing
+else in the chain is in the way, and no part of the standard changes when they
+are — the axiom becomes a `decide +kernel`. This is the highest-value next item
+in the area.
 
 ## Non-goals
 

@@ -1,5 +1,6 @@
 import LeanCompCert.Verified.Package
 import LeanCompCert.Verified.EarlyExit
+import LeanCompCert.Attest
 
 /-!
 # External consumer demo: a masked cube sum with a proved comparison
@@ -123,11 +124,12 @@ theorem foldP_accepts_total_step (indices : List Nat) :
 
 /-! ## Emission -/
 
+/-- The self-checking `main`, built from `expectedValue` rather than from a
+literal spelled out a second time.  `Attest.selfCheckMain` exists so that the
+constant the binary tests and the constant a receipt records cannot drift
+apart; the `main` is inside the hashed text, so `programHash` pins it. -/
 def mainC : String :=
-  "\nint main(void)\n" ++
-  "{\n" ++
-  "    return l_Consumer_demo() == UINT64_C(28707) ? 0 : 1;\n" ++
-  "}\n"
+  Attest.selfCheckMain "l_Consumer_demo" expectedValue
 
 /-- The complete C translation unit for the computation plus a `main`
 that exits `0` exactly when the native run reproduces the certified
@@ -136,5 +138,58 @@ def emittedC : Except (Array String) String := do
   let (_, source) ← Lower.compileProgram .portable
     { functions := #[computation.fn] }
   pure (source ++ mainC)
+
+/-! ## Attested runs, from the public API alone
+
+`Attest.Artifact` is pure data: the computation, the emission route, and the
+`main`.  The C text is not something this file asserts — it is
+`Artifact.source?`, computed by the package's own emitter — so there is nothing
+here that can be got wrong, and a receipt binds to that text or to nothing.
+
+Producing a receipt is `consumer attest`; checking one is
+`consumer verify-receipt FILE --cert demo`.  Both go through
+`LeanCompCert.NativeCheck`, which is the same five-line registration this
+project already used for `check-native`.
+
+The Lean-side check is `Attest.receiptBinds`, and closing it needs two things
+this example deliberately does not fabricate:
+
+* a `ReceiptCrypto` — SHA-256 and ECDSA P-256 as executable Lean.  The package
+  parameterises over them rather than shipping a second copy; `gpu_prover`'s
+  `SparkInterval.Certificate.{SHA256,P256}` are the intended implementations
+  and satisfy `ReceiptCrypto.SelfTested` (measured: 9.7 s under
+  `decide +kernel`, axiom-free).
+* `RunAdmission` — the empirical premise, discharged by
+  `LeanCompCert.Trusted.localSignedRun_admits` for a local key or by
+  `gpu_prover`'s enclave axiom.  Both show up by name in `#print axioms`.
+
+With those two supplied, the certified statement below follows from a receipt
+by `Attest.decide_of_receipt` — the theorem is stated here against arbitrary
+hypotheses, so this file stays axiom-free while showing exactly the shape a
+campaign site has. -/
+
+open LeanCompCert.Attest in
+/-- The artifact this project attests: the demo computation, the straight-line
+route, and the self-checking `main` above. -/
+def artifact : Artifact := {
+  computation
+  route := EmissionRoute.provedStraightLine
+  mainC
+}
+
+open LeanCompCert.Attest in
+/-- **The consumer-side shape of an attested campaign.**
+
+Read it as: given a crypto bundle that passes its known-answer tests, a receipt
+that binds to *this* artifact and *this* value, and an admitted run, the
+consumer's own theorem follows.  Nothing here is admitted; the hypotheses are
+where a deployment plugs in its two axioms. -/
+theorem demo_certificate_of_receipt
+    (crypto : ReceiptCrypto) (receipt : RunReceipt) (nonce : String)
+    (bound : receiptBinds crypto artifact AttestationKind.localSignature ""
+      nonce ((expectedValue : Nat) : Int) receipt = true)
+    (admitted : RunAdmission crypto artifact receipt) :
+    referenceSum = expectedValue :=
+  decide_of_receipt decision rfl bound admitted
 
 end Consumer

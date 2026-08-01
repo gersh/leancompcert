@@ -137,6 +137,38 @@ else
   echo "clightgen not found; skipping Clight translation validation" >&2
 fi
 
+# The run-receipt loop, end to end: generate a local key, attest one
+# certificate, verify the receipt against freshly emitted C, and require that a
+# receipt with ONE edited field is rejected.  The last step is the whole point
+# of signing: without it a receipt is a text file anyone can rewrite.
+attest_dir="$output/attest"
+rm -rf "$attest_dir"
+mkdir -p "$attest_dir"
+.lake/build/bin/lean-compcert attest-keygen --key "$attest_dir/key.pem" >/dev/null
+.lake/build/bin/lean-compcert attest \
+  --key "$attest_dir/key.pem" \
+  --dir "$attest_dir/check" \
+  --receipts "$attest_dir/receipts" \
+  --campaign "acceptance" >/dev/null
+test -s "$attest_dir/receipts/rolled-10m.receipt"
+.lake/build/bin/lean-compcert verify-receipt \
+  "$attest_dir/receipts/rolled-10m.receipt" --cert rolled-10m >/dev/null
+# A receipt that names another certificate's program must not verify.
+if .lake/build/bin/lean-compcert verify-receipt \
+     "$attest_dir/receipts/rolled-10m.receipt" --cert fixedpoint >/dev/null 2>&1; then
+  echo "receipt bound to the wrong certificate was accepted" >&2
+  exit 1
+fi
+# One edited field must break the signature.
+sed 's/^acceptance$/acceptance-tampered/' \
+  "$attest_dir/receipts/rolled-10m.receipt" > "$attest_dir/tampered.receipt"
+if .lake/build/bin/lean-compcert verify-receipt \
+     "$attest_dir/tampered.receipt" --cert rolled-10m >/dev/null 2>&1; then
+  echo "a receipt edited after signing was accepted" >&2
+  exit 1
+fi
+echo "run receipts: signed, verified, and both substitution and tampering rejected"
+
 audit_log="$output/axiom-audit.txt"
 lake env lean scripts/AxiomAudit.lean > "$audit_log"
 test -s "$audit_log"
@@ -176,9 +208,10 @@ EOF
 #   * `LeanCompCert`        — zero axioms beyond the three standard ones.  The
 #                             kernel route never runs a compiler, so there is
 #                             nothing to admit.  Checked by the block above.
-#   * `LeanCompCertTrusted` — exactly ONE further axiom, by name.  Anything
-#                             else appearing here is a silent widening of the
-#                             trusted base and fails the build.
+#   * `LeanCompCertTrusted` — exactly TWO further axioms, by name, one per
+#                             admission regime.  Anything else appearing here
+#                             is a silent widening of the trusted base and
+#                             fails the build.
 trusted_log="$output/trusted-axiom-audit.txt"
 lake env lean scripts/TrustedAxiomAudit.lean > "$trusted_log"
 test -s "$trusted_log"
@@ -187,9 +220,15 @@ import re
 import sys
 
 standard = {"propext", "Classical.choice", "Quot.sound"}
-# The single admitted schema, and the per-use-site axioms the tactic mints,
-# which are all instances of exactly that statement.
-admitted = "LeanCompCert.Trusted.evidencedRun_sound"
+# The admitted schemas, and the per-use-site axioms the tactic mints, which
+# are all instances of exactly one of those statements.  The two regimes are
+# named apart on purpose: a reader of a downstream `#print axioms` must be able
+# to tell "an evidenced artifact run" from "a receipt the running machine
+# signed about itself" without reading any source.
+admitted = {
+    "LeanCompCert.Trusted.evidencedRun_sound",
+    "LeanCompCert.Trusted.localSignedRun_admits",
+}
 text = open(sys.argv[1]).read()
 entries = re.findall(r"'([^']+)' depends on axioms: \[([^\]]*)\]", text)
 if not entries:
@@ -201,7 +240,7 @@ for name, axioms in entries:
     for axiom in (a.strip() for a in axioms.split(",")):
         if not axiom or axiom in standard:
             continue
-        if axiom == admitted or axiom.endswith("._evidenced.run.ax"):
+        if axiom in admitted or axiom.endswith("._evidenced.run.ax"):
             carriers.add(name)
             continue
         bad.append((name, axiom))
@@ -212,7 +251,7 @@ for name, axiom in bad:
 if bad:
     sys.exit(1)
 print(f"axiom partition clean: {len(entries)} audited; "
-      f"{len(carriers)} declaration(s) carry {admitted}; "
+      f"{len(carriers)} declaration(s) carry one of {sorted(admitted)}; "
       "no other axiom present")
 EOF
 

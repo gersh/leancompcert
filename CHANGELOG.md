@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- **Run receipts: the join between the proved chain and an attested
+  execution.**  `LeanCompCert/Attest/` states what a receipt is, what it means
+  for one to bind to a computation (`receiptBinds` — decidable, total,
+  fail-closed), proves what a passing check forces and, for eleven distinct
+  mutations, what it refuses, and composes the result with
+  `Computation.result_preserved` into `Attest.returns_of_receipt`.  The whole
+  module is in the **axiom-free** library: `RunAdmission` is a hypothesis it
+  never discharges.
+  - **Two dischargers, told apart mechanically.**
+    `LeanCompCert.Trusted.localSignedRun_admits` (a key on the machine that ran
+    the binary) and `gpu_prover`'s enclave axiom carry different
+    `AttestationKind`s, so `receiptBinds` refuses one where the other was
+    demanded, and different names, so `#print axioms` says which a theorem
+    rests on.  A local receipt is **tamper-evident, not attested**, and that
+    sentence is in the module docstring, the CLI output and the docs.
+  - **Cryptography is parameterised, not forked.**  `ReceiptCrypto` carries
+    nine known-answer tests required by every discharger, so
+    `⟨fun _ => "0…0", fun _ _ _ => true⟩` cannot admit a run.  `gpu_prover`'s
+    audited SHA-256 and P-256 satisfy them in 9.7 s under `decide +kernel`,
+    axiom-free.  They are not moved here: they begin `import Mathlib` and this
+    package has zero dependencies.
+  - **Tooling.**  `attest-keygen`, `attest`, `verify-receipt`, and
+    `check-native --attest`, with the content-hash caching unchanged.  The
+    acceptance script now requires that a receipt bound to another certificate
+    and a receipt with one edited field are both rejected.
+  - ⚠ **One link is open and is documented as such**:
+    `receiptBinds … = true` is not kernel-evaluable, because the C emitter and
+    validator are `partial`.  Consumers discharge it with one named axiom per
+    artifact, checked out of band.  See `docs/use-case-3-attested-run-receipts.md`.
+
 - **A documentation-conformance and adversarial test suite, and the axiom
   partition made mechanical.**  `LeanCompCertTests/Docs.lean` reproduces every
   worked example printed in `docs/` *as printed* — tutorial 1's program and its

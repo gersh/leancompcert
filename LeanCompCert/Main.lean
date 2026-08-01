@@ -44,6 +44,21 @@ private def usage : String :=
   "                       --hosted restores the old ccomp/glibc link.\n" ++
   "                       Exit 0 = agrees, 1 = disagrees, other = abnormal\n" ++
   "                       termination (never reported as a disagreement)\n" ++
+  "  attest-keygen [--key PATH]\n" ++
+  "                       generate a local P-256 signing key.  A receipt it\n" ++
+  "                       signs is TAMPER-EVIDENT, not attested: the key sits\n" ++
+  "                       on the machine that runs the binaries\n" ++
+  "  attest [--key PATH] [--campaign NAME] [--nonce HEX64] [--params FILE]\n" ++
+  "         [--receipts DIR] [check-native options]\n" ++
+  "                       run the native check and write a signed run receipt\n" ++
+  "                       for every certificate that agrees.  Same caching:\n" ++
+  "                       a certificate whose C is unchanged and whose receipt\n" ++
+  "                       still matches is neither recompiled nor re-signed\n" ++
+  "  verify-receipt FILE --cert NAME [--lean IDENT]\n" ++
+  "                       re-check a receipt against freshly emitted C: schema,\n" ++
+  "                       field shapes, verdict, program digest, signature,\n" ++
+  "                       route and value.  --lean prints the RunReceipt term\n" ++
+  "                       to paste into a certificate file\n" ++
   "  mangle NAME...       print stable C symbols\n" ++
   "  abi-manifest         print the active ABI manifest\n" ++
   "  version              print backend and compiler versions\n\n" ++
@@ -119,22 +134,156 @@ private def emitFixedPointCertificate (file : String) : IO UInt32 :=
 private def emitRolled10M (file : String) : IO UInt32 :=
   emitCertificate file Testing.RolledFixedPoint.emittedC
 
+/-- Registered certificates.
+
+`certifiedValue` is the constant the generated `main` compares against, taken
+from the certificate's own definition wherever the certificate has one rather
+than spelled out again here.  It is required by `--attest` and ignored
+otherwise.  Three of these (`wide-mertens`, `squarefree-mertens`, `reflected`)
+compare against `1` because their emitted function returns a flag: the wide
+value is checked *inside* the program and the entry point reports whether it
+matched. -/
 private def nativeCerts : List NativeCheck.Cert := [
-  ⟨"verified-decide", Testing.VerifiedDecide.emittedC⟩,
-  ⟨"mertens", Testing.MertensCertificate.emittedC⟩,
-  ⟨"wide-mertens", Testing.WideMertensCertificate.emittedC⟩,
-  ⟨"squarefree-mertens", Testing.SquarefreeMertensCertificate.emittedC⟩,
-  ⟨"reflected", Testing.ReflectedCertificate.emittedC⟩,
-  ⟨"fixedpoint", Testing.FixedPointCertificate.emittedC⟩,
-  ⟨"rolled-10m", Testing.RolledFixedPoint.emittedC⟩,
-  ⟨"proth", Testing.ProthCertificate.emittedC⟩,
-  ⟨"mobius-array", Testing.ArrayMobiusCertificate.emittedC⟩,
-  ⟨"mobius-seg", Testing.ArraySegCertificate.emittedC⟩,
-  ⟨"cdem-abel", Testing.AbelScanCertificate.emittedC⟩,
-  ⟨"dirichlet-ladder", Testing.DirichletLadderCertificate.emittedC⟩,
-  ⟨"rs62-ladder-sl", Testing.RS62LadderCertificate.emittedCSL⟩,
-  ⟨"rs62-ladder-su", Testing.RS62LadderCertificate.emittedCSU⟩
+  { name := "verified-decide", emitted := Testing.VerifiedDecide.emittedC,
+    certifiedValue := some 42 },
+  { name := "mertens", emitted := Testing.MertensCertificate.emittedC,
+    certifiedValue := some (Testing.MertensCertificate.expectedValue : Nat) },
+  { name := "wide-mertens", emitted := Testing.WideMertensCertificate.emittedC,
+    certifiedValue := some 1 },
+  { name := "squarefree-mertens",
+    emitted := Testing.SquarefreeMertensCertificate.emittedC,
+    certifiedValue := some 1 },
+  { name := "reflected", emitted := Testing.ReflectedCertificate.emittedC,
+    certifiedValue := some 1 },
+  { name := "fixedpoint", emitted := Testing.FixedPointCertificate.emittedC,
+    certifiedValue := some (Testing.FixedPointCertificate.expectedValue : Nat) },
+  { name := "rolled-10m", emitted := Testing.RolledFixedPoint.emittedC,
+    routeLabel := Attest.EmissionRoute.rolledLoop
+      Testing.RolledFixedPoint.program "FixedPoint.rolled10M" |>.label,
+    certifiedValue := some (Testing.RolledFixedPoint.expectedBig : Nat) },
+  { name := "proth", emitted := Testing.ProthCertificate.emittedC,
+    certifiedValue := some 0 },
+  { name := "mobius-array", emitted := Testing.ArrayMobiusCertificate.emittedC,
+    certifiedValue := some (Testing.ArrayMobiusCertificate.expected : Nat) },
+  { name := "mobius-seg", emitted := Testing.ArraySegCertificate.emittedC,
+    certifiedValue := some (Testing.ArraySegCertificate.expected : Nat) },
+  { name := "cdem-abel", emitted := Testing.AbelScanCertificate.emittedC,
+    certifiedValue := some (Testing.AbelScanCertificate.expected : Nat) },
+  { name := "dirichlet-ladder",
+    emitted := Testing.DirichletLadderCertificate.emittedC,
+    certifiedValue := some (Testing.DirichletLadderCertificate.expected : Nat) },
+  { name := "rs62-ladder-sl", emitted := Testing.RS62LadderCertificate.emittedCSL,
+    certifiedValue := some (Testing.RS62LadderCertificate.expectedSL : Nat) },
+  { name := "rs62-ladder-su", emitted := Testing.RS62LadderCertificate.emittedCSU,
+    certifiedValue := some (Testing.RS62LadderCertificate.expectedSU : Nat) }
 ]
+
+/-! ## Receipt verbs -/
+
+private def attestKeygen (args : List String) : IO UInt32 := do
+  let path : System.FilePath :=
+    match args with
+    | ["--key", path] => path
+    | _ => Attest.Tool.defaultKeyPath
+  match ← Attest.Tool.generateKey path with
+  | .error message =>
+      IO.eprintln s!"error: {message}"
+      pure 1
+  | .ok message =>
+      IO.println message
+      let scratch := path.parent.getD "." / "scratch"
+      match ← Attest.Tool.publicKeyHex path scratch with
+      | .error detail =>
+          IO.eprintln s!"error: {detail}"
+          pure 1
+      | .ok hex =>
+          IO.println s!"public key (SEC1 uncompressed): {hex}"
+          IO.println ""
+          IO.println
+            "This is a LOCAL key.  A receipt it signs is tamper-evident, not attested:"
+          IO.println
+            "anyone who can read the key file can sign any value.  It is auditable"
+          IO.println
+            "bookkeeping for a machine you already trust, and nothing stronger."
+          pure 0
+
+private structure VerifyArgs where
+  file : Option String := none
+  cert : Option String := none
+  leanName : Option String := none
+
+private def parseVerifyArgs : List String → Except String VerifyArgs
+  | [] => .ok {}
+  | "--cert" :: name :: rest => do
+      let a ← parseVerifyArgs rest
+      .ok { a with cert := some name }
+  | "--lean" :: name :: rest => do
+      let a ← parseVerifyArgs rest
+      .ok { a with leanName := some name }
+  | arg :: rest =>
+      if arg.startsWith "--" then .error s!"unknown verify-receipt argument '{arg}'"
+      else do
+        let a ← parseVerifyArgs rest
+        .ok { a with file := some arg }
+
+private def verifyReceipt (args : List String) : IO UInt32 := do
+  let parsed ←
+    match parseVerifyArgs args with
+    | .error message => IO.eprintln s!"error: {message}"; return 2
+    | .ok parsed => pure parsed
+  let some file := parsed.file
+    | IO.eprintln "error: verify-receipt needs a receipt file"; return 2
+  let some certName := parsed.cert
+    | IO.eprintln
+        ("error: verify-receipt needs --cert NAME, so the receipt is checked " ++
+         "against a program rather than against itself")
+      return 2
+  let some cert := nativeCerts.find? (·.name == certName)
+    | IO.eprintln s!"error: no registered certificate named '{certName}'"
+      IO.eprintln s!"       known: {String.intercalate ", " (nativeCerts.map (·.name))}"
+      return 2
+  let text ← IO.FS.readFile file
+  let receipt ←
+    match Attest.Tool.parseReceipt text with
+    | .error message => IO.eprintln s!"error: {message}"; return 1
+    | .ok receipt => pure receipt
+  let scratch : System.FilePath := ".lake" / "build" / "attest" / "verify"
+  let outcome ← Attest.Tool.verifyReceiptAgainst scratch receipt cert.emitted
+  for line in outcome.lines do
+    IO.println line
+  if receipt.routeLabel != cert.routeLabel then
+    IO.println
+      s!"  FAIL route is '{receipt.routeLabel}', certificate '{certName}' emits '{cert.routeLabel}'"
+    return 1
+  IO.println s!"  ok   route {receipt.routeLabel}"
+  match cert.certifiedValue with
+  | some value =>
+      if receipt.value != value then
+        IO.println
+          s!"  FAIL value {receipt.value} ≠ the certificate's constant {value}"
+        return 1
+      IO.println s!"  ok   value {receipt.value}"
+  | none =>
+      IO.println
+        s!"  FAIL certificate '{certName}' declares no certifiedValue to compare"
+      return 1
+  if !outcome.ok then
+    IO.eprintln
+      "verify-receipt: FAILED.  Note this tool is a convenience: the authoritative"
+    IO.eprintln
+      "check is `Attest.receiptBinds` in the Lean kernel with your own verifier."
+    return 1
+  if let some name := parsed.leanName then
+    IO.println ""
+    IO.print (Attest.Tool.renderLean name receipt)
+  IO.println ""
+  IO.println
+    "verify-receipt: every field this tool can check is consistent.  This is NOT"
+  IO.println
+    "the proof: `Attest.receiptBinds` re-does all of it in the kernel, and even"
+  IO.println
+    "then a locally signed receipt attests nothing about whether the run happened."
+  pure 0
 
 def main (args : List String) : IO UInt32 :=
   match args with
@@ -148,6 +297,9 @@ def main (args : List String) : IO UInt32 :=
   | ["emit-fixedpoint-cert-c", file] => emitFixedPointCertificate file
   | ["emit-rolled-10m-c", file] => emitRolled10M file
   | "check-native" :: rest => NativeCheck.run nativeCerts rest
+  | "attest" :: rest => NativeCheck.run nativeCerts ("--attest" :: rest)
+  | "attest-keygen" :: rest => attestKeygen rest
+  | "verify-receipt" :: rest => verifyReceipt rest
   | ["emit-clight-fixedpoint-v", file] =>
       match Verified.ClightEmit.emitClight "direct_FixedPoint_mulShiftSum"
           Testing.FixedPointCertificate.computation.statements
