@@ -317,6 +317,58 @@ gate is time-in-service on the declared stability.
 its own bounded computation, and gets the full trust chain without
 touching this repo's internals.
 
+### M8 — A kernel-efficient denotation 🔴 (open; measured requirement)
+
+**The problem.** `RegState` is `Nat → Nat` and `RegState.set` is functional
+update (`Verified/Reflect.lean:96–99`), so every register read walks a closure
+chain whose length is the number of stores so far, and `AState` array reads do
+the same.  The denotation is therefore *quadratic in trip count* when the
+kernel evaluates it, which is exactly the one place the roadmap above promises
+the kernel's work is "evaluating one Lean-level fold".
+
+**Measured** (2026-08-01, ternary-goldbach consumer, serial on an idle box —
+the same computation expressed both ways, denotations agreeing on the value
+`13938989466958741855` at `N = 10⁵`):
+
+| shape | per elementary op | reach per `decide +kernel` |
+| --- | ---: | ---: |
+| plain Lean recursion (reference function) | **41 µs** | ~10⁶ steps, 7.4 GB |
+| scalar `Program.denote` | **≈160 µs** | **1 000–2 000 iterations**, C-stack overflow at 0.8 GB |
+| `AProgram.denote`, local array access | ≈150 µs | ~10³ iterations |
+| `AProgram.denote`, non-local read | **quadratic** — 23.7 ms/iter at `N = 10³` | ~10³ iterations |
+
+So the `Program` route is ~4× slower per elementary operation than the plain
+Lean recursion it is meant to replace, and its per-invocation reach is ~500×
+smaller.  The overflow is *recursion depth*, not stack size: `--tstack=1000000`
+did not move it.  The non-local-read row is clean quadratic (×3.9 then ×4.9 per
+doubling).
+
+**Consequence for use case 1.**  For fold-shaped certificates at production
+height a consumer is better off chunking its *reference function* directly than
+routing through `Program`.  That is sound and Tutorial 3 explicitly allows it
+("the kernel evaluates whichever side of the equivalence is cheaper") — but it
+means the reflection route does not currently pay for this whole class, which
+is most of the flagship workload.
+
+⚠ **Do not cite the 31× sieve-over-trial-division benchmark as a kernel
+figure.**  It is `tests/benchmarks/rewrite-bench.c` — a *CompCert-binary*
+measurement.  It says what the artifact does, not what the kernel does, and a
+kernel-evaluated sieve is blocked by the quadratic row above.  This distinction
+was drawn incorrectly by a consumer and cost real effort.
+
+**What is wanted.**  A `denote` variant over a representation the kernel can
+evaluate in near-constant time per access — a finite map, a run-length register
+file, or a fixed-width vector indexed by `Fin regCount` — **with equality to
+the present `denote` proved**, so every theorem above it (`evalCC_compile`,
+`lowerSequence_correct`, the packaging chain) applies unchanged.  Nothing below
+the interpreter needs to move: the fragment, the Clight bridge and the
+equivalence library are all fine.  This is a core design change and wants an
+upstream decision, not a drive-by patch.
+
+*Acceptance:* a `10⁶`-iteration scalar `Program` certificate checked by
+`decide +kernel` in the same order of time as the equivalent chunked reference
+fold, with the denotation-equality theorem carrying the existing chain.
+
 ## Cross-cutting commitments
 
 - **Axiom-free forever**: no run-admission axiom; the native run stays an
