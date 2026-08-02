@@ -166,7 +166,12 @@ this example deliberately does not fabricate:
 With those two supplied, the certified statement below follows from a receipt
 by `Attest.decide_of_receipt` — the theorem is stated here against arbitrary
 hypotheses, so this file stays axiom-free while showing exactly the shape a
-campaign site has. -/
+campaign site has.
+
+Note that only the *second* of those is an axiom.  With a concrete
+`ReceiptCrypto` in hand, `bound` is `by decide +kernel`: the kernel re-emits
+the C for this artifact and checks the receipt's `programHash` against its
+digest itself.  There is no per-artifact axiom and no out-of-band step. -/
 
 open LeanCompCert.Attest in
 /-- The artifact this project attests: the demo computation, the straight-line
