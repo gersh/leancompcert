@@ -56,7 +56,9 @@ import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Verified.ExpFixed
 import LeanCompCert.Ports.ExpFixPort
 import LeanCompCert.Verified.ArrayFoldBridge
+import LeanCompCert.Verified.Algorithm.ArrayBridge
 import LeanCompCert.Ports.ArraySieveCount
+import LeanCompCert.Ports.ArrayMobiusDenotation
 import LeanCompCert.Attest
 import LeanCompCertTests.Attest
 
@@ -133,6 +135,17 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySieveCount.sieveCountProgram_denote
 #print axioms LeanCompCert.Ports.ArraySieveCount.sieveCountProgram_compiled
 #print axioms LeanCompCert.Ports.ArraySieveCount.leastFactor_eq_self_iff
+-- M10: the array refinement combinator, and the two arrows for an array port
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.AllDefined_append
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.or_one_mod
+#print axioms LeanCompCert.Verified.Algorithm.ArrayLoop.denote
+#print axioms LeanCompCert.Verified.Algorithm.AProgramRefinement.ofDenotationOn
+#print axioms LeanCompCert.Verified.Algorithm.AProgramRefinement.ofArrayLoopOn
+#print axioms LeanCompCert.Verified.Algorithm.trace_value_unique
+#print axioms LeanCompCert.Ports.ArraySieveCount.reference_sound
+#print axioms LeanCompCert.Ports.ArraySieveCount.example_result
+#print axioms LeanCompCert.Ports.ArrayMobiusDenotation.body_defined
+#print axioms LeanCompCert.Ports.ArrayMobiusDenotation.layoutOk
 #print axioms LeanCompCert.Verified.MemFragment.lowerMSequence_correct
 -- Tail-recursive trace lowering: the two equations the correctness proofs use
 #print axioms LeanCompCert.Verified.MemFragment.lowerMAux_eq

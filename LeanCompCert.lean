@@ -89,7 +89,9 @@ import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Ports.BlockedFold
 import LeanCompCert.Ports.RS62LadderEncoding
+import LeanCompCert.Verified.Algorithm.ArrayBridge
 import LeanCompCert.Ports.ArraySieveCount
+import LeanCompCert.Ports.ArrayMobiusDenotation
 import LeanCompCert.Attest
 
 /-! # LeanCompCert -/

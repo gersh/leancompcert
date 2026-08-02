@@ -125,6 +125,30 @@ theorem denoteAInstr_eq_astep {len k : Nat} {s : AState} {i : AInstr}
       simp only [ADefined] at h
       simp only [denoteAInstr, astep, if_pos h]
 
+/-- Definedness splits along a block boundary, at the state the second block
+starts in.  Transcribing a sixty-instruction body in one `simp` produces a
+term whose printed size is quadratic in the block length; this is what lets a
+port cut the body into named stages and pay only for one stage at a time. -/
+theorem AllDefined_append (len k : Nat) :
+    ∀ (xs ys : List AInstr) (s : AState),
+      AllDefined len k s (xs ++ ys) ↔
+        (AllDefined len k s xs ∧ AllDefined len k (arun k s xs) ys) := by
+  intro xs
+  induction xs with
+  | nil =>
+      intro ys s
+      exact ⟨fun h => ⟨trivial, h⟩, fun h => h.2⟩
+  | cons x xs ih =>
+      intro ys s
+      constructor
+      · intro h
+        obtain ⟨hx, hrest⟩ := h
+        obtain ⟨h1, h2⟩ := (ih ys (astep k s x)).mp hrest
+        exact ⟨⟨hx, h1⟩, h2⟩
+      · intro h
+        obtain ⟨⟨hx, h1⟩, h2⟩ := h
+        exact ⟨hx, (ih ys (astep k s x)).mpr ⟨h1, h2⟩⟩
+
 /--
 **A straight-line array block denotes its total run.**
 
@@ -376,7 +400,29 @@ theorem bit_and_one (a : Prop) [Decidable a] :
     ((if a then (1:Nat) else 0) &&& 1) = if a then 1 else 0 := by
   by_cases ha : a <;> simp [ha] <;> decide
 
+/-- Conjunction with a negated flag, in the form a two-level phase gate
+leaves behind (`ArrayMobius`'s cursor advance is exactly this). -/
+theorem ite_ite_not_and (a b : Prop) [Decidable a] [Decidable b] :
+    (if a then (if b then (0:Nat) else 1) else 0) = if a ∧ ¬ b then 1 else 0 := by
+  by_cases ha : a <;> by_cases hb : b <;> simp [ha, hb]
+
+/-- The branchless select with the gate on the *second* summand. -/
+theorem ite_add_ite' (a : Prop) [Decidable a] (x y : Nat) :
+    ((if a then (0:Nat) else x) + (if a then y else 0)) = if a then y else x := by
+  by_cases ha : a <;> simp [ha]
+
 theorem one_lt_M : 1 < M := by decide
+
+/-- **The "or 1" idiom.**  A port that uses `0` to mean the empty product
+materializes `max v 1` branchlessly as `v + [v = 0]`; below the word size the
+machine's truncation is invisible. -/
+theorem or_one_mod {v m : Nat} (hv : v < m) (hm : 1 < m) :
+    (v + (if v = 0 then 1 else 0)) % m = if v = 0 then 1 else v := by
+  by_cases h : v = 0
+  · rw [if_pos h, if_pos h, h]
+    exact Nat.mod_eq_of_lt hm
+  · rw [if_neg h, if_neg h, Nat.add_zero]
+    exact Nat.mod_eq_of_lt hv
 
 /-- Flag negation, as the machine computes it: `1 - g` is
 `(1 + (2⁶⁴ − g)) mod 2⁶⁴`. -/

@@ -191,6 +191,32 @@ private def testAlgorithmProof : IO Unit := do
       "AlgorithmProof.sumRange").targetResult == some 1)
     "certified algorithm generated-C model did not accept"
 
+private def testArrayAlgorithmProof : IO Unit := do
+  -- the array analogue: an `AProgramClaim` whose `sound` field is a theorem,
+  -- and whose decoder rejects both a wrong value and an inadmissible input
+  check
+    (Ports.ArraySieveCount.exampleClaim.program.denote == some 9)
+    "array certified algorithm example did not accept"
+  check
+    (Ports.ArraySieveCount.decode Ports.ArraySieveCount.exampleInput 9 == some ())
+    "array decoder rejected the accepting value"
+  check
+    (Ports.ArraySieveCount.decode Ports.ArraySieveCount.exampleInput 8 == none)
+    "array decoder accepted a wrong value"
+  check
+    (Ports.ArraySieveCount.decode ⟨0, 24, 9⟩ 9 == none)
+    "array decoder accepted an inadmissible configuration"
+  -- the Möbius port's layout bounds, evaluated: the crude estimates
+  -- `layoutOk` relies on are true of the layout the port actually builds
+  check
+    (Ports.ArrayMobius.Layout.tableLen (Ports.ArrayMobius.Layout.ofSegment 1000)
+      <= 1000)
+    "mobius prime table longer than its segment"
+  check
+    (Ports.ArrayMobius.Layout.markSteps (Ports.ArrayMobius.Layout.ofSegment 1000)
+      <= 1000 * 1000 + 1000 + 16)
+    "mobius mark budget above its bound"
+
 private def scaleProgram : Verified.Reflect.Program := {
   regCount := 6
   loopCount := 150000
@@ -301,6 +327,7 @@ def main : IO Unit := do
   testSquarefreeMertensCertificate
   testReflectedCertificate
   testAlgorithmProof
+  testArrayAlgorithmProof
   testPackagingScale
   testFixedPointCertificate
   testRolledEmission

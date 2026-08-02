@@ -1,6 +1,7 @@
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Verified.ArrayBridge
 import LeanCompCert.Ports.BlockedFold
+import LeanCompCert.Verified.Algorithm.ArrayBridge
 
 /-!
 # An array-backed sieve whose denotation is proved
@@ -74,6 +75,7 @@ open LeanCompCert.Verified
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.Algorithm
 
 /-! ## The program
 
@@ -595,5 +597,136 @@ theorem leastFactor_eq_self_iff (n : Nat) (hn : 2 ≤ n) :
         Nat.mul_le_mul_right _ hd2
       have hlt : Sieve.leastFactor n < n := by omega
       exact h _ hd2 hlt hdvd
+
+/-! ## The `Algorithm` / `AProgramRefinement` packaging
+
+The denotation theorem above is the mathematics.  This section is the
+demonstration that `Verified/Algorithm/ArrayBridge.lean` carries an array port
+through the same two-arrow discipline `docs/algorithm-to-proof.md` asks of a
+scalar one:
+
+```text
+reference checker accepts        →  π(len − 1) = expected      Algorithm.Ensures
+array program decodes to accept  →  reference checker accepts   AProgramRefinement
+```
+
+The side conditions of `sieveCountProgram_denote` are carried by `admissible`
+and re-tested inside `decode`, so an inadmissible configuration is rejected by
+the certificate rather than excused in a docstring.
+-/
+
+/-- A shard of the certificate: a sieve configuration and the count it claims. -/
+structure Input where
+  /-- Number of marking rounds. -/
+  bound : Nat
+  /-- Number of cells. -/
+  len : Nat
+  /-- The claimed number of primes below `len`. -/
+  expected : Nat
+  deriving Repr, DecidableEq
+
+/-- The number of primes below `len`, in the reference formulation. -/
+def primeCount (len : Nat) : Nat :=
+  (List.range len).countP (fun n => decide (2 ≤ n ∧ Sieve.leastFactor n = n))
+
+/-- The arithmetic side conditions of `sieveCountProgram_denote`, as a
+decidable guard.  `decode` re-tests this, so they are part of the certificate's
+visible surface. -/
+def admissible (i : Input) : Bool :=
+  decide (0 < i.len) && decide (i.len < M) && decide ((i.bound + 1) * i.len < M) &&
+    decide ((i.bound + 2) * (i.bound + 2) < M) &&
+    decide (i.len ≤ (i.bound + 2) * (i.bound + 2))
+
+theorem admissible_iff (i : Input) :
+    admissible i = true ↔
+      (0 < i.len ∧ i.len < M ∧ (i.bound + 1) * i.len < M ∧
+        (i.bound + 2) * (i.bound + 2) < M ∧
+        i.len ≤ (i.bound + 2) * (i.bound + 2)) := by
+  simp only [admissible, Bool.and_eq_true, decide_eq_true_eq]
+  constructor
+  · rintro ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩; exact ⟨h1, h2, h3, h4, h5⟩
+  · rintro ⟨h1, h2, h3, h4, h5⟩; exact ⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩
+
+/-- The mathematical proposition a shard asserts. -/
+def proposition (i : Input) : Prop := primeCount i.len = i.expected
+
+/-- The reference checker. -/
+def check (i : Input) : Bool := admissible i && (primeCount i.len == i.expected)
+
+def reference : Algorithm Input Unit := Algorithm.ofChecker check
+
+/-- **The first arrow.**  Acceptance of the reference checker cannot lie about
+the number of primes below `len`. -/
+theorem reference_sound : reference.Ensures proposition := by
+  apply Algorithm.ofChecker_ensures
+  intro i accepted
+  simp only [check, Bool.and_eq_true, beq_iff_eq] at accepted
+  exact accepted.2
+
+/-- Machine result `v` is accepted exactly when the configuration is
+admissible and `v` is the claimed count; every other result is rejected. -/
+def decode (i : Input) (result : Nat) : Option Unit :=
+  if admissible i && (result == i.expected) then some () else none
+
+/-- **The second arrow**, through `ArrayBridge`.  Only the well-formedness of
+the program and the denotation theorem are used; no loop is evaluated. -/
+def compilation : AProgramRefinement reference :=
+  AProgramRefinement.ofDenotationOn reference
+    (fun i => sieveCountProgram i.bound i.len)
+    (fun i => sieveCountProgram_wf i.bound i.len)
+    (fun i => admissible i = true)
+    (fun i => primeCount i.len)
+    (by
+      intro i hadm
+      obtain ⟨h1, h2, h3, h4, h5⟩ := (admissible_iff i).mp hadm
+      exact sieveCountProgram_denote i.bound i.len h1 h2 h3 h4 h5)
+    decode
+    (by
+      intro i result output hdec
+      simp only [decode] at hdec
+      split at hdec
+      · next h => exact (Bool.and_eq_true _ _ |>.mp h).1
+      · exact absurd hdec (by simp))
+    (by
+      intro i output hadm hdec
+      simp only [decode] at hdec
+      split at hdec
+      · next h =>
+          have hexp : primeCount i.len = i.expected := by
+            have := (Bool.and_eq_true _ _ |>.mp h).2
+            simpa using this
+          cases output
+          simp only [reference, Algorithm.ofChecker, check, hadm, hexp,
+            Bool.true_and, beq_self_eq_true, if_pos]
+      · exact absurd hdec (by simp))
+
+/-- The certified array algorithm: reference soundness and compiled
+refinement, packaged. -/
+def certified : ACertifiedAlgorithm Input Unit proposition := {
+  algorithm := reference
+  sound := reference_sound
+  compilation
+}
+
+/-! ### One closed claim
+
+`bound = 4`, `len = 24`, `expected = 9`: there are nine primes below 24.  The
+claim's `sound` field is a theorem; nothing here admits a run.
+-/
+
+def exampleInput : Input := ⟨4, 24, 9⟩
+
+def exampleClaim : AProgramClaim (proposition exampleInput) :=
+  certified.claim exampleInput 9 () (by decide)
+
+theorem example_program_accepts : exampleClaim.program.denote = some 9 := by
+  show (sieveCountProgram 4 24).denote = some 9
+  rw [sieveCountProgram_denote 4 24 (by omega) (by decide) (by decide)
+    (by decide) (by decide)]
+  decide
+
+/-- The mathematical conclusion, from the packaged claim. -/
+theorem example_result : proposition exampleInput :=
+  exampleClaim.sound example_program_accepts
 
 end LeanCompCert.Ports.ArraySieveCount

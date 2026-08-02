@@ -91,8 +91,34 @@ Use the existing compiler-correctness combinators to prove that theorem:
 - `FoldBridge` for counted folds and observations of register state;
 - `EarlyExit` for poison-flag implementations of early return;
 - `Straight` and `Frontend` for expression and straight-line blocks;
-- `ArrayBridge`, `Segment`, and `ListFold` for arrays, shards, guards, and
-  tables.
+- `Segment` and `ListFold` for shards, guards, and tables;
+- `Verified/Algorithm/ArrayBridge.lean` for array programs.
+
+Array programs are a different machine (`AProgram`, over `AState`) with their
+own refinement structure, `AProgramRefinement`, and their own claim,
+`AProgramClaim`.  Three modules carry an array port:
+
+- `Verified/ArrayState.lean` and `Verified/ArrayBridge.lean` — the array
+  machine and its compiler bridge into CCIR and generated C;
+- `Verified/ArrayFoldBridge.lean` — the reasoning bridge, the array analogue
+  of `FoldBridge`, turning `AProgram.denote` into a `List.foldl`.  Its
+  body-simulation hypothesis is restricted to `index < loopCount`, which is
+  load-bearing: a body that decodes a divisor from the loop index is
+  genuinely undefined at an adversarial index;
+- `Verified/Algorithm/ArrayBridge.lean` — the refinement bridge.  `ArrayLoop`
+  bundles the simulation obligations; `AProgramRefinement.ofArrayLoopOn` and
+  `ofDenotationOn` produce the refinement.
+
+One asymmetry is deliberate and is not hidden.  The array compiler bridge is
+one-way — `p.denote = some n → (trace).output = some n`, not the converse,
+because `u64` address arithmetic is not injective over the whole register
+range.  So `AProgramClaim` carries **no** `Computation.Returns` iff.  A run of
+an array artifact reads a *proved* denotation off (`trace_value_unique`); it
+never establishes one.
+
+`AProgramRefinement.ofDenotationOn` takes the arithmetic side conditions of
+the denotation as an explicit `Admissible` predicate and requires the decoder
+to reject inadmissible inputs, so audit item 2 below covers them too.
 
 `CertifiedAlgorithm` packages the reference soundness and compiled refinement.
 Specializing it to an input, accepted machine value, and decoded output with

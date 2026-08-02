@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+- **`ArrayBridge`: the array machine gets the refinement combinator
+  `docs/algorithm-to-proof.md` §3 promised.**  Three modules now carry an array
+  port, and the doc says which is which:
+  `Verified/ArrayBridge.lean` (compiler bridge, already present),
+  `Verified/ArrayFoldBridge.lean` (reasoning bridge — the array analogue of
+  `FoldBridge`, with the body-simulation hypothesis restricted to
+  `index < loopCount`), and the new
+  `Verified/Algorithm/ArrayBridge.lean` (refinement bridge).
+  - **`AProgramRefinement`, `ACertifiedAlgorithm`, `AProgramClaim`.**  The
+    `AProgram` analogues of the `Algorithm` structures.  `ArrayLoop` bundles
+    the four size-independent simulation obligations;
+    `AProgramRefinement.ofArrayLoopOn` and `ofDenotationOn` build the
+    refinement from them.
+  - **Side conditions live in the decoder.**  `ofDenotationOn` takes the
+    arithmetic side conditions of the denotation as an explicit `Admissible`
+    predicate and *requires* the decoder to reject inadmissible inputs, so a
+    port cannot state its no-wraparound hypotheses in a docstring and forget
+    them in the certificate.
+  - **The one-way asymmetry is recorded, not papered over.**  The array
+    compiler bridge proves `denote → trace`, not the converse, because `u64`
+    address arithmetic is not injective over the whole register range.  So
+    `AProgramClaim` carries **no** `Computation.Returns` iff; `trace_value_unique`
+    says instead that a run *reads off* a proved denotation.  Restoring the
+    scalar `iff` needs abstract pointer arithmetic in CCIR or an emitted
+    out-of-range trap — both fragment extensions, neither taken.
+  - **`Ports/ArraySieveCount.lean`** — the first array port with a proved
+    denotation — now also carries both arrows: `reference_sound`
+    (`Algorithm.Ensures`) and `compilation` (`AProgramRefinement`), with a
+    closed `AProgramClaim` at `bound = 4, len = 24` whose conclusion is
+    `π(23) = 9`.
+  - **`Ports/ArrayMobiusDenotation.lean`** — the segmented Möbius sieve's
+    machine half.  `body_defined` proves that the 60-instruction branchless
+    body is defined at every index the loop visits and every state satisfying
+    a single-register invariant: no array access leaves `[0, arrayLen)` and
+    the `urem` by `p²` never divides by zero.  `layoutOk` discharges every
+    arithmetic side condition from one inequality, `(L + 4)² < 2⁶⁴`, which
+    admits `L` up to about `4.29 · 10⁹`.  The observation equation and the
+    Möbius mathematics are *not* proved and are named as the two remaining
+    obligations; there is no `sorry` and no axiom.
+  - **Generic additions to `ArrayFoldBridge`**: `AllDefined_append` (cut a
+    long body into stages and pay for one at a time), `or_one_mod` (the
+    branchless "`0` means the empty product" idiom), `ite_ite_not_and` and
+    `ite_add_ite'`.
+  - Checked, not assumed: `mobiusProgram L |>.denote` agrees with a
+    trial-division Mertens reference at every `L ∈ [1, 200]`.  It disagrees at
+    `L = 0` — the program denotes `1`, the sum is `0` — which is why
+    `MobiusOk` requires `0 < L`.
+
 - **Run receipts: the join between the proved chain and an attested
   execution.**  `LeanCompCert/Attest/` states what a receipt is, what it means
   for one to bind to a computation (`receiptBinds` — decidable, total,
