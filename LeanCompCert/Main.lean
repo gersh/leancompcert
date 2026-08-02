@@ -158,8 +158,7 @@ private def nativeCerts : List NativeCheck.Cert := [
   { name := "fixedpoint", emitted := Testing.FixedPointCertificate.emittedC,
     certifiedValue := some (Testing.FixedPointCertificate.expectedValue : Nat) },
   { name := "rolled-10m", emitted := Testing.RolledFixedPoint.emittedC,
-    routeLabel := Attest.EmissionRoute.rolledLoop
-      Testing.RolledFixedPoint.program "FixedPoint.rolled10M" |>.label,
+    routeLabel := Attest.EmissionRoute.rolledLoop.label,
     certifiedValue := some (Testing.RolledFixedPoint.expectedBig : Nat) },
   { name := "proth", emitted := Testing.ProthCertificate.emittedC,
     certifiedValue := some 0 },

@@ -54,7 +54,7 @@ the *source* size and is independent of how long the artifact ran.
 | piece | where | what it is |
 | --- | --- | --- |
 | `RunReceipt` | `LeanCompCert/Attest/Receipt.lean` | the signed record |
-| `Artifact` | same | a computation, an emission route, a `main` |
+| `Artifact` | same | an `ArtifactBody` (a computation, or a program to roll) and a `main` |
 | `receiptBinds` | same | the decidable check, total and fail-closed |
 | `RunAdmission` | `LeanCompCert/Attest/Admission.lean` | the empirical premise, **assumed** here |
 | a discharger | `Trusted/LocalReceipt.lean`, or `gpu_prover` | one named axiom, opted into |
@@ -161,15 +161,25 @@ vectors could do more.
 open LeanCompCert.Attest
 
 def artifact : Artifact := {
-  computation := MyProject.computation
-  route := EmissionRoute.provedStraightLine
+  body := .straightLine MyProject.computation
+  mainC := MyProject.mainC
+}
+```
+
+or, for a computation too large to emit unrolled,
+
+```lean
+def artifact : Artifact := {
+  body := .rolled MyProject.program "MyProject.entry"
   mainC := MyProject.mainC
 }
 ```
 
 `Artifact` is **pure data with no proof field**. The C text is not something
 you assert — it is `Artifact.source?`, computed by the package's own emitter —
-so there is nothing here you can get wrong.
+so there is nothing here you can get wrong. Note that the rolled form carries
+*only* the program: its computation is derived, not supplied, so an artifact
+cannot name one program and carry a `Computation` for another.
 
 Then:
 
@@ -263,21 +273,40 @@ Do not present the replacement as mechanical.
 
 ## The two emission routes
 
-`EmissionRoute.provedStraightLine` emits the `Computation`'s own lowered
-statements. `Computation.result_preserved` is about exactly those statements,
-so the chain from "the C model returns `v`" back to the CCIR computation is
-proved end to end.
+`ArtifactBody.straightLine` emits the `Computation`'s own lowered statements.
+`Computation.result_preserved` is about exactly those statements, so the chain
+from "the C model returns `v`" back to the CCIR computation is proved end to
+end.
 
-`EmissionRoute.rolledLoop` emits `emitRolled`'s `while`-loop form. This is what
-makes a 10⁷-iteration computation a 2 KB artifact. ⚠ **It is not covered by the
-proved C model**: `Proof.PureSemantics.evalCStmt` interprets assignments only,
-so a `whileLoop` evaluates to `none` and there is no `result_preserved` for the
-rolled unit. What *is* proved is `Verified.Reflect.rolledTrace_eq_augmented`,
-at the CCIR level. On the rolled route a discharger's `RunAdmission.denotes`
-therefore bundles one further unmechanised step.
+`ArtifactBody.rolled` emits `emitRolled`'s `while`-loop form. This is what
+makes a 10⁷-iteration computation a 2 KB artifact. **It is now covered by the
+proved C model too.** `Proof.PureSemantics.evalCWhile` is a fuelled `while`
+rule, and `Verified.Reflect.rolledResult_eq_denote` says that the model of the
+*emitted statements* — declarations, prologue, the counted loop, epilogue —
+returns the counter-augmented program's denotation. So a discharger's clause 4
+is the same claim on both routes, and neither bundles an unmechanised step.
 
-Use `receiptBindsProved` when you want the route with no such step;
-`receiptBinds` accepts both and records which in the signed payload.
+### What shape of `while` the proved model covers
+
+Deliberately not "all of `while`". The covered shape is exactly what
+`emitRolled` produces:
+
+* a `u64` counter register, declared with initialiser `0`;
+* a guard `v_k < UINT64_C(N)` with `N` a literal below `2⁶⁴`;
+* a body of assignments only, ending in `v_k = v_k + UINT64_C(1)`;
+* and a fuel budget of `N + 1` — one unit per iteration plus the exit test.
+
+Everything else is `none` — the model declines rather than guesses: nested
+loops, `break`, `continue`, `goto`, a `return` inside the body, a guard that
+reads memory, and any loop that has not exited when the fuel runs out. A
+fuelled semantics can only refuse to answer, never answer wrongly, which is why
+it is adequate here without a general `while` rule.
+
+`ArtifactBody.coveredByProvedChain` is the decidable side condition:
+`program.WF` and `program.loopCount < 2⁶⁴`. Both are *program*-sized — neither
+grows with the trip count. `receiptBindsProved` demands it;
+`receiptBinds` accepts an artifact without it and records the route in the
+signed payload.
 
 ## The receipt format
 
@@ -342,10 +371,17 @@ emitting 1121 bytes of C), Lean 4.32.1, `decide +kernel`:
 
 | goal | wall | peak RSS |
 | --- | --- | --- |
-| `(Lower.compileProgram .portable ⟨#[computation.fn]⟩).toOption.isSome = true` | 5 s | 0.7 GB |
-| `artifact.source?.isSome = true` | 4 s | 0.7 GB |
-| `programHash = digest source` — **the join** | 10 s | 2.6 GB |
-| `receiptBinds … = true`, whole check | 54 s | 12.3 GB |
+| `(Lower.compileProgram .portable ⟨#[computation.fn]⟩).toOption.isSome = true` | 0.9 s | 0.7 GB |
+| `artifact.source?.isSome = true` | 0.9 s | 0.7 GB |
+| `Rolled.artifact.source?.isSome = true` (the 10⁷ rolled unit) | 0.6 s | 0.6 GB |
+| `programHash = digest source` — **the join** | 70 s | 16.8 GB |
+| `receiptBinds … = true`, whole check | 119 s | 26.4 GB |
+
+(Re-measured on the machine these were last taken on; the join and the whole
+check are within noise of the same goals on the commit before the `Artifact`
+change — 69 s / 16.8 GB and 108 s / 26.4 GB — so the rolled-route work did not
+move them. Note that the rolled 10⁷ artifact's emitter is *cheaper* in the
+kernel than the straight-line one's: its C is smaller.)
 
 The gap between the third row and the fourth is **not** the emitter.  It is the
 `ReceiptCrypto` instance applied to `RunReceipt.payload`: reducing

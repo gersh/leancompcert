@@ -33,6 +33,15 @@ rolled loop's dynamic trace evaluates exactly as the standard
 so packaging, bridge, and denotation theorems apply to it unchanged.
 Author theorems against `p.counterAugment`; emit `p` rolled.
 
+The emitted `while` statement is inside the proved C model as well:
+`Proof.evalCWhile` is a **fuelled** rule for exactly the counted shape
+`rolledCFunction` emits — `u64` counter register, literal trip count,
+assignment-only body ending in the increment, budget `loopCount + 1` — and
+`Reflect.rolledResult_eq_denote` runs the emitted statements in that model and
+gets `p.counterAugment.denote`.  Nested loops, `break`, `goto`, a `return`
+inside the body, a memory-reading guard, and fuel exhaustion are all `none`:
+the model declines rather than guesses.
+
 ## Arrays
 
 `Verified.ArrayState` extends the register machine with one

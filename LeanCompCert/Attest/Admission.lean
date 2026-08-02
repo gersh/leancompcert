@@ -16,10 +16,10 @@ into, so a downstream `#print axioms` names which discharger was used.
 
 Read this paragraph before writing or accepting one.
 
-> Let `A` be an `Artifact`: a `Computation`, an `EmissionRoute`, and a string
-> `A.source` together with a kernel-checked proof that `A.source` is exactly
-> the C text this package's emitter produces for that computation on that
-> route.  Let `R` be a `RunReceipt` for which
+> Let `A` be an `Artifact`: an `ArtifactBody` — a `Computation`, or a
+> `Reflect.Program` to be emitted rolled — and a string `A.source` together
+> with a kernel-checked proof that `A.source` is exactly the C text this
+> package's emitter produces for that body.  Let `R` be a `RunReceipt` for which
 > `receiptBinds crypto A kind params nonce value R = true` — so, in particular,
 > `R.programHash` is `crypto.digest.hashHex A.source`, `R.value` is `value`,
 > `R.verdict` is `agrees`, `R.nonce` is the challenge nonce, and `R`'s
@@ -39,18 +39,17 @@ Read this paragraph before writing or accepting one.
 >    generated on a machine you administer;
 > 4. and — because `MachineExecuted` is not a statement Lean can relate to the
 >    C model on its own — **that the value the binary reported is the value the
->    proved C model returns**, i.e. `A.computation.targetResult = some R.value`.
+>    proved C model returns**, i.e. `A.body.modelResult = some R.value`.
 >
-> Clause 4 is where the residual risk sits, and how much it carries depends on
-> the emission route.  On `EmissionRoute.provedStraightLine` the C text is the
-> emission of exactly the statements `A.computation` carries, so clause 4 is
-> the ordinary claim that CompCert compiled that text faithfully and the
-> hardware ran the result — the thing CompCert's Coq proof is about.  On
-> `EmissionRoute.rolledLoop` clause 4 additionally bundles an **unmechanised
-> step**: this package's proved C model interprets assignments only, so nothing
-> here relates the rolled `while` loop to the unrolled statement sequence.  See
-> `EmissionRoute`.  Use `receiptBindsProved` if you want the route where clause
-> 4 is minimal.
+> Clause 4 is where the residual risk sits, and it is now the same claim on
+> both routes: that CompCert compiled the emitted text faithfully and the
+> hardware ran the result — the thing CompCert's Coq proof is about.
+> `A.body.modelResult` is the model of the statements *actually emitted*: the
+> lowered straight-line statements on `provedStraightLine`, and the
+> declarations, prologue, counted `while` loop and epilogue on `rolledLoop`.
+> The rolled route no longer bundles an extra unmechanised step; see
+> `ArtifactBody.modelResult_eq_sourceResult` and
+> `Reflect.rolledResult_eq_denote`.
 
 Nothing in that list is provable in Lean, and no amount of cryptography makes
 it so.  A signature establishes who is speaking, never that what they said is
@@ -110,7 +109,7 @@ structure RunAdmission (crypto : ReceiptCrypto) (artifact : Artifact)
   text, on these inputs, and reported this value. -/
   executed : MachineExecuted crypto artifact receipt
   /-- …and therefore the proved restricted-C model of that text returns it. -/
-  reported : artifact.computation.targetResult = some receipt.value
+  reported : artifact.body.modelResult = some receipt.value
 
 /-! ## The composition
 
@@ -118,44 +117,59 @@ This is the theorem the whole module exists for: a checked receipt plus an
 admitted run gives a fact about the `Computation`, and hence — through the
 consumer's own equivalence lemma — about the consumer's mathematics. -/
 
+/-- **The join, at the C model.**  A checked receipt plus an admitted run says
+the proved model of the *emitted text* returns the claimed value.  No coverage
+hypothesis: this is true on any route, because `modelResult` is by definition
+about the statements that were emitted. -/
+theorem modelResult_of_receipt {crypto : ReceiptCrypto} {artifact : Artifact}
+    {kind : AttestationKind} {params nonce : String} {value : Int}
+    {receipt : RunReceipt}
+    (bound : receiptBinds crypto artifact kind params nonce value receipt = true)
+    (admitted : RunAdmission crypto artifact receipt) :
+    artifact.body.modelResult = some value := by
+  have hvalue : receipt.value = value := (receiptBinds_sound bound).2.2.2.2.2.2.1
+  rw [admitted.reported, hvalue]
+
 /-- **The join.**
 
 ```text
 receiptBinds crypto artifact kind params nonce value receipt = true
+  →  artifact.coveredByProvedChain = true
   →  RunAdmission crypto artifact receipt
-  →  artifact.computation.Returns value
+  →  artifact.body.Returns value
 ```
 
 The first hypothesis is decidable and the kernel checks it; it is what makes
-the second hypothesis *about this computation* rather than about some
-unspecified binary.  The step from the C model back to the CCIR computation is
-`Computation.result_preserved`, which is proved.
+the third hypothesis *about this artifact* rather than about some unspecified
+binary.  The second is the decidable, program-sized coverage condition — `rfl`
+on the straight-line route.  The step from the C model back to the source
+meaning is `ArtifactBody.modelResult_eq_sourceResult`, which is proved.
 
 Axiom-free: `#print axioms` shows only the standard three. -/
 theorem returns_of_receipt {crypto : ReceiptCrypto} {artifact : Artifact}
     {kind : AttestationKind} {params nonce : String} {value : Int}
     {receipt : RunReceipt}
     (bound : receiptBinds crypto artifact kind params nonce value receipt = true)
+    (covered : artifact.coveredByProvedChain = true)
     (admitted : RunAdmission crypto artifact receipt) :
-    artifact.computation.Returns value := by
-  have hvalue : receipt.value = value := (receiptBinds_sound bound).2.2.2.2.2.2.1
-  have htarget : artifact.computation.targetResult = some value := by
-    rw [admitted.reported, hvalue]
-  exact (artifact.computation.targetReturns_iff value).mp htarget
+    artifact.body.Returns value := by
+  show artifact.body.sourceResult = some value
+  rw [← artifact.body.modelResult_eq_sourceResult covered]
+  exact modelResult_of_receipt bound admitted
 
-/-- The same, restricted to the emission route the proved C model covers.  This
-is the form with no unmechanised step between the compiled text and the
-`Computation`; see `EmissionRoute`. -/
+/-- The same, with the coverage condition taken from `receiptBindsProved`
+rather than supplied separately.  This is the form with no unmechanised step
+between the compiled text and the source meaning — available on **both**
+routes; see `ArtifactBody`. -/
 theorem returns_of_receipt_proved {crypto : ReceiptCrypto} {artifact : Artifact}
     {kind : AttestationKind} {params nonce : String} {value : Int}
     {receipt : RunReceipt}
     (bound :
       receiptBindsProved crypto artifact kind params nonce value receipt = true)
     (admitted : RunAdmission crypto artifact receipt) :
-    artifact.route = EmissionRoute.provedStraightLine
-      ∧ artifact.computation.Returns value :=
-  ⟨(receiptBindsProved_sound bound).1,
-    returns_of_receipt (receiptBindsProved_sound bound).2 admitted⟩
+    artifact.body.Returns value :=
+  returns_of_receipt (receiptBindsProved_sound bound).2
+    (receiptBindsProved_sound bound).1 admitted
 
 /-- Consumer-facing form: an admitted run discharges a `Decision`, and hence
 the proposition it decides.
@@ -168,10 +182,14 @@ theorem decide_of_receipt {proposition : Prop} {crypto : ReceiptCrypto}
     {artifact : Artifact} {kind : AttestationKind} {params nonce : String}
     {receipt : RunReceipt}
     (decision : Decision proposition)
-    (same : decision.computation = artifact.computation)
-    (bound : receiptBinds crypto artifact kind params nonce
+    (same : artifact.body.sourceResult = decision.computation.sourceResult)
+    (bound : receiptBindsProved crypto artifact kind params nonce
       decision.acceptingValue receipt = true)
     (admitted : RunAdmission crypto artifact receipt) : proposition :=
-  decision.prove (same ▸ returns_of_receipt bound admitted)
+  decision.prove (by
+    have h := returns_of_receipt_proved bound admitted
+    show decision.computation.sourceResult = some decision.acceptingValue
+    rw [← same]
+    exact h)
 
 end LeanCompCert.Attest
