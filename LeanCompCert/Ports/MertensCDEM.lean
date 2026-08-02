@@ -260,6 +260,16 @@ structure Abs where
 
 def obs (s : RegState) : Abs := ⟨s 0, s 1, ⟨s 2, s 3, s 4⟩⟩
 
+/-- Componentwise equality.  This package has no `ext` attribute (that is a
+Mathlib tactic), so the two structures carry their own. -/
+theorem Trial.eq_of {x y : Trial} (h1 : x.res = y.res) (h2 : x.sq = y.sq)
+    (h3 : x.par = y.par) : x = y := by
+  cases x; cases y; simp_all
+
+theorem Abs.eq_of {x y : Abs} (h1 : x.bad = y.bad) (h2 : x.mo = y.mo)
+    (h3 : x.t = y.t) : x = y := by
+  cases x; cases y; simp_all
+
 /-! ## The mathematical step
 
 Written to mirror the block structure of the program.  The only `% M` that
@@ -348,6 +358,11 @@ structure Admissible (c : Cfg) : Prop where
   biasLt : c.bias < M
   /-- … as is the seed. -/
   m0Lt : c.m0 < M
+  /-- The seed is far enough above `0` that the accumulator cannot underflow:
+  it moves by at most `1` per candidate. -/
+  m0Pos : c.len < c.m0
+  /-- … and far enough below `2⁶⁴` that it cannot overflow. -/
+  m0Hi : c.m0 + c.len + 1 < M
   /-- The clamped product stays inside a word. -/
   capLt : c.den * c.cap + c.slack < M
   /-- A clamped comparison can never pass, so the clamp only ever turns a
@@ -991,6 +1006,394 @@ theorem body_wf (c : Cfg) : ∀ i ∈ body c, i.WF regCount := by
 theorem cdemProgram_wf (c : Cfg) : (cdemProgram c).WF :=
   ⟨by show 0 < 54; omega, initBlock_wf c, body_wf c, (by intro i hi; cases hi)⟩
 
+/-! ## From the flat index space to candidates
+
+`Ports/BlockedFold.lean` re-associates the flat fold over `[0, len·rounds)`
+into `len` blocks of `rounds`.  What remains is one block — a statement whose
+size does not grow with either parameter — and then a `bor` chain over the
+candidates.
+
+Everything in this section is ordinary `Nat` arithmetic.  No register, no
+trace and no problem size appears in any of it, and nothing here mentions the
+Möbius function: that identification is the consumer's obligation, stated at
+the end of this file.
+-/
+
+/-- The `+1` a candidate contributes to the running Mertens value. -/
+def muPlus (t : Trial) : Nat := (1 - t.sq) * (1 - omegaPar t)
+
+/-- The `−1` a candidate contributes. -/
+def muMinus (t : Trial) : Nat := (1 - t.sq) * omegaPar t
+
+/-- The running value after the candidate whose trial state is `t`. -/
+def moAdvance (mo : Nat) (t : Trial) : Nat := moStep mo (muPlus t) (muMinus t)
+
+/-- A round that is not the last leaves the accumulator alone. -/
+theorem moStep_zero (mo : Nat) (h : mo < M) : moStep mo 0 0 = mo := by
+  simp only [moStep, Nat.add_zero, Nat.sub_zero, Nat.mod_eq_of_lt h,
+    Nat.add_mod_right]
+
+/-- The accumulator stays a word. -/
+theorem moStep_lt (mo p m : Nat) : moStep mo p m < M :=
+  Nat.mod_lt _ M_pos
+
+private theorem or_zero (x : Nat) : x ||| 0 = x := by simp
+
+/-- The flat index decodes to `(candidate, round)`. -/
+theorem index_decode (c : Cfg) (n r : Nat) (hr : r < c.rounds) :
+    (n * c.rounds + r) / c.rounds = n ∧ (n * c.rounds + r) % c.rounds = r := by
+  have h0 : 0 < c.rounds := by omega
+  constructor
+  · rw [Nat.mul_comm, Nat.mul_add_div h0, Nat.div_eq_of_lt hr, Nat.add_zero]
+  · rw [Nat.mul_comm, Nat.mul_add_mod, Nat.mod_eq_of_lt hr]
+
+/-- The reset stage, as a whole-`Trial` selection. -/
+theorem gA_t (c : Cfg) (idx : Nat) (a : Abs) :
+    (gA c idx a).t =
+      if idx % c.rounds = 0 then ⟨c.lo + idx / c.rounds, 0, 0⟩ else a.t := by
+  by_cases h : idx % c.rounds = 0
+  · refine Trial.eq_of ?_ ?_ ?_ <;> simp [gA, h]
+  · refine Trial.eq_of ?_ ?_ ?_ <;> simp [gA, h]
+
+/-- **The abstract step, with the decode named.**  Everything the machine does
+in one iteration, written against the decoded round `q` and candidate `X`. -/
+theorem gstep_qX (c : Cfg) (idx : Nat) (a : Abs) (q X : Nat)
+    (hq : idx % c.rounds = q) (hX : c.lo + idx / c.rounds = X) :
+    gstep c idx a =
+      (let t := trialStep (q + 2) (if q = 0 then ⟨X, 0, 0⟩ else a.t)
+      let last := if q = c.rounds - 1 then 1 else 0
+      let mo := moStep a.mo (last * muPlus t) (last * muMinus t)
+      ⟨a.bad ||| (if RowFail c X mo ∨ AnchorFail c X mo then last else 0), mo, t⟩) := by
+  have ht : (gB c idx (gA c idx a)).t
+      = trialStep (q + 2) (if q = 0 then ⟨X, 0, 0⟩ else a.t) := by
+    show trialStep (idx % c.rounds + 2) _ = _
+    rw [hq, gA_t, hq, hX]
+  have hbad : (gB c idx (gA c idx a)).bad = a.bad := rfl
+  have hmo : (gB c idx (gA c idx a)).mo = a.mo := rfl
+  refine Abs.eq_of ?_ ?_ ht
+  · show badOf c (c.lo + idx / c.rounds) _ _ _ = _
+    simp only [badOf, moOf, hX, hq, hbad, hmo, ht, muPlus, muMinus]
+    rfl
+  · show moOf _ _ _ = _
+    simp only [moOf, hq, hbad, hmo, ht, muPlus, muMinus]
+
+/-- **One round of one candidate**, in ordinary arithmetic.  The candidate is
+reset at round `0`; the accumulators move only at the last round. -/
+theorem gstep_round (c : Cfg) (n r : Nat) (hr : r < c.rounds) (a : Abs)
+    (hmo : a.mo < M) :
+    gstep c (n * c.rounds + r) a =
+      (let t := trialStep (r + 2)
+        (if r = 0 then ⟨c.lo + n, 0, 0⟩ else a.t)
+      if r + 1 = c.rounds then
+        (let mo := moAdvance a.mo t
+        ⟨a.bad ||| (if RowFail c (c.lo + n) mo ∨ AnchorFail c (c.lo + n) mo
+            then 1 else 0), mo, t⟩)
+      else ⟨a.bad, a.mo, t⟩) := by
+  obtain ⟨hdiv, hmod⟩ := index_decode c n r hr
+  rw [gstep_qX c (n * c.rounds + r) a r (c.lo + n) hmod (by rw [hdiv])]
+  by_cases hlast : r + 1 = c.rounds
+  · have hq : r = c.rounds - 1 := by omega
+    simp only [if_pos hlast, if_pos hq, Nat.one_mul, moAdvance]
+    rfl
+  · have hq : ¬ (r = c.rounds - 1) := by omega
+    simp only [if_neg hlast, if_neg hq, Nat.zero_mul, ite_self, or_zero,
+      moStep_zero _ hmo]
+
+/-- The rounds a candidate has run through, as a prefix fold. -/
+def trialPrefix (X : Nat) (k : Nat) : Trial :=
+  (List.range k).foldl (fun t q => trialStep (q + 2) t) ⟨X, 0, 0⟩
+
+theorem trialPrefix_full (X R : Nat) : trialPrefix X R = trialRun X R := rfl
+
+/-- **The prefix of one block.**  After `k + 1 ≤ rounds` rounds the candidate's
+trial state is the `k + 1`-round prefix, and the accumulators have moved
+exactly when the block is complete. -/
+theorem block_prefix (c : Cfg) (hR : 0 < c.rounds) (n : Nat) (a : Abs)
+    (hmo : a.mo < M) :
+    ∀ k, k < c.rounds →
+      (List.range (k + 1)).foldl (fun x r => gstep c (n * c.rounds + r) x) a =
+        (let t := trialPrefix (c.lo + n) (k + 1)
+        if k + 1 = c.rounds then
+          (let mo := moAdvance a.mo t
+          ⟨a.bad ||| (if RowFail c (c.lo + n) mo ∨ AnchorFail c (c.lo + n) mo
+              then 1 else 0), mo, t⟩)
+        else ⟨a.bad, a.mo, t⟩) := by
+  intro k
+  induction k with
+  | zero =>
+      intro hk
+      rw [show (List.range 1) = [0] from rfl, List.foldl_cons, List.foldl_nil,
+        gstep_round c n 0 hk a hmo]
+      simp only [trialPrefix, show (List.range 1) = [0] from rfl, List.foldl_cons,
+        List.foldl_nil, if_pos rfl]
+      rfl
+  | succ k ih =>
+      intro hk
+      have hklt : k < c.rounds := by omega
+      have hkne : ¬ (k + 1 = c.rounds) := by omega
+      rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
+        ih hklt]
+      rw [if_neg hkne]
+      rw [gstep_round c n (k + 1) hk
+        ⟨a.bad, a.mo, trialPrefix (c.lo + n) (k + 1)⟩ hmo]
+      have hne0 : ¬ (k + 1 = 0) := by omega
+      simp only [if_neg hne0, trialPrefix, List.range_succ, List.foldl_append,
+        List.foldl_cons, List.foldl_nil]
+
+/-- **One block.**  A whole candidate's contribution. -/
+theorem block_spec (c : Cfg) (hR : 0 < c.rounds) (n : Nat) (a : Abs)
+    (hmo : a.mo < M) :
+    BlockedFold.block c.rounds (fun x i => gstep c i x) a n =
+      (let mo := moAdvance a.mo (trialRun (c.lo + n) c.rounds)
+      ⟨a.bad ||| (if RowFail c (c.lo + n) mo ∨ AnchorFail c (c.lo + n) mo
+          then 1 else 0), mo, trialRun (c.lo + n) c.rounds⟩) := by
+  have h := block_prefix c hR n a hmo (c.rounds - 1) (by omega)
+  rw [show c.rounds - 1 + 1 = c.rounds from by omega] at h
+  rw [BlockedFold.block_eq_shift, h]
+  simp only [reduceIte, trialPrefix_full]
+  rfl
+
+/-! ## The whole sweep, candidate by candidate -/
+
+/-- The running Mertens value after `n` candidates, biased. -/
+def moAt (c : Cfg) : Nat → Nat
+  | 0 => c.m0 % M
+  | n + 1 => moAdvance (moAt c n) (trialRun (c.lo + n) c.rounds)
+
+theorem moAt_lt (c : Cfg) (hm0 : c.m0 < M) : ∀ n, moAt c n < M
+  | 0 => by rw [moAt]; exact Nat.mod_lt _ M_pos
+  | _ + 1 => moStep_lt _ _ _
+
+/-- The flag candidate `n` contributes. -/
+def rowFlag (c : Cfg) (n : Nat) : Nat :=
+  if RowFail c (c.lo + n) (moAt c (n + 1)) ∨ AnchorFail c (c.lo + n) (moAt c (n + 1))
+    then 1 else 0
+
+/-- The violation flag after `n` candidates. -/
+def badAt (c : Cfg) : Nat → Nat
+  | 0 => 0
+  | n + 1 => badAt c n ||| rowFlag c n
+
+theorem badAt_le (c : Cfg) : ∀ n, badAt c n ≤ 1
+  | 0 => by rw [badAt]; omega
+  | n + 1 => by
+      rw [badAt]
+      exact bit_or _ _ (badAt_le c n) (bitLe _)
+
+/-- **The candidate fold.**  Only the flag and the accumulator are tracked:
+the trial state is reset at every candidate's round `0`, so nothing reads it
+across a block boundary. -/
+theorem fold_blocks (c : Cfg) (hR : 0 < c.rounds) (hm0 : c.m0 < M) : ∀ n,
+    ((List.range n).foldl
+        (BlockedFold.block c.rounds (fun y i => gstep c i y)) (obs (entry c))).bad
+      = badAt c n ∧
+    ((List.range n).foldl
+        (BlockedFold.block c.rounds (fun y i => gstep c i y)) (obs (entry c))).mo
+      = moAt c n := by
+  intro n
+  induction n with
+  | zero =>
+      refine ⟨?_, ?_⟩
+      · show (initialState.set 1 (c.m0 % M)) 0 = 0
+        simp [RegState.set, initialState]
+      · show (initialState.set 1 (c.m0 % M)) 1 = c.m0 % M
+        simp [RegState.set]
+  | succ n ih =>
+      rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
+      rw [block_spec c hR n _ (by rw [ih.2]; exact moAt_lt c hm0 n)]
+      refine ⟨?_, ?_⟩
+      · show _ ||| _ = _
+        rw [ih.1, ih.2, badAt, rowFlag, moAt]
+      · show moAdvance _ _ = _
+        rw [ih.2, moAt]
+
+/-- **The denotation, candidate by candidate.**  The value the program denotes
+is the `bor` of one flag per candidate. -/
+theorem value_eq_badAt (c : Cfg) (hR : 0 < c.rounds) (hm0 : c.m0 < M) :
+    value c = badAt c c.len := by
+  rw [value, BlockedFold.foldl_range_mul c.len c.rounds
+    (fun a index => gstep c index a) (obs (entry c))]
+  exact (fold_blocks c hR hm0 c.len).1
+
+/-- A `bor` chain of bits vanishes exactly when every term does. -/
+theorem badAt_eq_zero (c : Cfg) : ∀ n, badAt c n = 0 → ∀ m, m < n → rowFlag c m = 0 := by
+  intro n
+  induction n with
+  | zero => intro _ m hm; omega
+  | succ n ih =>
+      intro h m hm
+      rw [badAt] at h
+      have hb := badAt_le c n
+      have hf : rowFlag c n ≤ 1 := bitLe _
+      have hsplit : badAt c n = 0 ∧ rowFlag c n = 0 := by
+        have h1 : badAt c n = 0 ∨ badAt c n = 1 := by omega
+        have h2 : rowFlag c n = 0 ∨ rowFlag c n = 1 := by omega
+        rcases h1 with h1 | h1 <;> rcases h2 with h2 | h2 <;>
+          rw [h1, h2] at h <;> simp_all
+      rcases Nat.lt_or_ge m n with hlt | hge
+      · exact ih hsplit.1 m hlt
+      · have : m = n := by omega
+        subst this
+        exact hsplit.2
+
+/-! ## The accumulator is a running sum, not a wrapping one
+
+`moStep` carries the machine's `% M` because bounding it needs the number of
+completed candidates, which the loop invariant cannot see.  Here that number
+*is* available, so the `% M` comes off: `Admissible.m0Pos` and
+`Admissible.m0Hi` are exactly the room the accumulator needs on each side.
+-/
+
+theorem trialStep_par_le (d : Nat) (t : Trial) (h : t.par ≤ 1) :
+    (trialStep d t).par ≤ 1 :=
+  bit_xor _ _ h (bitLe _)
+
+theorem trialStep_sq_le (d : Nat) (t : Trial) (h : t.sq ≤ 1) :
+    (trialStep d t).sq ≤ 1 :=
+  bit_or _ _ h (bitLe _)
+
+theorem trialRun_bits (X R : Nat) :
+    (trialRun X R).sq ≤ 1 ∧ (trialRun X R).par ≤ 1 := by
+  have gen : ∀ k, ((List.range k).foldl (fun t q => trialStep (q + 2) t)
+      (⟨X, 0, 0⟩ : Trial)).sq ≤ 1 ∧
+      ((List.range k).foldl (fun t q => trialStep (q + 2) t)
+      (⟨X, 0, 0⟩ : Trial)).par ≤ 1 := by
+    intro k
+    induction k with
+    | zero => exact ⟨by simp, by simp⟩
+    | succ k ih =>
+        rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
+        exact ⟨trialStep_sq_le _ _ ih.1, trialStep_par_le _ _ ih.2⟩
+  exact gen R
+
+/-- A candidate contributes `+1`, `−1` or `0`, never both. -/
+theorem mu_exclusive (t : Trial) (h : t.par ≤ 1) :
+    muPlus t ≤ 1 ∧ muMinus t ≤ 1 ∧ ¬ (muPlus t = 1 ∧ muMinus t = 1) := by
+  have hop : omegaPar t ≤ 1 := bit_xor _ _ h (bitLe _)
+  have hsq : 1 - t.sq ≤ 1 := by omega
+  refine ⟨?_, ?_, ?_⟩ <;> simp only [muPlus, muMinus]
+  · have := Nat.mul_le_mul hsq (by omega : 1 - omegaPar t ≤ 1); omega
+  · have := Nat.mul_le_mul hsq hop; omega
+  · rintro ⟨h1, h2⟩
+    have hop01 : omegaPar t = 0 ∨ omegaPar t = 1 := by omega
+    rcases hop01 with hh | hh <;> rw [hh] at h1 h2 <;> simp_all
+
+/-- **The `% M` comes off.**  With room on both sides the biased accumulator
+really does add the candidate's `μ`. -/
+theorem moStep_exact (mo p m : Nat) (hp : p ≤ 1) (hm : m ≤ 1)
+    (hpm : ¬ (p = 1 ∧ m = 1)) (h1 : m ≤ mo) (h2 : mo + p < M) :
+    moStep mo p m = mo + p - m := by
+  have hp01 : p = 0 ∨ p = 1 := by omega
+  have hm01 : m = 0 ∨ m = 1 := by omega
+  rcases hp01 with rfl | rfl
+  · rcases hm01 with rfl | rfl
+    · exact moStep_zero mo (by omega)
+    · simp only [moStep, Nat.add_zero, Nat.mod_eq_of_lt (show mo < M by omega)]
+      have he : mo + (M - 1) = (mo - 1) + M := by omega
+      rw [he, Nat.add_mod_right]
+      exact Nat.mod_eq_of_lt (by omega)
+  · rcases hm01 with rfl | rfl
+    · simp only [moStep, Nat.sub_zero, Nat.mod_eq_of_lt h2, Nat.add_mod_right]
+    · exact absurd ⟨rfl, rfl⟩ hpm
+
+/-- The accumulator moves by at most one per candidate. -/
+theorem moAt_bounds (c : Cfg) (hadm : Admissible c) : ∀ n, n ≤ c.len →
+    c.m0 - n ≤ moAt c n ∧ moAt c n ≤ c.m0 + n := by
+  intro n
+  induction n with
+  | zero =>
+      intro _
+      rw [moAt, Nat.mod_eq_of_lt hadm.m0Lt]
+      omega
+  | succ n ih =>
+      intro hn
+      obtain ⟨hlo, hhi⟩ := ih (by omega)
+      have hbits := trialRun_bits (c.lo + n) c.rounds
+      obtain ⟨hp, hm, hpm⟩ := mu_exclusive _ hbits.2
+      have hm0 := hadm.m0Pos
+      have hM := hadm.m0Hi
+      have hstep : moAt c (n + 1)
+          = moAt c n + muPlus (trialRun (c.lo + n) c.rounds)
+              - muMinus (trialRun (c.lo + n) c.rounds) := by
+        rw [moAt, moAdvance]
+        exact moStep_exact _ _ _ hp hm hpm (by omega) (by omega)
+      rw [hstep]
+      omega
+
+/-- **The accumulator's recurrence, exactly.**  This is the form the consumer
+reads: one step of the biased running value is one `μ`. -/
+theorem moAt_succ (c : Cfg) (hadm : Admissible c) (n : Nat) (hn : n < c.len) :
+    moAt c (n + 1)
+      = moAt c n + muPlus (trialRun (c.lo + n) c.rounds)
+          - muMinus (trialRun (c.lo + n) c.rounds) := by
+  obtain ⟨hlo, hhi⟩ := moAt_bounds c hadm n (by omega)
+  have hbits := trialRun_bits (c.lo + n) c.rounds
+  obtain ⟨hp, hm, hpm⟩ := mu_exclusive _ hbits.2
+  have hm0 := hadm.m0Pos
+  have hM := hadm.m0Hi
+  rw [moAt, moAdvance]
+  exact moStep_exact _ _ _ hp hm hpm (by omega) (by omega)
+
+theorem moAt_zero (c : Cfg) (hadm : Admissible c) : moAt c 0 = c.m0 := by
+  rw [moAt, Nat.mod_eq_of_lt hadm.m0Lt]
+
+/-! ## What a zero value means
+
+The clamp is where a reviewer should look hardest, so it is discharged here
+rather than left to the reader: `Admissible.capSound` makes the clamped
+comparison unsatisfiable on the shard, so a row that *passes* cannot be a row
+whose `|M|` was clamped.  The conclusion is therefore about the true `|M|`.
+-/
+
+/-- A passing row was compared against the true `|M(X)|`, not the clamp. -/
+theorem absClamped_eq (c : Cfg) (hadm : Admissible c) (X mo : Nat)
+    (hX : X < c.lo + c.len)
+    (hpass : c.den * absClamped c mo + c.slack ≤ X) :
+    absClamped c mo = absOf c mo := by
+  by_cases hc : c.cap ≤ absOf c mo
+  · exfalso
+    rw [absClamped, if_pos hc] at hpass
+    have := hadm.capSound
+    omega
+  · rw [absClamped, if_neg hc]
+
+/--
+**The certificate's meaning.**
+
+If the program denotes `0` then, at every candidate of the shard, the biased
+running value satisfies the Cohen–Dress–El Marraki inequality in its exact
+form, and the anchor holds.  `moAt` is still the *program's* running value;
+identifying it with `bias + Σ_{k ≤ X} μ(k)` is the consumer's obligation, and
+is the only thing between this theorem and the atom.
+-/
+theorem value_eq_zero_sound (c : Cfg) (hadm : Admissible c) (hval : value c = 0)
+    (n : Nat) (hn : n < c.len) :
+    (c.lower ≤ c.lo + n →
+      c.den * absOf c (moAt c (n + 1)) + c.slack ≤ c.lo + n) ∧
+    (c.lo + n = c.anchorX → moAt c (n + 1) = c.anchorM) := by
+  have hflag : rowFlag c n = 0 := by
+    refine badAt_eq_zero c c.len ?_ n hn
+    rw [← value_eq_badAt c hadm.roundsPos hadm.m0Lt]
+    exact hval
+  have hnot : ¬ (RowFail c (c.lo + n) (moAt c (n + 1)) ∨
+      AnchorFail c (c.lo + n) (moAt c (n + 1))) := by
+    rw [rowFlag] at hflag
+    intro h
+    rw [if_pos h] at hflag
+    omega
+  constructor
+  · intro hlow
+    have hrow : ¬ RowFail c (c.lo + n) (moAt c (n + 1)) := fun h => hnot (Or.inl h)
+    rw [RowFail] at hrow
+    have hpass : c.den * absClamped c (moAt c (n + 1)) + c.slack ≤ c.lo + n :=
+      Decidable.byContradiction (fun hcon => hrow ⟨hlow, hcon⟩)
+    rwa [absClamped_eq c hadm _ _ (by omega) hpass] at hpass
+  · intro hax
+    have hanc : ¬ AnchorFail c (c.lo + n) (moAt c (n + 1)) :=
+      fun h => hnot (Or.inr h)
+    rw [AnchorFail] at hanc
+    exact Decidable.byContradiction (fun hcon => hanc ⟨hax, hcon⟩)
+
 /-! ## Kernel sanity checks
 
 The denotation is proved by simulation, so these evaluate nothing the proof
@@ -1016,10 +1419,38 @@ example : (cdemProgram (tinyCfg 97)).denote = some 1 := by decide +kernel
 /-- The same, through the proved denotation rather than by evaluating the
 machine: `Admissible` holds and the fold is `0`. -/
 theorem tiny_admissible : Admissible (tinyCfg 98) := by
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
     simp only [tinyCfg] <;> decide +kernel
 
 set_option maxRecDepth 100000 in
 example : value (tinyCfg 98) = 0 := by decide +kernel
+
+/-! ## What remains, stated exactly
+
+Both arrows of `docs/algorithm-to-proof.md` are discharged here **except** one
+proposition, and it mentions no register, no trace and no problem size:
+
+```text
+  muPlus  (trialRun X R) - muMinus (trialRun X R)  =  μ(X)
+```
+
+for `1 ≤ X` and `X < (R + 2)²` — the covering condition, which says the trial
+divisors `2 … R + 1` reach `√X`, so at most one prime factor of `X` survives
+them.  `Ports/` cannot state it: this package has no Möbius function
+(`Verified/Sieve.lean` stops at `leastFactor`) and no package dependencies at
+all.  It belongs in the consumer, next to `ArithmeticFunction.moebius`.
+
+With it, `moAt_zero` / `moAt_succ` turn the program's biased accumulator into
+`bias + Σ_{k ≤ X} μ(k)` by a one-line induction, and `value_eq_zero_sound`
+becomes the Cohen–Dress–El Marraki statement verbatim.  `RunAdmission` then
+supplies `value c = 0` from the artifact run, and the named axiom on the
+consumer side says exactly that and nothing else.
+
+The covering condition is *not* in `Admissible`, deliberately: it is a
+hypothesis of the mathematics, not of the machine.  Every shard sizing in
+`problems/ternary-goldbach/compcert_campaigns.json` satisfies it — the
+tightest is `rounds = 2481` against `X ≤ 6155336`, where
+`(2481 + 2)² = 6165289`.
+-/
 
 end LeanCompCert.Ports.MertensCDEM
