@@ -158,6 +158,123 @@ theorem Program.denote_eq_foldl
   exact LProgram.denote_eq_foldl (LProgram.ofProgram p) P step fin s₀
     hInit hP₀ hStep hClosed hEpilogue
 
+/-! ## Layer 3′ — the same bridge, restricted to the indices the loop visits
+
+`Verified/ArrayFoldBridge.lean` carries an index-restricted form of this
+bridge and its docstring explains why: a body that **decodes** its index —
+`n = idx / R`, `q = idx % R` — is genuinely undefined, or denotes something
+else, at an index the loop never reaches.  For such a body the unrestricted
+`hStep` above is unprovable, and `Segment` cannot patch it because the failure
+is inside one iteration.
+
+The scalar machine had no such form.  This section supplies it, with exactly
+the array module's hypotheses.
+-/
+
+/-- **Body simulation at the visited indices.** -/
+theorem foldlM_body_eq_foldl_mem
+    (body : List Instr) (Q : Nat → Prop) (P : RegState → Prop)
+    (step : Nat → RegState → RegState)
+    (hStep : ∀ index s, Q index → P s →
+      denoteInstrs index s body = some (step index s))
+    (hClosed : ∀ index s, Q index → P s → P (step index s)) :
+    ∀ (indices : List Nat), (∀ i ∈ indices, Q i) → ∀ s : RegState, P s →
+      indices.foldlM (fun s index => denoteInstrs index s body) s =
+        some (indices.foldl (fun s index => step index s) s) := by
+  intro indices
+  induction indices with
+  | nil => intro _ s _; rfl
+  | cons index rest ih =>
+      intro hQ s hP
+      have hQi : Q index := hQ index (by simp)
+      show (denoteInstrs index s body).bind
+        (fun s => rest.foldlM (fun s index => denoteInstrs index s body) s) = _
+      rw [hStep index s hQi hP]
+      exact ih (fun i hi => hQ i (by simp [hi])) _ (hClosed index s hQi hP)
+
+/-- The invariant survives a fold over visited indices. -/
+theorem foldl_closed_mem
+    (Q : Nat → Prop) (P : RegState → Prop) (step : Nat → RegState → RegState)
+    (hClosed : ∀ index s, Q index → P s → P (step index s)) :
+    ∀ (indices : List Nat), (∀ i ∈ indices, Q i) → ∀ s : RegState, P s →
+      P (indices.foldl (fun s index => step index s) s) := by
+  intro indices
+  induction indices with
+  | nil => intro _ s hP; exact hP
+  | cons index rest ih =>
+      intro hQ s hP
+      exact ih (fun i hi => hQ i (by simp [hi])) _
+        (hClosed index s (hQ index (by simp)) hP)
+
+/-- **Observation transfer**, at the visited indices. -/
+theorem foldl_obs_mem {A : Type _}
+    (Q : Nat → Prop) (P : RegState → Prop) (step : Nat → RegState → RegState)
+    (obs : RegState → A) (g : Nat → A → A)
+    (hClosed : ∀ index s, Q index → P s → P (step index s))
+    (hObs : ∀ index s, Q index → P s → obs (step index s) = g index (obs s)) :
+    ∀ (indices : List Nat), (∀ i ∈ indices, Q i) → ∀ s : RegState, P s →
+      obs (indices.foldl (fun s index => step index s) s) =
+        indices.foldl (fun acc index => g index acc) (obs s) := by
+  intro indices
+  induction indices with
+  | nil => intro _ s _; rfl
+  | cons index rest ih =>
+      intro hQ s hP
+      have hQi : Q index := hQ index (by simp)
+      show obs (rest.foldl (fun s index => step index s) (step index s)) = _
+      rw [ih (fun i hi => hQ i (by simp [hi])) (step index s)
+          (hClosed index s hQi hP), hObs index s hQi hP]
+      rfl
+
+/--
+**The statement an index-decoding port quotes.**
+
+An observation `obs` of the register file is folded by `g`, and the epilogue
+reads the answer out through `out`.  Every hypothesis is restricted to
+`index < p.loopCount`; none of them mentions the problem size otherwise.
+-/
+theorem Program.denote_eq_obs_foldl_mem {A : Type _}
+    (p : Program) (P : RegState → Prop) (step : Nat → RegState → RegState)
+    (obs : RegState → A) (g : Nat → A → A) (out : A → Nat) (s₀ : RegState)
+    (hInit : denoteInstrs 0 initialState p.init = some s₀)
+    (hP₀ : P s₀)
+    (hStep : ∀ index s, index < p.loopCount → P s →
+      denoteInstrs index s p.body = some (step index s))
+    (hClosed : ∀ index s, index < p.loopCount → P s → P (step index s))
+    (hObs : ∀ index s, index < p.loopCount → P s →
+      obs (step index s) = g index (obs s))
+    (hOut : ∀ s, P s →
+      (denoteInstrs 0 s p.epilogue).map (fun s' => s' p.output)
+        = some (out (obs s))) :
+    p.denote =
+      some (out ((List.range p.loopCount).foldl
+        (fun acc index => g index acc) (obs s₀))) := by
+  have hmem : ∀ i ∈ List.range p.loopCount, i < p.loopCount :=
+    fun i hi => List.mem_range.mp hi
+  have hFoldP : P ((List.range p.loopCount).foldl
+      (fun s index => step index s) s₀) :=
+    foldl_closed_mem (fun i => i < p.loopCount) P step hClosed
+      (List.range p.loopCount) hmem s₀ hP₀
+  have hView := foldl_obs_mem (fun i => i < p.loopCount) P step obs g hClosed
+    hObs (List.range p.loopCount) hmem s₀ hP₀
+  show (denoteInstrs 0 initialState p.init).bind _ = _
+  rw [hInit]
+  show ((List.range p.loopCount).foldlM
+    (fun s index => denoteInstrs index s p.body) s₀).bind _ = _
+  rw [foldlM_body_eq_foldl_mem p.body (fun i => i < p.loopCount) P step hStep
+    hClosed (List.range p.loopCount) hmem s₀ hP₀]
+  show ((denoteInstrs 0 _ p.epilogue).bind (fun s => some (s p.output))) = _
+  have hmap := hOut _ hFoldP
+  cases hE : denoteInstrs 0
+      ((List.range p.loopCount).foldl (fun s index => step index s) s₀)
+      p.epilogue with
+  | none => rw [hE] at hmap; exact absurd hmap (by simp)
+  | some s' =>
+      rw [hE] at hmap
+      simp only [Option.map_some] at hmap
+      show some (s' p.output) = _
+      rw [Option.some_inj.mp hmap, hView]
+
 /-! ## The scalar specialization
 
 The overwhelmingly common shape: one accumulator register, some scratch, and
