@@ -62,8 +62,9 @@ The theorem is not free of hypotheses and does not pretend to be:
 * `len ≤ (bound + 2) * (bound + 2)` — the classical sieve covering condition:
   the scanned divisor window reaches `√n` for every cell.
 
-At the configuration `ArraySegSieve.sieveCheck_sieveN₀` needs,
-`len = 2 560 000`, the hypotheses hold with any `bound ≥ 1599`.
+At `len = 2 560 000` the hypotheses hold for every `bound ≥ 1598`
+(`1600² = 2 560 000` exactly), and the largest configuration they admit is
+`len ≤ 2⁶⁴ − 1` with `bound + 2 ≤ 2³²`.
 -/
 
 namespace LeanCompCert.Ports.ArraySieveCount
