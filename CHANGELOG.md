@@ -2,6 +2,68 @@
 
 ## Unreleased
 
+- **The program ledger: one view of which compiled programs exist, what is in
+  each, and which have actually been run.**  The pieces existed —
+  `NativeCheck` stamped passing runs, `Attest/` bound receipts — and there was
+  no single place to look.  `docs/program-ledger.md` is the guide.
+  - **`LeanCompCert/Attest/Ledger.lean`** — the data model.  `ProgramEntry`
+    carries a name, a summary, the emitted C, the route, the certified value,
+    the entry point, a `ProgramShape` (registers, trip count, per-block
+    instruction counts, CCIR and restricted-C sizes), the parameters the
+    program was instantiated at, the denotation theorem *and whether it is
+    instantiated at these parameters*, a faithful instruction listing, and a
+    `LeanSide`.
+  - **Three states, three columns, never merged.**  `compiled` (`ccomp`
+    accepted this C), `run` (the binary executed and agreed), and
+    `chain proved` (a proved Lean arrow from this program's computation to a
+    mathematical proposition) are independent facts, and this repository has
+    an example of each holding without the others.  `lake exe lean-compcert
+    ledger` prints all three plus `bindable`; `--json` for machines.
+  - **`ChainProof` cannot be claimed falsely.**  Its `sound` field is a
+    function out of `artifact.computation.Returns`, so it is about the
+    computation *this artifact compiles* and no other — the producer-side form
+    of the consumer's `evaluates_atom_predicate`.  `prop_of_receipt` is the
+    theorem the column licenses; `RunAdmission` is still a hypothesis, and the
+    ledger records runs without ever letting one become a theorem.
+  - **`describe NAME`** answers "what does this binary actually compute?"
+    without reading the emitter: shape, parameters, denotation theorem, the
+    SHA-256 and byte size of the exact text `ccomp` was handed, the toolchain
+    that last compiled it, and every instruction in emitter order.
+  - **Staleness is detected and attributed.**  `check-native` now writes a
+    `<name>.run` record on *every* attempt, not only a passing one, so a tree
+    where every artifact was killed is distinguishable from one where nothing
+    was tried.  The stamp's two halves are compared separately: a row says
+    whether the *generated C* moved or the *toolchain* did, and either way
+    reads `STALE`, never `RUN`.  A receipt whose `programHash` is not the
+    digest of the C this build emits reads `STALE`; one that does not parse
+    reads `UNREADABLE`; absence reads `NO RECEIPT`.
+  - **Route labels fixed.**  Seven certificates emitted rolled or array-rolled
+    C and declared the `straight-line` route — the route whose proved chain
+    covers exactly the case they are not.  They are now `rolled-loop` and
+    `array-rolled-loop`, so `receiptBinds`'s route clause refuses a receipt
+    for them rather than comparing it against a scalar program's C.  No
+    emitted byte changed.
+  - **`bindable`, a fourth column.**  Eight of the fifteen registered programs
+    have no `Artifact`, so no receipt for them can ever be checked in the
+    kernel — `attest` will still sign one and `verify-receipt` will still
+    accept it.  The ledger says so instead of leaving a reader to find out.
+  - **`algorithm-sumrange` is registered.**  `Testing/AlgorithmProof.lean` had
+    `Algorithm.Ensures` *and* `ProgramRefinement` and was compiled by nothing.
+    It is now a cross-check unit, and the only registered program whose chain
+    column is `true` on a refinement proved structurally for every input.  Its
+    `main` is built with `Attest.selfCheckMain` from the accepting value.
+  - **One registry.**  `NativeCheck.Cert.ofEntry` derives the cross-check units
+    from the ledger entries, so a program cannot be described by one verb and
+    compiled by another.
+  - **Seven classes of structural defect fail the `ledger` verb with exit 1** —
+    an `Artifact` that does not re-emit the compiled C, a chain consuming a
+    different value than the binary tests, a chain with no certified value, a
+    route label the artifact contradicts, an entry with *no* artifact filed
+    under the `straight-line` default, an unexplained gap, and an entry point
+    absent from the emitted C.  Each is exercised in
+    `LeanCompCertTests.testProgramLedger` on a registration wrong in exactly
+    that one way.
+
 - **`ArrayBridge`: the array machine gets the refinement combinator
   `docs/algorithm-to-proof.md` §3 promised.**  Three modules now carry an array
   port, and the doc says which is which:

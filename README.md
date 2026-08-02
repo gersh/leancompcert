@@ -152,6 +152,13 @@ Then the use-case guide that matches your goal:
   bound to the emitted C by a digest the kernel checks, and one named
   axiom for the one thing no proof establishes.  A locally signed receipt
   is **tamper-evident, not attested**, and the guide says so throughout.
+- **[The program ledger](docs/program-ledger.md)** — one view of every
+  registered program: what is in it, and which of three *independent*
+  states it is in.  `lake exe lean-compcert ledger` prints **compiled**,
+  **run** and **chain proved** as separate columns and never merges them;
+  a program whose C changed since its last run reads **stale**, not run;
+  and `describe NAME` answers "what does this binary actually compute?"
+  without reading the emitter.
 
 Deep-dive tutorials in [docs/](docs/):
 
