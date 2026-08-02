@@ -164,22 +164,31 @@ structure Artifact where
 `none` when emission fails, which makes `receiptBinds` refuse the receipt: an
 artifact that cannot be emitted cannot be attested.
 
-⚠ **This is the one thing the kernel cannot currently evaluate.**  The C
-emitter and the C validator (`LeanCompCert/C/Emit.lean`,
-`LeanCompCert/C/Validate.lean`) are written with `partial` definitions —
-`CType.emit`, `CExpr.emit`, `emitStatements`, `emitStatement`, `validateType`,
-`validateExpr`, `validateStatements` — which the kernel will not unfold, and
-`CCIR.validateProgram` is stuck for the same reason.  Measured: `decide
-+kernel` on `(Lower.compileProgram .portable ⟨#[computation.fn]⟩).toOption
-.isSome = true` does not reduce, for a two-instruction program.
+**The kernel evaluates this.**  That is what makes `receiptBinds … = true` a
+`decide +kernel` rather than an axiom, so a consumer never has to assert the
+digest of the emitted C out of band.  Getting there meant removing five kinds
+of obstruction, all of which are the same mistake in different clothes — a
+definition the kernel refuses to unfold:
 
-The consequence is stated plainly in
-`docs/use-case-3-attested-run-receipts.md` and in `ROADMAP.md`: today a
-consumer discharges `receiptBinds … = true` with **one named axiom per
-artifact**, checked out of band by `lean-compcert verify-receipt`, which
-re-emits the C and compares digests.  The fix is to make those seven
-definitions structural or fuelled; nothing else in the chain is in the way,
-and no part of the standard changes when they are. -/
+* `partial` in the C emitter and the two validators (`CType.emit`,
+  `CExpr.emit`, `emitStatements`, `emitStatement`, `validateType`,
+  `validateExpr`, `validateStatements`, `collectLabels`), plus
+  `CCIR.CCType.toString`, `C.CType.supportedBy` and `Lower.lowerCompoundType`.
+  All are now structural, recursing through a `List` companion on `.toList` of
+  the nested `Array`;
+* the **derived `BEq`** on `CCIR.CCType` and `C.CType` — `deriving BEq` on an
+  inductive that nests through `Array` compiles to well-founded recursion, and
+  both validators compare types constantly.  Written out structurally;
+* **`Subarray`'s `ForIn`**, reached by the `blocks[:index]` and
+  `functions[:index]` duplicate scans in `CCIR/Validate.lean`.  `Array`'s
+  `ForIn` reduces; `Subarray`'s does not;
+* **`String.replace`** (`WellFounded.opaqueFix`), used to split `*/` inside an
+  emitted comment.  Replaced by a structural character walk.
+
+None of it changed a byte of the emitted C, and none of it changed this
+standard.  See `docs/use-case-3-attested-run-receipts.md` for the measurements
+and for where the remaining kernel cost actually sits (the `ReceiptCrypto`
+instance over `RunReceipt.payload`, not the emitter). -/
 def Artifact.source? (a : Artifact) : Option String :=
   (emitFor a.computation a.route a.mainC).toOption
 

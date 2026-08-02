@@ -56,6 +56,7 @@ import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Verified.ExpFixed
 import LeanCompCert.Ports.ExpFixPort
 import LeanCompCert.Attest
+import LeanCompCertTests.Attest
 
 
 /-!
@@ -416,3 +417,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Attest.not_selfTested_of_alwaysFalse
 #print axioms LeanCompCert.Attest.not_selfTested_of_messageIgnoring
 #print axioms LeanCompCert.Attest.not_selfTested_of_constantDigest
+
+-- M9: the receipt join, now checked by the kernel rather than admitted.  These
+-- are the goals that used to be one named axiom per artifact; if any of them
+-- ever needs `ofReduceBool` or a bespoke axiom, this gate says so.
+#print axioms LeanCompCertTests.Attest.compiles_in_kernel
+#print axioms LeanCompCertTests.Attest.source_in_kernel
+#print axioms LeanCompCertTests.Attest.binds_programHash

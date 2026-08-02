@@ -176,10 +176,14 @@ Then:
 ```lean
 theorem demo_binds :
     receiptBinds sparkCrypto artifact AttestationKind.localSignature ""
-      nonce ((expectedValue : Nat) : Int) demoReceipt = true := …
+      nonce ((expectedValue : Nat) : Int) demoReceipt = true := by
+  decide +kernel
 ```
 
-⚠ **This is the one link that is open today.** See "What is still open" below.
+`receiptBinds` is a `Bool` every clause of which the kernel reduces, including
+`Artifact.source?` — the C emitter and the CCIR and C validators are structural
+and unfold.  There is no axiom here, and no out-of-band step: the kernel
+re-emits the C text and compares its digest itself.
 
 ### 6. Discharge `RunAdmission`
 
@@ -312,36 +316,44 @@ version string alone does not identify a compiler: `ccomp -version` prints no
 architecture, so an `aarch64` install and an `x86_64` one are indistinguishable
 by it.
 
-## What is still open
+## The kernel-evaluability link, closed
 
-**The `receiptBinds … = true` step is not kernel-evaluable today.**
+**`receiptBinds … = true` is now a `decide +kernel`, with no axiom.**
 
-Evaluating it requires evaluating `Artifact.source?`, and the C emitter and
-validator are written with `partial` definitions the kernel will not unfold:
-`C.CType.emit`, `C.CExpr.emit`, `C.emitStatements`, `C.emitStatement`,
-`C.validateType`, `C.validateExpr`, `C.validateStatements`, plus
-`C.collectLabels`; `CCIR.validateProgram` is stuck for the same reason.
-Measured: `decide +kernel` on
-`(Lower.compileProgram .portable ⟨#[computation.fn]⟩).toOption.isSome = true`
-does not reduce, for a two-instruction program.
+It used to be one named axiom per artifact, because evaluating `Artifact.source?`
+reached `partial` definitions in the emitter and the validators.  Those are
+structural now, and so are three other things the kernel could not unfold and
+which the original diagnosis missed:
 
-So today a consumer discharges it with **one named axiom per artifact**:
+* the derived `BEq` instances on `CCIR.CCType` and `C.CType` — `deriving BEq`
+  on an inductive that nests through `Array` compiles to well-founded
+  recursion, and both validators compare types constantly;
+* `Subarray`'s `ForIn` instance, reached by the `fn.blocks[:index]` and
+  `program.functions[:index]` duplicate scans in `CCIR/Validate.lean`;
+* `String.replace`, used to split `*/` inside an emitted comment, which is
+  compiled to `WellFounded.opaqueFix`.
 
-```lean
-axiom shard7_binds :
-    receiptBinds sparkCrypto shard7Artifact AttestationKind.localSignature ""
-      shard7Nonce 243790673307260 shard7Receipt = true
-```
+Nothing about the standard changed: same `receiptBinds`, same theorems, same
+receipts, same emitted C — byte for byte, checked against the recorded digests
+of all fourteen certificates.
 
-greppable, one line per artifact, and checked out of band by
-`lean-compcert verify-receipt`, which re-emits the C and compares digests —
-i.e. it checks exactly this equation, modulo the digest's collision resistance.
-This is the same pending-campaign axiom discipline the rest of the system uses.
+Measured on `LeanCompCertTests/Attest.lean`'s artifact (a `Computation`
+emitting 1121 bytes of C), Lean 4.32.1, `decide +kernel`:
 
-The fix is to make those eight definitions structural or fuelled. Nothing else
-in the chain is in the way, and **no part of this standard changes when they
-are**: the same `receiptBinds`, the same theorems, the same receipts — the
-axiom simply becomes a `decide +kernel`.
+| goal | wall | peak RSS |
+| --- | --- | --- |
+| `(Lower.compileProgram .portable ⟨#[computation.fn]⟩).toOption.isSome = true` | 5 s | 0.7 GB |
+| `artifact.source?.isSome = true` | 4 s | 0.7 GB |
+| `programHash = digest source` — **the join** | 10 s | 2.6 GB |
+| `receiptBinds … = true`, whole check | 54 s | 12.3 GB |
+
+The gap between the third row and the fourth is **not** the emitter.  It is the
+`ReceiptCrypto` instance applied to `RunReceipt.payload`: reducing
+`payload.length` alone costs 28 s and 4.9 GB, because `payload` is built by
+`String.intercalate` and Lean 4.32's `String` is UTF-8 bytes, so every
+character read walks an append chain.  That cost is the receipt format's and
+the instance's, not the artifact's — it does not grow with the size of the
+computation, and the shipped kernel tests therefore stop at the join.
 
 ## Where the pieces live
 

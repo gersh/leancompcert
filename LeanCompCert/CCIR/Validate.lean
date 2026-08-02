@@ -329,11 +329,17 @@ def validateFunction (fn : Function) : Array ValidationError := Id.run do
   let mut errors := validateLocalDeclarations fn
   if !(fn.findBlock? fn.entry).isSome then
     errors := addError errors .missingEntry s!"entry block {fn.entry} does not exist" fn
+  -- `seen` accumulates the block ids already visited.  It replaces a
+  -- `fn.blocks[:index]` slice: `Subarray`'s `ForIn` instance does not reduce
+  -- in the kernel, and this validator has to, for `Attest.Artifact.source?`
+  -- to be checkable by `decide +kernel`.
+  let mut seen : Array BlockId := #[]
   for index in [:fn.blocks.size] do
     let block := fn.blocks[index]!
-    for previous in fn.blocks[:index] do
-      if previous.id == block.id then
+    for previous in seen do
+      if previous == block.id then
         errors := addError errors .duplicateBlock s!"duplicate block {block.id}" fn (some block.id)
+    seen := seen.push block.id
     let locals := collectLocals fn
     for instructionIndex in [:block.instructions.size] do
       errors := errors ++ validateInstruction fn block instructionIndex locals
@@ -379,15 +385,18 @@ private def validateCalls (program : Program) (fn : Function) : Array Validation
 
 def validateProgram (program : Program) : Array ValidationError := Id.run do
   let mut errors := #[]
+  -- `seen` replaces a `program.functions[:index]` slice; see `validateFunction`.
+  let mut seen : Array GlobalId := #[]
   for index in [:program.functions.size] do
     let fn := program.functions[index]!
-    for previous in program.functions[:index] do
-      if previous.name == fn.name then
+    for previous in seen do
+      if previous == fn.name then
         errors := errors.push {
           rule := .duplicateFunction
           message := s!"duplicate function @{fn.name.name}"
           function := some fn.name
         }
+    seen := seen.push fn.name
     errors := errors ++ validateFunction fn ++ validateCalls program fn
   return errors
 

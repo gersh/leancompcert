@@ -19,7 +19,15 @@ def LowerError.pretty (error : LowerError) : String :=
   let instruction := error.instruction.map (fun index => s!" instruction {index}") |>.getD ""
   s!"lowering error{fn}{block}{instruction}: {error.message}"
 
-private partial def lowerCompoundType : CCIR.CCType → C.CType
+/-
+Structural, not `partial`: the recursion under `fnPtr` goes through
+`lowerCompoundTypes` on `args.toList`, a projection of the constructor
+argument, so the kernel unfolds it.  `Array.mk (l.map f)` is `Array.map f` on
+the corresponding array (`lowerCompoundType_fnPtr_args`), so the lowered type
+is unchanged.
+-/
+mutual
+private def lowerCompoundType : CCIR.CCType → C.CType
   | .void => .void
   | .u8 => .u8
   | .u16 => .u16
@@ -36,7 +44,22 @@ private partial def lowerCompoundType : CCIR.CCType → C.CType
   | .obj => .ptr (.named "lean_object")
   | .ptr element => .ptr (lowerCompoundType element)
   | .fnPtr args result =>
-      .fnPtr (args.map lowerCompoundType) (lowerCompoundType result)
+      .fnPtr ⟨lowerCompoundTypes args.toList⟩ (lowerCompoundType result)
+
+private def lowerCompoundTypes : List CCIR.CCType → List C.CType
+  | [] => []
+  | type :: rest => lowerCompoundType type :: lowerCompoundTypes rest
+end
+
+private theorem lowerCompoundTypes_eq_map (types : List CCIR.CCType) :
+    lowerCompoundTypes types = types.map lowerCompoundType := by
+  induction types with
+  | nil => rfl
+  | cons _ _ ih => simp [lowerCompoundTypes, ih]
+
+private theorem lowerCompoundType_fnPtr_args (args : Array CCIR.CCType) :
+    (⟨lowerCompoundTypes args.toList⟩ : Array C.CType) = args.map lowerCompoundType := by
+  rw [lowerCompoundTypes_eq_map, ← Array.toList_map]
 
 /--
 Lower a CCIR type to the restricted C AST. The public definition exposes

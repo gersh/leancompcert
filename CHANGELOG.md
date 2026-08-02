@@ -27,10 +27,20 @@
     `check-native --attest`, with the content-hash caching unchanged.  The
     acceptance script now requires that a receipt bound to another certificate
     and a receipt with one edited field are both rejected.
-  - ⚠ **One link is open and is documented as such**:
-    `receiptBinds … = true` is not kernel-evaluable, because the C emitter and
-    validator are `partial`.  Consumers discharge it with one named axiom per
-    artifact, checked out of band.  See `docs/use-case-3-attested-run-receipts.md`.
+  - **`receiptBinds … = true` is a `decide +kernel`.**  The per-artifact axiom
+    is gone.  Closing it meant making the C emitter, the C validator and the
+    CCIR validator structural rather than `partial`, and three things the
+    original diagnosis had missed: the **derived `BEq`** on `CCIR.CCType` and
+    `C.CType` (`deriving BEq` through `Array` compiles to well-founded
+    recursion), **`Subarray`'s `ForIn`** (the `blocks[:index]` duplicate
+    scans), and **`String.replace`** (`WellFounded.opaqueFix`, used to split
+    `*/` in an emitted comment).  The emitted C is **byte-identical** — the
+    SHA-256 of all fourteen `check-native` certificate units is unchanged — and
+    no part of the standard moved.  Measured: the join clause
+    `programHash = digest source` reduces in 10 s / 2.6 GB, the whole
+    `receiptBinds` in 54 s / 12.3 GB, the residual cost being the
+    `ReceiptCrypto` instance over `RunReceipt.payload` rather than the emitter.
+    See `docs/use-case-3-attested-run-receipts.md`.
 
 - **A documentation-conformance and adversarial test suite, and the axiom
   partition made mechanical.**  `LeanCompCertTests/Docs.lean` reproduces every

@@ -12,16 +12,24 @@ regime confusion, route confusion, a substituted digest, a field edited after
 signing, and an artifact that does not emit — and that the toy `ReceiptCrypto`
 used below is *not* self-tested, so it cannot be mistaken for a deployment.
 
-**Not tested here, because the kernel cannot do it.**  `receiptBinds … = true`
-on a real artifact.  Evaluating it requires evaluating `Artifact.source?`, and
-the C emitter is `partial` — see the warning on `Artifact.source?`.  The
-positive direction therefore appears below as a *hypothesis*, which is exactly
-the shape a consumer is in today: they discharge it with one named axiom per
-artifact and check it out of band with `lean-compcert verify-receipt`.
+**Also tested in the kernel, and this is the part that used to be an axiom.**
+That `Artifact.source?` evaluates at all, and that the receipt's `programHash`
+is the digest of the emitted C — the *join*.  `decide +kernel` reduces the
+emitter and both validators now; see `Artifact.source?` for the five kinds of
+non-reducing definition that had to go.
+
+**Not tested here, and why.**  The whole `receiptBinds … = true` in one goal.
+It does close by `decide +kernel` — measured 54 s and 12.3 GB on this artifact
+— but the cost is almost entirely the toy hash applied to `RunReceipt.payload`
+(reducing `payload.length` alone is 28 s and 4.9 GB, because `payload` is built
+by `String.intercalate` and Lean 4.32's `String` is UTF-8 bytes, so every
+character read walks an append chain).  That is the receipt format's cost and
+the crypto instance's, not the emitter's, and it does not grow with the size of
+the computation.  Paying it on every build would buy no coverage the join test
+below does not already give, so the shipped test stops at the join.
 
 The mutation tests use the library's proved failure theorems rather than
-`decide`, for the same reason — and they are stronger for it: they hold for
-every artifact, not for one.
+`decide`.  They are stronger for it: they hold for every artifact, not for one.
 -/
 
 namespace LeanCompCertTests.Attest
@@ -87,11 +95,19 @@ def toyHash (text : String) : String :=
   let h := text.toList.foldl (fun acc c => (acc * 131 + c.toNat) % (2 ^ 64)) 7
   String.ofList ((List.range 64).map fun i => hexChar (h >>> (i % 16 * 4) + i))
 
+/-- A 128-hex-character stand-in for an `r ‖ s` signature.  The width matters:
+`receiptBinds` requires `isP256Signature`, so a 64-character toy would make the
+positive direction unreachable and the refusals would be passing for the wrong
+reason. -/
+def toySign (message : String) : String :=
+  let h := toyHash message
+  h ++ h
+
 def toyCrypto : ReceiptCrypto := {
   digest := { name := "sha256", hashHex := toyHash }
   signature := {
     name := "ecdsa-p256-sha256"
-    verify := fun _ message signature => signature == toyHash message }
+    verify := fun _ message signature => signature == toySign message }
 }
 
 /-- **The toy crypto is not self-tested**, so no discharger would accept it:
@@ -119,8 +135,11 @@ def unsigned : RunReceipt := {
   routeLabel := EmissionRoute.provedStraightLine.label
   campaign := "leancompcert-tests"
   digestName := "sha256"
+  -- The toy digest of the exact C this artifact emits, written out rather than
+  -- computed, so that `binds_programHash` below is a real check on the emitted
+  -- bytes: change the emitter and this test fails.
   programHash :=
-    "1111111111111111111111111111111111111111111111111111111111111111"
+    "8472955648989d3d8472955648989d3d8472955648989d3d8472955648989d3d"
   paramsHash := toyHash ""
   toolchain
   value := ((expected : Nat) : Int)
@@ -133,7 +152,7 @@ def unsigned : RunReceipt := {
 }
 
 def receipt : RunReceipt :=
-  { unsigned with signature := toyHash unsigned.payload }
+  { unsigned with signature := toySign unsigned.payload }
 
 /-! ### The mutations
 
@@ -198,13 +217,35 @@ theorem no_emission_refused (a : Artifact) (h : a.source? = none) :
       ((expected : Nat) : Int) receipt = false :=
   receiptBinds_false_of_noEmission h
 
-/-! ### The positive direction, as a hypothesis
+/-! ### The positive direction, in the kernel
 
-This is the shape a consumer writes today: `bound` is discharged by one named
-axiom per artifact and checked out of band by `lean-compcert verify-receipt`;
-`admitted` is discharged by `Trusted.localSignedRun_admits` or by
-`gpu_prover`'s enclave axiom.  Both premises are visible in `#print axioms`
-downstream; this theorem itself carries none. -/
+The two facts that used to need an axiom.  `bound` in
+`returns_of_admitted_receipt` below is now something a consumer writes as
+`by decide +kernel`; only `admitted` — the empirical premise — is still
+discharged by a named axiom, and that one is the point of the whole design. -/
+
+/-- **The emitter runs in the kernel.**  This is the exact reproducer the
+ROADMAP recorded as *not* reducing. -/
+theorem compiles_in_kernel :
+    (Lower.compileProgram .portable
+      { functions := #[computation.fn] }).toOption.isSome = true := by
+  decide +kernel
+
+/-- …and so does the whole of `Artifact.source?`, `main` included. -/
+theorem source_in_kernel : artifact.source?.isSome = true := by
+  decide +kernel
+
+/-- **The join, checked by the kernel.**  The receipt's `programHash` is the
+digest of the C text *this* artifact emits — not of some text lying around, and
+not asserted by anybody. -/
+theorem binds_programHash :
+    (decide (receipt.programHash
+      = toyCrypto.digest.hashHex (artifact.source?.getD ""))) = true := by
+  decide +kernel
+
+/-! ### Composition
+
+`admitted` is the one premise that is not a theorem; see `RunAdmission`. -/
 theorem returns_of_admitted_receipt
     (bound : receiptBinds toyCrypto artifact AttestationKind.localSignature ""
       nonce ((expected : Nat) : Int) receipt = true)

@@ -2,7 +2,17 @@ import LeanCompCert.C.Validate
 
 namespace LeanCompCert.C
 
-partial def CType.emit : CType → String
+/-
+Type emission, structural rather than `partial`.
+
+The recursion under `fnPtr` goes through `CType.emitList` on `args.toList`, a
+projection of the constructor argument, so the kernel unfolds it.
+`CType.emitList` is `List.map CType.emit` (`CType.emitList_eq_map`), so the
+emitted text is unchanged.
+-/
+mutual
+/-- The C spelling of a type. -/
+def CType.emit : CType → String
   | .void => "void"
   | .bool => "uint8_t"
   | .u8 => "uint8_t"
@@ -20,13 +30,25 @@ partial def CType.emit : CType → String
   | .named name => name
   | .ptr element => s!"{element.emit} *"
   | .fnPtr args result =>
-      let params := String.intercalate ", " (args.toList.map CType.emit)
+      let params := String.intercalate ", " (CType.emitList args.toList)
       s!"{result.emit} (*)({params})"
+
+/-- `List.map CType.emit`, spelled out so the recursion is structural. -/
+def CType.emitList : List CType → List String
+  | [] => []
+  | type :: rest => type.emit :: CType.emitList rest
+end
+
+theorem CType.emitList_eq_map (types : List CType) :
+    CType.emitList types = types.map CType.emit := by
+  induction types with
+  | nil => rfl
+  | cons _ _ ih => simp [CType.emitList, ih]
 
 private def emitDecl (type : CType) (name : String) : String :=
   match type with
   | .fnPtr args result =>
-      let params := String.intercalate ", " (args.toList.map CType.emit)
+      let params := String.intercalate ", " (CType.emitList args.toList)
       s!"{result.emit} (*{name})({params})"
   | _ => s!"{type.emit} {name}"
 
@@ -52,7 +74,9 @@ private def escapeString (value : String) : String :=
       | '\t' => "\\t"
       | character => character.toString
 
-partial def CExpr.emit : CExpr → String
+/-- The C spelling of an expression.  Structural: every recursive call is on a
+direct subexpression. -/
+def CExpr.emit : CExpr → String
   | .var name _ => name
   | .uintLit .u64 value => s!"UINT64_C({value})"
   | .uintLit .u32 value => s!"UINT32_C({value})"
@@ -71,17 +95,40 @@ partial def CExpr.emit : CExpr → String
   | .field _ object name => s!"({object.emit}.{name})"
   | .index _ arr idx => s!"({arr.emit}[{idx.emit}])"
 
+/-- Close the one sequence a `/* … */` comment cannot contain, by splitting it.
+
+Structural, character by character, rather than `String.replace`: the latter is
+compiled by well-founded recursion (`WellFounded.opaqueFix`) and the kernel
+will not unfold it, which alone is enough to make the emitted text of any
+function carrying a `sourceDecl` comment unevaluable by `decide +kernel`.
+Left-to-right, non-overlapping, one `"* /"` per `"*/"` — the same replacement
+`String.replace "*/" "* /"` performs. -/
+private def splitCommentEnd : List Char → List Char
+  | [] => []
+  | '*' :: '/' :: rest => '*' :: ' ' :: '/' :: splitCommentEnd rest
+  | character :: rest => character :: splitCommentEnd rest
+
+private def escapeComment (text : String) : String :=
+  String.ofList (splitCommentEnd text.toList)
+
 private def indent (level : Nat) : String :=
   String.ofList (List.replicate (level * 4) ' ')
 
+/-
+Statement emission, structural rather than `partial`.
+
+`CStmt` nests through `Array CStmt` and `Array CSwitchCase`.  The companions
+below recurse on `.toList` of those arrays — projections of the constructor
+arguments — and each switch arm is emitted by its own function in the mutual
+group, which is what lets the kernel unfold the whole walk.
+
+`emitStmtList` is `List.flatMap (emitStatement · level)`
+(`emitStmtList_eq_flatMap`), and the switch arms are concatenated in index
+order with the default arm last, so the emitted lines are unchanged.
+-/
 mutual
-partial def emitStatements (statements : Array CStmt) (level : Nat) : List String :=
-  statements.toList.flatMap fun statement => emitStatement statement level
-
-partial def emitBlock (statements : Array CStmt) (level : Nat) : List String :=
-  [s!"{indent level}\{"] ++ emitStatements statements (level + 1) ++ [s!"{indent level}}"]
-
-partial def emitStatement (statement : CStmt) (level : Nat) : List String :=
+/-- Emit a statement, indented `level` blocks in. -/
+def emitStatement (statement : CStmt) (level : Nat) : List String :=
   let pad := indent level
   match statement with
   | .decl type name none => [s!"{pad}{emitDecl type name};"]
@@ -100,22 +147,26 @@ partial def emitStatement (statement : CStmt) (level : Nat) : List String :=
         | some destination => s!"{pad}{destination.emit} = {call};"
         | none => s!"{pad}{call};"]
   | .ifThenElse condition thenBody elseBody =>
-      let thenLines := [s!"{pad}if ({condition.emit})"] ++ emitBlock thenBody level
+      let thenLines :=
+        [s!"{pad}if ({condition.emit})", s!"{pad}\{"]
+          ++ emitStmtList thenBody.toList (level + 1) ++ [s!"{pad}}"]
       if elseBody.isEmpty then thenLines
-      else thenLines ++ [s!"{pad}else"] ++ emitBlock elseBody level
-  | .switch discriminant cases default => Id.run do
-      let mut lines := [s!"{pad}switch ({discriminant.emit}) \{"]
-      for arm in cases do
-        lines := lines ++ [s!"{indent (level + 1)}case {arm.value}:"]
-          ++ emitStatements arm.body (level + 2)
-          ++ [s!"{indent (level + 2)}break;"]
-      for body in default do
-        lines := lines ++ [s!"{indent (level + 1)}default:"]
-          ++ emitStatements body (level + 2)
-          ++ [s!"{indent (level + 2)}break;"]
-      return lines ++ [s!"{pad}}"]
+      else thenLines ++ [s!"{pad}else", s!"{pad}\{"]
+        ++ emitStmtList elseBody.toList (level + 1) ++ [s!"{pad}}"]
+  | .switch discriminant cases default =>
+      let header := [s!"{pad}switch ({discriminant.emit}) \{"]
+      let arms := emitCaseList cases.toList level
+      let fallback :=
+        match default with
+        | none => []
+        | some body =>
+            [s!"{indent (level + 1)}default:"]
+              ++ emitStmtList body.toList (level + 2)
+              ++ [s!"{indent (level + 2)}break;"]
+      header ++ arms ++ fallback ++ [s!"{pad}}"]
   | .whileLoop condition body =>
-      [s!"{pad}while ({condition.emit})"] ++ emitBlock body level
+      [s!"{pad}while ({condition.emit})", s!"{pad}\{"]
+        ++ emitStmtList body.toList (level + 1) ++ [s!"{pad}}"]
   | .goto label => [s!"{pad}goto {label};"]
   | .label label => [s!"{indent (level - 1)}{label}:"]
   | .return none => [s!"{pad}return;"]
@@ -123,14 +174,54 @@ partial def emitStatement (statement : CStmt) (level : Nat) : List String :=
   | .unreachable reason =>
       [s!"{pad}lean_compcert_unreachable(\"{escapeString reason}\");"]
   | .comment text =>
-      let safe := text.replace "*/" "* /"
+      let safe := escapeComment text
       [s!"{pad}/* {safe} */"]
+
+/-- Emit each statement of the list in turn, all at `level`. -/
+def emitStmtList (statements : List CStmt) (level : Nat) : List String :=
+  match statements with
+  | [] => []
+  | statement :: rest => emitStatement statement level ++ emitStmtList rest level
+
+/-- Emit one `case` arm, label and `break` included. -/
+def emitCase (arm : CSwitchCase) (level : Nat) : List String :=
+  match arm with
+  | ⟨value, body⟩ =>
+      [s!"{indent (level + 1)}case {value}:"]
+        ++ emitStmtList body.toList (level + 2)
+        ++ [s!"{indent (level + 2)}break;"]
+
+/-- Emit the `case` arms in order. -/
+def emitCaseList (arms : List CSwitchCase) (level : Nat) : List String :=
+  match arms with
+  | [] => []
+  | arm :: rest => emitCase arm level ++ emitCaseList rest level
 end
+
+/-- Emit a statement array, all at `level`. -/
+def emitStatements (statements : Array CStmt) (level : Nat) : List String :=
+  emitStmtList statements.toList level
+
+/-- Emit a brace-delimited block whose statements sit one level deeper. -/
+def emitBlock (statements : Array CStmt) (level : Nat) : List String :=
+  [s!"{indent level}\{"] ++ emitStatements statements (level + 1) ++ [s!"{indent level}}"]
+
+theorem emitStmtList_eq_flatMap (statements : List CStmt) (level : Nat) :
+    emitStmtList statements level
+      = statements.flatMap (fun statement => emitStatement statement level) := by
+  induction statements with
+  | nil => rfl
+  | cons _ _ ih => simp [emitStmtList, ih]
+
+theorem emitStatements_eq (statements : Array CStmt) (level : Nat) :
+    emitStatements statements level
+      = statements.toList.flatMap (fun statement => emitStatement statement level) :=
+  emitStmtList_eq_flatMap _ _
 
 def CExternal.emit (external : CExternal) : String :=
   let params :=
     if external.params.isEmpty then "void"
-    else String.intercalate ", " (external.params.toList.map CType.emit)
+    else String.intercalate ", " (CType.emitList external.params.toList)
   s!"extern {external.result.emit} {external.name}({params});"
 
 def CGlobal.emit (global : CGlobal) : String :=

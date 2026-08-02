@@ -393,7 +393,7 @@ fold, with the denotation-equality theorem carrying the existing chain.
   measured failure mode), and keep a small corpus of kernel-reduction
   regression tests.
 
-### M9 — the run-receipt standard ✅ (implemented; one link open)
+### M9 — the run-receipt standard ✅ (implemented; kernel link closed)
 
 `LeanCompCert/Attest/` closes the join between the proved forward chain and an
 attested execution:
@@ -426,20 +426,47 @@ certificates, verifies a receipt against freshly emitted C, and requires that a
 receipt bound to another certificate and a receipt with one edited field are
 both rejected.
 
-**⚠ Open link.** `receiptBinds … = true` is not kernel-evaluable today, because
-evaluating `Artifact.source?` needs the C emitter and the C validator, which are
-written with `partial` definitions the kernel will not unfold (`CType.emit`,
-`CExpr.emit`, `emitStatements`, `emitStatement`, `validateType`,
-`validateExpr`, `validateStatements`, `collectLabels`, and
-`CCIR.validateProgram`). Measured: `decide +kernel` on
-`(Lower.compileProgram .portable ⟨#[computation.fn]⟩).toOption.isSome = true`
-does not reduce for a two-instruction program. Consumers therefore discharge it
-with one named axiom per artifact, checked out of band by `verify-receipt`.
+**✅ Kernel link closed.** `receiptBinds … = true` is now discharged by
+`decide +kernel`, and the per-artifact axiom is gone from the consumer story.
+`CType.emit`, `CExpr.emit`, `emitStatements`, `emitStatement`, `validateType`,
+`validateExpr`, `validateStatements` and `collectLabels` are structural
+(mutual recursion through `.toList` companions rather than `partial`), and so
+are `CCIR.CCType.toString`, `C.CType.supportedBy` and `Lower.lowerCompoundType`.
 
-*What would close it:* make those definitions structural or fuelled. Nothing
-else in the chain is in the way, and no part of the standard changes when they
-are — the axiom becomes a `decide +kernel`. This is the highest-value next item
-in the area.
+Three further blockers were not in the original diagnosis and had to go too:
+
+* the **derived `BEq`** on `CCIR.CCType` and `C.CType`. `deriving BEq` on an
+  inductive nesting through `Array` compiles to well-founded recursion, which
+  the kernel will not unfold, and both validators compare types constantly.
+  Written out structurally; the same pairs are accepted.
+* **`Subarray`'s `ForIn`**, reached by the `fn.blocks[:index]` and
+  `program.functions[:index]` duplicate scans. Replaced by an explicit
+  already-seen accumulator (`Array`'s `ForIn` does reduce; `Subarray`'s does
+  not).
+* **`String.replace`**, used to split `*/` inside an emitted comment, compiled
+  to `WellFounded.opaqueFix`. Replaced by a structural character walk with the
+  same left-to-right non-overlapping behaviour.
+
+The emitted C is **byte-identical**: all fourteen certificates in
+`check-native` produce files whose SHA-256 digests match the ones recorded
+before the change.
+
+Measured (Lean 4.32.1, `decide +kernel`, the 1121-byte artifact in
+`LeanCompCertTests/Attest.lean`): the ROADMAP's own reproducer
+`(Lower.compileProgram .portable ⟨#[computation.fn]⟩).toOption.isSome = true`
+reduces in 5 s; `artifact.source?.isSome` in 4 s; the join clause
+`programHash = digest source` in 10 s / 2.6 GB; the whole `receiptBinds` in
+54 s / 12.3 GB. The last figure is dominated by the `ReceiptCrypto` instance
+applied to `RunReceipt.payload` — reducing `payload.length` alone is 28 s and
+4.9 GB, because `String.intercalate` over UTF-8-backed strings makes every
+character read walk an append chain — and not by the emitter. Reducing that is
+a separate, receipt-format-level item.
+
+**⚠ Still open in this area: the rolled route.** `EmissionRoute.rolledLoop` is
+outside the proved C model — `Proof.PureSemantics.evalCStmt` interprets
+assignments only, so a `whileLoop` evaluates to `none` — and
+`receiptBindsProved` therefore still demands the unrolled route. See
+`EmissionRoute`'s docstring for exactly what a rolled-route discharger bundles.
 
 ## Non-goals
 

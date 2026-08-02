@@ -9,7 +9,47 @@ inductive CType where
   | named (name : String)
   | ptr (element : CType)
   | fnPtr (args : Array CType) (result : CType)
-  deriving Repr, BEq, Inhabited
+  deriving Repr, Inhabited
+
+/-
+Equality is written out rather than derived, for the reason given on
+`CCIR.CCType.beq`: `deriving BEq` on an inductive nesting through `Array`
+compiles to well-founded recursion, which the kernel does not unfold.  This is
+the derived definition with the `Array` comparison spelled out structurally,
+and accepts exactly the same pairs.
+-/
+mutual
+/-- Structural equality on C types. -/
+def CType.beq : CType → CType → Bool
+  | .void, .void => true
+  | .bool, .bool => true
+  | .u8, .u8 => true
+  | .u16, .u16 => true
+  | .u32, .u32 => true
+  | .u64, .u64 => true
+  | .usize, .usize => true
+  | .i8, .i8 => true
+  | .i16, .i16 => true
+  | .i32, .i32 => true
+  | .i64, .i64 => true
+  | .isize, .isize => true
+  | .f32, .f32 => true
+  | .f64, .f64 => true
+  | .named left, .named right => left == right
+  | .ptr left, .ptr right => CType.beq left right
+  | .fnPtr leftArgs leftResult, .fnPtr rightArgs rightResult =>
+      CType.beqList leftArgs.toList rightArgs.toList && CType.beq leftResult rightResult
+  | _, _ => false
+
+/-- Pointwise equality of two type lists, including their lengths. -/
+def CType.beqList : List CType → List CType → Bool
+  | [], [] => true
+  | left :: leftRest, right :: rightRest =>
+      CType.beq left right && CType.beqList leftRest rightRest
+  | _, _ => false
+end
+
+instance : BEq CType := ⟨CType.beq⟩
 
 def CType.isSigned : CType → Bool
   | .i8 | .i16 | .i32 | .i64 | .isize => true
