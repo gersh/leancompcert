@@ -101,6 +101,12 @@ exit (gates, violation counters, checked budgets), where the word size binds,
 the four proof obligations you owe, and a checklist of the mistakes that have
 actually produced wrong answers here.
 
+**Starting from an ordinary algorithm and a mathematical specification?**
+[From an algorithm to a mathematical proof](docs/algorithm-to-proof.md)
+documents the reusable `Algorithm.Ensures` → `ProgramRefinement` →
+`ProgramClaim` path, including where `mvcgen` helps and the explicit boundary
+where an independent `gpu_prover` supplies remote execution evidence.
+
 **Setting up?** [Installation](docs/installation.md) — building CompCert,
 verifying it, and requiring this package from your `lakefile.toml`.
 

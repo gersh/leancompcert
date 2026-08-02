@@ -55,6 +55,7 @@ import LeanCompCert.Verified.ListFold
 import LeanCompCert.Verified.PackedSieve
 import LeanCompCert.Verified.Segment
 import LeanCompCert.Verified.FoldBridge
+import LeanCompCert.Verified.Algorithm.Spec
 import LeanCompCert.Ports.RS62Increments
 import LeanCompCert.Ports.RS62LoopE
 import LeanCompCert.Verified.ScalarLift
