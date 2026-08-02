@@ -85,6 +85,10 @@ import LeanCompCert.Ports.MobiusResidueWeight
 import LeanCompCert.Ports.MobiusResidueAcc
 import LeanCompCert.Ports.MobiusResidueTest
 import LeanCompCert.Ports.MobiusResidueWindow
+import LeanCompCert.Verified.ArrayFoldBridge
+import LeanCompCert.Ports.BlockedFold
+import LeanCompCert.Ports.RS62LadderEncoding
+import LeanCompCert.Ports.ArraySieveCount
 import LeanCompCert.Attest
 
 /-! # LeanCompCert -/

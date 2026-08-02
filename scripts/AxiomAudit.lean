@@ -55,6 +55,8 @@ import LeanCompCert.Ports.A36Bisect
 import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Verified.ExpFixed
 import LeanCompCert.Ports.ExpFixPort
+import LeanCompCert.Verified.ArrayFoldBridge
+import LeanCompCert.Ports.ArraySieveCount
 import LeanCompCert.Attest
 import LeanCompCertTests.Attest
 
@@ -122,6 +124,15 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Verified.MulWide.hl_spec
 #print axioms LeanCompCert.Verified.Frontend.compileExpr_correct
 #print axioms LeanCompCert.Verified.ArrayState.sieveSweep_cell
+-- M9: the array fold bridge, and the first array port with a proved denotation
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.denoteAInstrs_eq_arun
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.AProgram.denote_eq_foldl_mem
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.AProgram.denote_eq_obs_foldl_mem
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.foldl_count_mod
+#print axioms LeanCompCert.Ports.ArraySieveCount.body_spec
+#print axioms LeanCompCert.Ports.ArraySieveCount.sieveCountProgram_denote
+#print axioms LeanCompCert.Ports.ArraySieveCount.sieveCountProgram_compiled
+#print axioms LeanCompCert.Ports.ArraySieveCount.leastFactor_eq_self_iff
 #print axioms LeanCompCert.Verified.MemFragment.lowerMSequence_correct
 -- Tail-recursive trace lowering: the two equations the correctness proofs use
 #print axioms LeanCompCert.Verified.MemFragment.lowerMAux_eq
