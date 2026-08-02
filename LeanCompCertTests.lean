@@ -8,6 +8,7 @@ import LeanCompCert.Testing.ReflectedCertificate
 import LeanCompCert.Testing.FixedPointCertificate
 import LeanCompCert.Testing.RolledFixedPoint
 import LeanCompCert.Testing.PackedCoverageCertificate
+import LeanCompCert.Testing.AlgorithmProof
 import LeanCompCert.Verified.ClightEmit
 import LeanCompCertTests.Docs
 import LeanCompCertTests.Attest
@@ -181,6 +182,15 @@ private def testReflectedCertificate : IO Unit := do
       check (source.contains "l_MertensCert_reflectedOddSquarefreeMertens")
         "reflected certificate C lacks the compiled entry point"
 
+private def testAlgorithmProof : IO Unit := do
+  check
+    (Testing.AlgorithmProof.exampleClaim.program.denote == some 1)
+    "certified algorithm example did not accept"
+  check
+    ((Testing.AlgorithmProof.exampleClaim.computation
+      "AlgorithmProof.sumRange").targetResult == some 1)
+    "certified algorithm generated-C model did not accept"
+
 private def scaleProgram : Verified.Reflect.Program := {
   regCount := 6
   loopCount := 150000
@@ -290,6 +300,7 @@ def main : IO Unit := do
   testWideMertensCertificate
   testSquarefreeMertensCertificate
   testReflectedCertificate
+  testAlgorithmProof
   testPackagingScale
   testFixedPointCertificate
   testRolledEmission
