@@ -353,6 +353,29 @@ theorem ite_add_ite (a : Prop) [Decidable a] (x y : Nat) :
     ((if a then x else 0) + (if a then 0 else y)) = if a then x else y := by
   by_cases ha : a <;> simp [ha]
 
+/-- Conjunction of flags, when the port combines them bitwise rather than by
+multiplication (`ArrayMobius` and `ArraySegSieve` do both). -/
+theorem bit_and_bit (a b : Prop) [Decidable a] [Decidable b] :
+    ((if a then (1:Nat) else 0) &&& (if b then 1 else 0)) =
+      if a ∧ b then 1 else 0 := by
+  by_cases ha : a <;> by_cases hb : b <;> simp [ha, hb] <;> decide
+
+/-- Disjunction of flags. -/
+theorem bit_or_bit (a b : Prop) [Decidable a] [Decidable b] :
+    ((if a then (1:Nat) else 0) ||| (if b then 1 else 0)) =
+      if a ∨ b then 1 else 0 := by
+  by_cases ha : a <;> by_cases hb : b <;> simp [ha, hb] <;> decide
+
+/-- Flag negation by `xor 1`, the other form ports write `1 − g` in. -/
+theorem bit_xor_one (a : Prop) [Decidable a] :
+    ((if a then (1:Nat) else 0) ^^^ 1) = if a then 0 else 1 := by
+  by_cases ha : a <;> simp [ha] <;> decide
+
+/-- Masking a flag with `1` is the identity. -/
+theorem bit_and_one (a : Prop) [Decidable a] :
+    ((if a then (1:Nat) else 0) &&& 1) = if a then 1 else 0 := by
+  by_cases ha : a <;> simp [ha] <;> decide
+
 theorem one_lt_M : 1 < M := by decide
 
 /-- Flag negation, as the machine computes it: `1 - g` is
