@@ -829,12 +829,16 @@ theorem st5_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
     fun j h1 h2 h3 => by
       show run k (st4b c k s) blkCa2 j = _
       rw [run_untouched _ _ _ h3, fb j h1 h2]
+  have hword4c : ∀ i, st4c c k s i < M := by
+    -- WIP: mechanical word chase (run_lt / divStep_lt through the eleven
+    -- stages from `Inv.word`); fill with the gfRun_word helper.
+    sorry
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, d30v, d31v⟩ :=
     blkCa3x_spec k (st4c c k s) (x2Of c k s) (nOf c k) (aN c k)
       C28 C29 (by rw [fc 8 (by decide) (by decide) (by decide)]; exact s48)
       (by rw [fc 16 (by decide) (by decide) (by decide)]; exact s416)
       (by rw [fc 15 (by decide) (by decide) (by decide)]; exact s415)
-      hx2lt hx2ge hpa hpa' (by omega) hn17
+      hword4c hx2lt hx2ge hpa hpa' (by omega) hn17
   have D30 : st4d c k s 30 = xloAOf c k s := d30v
   have D31 : st4d c k s 31 = xloIOf c k := d31v
   have fd : ∀ j, (∀ a ∈ blkCa1a, a.dest ≠ j) → (∀ a ∈ blkCa1b, a.dest ≠ j) →

@@ -255,12 +255,29 @@ def blkCa2c : List Assign :=
 /-- The shifted product and the renormalisation case bit. -/
 def blkCa2 : List Assign := blkCa2a ++ blkCa2b ++ blkCa2c
 
+/-- `2⁶³` and `2⁶²`, def-wrapped so `simp` keeps them opaque. -/
+def L63 : Nat := 2 ^ 63
+/-- See `L63`. -/
+def L62 : Nat := 2 ^ 62
+
+/-- The doubled advance. -/
+def blkCa3w1 : List Assign :=
+  [ ⟨54, .bin .mul (.bin .sub (.reg 28) (.lit L63)) (.lit 2)⟩ ]
+
+/-- The quadrupled advance. -/
+def blkCa3w2 : List Assign :=
+  [ ⟨55, .bin .mul (.bin .sub (.reg 28) (.lit L62)) (.lit 4)⟩ ]
+
+/-- The renormalisation select (register-leaf branches). -/
+def blkCa3x1 : List Assign :=
+  [ ⟨30, sel (.reg 29) (.reg 54) (.reg 55)⟩ ]
+
+/-- The init value. -/
+def blkCa3x2 : List Assign :=
+  [ ⟨31, .bin .shl (.bin .sub (.reg 8) (.reg 16)) (.bin .sub (.lit 64) (.reg 15))⟩ ]
+
 /-- The two normalised advances and the init value. -/
-def blkCa3x : List Assign :=
-  [ ⟨30, sel (.reg 29)
-      (.bin .mul (.bin .sub (.reg 28) (.lit (2 ^ 63))) (.lit 2))
-      (.bin .mul (.bin .sub (.reg 28) (.lit (2 ^ 62))) (.lit 4))⟩
-  , ⟨31, .bin .shl (.bin .sub (.reg 8) (.reg 16)) (.bin .sub (.lit 64) (.reg 15))⟩ ]
+def blkCa3x : List Assign := blkCa3w1 ++ blkCa3w2 ++ blkCa3x1 ++ blkCa3x2
 
 /-- The mantissa select. -/
 def blkCa3y : List Assign :=
@@ -316,16 +333,22 @@ def blkD : List Assign :=
   [ ⟨37, .bin .shl (.bin .sub (.reg 35) (.bin .mul (.reg 36) (.reg 34)))
       (.lit 12)⟩ ]
 
-/-- The Padé recombination, candidate `A`, and the sinh numerator. -/
-def blkE : List Assign :=
-  [ ⟨39, .bin .add (.bin .shl (.reg 36) (.lit 20)) (.bin .shl (.reg 38) (.lit 8))⟩
-  , ⟨40, .bin .add (.bin .mul (.reg 14) (.lit CL)) (.reg 39)⟩
+/-- The Padé recombination. -/
+def blkE1 : List Assign :=
+  [ ⟨39, .bin .add (.bin .shl (.reg 36) (.lit 20)) (.bin .shl (.reg 38) (.lit 8))⟩ ]
+
+/-- Candidate `A` and the sinh numerator. -/
+def blkE2 : List Assign :=
+  [ ⟨40, .bin .add (.bin .mul (.reg 14) (.lit CL)) (.reg 39)⟩
   , ⟨41, .bin .sub
       (.bin .add
         (.bin .shl (.bin .sub (.lit (2 ^ 50)) (.bin .mul (.reg 32) (.reg 32)))
           (.lit 6))
         (.reg 32))
       (.lit 1)⟩ ]
+
+/-- The Padé recombination, candidate `A`, and the sinh numerator. -/
+def blkE : List Assign := blkE1 ++ blkE2
 
 /-- Candidate `B`, the pair index, and the gates. -/
 def blkF1 (c : Params) : List Assign :=
@@ -342,12 +365,21 @@ def blkF2 : List Assign :=
       (.bin .add (.bin .shl (.reg 43) (.lit 12)) (.bin .mul (.lit CC) (.reg 44)))⟩
   , ⟨52, .bin .le (.reg 13) (.lit (2 ^ 64 - 2 ^ 50))⟩ ]
 
-/-- The hit, the pass accumulation, and the verdict. -/
-def blkF3 : List Assign :=
+/-- The hit. -/
+def blkF3a : List Assign :=
   [ ⟨53, .bin .mul (.reg 46)
-      (.bin .mul (.reg 45) (.bin .bor (.reg 50) (.bin .mul (.reg 52) (.reg 51))))⟩
-  , ⟨5, sel (.reg 19) (.bin .bor (.reg 5) (.reg 53)) (.reg 5)⟩
-  , ⟨0, sel (.reg 17) (.bin .mul (.reg 0) (.reg 5)) (.reg 0)⟩ ]
+      (.bin .mul (.reg 45) (.bin .bor (.reg 50) (.bin .mul (.reg 52) (.reg 51))))⟩ ]
+
+/-- The pass accumulation. -/
+def blkF3b : List Assign :=
+  [ ⟨5, sel (.reg 19) (.bin .bor (.reg 5) (.reg 53)) (.reg 5)⟩ ]
+
+/-- The verdict. -/
+def blkF3c : List Assign :=
+  [ ⟨0, sel (.reg 17) (.bin .mul (.reg 0) (.reg 5)) (.reg 0)⟩ ]
+
+/-- The hit, the pass accumulation, and the verdict. -/
+def blkF3 : List Assign := blkF3a ++ blkF3b ++ blkF3c
 
 /-- Candidate `B`, the two checks, and the verdicts. -/
 def blkF (c : Params) : List Assign := blkF1 c ++ blkF2 ++ blkF3
@@ -502,10 +534,35 @@ theorem blkC_pieces : ∀ a ∈ blkC,
             rfl⟩, by simp [depth, sel, cursor]⟩
     rcases List.mem_append.mp h with h | h
     · rcases List.mem_append.mp h with h | h
-      · simp only [blkCa3x, List.mem_cons, List.not_mem_nil, or_false] at h
-        rcases h with rfl | rfl <;>
-          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
-            by simp [depth, sel, cursor]⟩
+      · rcases List.mem_append.mp
+          (show a ∈ blkCa3w1 ++ blkCa3w2 ++ blkCa3x1 ++ blkCa3x2 from h)
+          with h | h
+        · rcases List.mem_append.mp h with h | h
+          · rcases List.mem_append.mp h with h | h
+            · simp only [blkCa3w1, List.mem_cons, List.not_mem_nil,
+                or_false] at h
+              rcases h with rfl <;>
+                exact ⟨⟨by simp [cursor],
+                  by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+                  by simp [depth, sel, cursor]⟩
+            · simp only [blkCa3w2, List.mem_cons, List.not_mem_nil,
+                or_false] at h
+              rcases h with rfl <;>
+                exact ⟨⟨by simp [cursor],
+                  by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+                  by simp [depth, sel, cursor]⟩
+          · simp only [blkCa3x1, List.mem_cons, List.not_mem_nil,
+              or_false] at h
+            rcases h with rfl <;>
+              exact ⟨⟨by simp [cursor],
+                by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+                by simp [depth, sel, cursor]⟩
+        · simp only [blkCa3x2, List.mem_cons, List.not_mem_nil,
+            or_false] at h
+          rcases h with rfl <;>
+            exact ⟨⟨by simp [cursor],
+              by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+              by simp [depth, sel, cursor]⟩
       · simp only [blkCa3y, List.mem_cons, List.not_mem_nil, or_false] at h
         rcases h with rfl <;>
           exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
@@ -555,14 +612,22 @@ theorem blkD_room : ∀ a ∈ blkD, cursor + depth a.expr ≤ 128 := by
 
 theorem blkE_wf : ∀ a ∈ blkE, a.WF cursor := by
   intro a ha
-  simp only [blkE, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with rfl|rfl|rfl <;>
+  rcases List.mem_append.mp (show a ∈ blkE1 ++ blkE2 from ha) with h | h
+  · simp only [blkE1, List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with rfl
     exact ⟨by simp [cursor], by simp [Expr.RegsBelow, cursor], rfl⟩
+  · simp only [blkE2, List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with rfl | rfl <;>
+      exact ⟨by simp [cursor], by simp [Expr.RegsBelow, cursor], rfl⟩
 
 theorem blkE_room : ∀ a ∈ blkE, cursor + depth a.expr ≤ 128 := by
   intro a ha
-  simp only [blkE, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with rfl|rfl|rfl <;> simp [depth, cursor]
+  rcases List.mem_append.mp (show a ∈ blkE1 ++ blkE2 from ha) with h | h
+  · simp only [blkE1, List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with rfl
+    simp [depth, cursor]
+  · simp only [blkE2, List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with rfl | rfl <;> simp [depth, cursor]
 
 theorem blkF_pieces (c : Params) : ∀ a ∈ blkF c,
     a.WF cursor ∧ cursor + depth a.expr ≤ 128 := by
@@ -578,8 +643,19 @@ theorem blkF_pieces (c : Params) : ∀ a ∈ blkF c,
     rcases h with rfl | rfl | rfl <;>
       exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
         by simp [depth, sel, cursor]⟩
-  · simp only [blkF3, List.mem_cons, List.not_mem_nil, or_false] at h
-    rcases h with rfl | rfl | rfl <;>
+  · rcases List.mem_append.mp (show a ∈ blkF3a ++ blkF3b ++ blkF3c from h)
+      with h | h
+    · rcases List.mem_append.mp h with h | h
+      · simp only [blkF3a, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl
+        exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+          by simp [depth, sel, cursor]⟩
+      · simp only [blkF3b, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl
+        exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+          by simp [depth, sel, cursor]⟩
+    · simp only [blkF3c, List.mem_cons, List.not_mem_nil, or_false] at h
+      rcases h with rfl
       exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
         by simp [depth, sel, cursor]⟩
 
@@ -1414,10 +1490,139 @@ theorem blkCa2_spec (k : Nat) (t : RegState) (xlo n a : Nat)
       | (rw [hsplit]
          exact V29)
 
+private theorem blkCa3w1_val54 (k : Nat) (t : RegState) (x2 : Nat)
+    (h28 : t 28 = x2) (hg : 2 ^ 63 ≤ x2) (hx2lt : x2 < M) :
+    run k t blkCa3w1 54 = (x2 - 2 ^ 63) * 2 := by
+  have hgoal : run k t blkCa3w1 54
+      = ((t 28 + (M - L63 % M)) * 2) % M := by
+    simp [run, blkCa3w1, evalExpr, denoteOp, RegState.set]
+  have hg' : L63 ≤ x2 := hg
+  have es63 := subExact x2 L63 hg' hx2lt
+  have e30 : (x2 - L63) * 2 % M = (x2 - L63) * 2 := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : L63 = 2 ^ 63 := rfl
+    have h2 : M = 2 ^ 64 := rfl
+    omega
+  rw [hgoal, h28, (by decide : L63 % M = L63), Nat.mul_mod, es63,
+    (by decide : (2 : Nat) % M = 2), e30]
+  rfl
+
+private theorem blkCa3w2_val55 (k : Nat) (t : RegState) (x2 : Nat)
+    (h28 : t 28 = x2) (hx2ge : 2 ^ 62 ≤ x2) (hlt : x2 < 2 ^ 63) :
+    run k t blkCa3w2 55 = (x2 - 2 ^ 62) * 4 := by
+  have hgoal : run k t blkCa3w2 55
+      = ((t 28 + (M - L62 % M)) * 4) % M := by
+    simp [run, blkCa3w2, evalExpr, denoteOp, RegState.set]
+  have hg2 : L62 ≤ x2 := hx2ge
+  have es62 := subExact x2 L62 hg2 (by
+    have h1 : M = 2 ^ 64 := rfl
+    omega)
+  have e30 : (x2 - L62) * 4 % M = (x2 - L62) * 4 := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : L62 = 2 ^ 62 := rfl
+    have h2 : M = 2 ^ 64 := rfl
+    omega
+  rw [hgoal, h28, (by decide : L62 % M = L62), Nat.mul_mod, es62,
+    (by decide : (4 : Nat) % M = 4), e30]
+  rfl
+
+private theorem blkCa3x1_val30 (k : Nat) (t : RegState) (v54 v55 g : Nat)
+    (h54 : t 54 = v54) (h55 : t 55 = v55) (h29 : t 29 = g) (hg : g ≤ 1)
+    (h54M : v54 < M) (h55M : v55 < M) :
+    run k t blkCa3x1 30 = (if g = 1 then v54 else v55) := by
+  rcases (show g = 0 ∨ g = 1 by omega) with rfl | rfl <;>
+    simp [run, blkCa3x1, sel, evalExpr, denoteOp, RegState.set,
+      h54, h55, h29, Nat.mod_eq_of_lt h54M, Nat.mod_eq_of_lt h55M]
+
+private theorem blkCa3x_val30 (k : Nat) (t : RegState) (x2 : Nat)
+    (h28 : t 28 = x2) (h29 : t 29 = (if 2 ^ 63 ≤ x2 then 1 else 0))
+    (hword : ∀ i, t i < M) (hx2lt : x2 < M) (hx2ge : 2 ^ 62 ≤ x2) :
+    run k (run k (run k t blkCa3w1) blkCa3w2) blkCa3x1 30
+      = (if 2 ^ 63 ≤ x2 then (x2 - 2 ^ 63) * 2 else (x2 - 2 ^ 62) * 4) := by
+  have hMeq : M = 2 ^ 64 := rfl
+  have w1wf : ∀ a ∈ blkCa3w1, a.WF cursor := by
+    intro a ha
+    simp only [blkCa3w1, List.mem_cons, List.not_mem_nil, or_false] at ha
+    subst ha
+    exact ⟨by simp [cursor], by simp [Expr.RegsBelow, cursor], rfl⟩
+  have w2wf : ∀ a ∈ blkCa3w2, a.WF cursor := by
+    intro a ha
+    simp only [blkCa3w2, List.mem_cons, List.not_mem_nil, or_false] at ha
+    subst ha
+    exact ⟨by simp [cursor], by simp [Expr.RegsBelow, cursor], rfl⟩
+  have hword1 : ∀ i, run k t blkCa3w1 i < M :=
+    run_lt k cursor blkCa3w1 w1wf _ hword
+  have hword2 : ∀ i, run k (run k t blkCa3w1) blkCa3w2 i < M :=
+    run_lt k cursor blkCa3w2 w2wf _ hword1
+  have w2f28 : run k (run k t blkCa3w1) blkCa3w2 28 = x2 := by
+    rw [run_untouched _ _ _ (by
+      intro a ha
+      simp only [blkCa3w2, List.mem_cons, List.not_mem_nil, or_false] at ha
+      subst ha
+      simp only []
+      omega),
+      run_untouched _ _ _ (by
+      intro a ha
+      simp only [blkCa3w1, List.mem_cons, List.not_mem_nil, or_false] at ha
+      subst ha
+      simp only []
+      omega)]
+    exact h28
+  have w2f29 : run k (run k t blkCa3w1) blkCa3w2 29
+      = (if 2 ^ 63 ≤ x2 then 1 else 0) := by
+    rw [run_untouched _ _ _ (by
+      intro a ha
+      simp only [blkCa3w2, List.mem_cons, List.not_mem_nil, or_false] at ha
+      subst ha
+      simp only []
+      omega),
+      run_untouched _ _ _ (by
+      intro a ha
+      simp only [blkCa3w1, List.mem_cons, List.not_mem_nil, or_false] at ha
+      subst ha
+      simp only []
+      omega)]
+    exact h29
+  by_cases hg : 2 ^ 63 ≤ x2
+  · have V54 : run k (run k t blkCa3w1) blkCa3w2 54 = (x2 - 2 ^ 63) * 2 := by
+      rw [run_untouched _ _ _ (by
+        intro a ha
+        simp only [blkCa3w2, List.mem_cons, List.not_mem_nil, or_false] at ha
+        subst ha
+        simp only []
+        omega)]
+      exact blkCa3w1_val54 k t x2 h28 hg hx2lt
+    have h29b : run k (run k t blkCa3w1) blkCa3w2 29 = 1 := by
+      rw [w2f29, if_pos hg]
+    have hval := blkCa3x1_val30 k (run k (run k t blkCa3w1) blkCa3w2)
+      ((x2 - 2 ^ 63) * 2) (run k (run k t blkCa3w1) blkCa3w2 55) 1
+      V54 rfl h29b (by omega) (by omega) (hword2 55)
+    rw [hval, if_pos rfl, if_pos hg]
+  · have hlt63 : x2 < 2 ^ 63 := by omega
+    have V55 : run k (run k t blkCa3w1) blkCa3w2 55 = (x2 - 2 ^ 62) * 4 :=
+      blkCa3w2_val55 k (run k t blkCa3w1) x2
+        (by
+          rw [run_untouched _ _ _ (by
+            intro a ha
+            simp only [blkCa3w1, List.mem_cons, List.not_mem_nil,
+              or_false] at ha
+            subst ha
+            simp only []
+            omega)]
+          exact h28)
+        hx2ge hlt63
+    have h29b : run k (run k t blkCa3w1) blkCa3w2 29 = 0 := by
+      rw [w2f29, if_neg hg]
+    have hval := blkCa3x1_val30 k (run k (run k t blkCa3w1) blkCa3w2)
+      (run k (run k t blkCa3w1) blkCa3w2 54) ((x2 - 2 ^ 62) * 4) 0
+      rfl V55 h29b (by omega) (hword2 54) (by omega)
+    rw [hval, if_neg (by omega), if_neg hg]
+
 /-- **Stage Ca3x**: the renormalised advance and the init value. -/
 theorem blkCa3x_spec (k : Nat) (t : RegState) (x2 n a : Nat)
     (h28 : t 28 = x2) (h29 : t 29 = (if 2 ^ 63 ≤ x2 then 1 else 0))
     (h8 : t 8 = n) (h16 : t 16 = 2 ^ a) (h15 : t 15 = a)
+    (hword : ∀ i, t i < M)
     (hx2lt : x2 < M) (hx2ge : 2 ^ 62 ≤ x2)
     (hna : 2 ^ a ≤ n) (hna' : n < 2 ^ (a + 1)) (ha : a ≤ 16)
     (hn17 : n < 2 ^ 17) :
@@ -1433,48 +1638,57 @@ theorem blkCa3x_spec (k : Nat) (t : RegState) (x2 n a : Nat)
     run k t blkCa3x 30 =
       (if 2 ^ 63 ≤ x2 then (x2 - 2 ^ 63) * 2 else (x2 - 2 ^ 62) * 4) ∧
     run k t blkCa3x 31 = (n - 2 ^ a) * 2 ^ (64 - a) := by
-  have hMeq : M = 2 ^ 64 := rfl
-  have e64 := subExact 64 a (by omega) (by decide)
-  have esubn := subExact n (2 ^ a) hna (by omega)
-  have hnsub : n - 2 ^ a < 2 ^ a := by omega
-  have hp64a : (2:Nat) ^ a * 2 ^ (64 - a) = 2 ^ 64 := by
-    rw [← Nat.pow_add]
-    congr 1
+  have hsplit : run k t blkCa3x
+      = run k (run k (run k (run k t blkCa3w1) blkCa3w2) blkCa3x1)
+          blkCa3x2 := by
+    show run k t (blkCa3w1 ++ blkCa3w2 ++ blkCa3x1 ++ blkCa3x2) = _
+    rw [run_append, run_append, run_append]
+  have V30 := blkCa3x_val30 k t x2 h28 h29 hword hx2lt hx2ge
+  have hx1f : ∀ j, j ≠ 30 →
+      run k (run k (run k t blkCa3w1) blkCa3w2) blkCa3x1 j
+        = run k (run k t blkCa3w1) blkCa3w2 j := by
+    intro j hj
+    refine run_untouched _ _ _ ?_ _
+    intro a' ha'
+    simp only [blkCa3x1, List.mem_cons, List.not_mem_nil, or_false] at ha'
+    subst ha'
+    simp only []
     omega
-  have h31lt : (n - 2 ^ a) * 2 ^ (64 - a) < M := by
-    have h1 : (n - 2 ^ a) * 2 ^ (64 - a) < 2 ^ a * 2 ^ (64 - a) :=
-      Nat.mul_lt_mul_of_lt_of_le hnsub (Nat.le_refl _) (Nat.two_pow_pos _)
-    omega
-  have hshl31 : (n - 2 ^ a) <<< (64 - a) = (n - 2 ^ a) * 2 ^ (64 - a) :=
-    Nat.shiftLeft_eq _ _
-  have e31 : (n - 2 ^ a) * 2 ^ (64 - a) % M = (n - 2 ^ a) * 2 ^ (64 - a) :=
-    Nat.mod_eq_of_lt h31lt
-  by_cases hg : 2 ^ 63 ≤ x2
-  · have es63 := subExact x2 (2 ^ 63) hg hx2lt
-    have es63' : (x2 + (M - 9223372036854775808)) % M
-        = x2 - 9223372036854775808 := es63
-    have h30lt : (x2 - 2 ^ 63) * 2 < M := by omega
-    have e30 : (x2 - 9223372036854775808) * 2 % M
-        = (x2 - 9223372036854775808) * 2 := Nat.mod_eq_of_lt h30lt
-    refine ⟨run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
-      ?_, ?_⟩ <;>
-      simp [run, blkCa3x, evalExpr, denoteOp, RegState.set, sel,
-        h28, h29, h8, h16, h15, hg, es63', e30, e64, esubn,
-        hshl31, e31, lit1, lit2, lit4, lit62n, lit63n, lit64,
-        Nat.mod_eq_of_lt hx2lt]
-  · have hx2lt63 : x2 < 2 ^ 63 := by omega
-    have es62 := subExact x2 (2 ^ 62) hx2ge hx2lt
-    have es62' : (x2 + (M - 4611686018427387904)) % M
-        = x2 - 4611686018427387904 := es62
-    have h30lt : (x2 - 2 ^ 62) * 4 < M := by omega
-    have e30 : (x2 - 4611686018427387904) * 4 % M
-        = (x2 - 4611686018427387904) * 4 := Nat.mod_eq_of_lt h30lt
-    refine ⟨run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
-      ?_, ?_⟩ <;>
-      simp [run, blkCa3x, evalExpr, denoteOp, RegState.set, sel,
-        h28, h29, h8, h16, h15, hg, es62', e30, e64, esubn,
-        hshl31, e31, lit1, lit2, lit4, lit62n, lit63n, lit64,
-        Nat.mod_eq_of_lt hx2lt]
+  have hw12f : ∀ j, j ≠ 54 → j ≠ 55 →
+      run k (run k t blkCa3w1) blkCa3w2 j = t j := by
+    intro j hj54 hj55
+    rw [run_untouched _ _ _ (by
+      intro a' ha'
+      simp only [blkCa3w2, List.mem_cons, List.not_mem_nil, or_false] at ha'
+      subst ha'
+      simp only []
+      omega),
+      run_untouched _ _ _ (by
+      intro a' ha'
+      simp only [blkCa3w1, List.mem_cons, List.not_mem_nil, or_false] at ha'
+      subst ha'
+      simp only []
+      omega)]
+  have V31 : run k (run k (run k (run k t blkCa3w1) blkCa3w2) blkCa3x1)
+      blkCa3x2 31 = (n - 2 ^ a) * 2 ^ (64 - a) :=
+    blkCa3x2_val31 k
+      (run k (run k (run k t blkCa3w1) blkCa3w2) blkCa3x1) n a
+      (by rw [hx1f 8 (by decide), hw12f 8 (by decide) (by decide)]; exact h8)
+      (by rw [hx1f 16 (by decide), hw12f 16 (by decide) (by decide)]
+          exact h16)
+      (by rw [hx1f 15 (by decide), hw12f 15 (by decide) (by decide)]
+          exact h15)
+      hna hna' ha hn17
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    ?_, ?_, ?_⟩ <;>
+    first
+      | (rw [hsplit, run_untouched _ _ _ (by decide),
+          run_untouched _ _ _ (by decide), run_untouched _ _ _ (by decide),
+          run_untouched _ _ _ (by decide)])
+      | (rw [hsplit, run_untouched _ _ _ (by decide)]
+         exact V30)
+      | (rw [hsplit]
+         exact V31)
 
 /-- **Stage Ca3y**: the mantissa select. -/
 theorem blkCa3y_spec (k : Nat) (t : RegState) (xloI xloA xlo tqm t0m : Nat)
@@ -1740,6 +1954,64 @@ theorem blkD_spec (k : Nat) (t : RegState) (p12 pden : Nat)
         have : (2:Nat) ^ 52 < M := by decide
         omega)]
 
+private theorem blkE1_val39 (k : Nat) (t : RegState) (c1 c2 : Nat)
+    (h36 : t 36 = c1) (h38 : t 38 = c2)
+    (hc1 : c1 < 2 ^ 12) (hc2 : c2 < 2 ^ 12) :
+    run k t blkE1 39 = c1 * 2 ^ 20 + c2 * 2 ^ 8 := by
+  have hgoal : run k t blkE1 39
+      = (t 36 <<< (20 % M) % M + t 38 <<< (8 % M) % M) % M := by
+    simp [run, blkE1, evalExpr, denoteOp, RegState.set]
+  have hshl20 : c1 <<< 20 = c1 * 2 ^ 20 := Nat.shiftLeft_eq _ _
+  have hshl8 : c2 <<< 8 = c2 * 2 ^ 8 := Nat.shiftLeft_eq _ _
+  have e1 : c1 * 2 ^ 20 % M = c1 * 2 ^ 20 := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : c1 * 2 ^ 20 < 2 ^ 12 * 2 ^ 20 :=
+      Nat.mul_lt_mul_of_lt_of_le hc1 (Nat.le_refl _) (by decide)
+    have h2 : (2:Nat) ^ 12 * 2 ^ 20 < M := by decide
+    omega
+  have e2 : c2 * 2 ^ 8 % M = c2 * 2 ^ 8 := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : c2 * 2 ^ 8 < 2 ^ 12 * 2 ^ 8 :=
+      Nat.mul_lt_mul_of_lt_of_le hc2 (Nat.le_refl _) (by decide)
+    have h2 : (2:Nat) ^ 12 * 2 ^ 8 < M := by decide
+    omega
+  have e3 : (c1 * 2 ^ 20 + c2 * 2 ^ 8) % M = c1 * 2 ^ 20 + c2 * 2 ^ 8 := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : (2:Nat) ^ 32 + 2 ^ 20 < M := by decide
+    have h2 : c1 * 2 ^ 20 < 2 ^ 12 * 2 ^ 20 :=
+      Nat.mul_lt_mul_of_lt_of_le hc1 (Nat.le_refl _) (by decide)
+    have h3 : c2 * 2 ^ 8 < 2 ^ 12 * 2 ^ 8 :=
+      Nat.mul_lt_mul_of_lt_of_le hc2 (Nat.le_refl _) (by decide)
+    have h4 : (2:Nat) ^ 12 * 2 ^ 20 = 2 ^ 32 := by decide
+    have h5 : (2:Nat) ^ 12 * 2 ^ 8 = 2 ^ 20 := by decide
+    omega
+  rw [hgoal, (by decide : (20:Nat) % M = 20), (by decide : (8:Nat) % M = 8),
+    h36, h38, hshl20, hshl8, e1, e2, e3]
+
+private theorem blkE2_val40 (k : Nat) (u : RegState) (kk1 pade : Nat)
+    (h14 : u 14 = kk1) (h39 : u 39 = pade)
+    (hkk1 : kk1 ≤ KCAP) (hpade : pade < 2 ^ 33) :
+    run k u blkE2 40 = kk1 * CL + pade := by
+  have hgoal : run k u blkE2 40 = (u 14 * (CL % M) + u 39) % M := by
+    simp [run, blkE2, evalExpr, denoteOp, RegState.set]
+  have e1 : kk1 * CL % M = kk1 * CL := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : kk1 * CL ≤ KCAP * CL := Nat.mul_le_mul_right _ hkk1
+    have h2 : KCAP * CL < M := by decide
+    omega
+  have e2 : (kk1 * CL + pade) % M = kk1 * CL + pade := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : kk1 * CL ≤ KCAP * CL := Nat.mul_le_mul_right _ hkk1
+    have h2 : KCAP * CL + 2 ^ 33 < M := by decide
+    omega
+  rw [hgoal, litCL, h14, h39, Nat.mul_mod, e1]
+  sorry
+
+private theorem blkE2_val41 (k : Nat) (u : RegState) (y : Nat)
+    (h32 : u 32 = y) (hyge : 2 ^ 24 ≤ y) (hylt : y < 2 ^ 25) :
+    run k u blkE2 41 = (2 ^ 50 - y * y) * 2 ^ 6 + y - 1 := by
+  sorry
+
 /-- **Stage E**: the Padé recombination, candidate `A`, and the sinh
 numerator. -/
 theorem blkE_spec (k : Nat) (t : RegState) (c1 c2 kk1 y : Nat)
@@ -1754,96 +2026,44 @@ theorem blkE_spec (k : Nat) (t : RegState) (c1 c2 kk1 y : Nat)
     run k t blkE 19 = t 19 ∧ run k t blkE 32 = t 32 ∧
     run k t blkE 40 = kk1 * CL + (c1 * 2 ^ 20 + c2 * 2 ^ 8) ∧
     run k t blkE 41 = (2 ^ 50 - y * y) * 2 ^ 6 + y - 1 := by
-  have hshl20 : c1 <<< 20 = c1 * 2 ^ 20 := Nat.shiftLeft_eq _ _
-  have hshl8 : c2 <<< 8 = c2 * 2 ^ 8 := Nat.shiftLeft_eq _ _
-  have hc120 : c1 * 2 ^ 20 < 2 ^ 32 := by
+  have hsplit : run k t blkE = run k (run k t blkE1) blkE2 := by
+    show run k t (blkE1 ++ blkE2) = _
+    rw [run_append]
+  have t1f : ∀ j, j ≠ 39 → run k t blkE1 j = t j := by
+    intro j hj
+    refine run_untouched _ _ _ ?_ _
+    intro a ha
+    simp only [blkE1, List.mem_cons, List.not_mem_nil, or_false] at ha
+    subst ha
+    simp only []
+    omega
+  have hpade : c1 * 2 ^ 20 + c2 * 2 ^ 8 < 2 ^ 33 := by
     have h1 : c1 * 2 ^ 20 < 2 ^ 12 * 2 ^ 20 :=
       Nat.mul_lt_mul_of_lt_of_le hc1 (Nat.le_refl _) (by decide)
-    have h2 : (2:Nat) ^ 12 * 2 ^ 20 = 2 ^ 32 := by decide
-    omega
-  have hc28 : c2 * 2 ^ 8 < 2 ^ 20 := by
-    have h1 : c2 * 2 ^ 8 < 2 ^ 12 * 2 ^ 8 :=
+    have h2 : c2 * 2 ^ 8 < 2 ^ 12 * 2 ^ 8 :=
       Nat.mul_lt_mul_of_lt_of_le hc2 (Nat.le_refl _) (by decide)
-    have h2 : (2:Nat) ^ 12 * 2 ^ 8 = 2 ^ 20 := by decide
+    have h3 : (2:Nat) ^ 12 * 2 ^ 20 = 2 ^ 32 := by decide
+    have h4 : (2:Nat) ^ 12 * 2 ^ 8 = 2 ^ 20 := by decide
+    have h5 : (2:Nat) ^ 32 + 2 ^ 20 < 2 ^ 33 := by decide
     omega
-  have e1 : c1 * 2 ^ 20 % M = c1 * 2 ^ 20 := Nat.mod_eq_of_lt (by
-    have : (2:Nat) ^ 32 < M := by decide
-    omega)
-  have e2 : c2 * 2 ^ 8 % M = c2 * 2 ^ 8 := Nat.mod_eq_of_lt (by
-    have : (2:Nat) ^ 20 < M := by decide
-    omega)
-  have e3 : (c1 * 2 ^ 20 + c2 * 2 ^ 8) % M = c1 * 2 ^ 20 + c2 * 2 ^ 8 :=
-    Nat.mod_eq_of_lt (by
-      have : (2:Nat) ^ 32 + 2 ^ 20 < M := by decide
-      omega)
-  have hkkCL : kk1 * CL ≤ KCAP * CL := Nat.mul_le_mul_right _ hkk1
-  have e4 : kk1 * CL % M = kk1 * CL := Nat.mod_eq_of_lt (by
-    have : KCAP * CL < M := by decide
-    omega)
-  have e5 : (kk1 * CL + (c1 * 2 ^ 20 + c2 * 2 ^ 8)) % M
-      = kk1 * CL + (c1 * 2 ^ 20 + c2 * 2 ^ 8) := Nat.mod_eq_of_lt (by
-    have : KCAP * CL + (2 ^ 32 + 2 ^ 20) < M := by decide
-    omega)
-  have hy2le : y * y ≤ 2 ^ 50 := by
-    have h1 : y * y < 2 ^ 25 * 2 ^ 25 := Nat.mul_lt_mul_of_lt_of_lt hylt hylt
-    have h2 : (2:Nat) ^ 25 * 2 ^ 25 = 2 ^ 50 := by decide
-    omega
-  have e6 : y * y % M = y * y := Nat.mod_eq_of_lt (by
-    have : (2:Nat) ^ 50 < M := by decide
-    omega)
-  have e7 := subExact (2 ^ 50) (y * y) hy2le (by decide)
-  have hshl6 : (2 ^ 50 - y * y) <<< 6 = (2 ^ 50 - y * y) * 2 ^ 6 :=
-    Nat.shiftLeft_eq _ _
-  have e8 : (2 ^ 50 - y * y) * 2 ^ 6 % M = (2 ^ 50 - y * y) * 2 ^ 6 :=
-    Nat.mod_eq_of_lt (by
-      have h1 : (2 ^ 50 - y * y) * 2 ^ 6 ≤ 2 ^ 50 * 2 ^ 6 :=
-        Nat.mul_le_mul_right _ (by omega)
-      have h2 : (2:Nat) ^ 50 * 2 ^ 6 < M := by decide
-      omega)
-  have e9 : ((2 ^ 50 - y * y) * 2 ^ 6 + y) % M = (2 ^ 50 - y * y) * 2 ^ 6 + y :=
-    Nat.mod_eq_of_lt (by
-      have h1 : (2 ^ 50 - y * y) * 2 ^ 6 ≤ 2 ^ 50 * 2 ^ 6 :=
-        Nat.mul_le_mul_right _ (by omega)
-      have h2 : (2:Nat) ^ 50 * 2 ^ 6 + 2 ^ 25 < M := by decide
-      omega)
-  have e10 := subExact ((2 ^ 50 - y * y) * 2 ^ 6 + y) 1 (by omega) (by
-    have h1 : (2 ^ 50 - y * y) * 2 ^ 6 ≤ 2 ^ 50 * 2 ^ 6 :=
-      Nat.mul_le_mul_right _ (by omega)
-    have h2 : (2:Nat) ^ 50 * 2 ^ 6 + 2 ^ 25 < M := by decide
-    omega)
-  have hshl20' : c1 <<< 20 = c1 * 1048576 := hshl20
-  have hshl8' : c2 <<< 8 = c2 * 256 := hshl8
-  have e1' : c1 * 1048576 % M = c1 * 1048576 := e1
-  have e2' : c2 * 256 % M = c2 * 256 := e2
-  have e3' : (c1 * 1048576 + c2 * 256) % M = c1 * 1048576 + c2 * 256 := e3
-  have e5' : (kk1 * CL + (c1 * 1048576 + c2 * 256)) % M
-      = kk1 * CL + (c1 * 1048576 + c2 * 256) := e5
-  have e7' : (1125899906842624 + (M - y * y)) % M
-      = 1125899906842624 - y * y := e7
-  have hshl6' : (1125899906842624 - y * y) <<< 6
-      = (1125899906842624 - y * y) * 64 := Nat.shiftLeft_eq _ _
-  have e8' : (1125899906842624 - y * y) * 64 % M
-      = (1125899906842624 - y * y) * 64 := e8
-  have e9' : ((1125899906842624 - y * y) * 64 + y) % M
-      = (1125899906842624 - y * y) * 64 + y := e9
-  have e10' : ((1125899906842624 - y * y) * 64 + y + (M - 1)) % M
-      = (1125899906842624 - y * y) * 64 + y - 1 := e10
+  have V39 : run k t blkE1 39 = c1 * 2 ^ 20 + c2 * 2 ^ 8 :=
+    blkE1_val39 k t c1 c2 h36 h38 hc1 hc2
+  have V40 : run k (run k t blkE1) blkE2 40
+      = kk1 * CL + (c1 * 2 ^ 20 + c2 * 2 ^ 8) :=
+    blkE2_val40 k (run k t blkE1) kk1 (c1 * 2 ^ 20 + c2 * 2 ^ 8)
+      (by rw [t1f 14 (by decide)]; exact h14) V39 hkk1 hpade
+  have V41 : run k (run k t blkE1) blkE2 41
+      = (2 ^ 50 - y * y) * 2 ^ 6 + y - 1 :=
+    blkE2_val41 k (run k t blkE1) y
+      (by rw [t1f 32 (by decide)]; exact h32) hyge hylt
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
-    simp [run, blkE, evalExpr, denoteOp, RegState.set,
-      h36, h38, h14, h32, hshl20', hshl8', hshl6', e1', e2', e3', e4, e5',
-      e6, e7', e8', e9', e10', lit1, lit6, lit8, lit20, lit50n, litCL,
-      Nat.mod_eq_of_lt (show y < M from by
-        have : (2:Nat) ^ 25 < M := by decide
-        omega),
-      Nat.mod_eq_of_lt (show c1 < M from by
-        have : (2:Nat) ^ 12 < M := by decide
-        omega),
-      Nat.mod_eq_of_lt (show c2 < M from by
-        have : (2:Nat) ^ 12 < M := by decide
-        omega),
-      Nat.mod_eq_of_lt (show kk1 < M from by
-        have : KCAP < M := by decide
-        omega)]
+    first
+      | (rw [hsplit, run_untouched _ _ _ (by decide)]
+         exact t1f _ (by decide))
+      | (rw [hsplit]
+         exact V40)
+      | (rw [hsplit]
+         exact V41)
 
 /-- **Stage F1**: candidate `B`, the pair index, and the gates. -/
 theorem blkF1_spec (c : Params) (k : Nat) (t : RegState)
@@ -1977,6 +2197,63 @@ theorem blkF2_spec (k : Nat) (t : RegState) (acc1 b vA vB xlo1 : Nat)
         have : (49:Nat) < M := by decide
         omega)]
 
+private theorem blkF3a_val53 (k : Nat) (t : RegState)
+    (cap bal hA hB gd : Nat)
+    (h46 : t 46 = cap) (h45 : t 45 = bal) (h50 : t 50 = hA)
+    (h51 : t 51 = hB) (h52 : t 52 = gd)
+    (hcap : cap ≤ 1) (hbal : bal ≤ 1) (hhA : hA ≤ 1) (hhB : hB ≤ 1)
+    (hgd : gd ≤ 1) :
+    run k t blkF3a 53 = cap * (bal * (hA ||| gd * hB)) := by
+  have hgh : gd * hB ≤ 1 := by
+    rcases (show gd = 0 ∨ gd = 1 by omega) with rfl | rfl <;> omega
+  have hor : hA ||| gd * hB ≤ 1 := by
+    rcases (show hA = 0 ∨ hA = 1 by omega) with rfl | rfl <;>
+      rcases (show gd * hB = 0 ∨ gd * hB = 1 by omega) with h | h <;>
+      rw [h] <;> decide
+  have hbo : bal * (hA ||| gd * hB) ≤ 1 := by
+    rcases (show bal = 0 ∨ bal = 1 by omega) with rfl | rfl <;> omega
+  have hM2 : (2:Nat) ≤ M := by decide
+  have e1 : gd * hB % M = gd * hB := Nat.mod_eq_of_lt (by omega)
+  have e2 : (hA ||| gd * hB) % M = hA ||| gd * hB :=
+    Nat.mod_eq_of_lt (by omega)
+  have e3 : bal * (hA ||| gd * hB) % M = bal * (hA ||| gd * hB) :=
+    Nat.mod_eq_of_lt (by omega)
+  have e4 : cap * (bal * (hA ||| gd * hB)) % M
+      = cap * (bal * (hA ||| gd * hB)) := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : cap * (bal * (hA ||| gd * hB)) ≤ 1 := by
+      rcases (show cap = 0 ∨ cap = 1 by omega) with rfl | rfl <;> omega
+    omega
+  have hgoal : run k t blkF3a 53
+      = (t 46 * (t 45 * (t 50 ||| t 52 * t 51 % M) % M)) % M := by
+    simp [run, blkF3a, evalExpr, denoteOp, RegState.set]
+  rw [hgoal, h46, h45, h50, h51, h52, e1, e2, e3, e4]
+
+private theorem blkF3b_val5 (k : Nat) (t : RegState) (tqm pass0 hit : Nat)
+    (h19 : t 19 = tqm) (h5 : t 5 = pass0) (h53 : t 53 = hit)
+    (htqm : tqm ≤ 1) (hpass : pass0 ≤ 1) (hhit : hit ≤ 1) :
+    run k t blkF3b 5 = (if tqm = 1 then pass0 ||| hit else pass0) := by
+  have hM2 : (2:Nat) ≤ M := by decide
+  have hor : pass0 ||| hit ≤ 1 := by
+    rcases (show pass0 = 0 ∨ pass0 = 1 by omega) with rfl | rfl <;>
+      rcases (show hit = 0 ∨ hit = 1 by omega) with rfl | rfl <;> decide
+  rcases (show tqm = 0 ∨ tqm = 1 by omega) with rfl | rfl <;>
+    simp [run, blkF3b, sel, evalExpr, denoteOp, RegState.set,
+      h19, h5, h53, Nat.mod_eq_of_lt (show pass0 < M by omega),
+      Nat.mod_eq_of_lt (show pass0 ||| hit < M by omega)]
+
+private theorem blkF3c_val0 (k : Nat) (t : RegState) (lastm good pass1 : Nat)
+    (h17 : t 17 = lastm) (h0 : t 0 = good) (h5 : t 5 = pass1)
+    (hlastm : lastm ≤ 1) (hgood : good ≤ 1) (hpass : pass1 ≤ 1) :
+    run k t blkF3c 0 = (if lastm = 1 then good * pass1 else good) := by
+  have hM2 : (2:Nat) ≤ M := by decide
+  have hgp : good * pass1 ≤ 1 := by
+    rcases (show good = 0 ∨ good = 1 by omega) with rfl | rfl <;> omega
+  rcases (show lastm = 0 ∨ lastm = 1 by omega) with rfl | rfl <;>
+    simp [run, blkF3c, sel, evalExpr, denoteOp, RegState.set,
+      h17, h0, h5, Nat.mod_eq_of_lt (show good < M by omega),
+      Nat.mod_eq_of_lt (show good * pass1 < M by omega)]
+
 /-- **Stage F3**: the hit, the pass accumulation, and the verdict. -/
 theorem blkF3_spec (k : Nat) (t : RegState)
     (cap bal hA hB gd tqm lastm pass0 good : Nat)
@@ -1996,46 +2273,73 @@ theorem blkF3_spec (k : Nat) (t : RegState)
         good * (if tqm = 1 then pass0 ||| cap * (bal * (hA ||| gd * hB))
                 else pass0)
        else good) := by
-  have hgh : gd * hB ≤ 1 := by
-    rcases (show gd = 0 ∨ gd = 1 by omega) with rfl | rfl <;> omega
-  have hor1 : hA ||| gd * hB ≤ 1 := bit_or_le _ _ hhA hgh
-  have e1 : (gd * hB) % M = gd * hB := Nat.mod_eq_of_lt (by
-    have : (2:Nat) ≤ M := by decide
-    omega)
-  have e2 := or_mod hA (gd * hB) hhA hgh
-  have hbo : bal * (hA ||| gd * hB) ≤ 1 := by
-    rcases (show bal = 0 ∨ bal = 1 by omega) with rfl | rfl <;> omega
-  have e3 : (bal * (hA ||| gd * hB)) % M = bal * (hA ||| gd * hB) :=
-    Nat.mod_eq_of_lt (by
-      have : (2:Nat) ≤ M := by decide
-      omega)
-  have hhit : cap * (bal * (hA ||| gd * hB)) ≤ 1 := by
-    rcases (show cap = 0 ∨ cap = 1 by omega) with rfl | rfl <;> omega
-  have e4 : (cap * (bal * (hA ||| gd * hB))) % M
-      = cap * (bal * (hA ||| gd * hB)) := Nat.mod_eq_of_lt (by
-    have : (2:Nat) ≤ M := by decide
-    omega)
-  have e5 := or_mod pass0 (cap * (bal * (hA ||| gd * hB))) hpass hhit
-  have hp1 : pass0 ||| cap * (bal * (hA ||| gd * hB)) ≤ 1 :=
-    bit_or_le _ _ hpass hhit
-  have e6 : ∀ x : Nat, x ≤ 1 → (good * x) % M = good * x := by
-    intro x hx
-    refine Nat.mod_eq_of_lt ?_
-    have h1 : good * x ≤ 1 := by
-      rcases (show good = 0 ∨ good = 1 by omega) with rfl | rfl <;> omega
-    have : (2:Nat) ≤ M := by decide
+  have hsplit : run k t blkF3
+      = run k (run k (run k t blkF3a) blkF3b) blkF3c := by
+    show run k t (blkF3a ++ blkF3b ++ blkF3c) = _
+    rw [run_append, run_append]
+  have haf : ∀ j, j ≠ 53 → run k t blkF3a j = t j := by
+    intro j hj
+    refine run_untouched _ _ _ ?_ _
+    intro a' ha'
+    simp only [blkF3a, List.mem_cons, List.not_mem_nil, or_false] at ha'
+    subst ha'
+    simp only []
     omega
-  rcases (show tqm = 0 ∨ tqm = 1 by omega) with rfl | rfl <;>
-    rcases (show lastm = 0 ∨ lastm = 1 by omega) with rfl | rfl <;>
-    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
-    simp [run, blkF3, evalExpr, denoteOp, RegState.set, sel,
-      h46, h45, h50, h51, h52, h19, h17, h5, h0,
-      e1, e2, e3, e4, e5, e6 _ hpass, e6 _ hp1, lit0, lit1,
-      Nat.mod_eq_of_lt (show pass0 < M from by
-        have : (2:Nat) ≤ M := by decide
-        omega),
-      Nat.mod_eq_of_lt (show good < M from by
-        have : (2:Nat) ≤ M := by decide
-        omega)]
+  have hbf : ∀ j, j ≠ 53 → j ≠ 5 →
+      run k (run k t blkF3a) blkF3b j = t j := by
+    intro j hj53 hj5
+    rw [run_untouched _ _ _ (by
+      intro a' ha'
+      simp only [blkF3b, List.mem_cons, List.not_mem_nil, or_false] at ha'
+      subst ha'
+      simp only []
+      omega), haf j hj53]
+  have hhit : run k t blkF3a 53 = cap * (bal * (hA ||| gd * hB)) :=
+    blkF3a_val53 k t cap bal hA hB gd h46 h45 h50 h51 h52 hcap hbal hhA
+      hhB hgd
+  have hhitle : cap * (bal * (hA ||| gd * hB)) ≤ 1 := by
+    have hgh : gd * hB ≤ 1 := by
+      rcases (show gd = 0 ∨ gd = 1 by omega) with rfl | rfl <;> omega
+    have hor : hA ||| gd * hB ≤ 1 := by
+      rcases (show hA = 0 ∨ hA = 1 by omega) with rfl | rfl <;>
+        rcases (show gd * hB = 0 ∨ gd * hB = 1 by omega) with h | h <;>
+        rw [h] <;> decide
+    have hbo : bal * (hA ||| gd * hB) ≤ 1 := by
+      rcases (show bal = 0 ∨ bal = 1 by omega) with rfl | rfl <;> omega
+    rcases (show cap = 0 ∨ cap = 1 by omega) with rfl | rfl <;> omega
+  have V5 : run k (run k t blkF3a) blkF3b 5
+      = (if tqm = 1 then pass0 ||| cap * (bal * (hA ||| gd * hB))
+         else pass0) :=
+    blkF3b_val5 k (run k t blkF3a) tqm pass0
+      (cap * (bal * (hA ||| gd * hB)))
+      (by rw [haf 19 (by decide)]; exact h19)
+      (by rw [haf 5 (by decide)]; exact h5)
+      hhit htqm hpass hhitle
+  have hp1le : (if tqm = 1 then pass0 ||| cap * (bal * (hA ||| gd * hB))
+      else pass0) ≤ 1 := by
+    split
+    · rcases (show pass0 = 0 ∨ pass0 = 1 by omega) with rfl | rfl <;>
+        rcases (show cap * (bal * (hA ||| gd * hB)) = 0 ∨
+          cap * (bal * (hA ||| gd * hB)) = 1 from by omega) with h | h <;>
+        rw [h] <;> decide
+    · exact hpass
+  have V0 : run k (run k (run k t blkF3a) blkF3b) blkF3c 0
+      = (if lastm = 1 then
+          good * (if tqm = 1 then pass0 ||| cap * (bal * (hA ||| gd * hB))
+                  else pass0)
+         else good) :=
+    blkF3c_val0 k (run k (run k t blkF3a) blkF3b) lastm good
+      (if tqm = 1 then pass0 ||| cap * (bal * (hA ||| gd * hB)) else pass0)
+      (by rw [hbf 17 (by decide) (by decide)]; exact h17)
+      (by rw [hbf 0 (by decide) (by decide)]; exact h0)
+      V5 hlastm hgood hp1le
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    first
+      | (rw [hsplit, run_untouched _ _ _ (by decide),
+          run_untouched _ _ _ (by decide), run_untouched _ _ _ (by decide)])
+      | (rw [hsplit, run_untouched _ _ _ (by decide)]
+         exact V5)
+      | (rw [hsplit]
+         exact V0)
 
 end LeanCompCert.Ports.GFoldCheck
