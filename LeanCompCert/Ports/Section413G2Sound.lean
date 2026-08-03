@@ -32,7 +32,10 @@ transfers to `Int` arithmetic term by term.
 3. **Cell transfer.**  Under those width bounds the word-level blocks
    compute the reference model's cell operations: `tmag` is sign and
    `natAbs`, `tlt` is the signed order of 128-bit sign-magnitude triples,
-   and `tcmul` is `Section413Sweep.cmul` of the decoded cells.
+   and `tcmul` is `Section413Sweep.cmul` of the decoded cells — the last
+   of these, `tcmul_spec`, is the heaviest single block of the program
+   (378 of its instructions, three uses per iteration).  The wrapped
+   `+`, `2·` and `0−` of the surrounding blocks transfer likewise.
 4. **Phase 1, phase 2, the run.**  Still open; see the closing `## OPEN`
    section for the precise remaining statements.
 
@@ -936,7 +939,77 @@ theorem tcmul_lt {gate aLo aHi bLo bHi viol : Nat} (hg : 0 < gate)
   · rw [h.1]; exact encodeZ_lt_M _
   · rw [h.2]; exact encodeZ_lt_M _
 
-/-! ## §15 The guard invariant
+/-! The bound-form transfers.  The touch block adds `2·P` to `w²`, whose
+sum can reach `3·CAP`, so the `Capped`-form lemmas above are too tight for
+it; what actually matters is only that the sum stays inside the signed
+range `2⁶³`. -/
+
+/-- Addition transfers whenever the `Int` sum is in the signed range. -/
+theorem decodeZ_add_of_range {a b : Nat} (ha : a < M) (hb : b < M)
+    (h1 : -(H63 : Int) ≤ decodeZ a + decodeZ b)
+    (h2 : decodeZ a + decodeZ b < (H63 : Int)) :
+    decodeZ ((a + b) % M) = decodeZ a + decodeZ b := by
+  rw [add_transfer a b ha hb]
+  exact decodeZ_encodeZ _
+    (by simp only [cellsH63_val, H63_val] at *; omega)
+    (by simp only [cellsH63_val, H63_val] at *; omega)
+
+/-- Doubling transfers whenever the doubled value is in the signed range. -/
+theorem decodeZ_double_of_range {a : Nat} (ha : a < M)
+    (h1 : -(H63 : Int) ≤ 2 * decodeZ a) (h2 : 2 * decodeZ a < (H63 : Int)) :
+    decodeZ ((a + a) % M) = 2 * decodeZ a := by
+  rw [double_transfer a ha]
+  exact decodeZ_encodeZ _
+    (by simp only [cellsH63_val, H63_val] at *; omega)
+    (by simp only [cellsH63_val, H63_val] at *; omega)
+
+/-- Negation transfers whenever the negated value is in the signed range. -/
+theorem decodeZ_tsub_zero_of_range {a : Nat} (ha : a < M)
+    (h1 : -(H63 : Int) ≤ -decodeZ a) (h2 : -decodeZ a < (H63 : Int)) :
+    decodeZ (tsub 0 a) = -decodeZ a := by
+  rw [tsub_eq_encodeZ 0 a (by simp only [M_val]; omega) ha,
+    LeanCompCert.Ports.Section413Cells.decodeZ_zero, Int.zero_sub]
+  exact decodeZ_encodeZ _
+    (by simp only [cellsH63_val, H63_val] at *; omega)
+    (by simp only [cellsH63_val, H63_val] at *; omega)
+
+/-! ## §15 Address arithmetic and the μ plane's alphabet -/
+
+/-- **No address wraps.**  Under `Admissible.arr_fits` the three plane
+addresses of a live slot are computed exactly, with no `% 2⁶⁴`. -/
+theorem touch_addr (c : Cfg) (hfit : 3 * (c.cap + 1) < M) {d : Nat}
+    (hd : d ≤ c.cap) :
+    1 * d % M = d ∧
+    (1 * d % M + c.plane1) % M = d + c.plane1 ∧
+    (1 * d % M + c.plane2) % M = d + c.plane2 := by
+  unfold Cfg.plane1 Cfg.plane2 at *
+  simp only [M_val] at *
+  exact ⟨by omega, by omega, by omega⟩
+
+/-- **The μ plane's codes decode to the reference model's `muZ`.**  This is
+the join between the shared trial division (`Ports/MertensCDEM`) and the
+sweep's signed weights. -/
+theorem muZ_eq (X R : Nat) :
+    LeanCompCert.Ports.Section413Sweep.muZ X R =
+      if LeanCompCert.Ports.MertensCDEM.muCode X R = 1 then 1
+      else if LeanCompCert.Ports.MertensCDEM.muCode X R = 2 then -1 else 0 := by
+  unfold LeanCompCert.Ports.Section413Sweep.muZ
+  generalize LeanCompCert.Ports.MertensCDEM.muCode X R = n
+  match n with
+  | 0 => rfl
+  | 1 => rfl
+  | 2 => rfl
+  | (_ + 3) => rfl
+
+/-- The `0`/`1` selectors the touch block reads off the μ plane pick out
+exactly the three cases of `Section413Sweep.csmul`'s scalar. -/
+theorem muZ_of_code {X R mc : Nat}
+    (h : mc = LeanCompCert.Ports.MertensCDEM.muCode X R) :
+    (if mc = 1 then (1 : Int) else if mc = 2 then -1 else 0)
+      = LeanCompCert.Ports.Section413Sweep.muZ X R := by
+  rw [muZ_eq, h]
+
+/-! ## §16 The guard invariant
 
 The predicate the forward induction of the remaining obligation carries.
 It is a *definition*, not a claim; its preservation lemma is stated in the
@@ -1028,9 +1101,17 @@ where `A`, `W`, `D` are the decoded accumulator table, weight cell and
 delta cell.  The `cmul A w` and `cmul w w` halves are `tcmul_spec` above;
 what is left is the `csmul mu` case split on the μ code (three cases,
 `+1/−1/0`, the negative one swapping the endpoints — that is
-`Section413Sweep.csmul`'s own case split) and the two `cadd`s, each of
-which is `Section413Cells.encodeZ_add` under `Inv`.  A gated-off touch
-(`g = 0`) is the identity on the decoded state.
+`Section413Sweep.csmul`'s own case split) and the two `cadd`s.  The
+scaffolding is all in place: `touch_addr` for the three plane addresses,
+`muZ_of_code` for the scalar, and `decodeZ_add_of_range` /
+`decodeZ_double_of_range` / `decodeZ_tsub_zero_of_range` for the
+arithmetic — the bound-form lemmas rather than the `Capped` ones, because
+`2·P + w²` reaches `3·CAP`, past a single cap but far inside `2⁶³`.  What
+still has to be written is the analogue of `tcmul_eq_back` for `ttouch`
+(same discipline: abstract the address and the interval product before
+unfolding) and the peeling of its six-guard chain, mirroring
+`tcmul_viol_eq_zero`.  A gated-off touch (`g = 0`) is the identity on the
+decoded state.
 
 **(O3) Phase 1 computes `μ`.**
 
@@ -1044,7 +1125,8 @@ theorem phase1_muCode (c : Cfg) (hc : Admissible c) (h : c.tFlag = 0)
 The registers `res/sq/par` of `tstep` are literally
 `MertensCDEM.trialStep` at the decoded divisor, so this is an induction
 over the `c.rounds` rounds of the candidate-major block relating them to
-`MertensCDEM.trialRun`, then the decode `code = 0/1/2`.  `μ(1) = +1` is
+`MertensCDEM.trialRun`, then the decode `code = 0/1/2` — whose bridge to
+the reference model's signed weight is `muZ_of_code` above.  `μ(1) = +1` is
 `tInit`.  `Admissible.cover` is what makes `muCode` correct for `n ≤ cap`.
 
 **(O4) Pass A computes `sigmaPair`.**
