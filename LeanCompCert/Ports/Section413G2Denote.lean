@@ -58,8 +58,9 @@ production artifact's sha256 is unchanged.
 * §4 — `Admissible`, and `production_admissible` / `smoke_admissible`.
 
 See the closing `## OPEN` section for the precise statements that remain —
-`divP18Body`, `cmulBody`, `touchBody`, the six body stages and the loop.  Nothing in this file is an axiom, a `sorry`, or a weakened
-restatement of the obligation; every theorem here has axiom set
+`divP18Body`, `cmulBody`, `touchBody`, the six body stages and the loop.
+Nothing in this file is an axiom, a `sorry`, or a weakened restatement of
+the obligation; every theorem here has axiom set
 `[propext, Classical.choice, Quot.sound]`.
 -/
 
