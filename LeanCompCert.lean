@@ -93,6 +93,7 @@ import LeanCompCert.Verified.Algorithm.ArrayBridge
 import LeanCompCert.Ports.ArraySieveCount
 import LeanCompCert.Ports.ArrayMobiusDenotation
 import LeanCompCert.Attest
+import LeanCompCert.Attest.LedgerReport
 
 /-! # LeanCompCert -/
 

@@ -14,7 +14,9 @@ import LeanCompCert.Testing.DirichletLadderCertificate
 import LeanCompCert.Testing.ArraySegCertificate
 import LeanCompCert.Testing.AbelScanCertificate
 import LeanCompCert.Testing.RS62LadderCertificate
+import LeanCompCert.Testing.AlgorithmProof
 import LeanCompCert.NativeCheck
+import LeanCompCert.Attest.LedgerReport
 
 open LeanCompCert
 
@@ -59,6 +61,19 @@ private def usage : String :=
   "                       field shapes, verdict, program digest, signature,\n" ++
   "                       route and value.  --lean prints the RunReceipt term\n" ++
   "                       to paste into a certificate file\n" ++
+  "  ledger [--json] [check-native options]\n" ++
+  "                       one row per registered program: whether its C has\n" ++
+  "                       been COMPILED, whether the binary has been RUN, and\n" ++
+  "                       whether a proved Lean chain runs from it to a\n" ++
+  "                       mathematical proposition.  These are three\n" ++
+  "                       independent facts and the table never merges them.\n" ++
+  "                       A program whose C changed since its last run reads\n" ++
+  "                       STALE, not RUN.  Exit 1 on a structural defect.\n" ++
+  "  describe NAME [--full] [--source]\n" ++
+  "                       what is IN a compiled program: shape, parameters,\n" ++
+  "                       denotation theorem, the digest and size of the exact\n" ++
+  "                       bytes ccomp was handed, the toolchain that last\n" ++
+  "                       compiled them, and the instruction listing\n" ++
   "  mangle NAME...       print stable C symbols\n" ++
   "  abi-manifest         print the active ABI manifest\n" ++
   "  version              print backend and compiler versions\n\n" ++
@@ -134,49 +149,505 @@ private def emitFixedPointCertificate (file : String) : IO UInt32 :=
 private def emitRolled10M (file : String) : IO UInt32 :=
   emitCertificate file Testing.RolledFixedPoint.emittedC
 
-/-- Registered certificates.
+/-! ## The program registry
+
+**One list.**  `check-native`, `attest`, `verify-receipt`, `ledger` and
+`describe` all read it, so a program is registered once and cannot be described
+by one verb and compiled by another.
+
+Each entry says what the program is, what it was instantiated at, what Lean
+proves about it, and — through `leanSide` — which of the three states it is in.
+The generic machinery is `LeanCompCert/Attest/Ledger.lean`; a consumer writes a
+list like this one in its own repository and gets the same two verbs.
 
 `certifiedValue` is the constant the generated `main` compares against, taken
 from the certificate's own definition wherever the certificate has one rather
-than spelled out again here.  It is required by `--attest` and ignored
-otherwise.  Three of these (`wide-mertens`, `squarefree-mertens`, `reflected`)
-compare against `1` because their emitted function returns a flag: the wide
-value is checked *inside* the program and the entry point reports whether it
-matched. -/
-private def nativeCerts : List NativeCheck.Cert := [
-  { name := "verified-decide", emitted := Testing.VerifiedDecide.emittedC,
-    certifiedValue := some 42 },
-  { name := "mertens", emitted := Testing.MertensCertificate.emittedC,
-    certifiedValue := some (Testing.MertensCertificate.expectedValue : Nat) },
-  { name := "wide-mertens", emitted := Testing.WideMertensCertificate.emittedC,
-    certifiedValue := some 1 },
-  { name := "squarefree-mertens",
-    emitted := Testing.SquarefreeMertensCertificate.emittedC,
-    certifiedValue := some 1 },
-  { name := "reflected", emitted := Testing.ReflectedCertificate.emittedC,
-    certifiedValue := some 1 },
-  { name := "fixedpoint", emitted := Testing.FixedPointCertificate.emittedC,
-    certifiedValue := some (Testing.FixedPointCertificate.expectedValue : Nat) },
-  { name := "rolled-10m", emitted := Testing.RolledFixedPoint.emittedC,
+than spelled out again here.  Four of these (`wide-mertens`,
+`squarefree-mertens`, `reflected`, `algorithm-sumrange`) compare against `1`
+because their emitted function returns a flag: the certified value is checked
+*inside* the program and the entry point reports whether it matched. -/
+
+/-! ### Artifacts
+
+An `Artifact` is what makes a receipt checkable in the kernel: `receiptBinds`
+re-emits `Artifact.source?` and compares its digest.  Only the straight-line
+certificates have one, and the reason is structural rather than an oversight —
+see the `.unbindable` entries below. -/
+
+private def verifiedDecideArtifact : Attest.Artifact := {
+  computation := Testing.VerifiedDecide.computation
+  route := .provedStraightLine
+  mainC := Testing.VerifiedDecide.mainC }
+
+private def mertensArtifact : Attest.Artifact := {
+  computation := Testing.MertensCertificate.computation
+  route := .provedStraightLine
+  mainC := Testing.MertensCertificate.mainC }
+
+private def wideMertensArtifact : Attest.Artifact := {
+  computation := Testing.WideMertensCertificate.computation
+  route := .provedStraightLine
+  mainC := Testing.WideMertensCertificate.mainC }
+
+private def squarefreeMertensArtifact : Attest.Artifact := {
+  computation := Testing.SquarefreeMertensCertificate.computation
+  route := .provedStraightLine
+  mainC := Testing.SquarefreeMertensCertificate.mainC }
+
+private def reflectedArtifact : Attest.Artifact := {
+  computation := Testing.ReflectedCertificate.computation
+  route := .provedStraightLine
+  mainC := Testing.ReflectedCertificate.mainC }
+
+private def fixedPointArtifact : Attest.Artifact := {
+  computation := Testing.FixedPointCertificate.computation
+  route := .provedStraightLine
+  mainC := Testing.FixedPointCertificate.mainC }
+
+/-- The end-to-end algorithm example, wired into the cross-check.
+
+This is the only registered program whose chain is `Algorithm.Ensures` **and**
+`ProgramRefinement`: `Testing.AlgorithmProof.reference_sound` turns success of
+the checker into the mathematical fold equality, and
+`Testing.AlgorithmProof.compilation` relates the register program's denotation
+back to the checker — *structurally, for every input*, never by evaluating the
+loop.  `CertifiedAlgorithm.claim` composes them at one input.
+
+It is here so the `chain proved` column has a `true` in it that a reader can go
+and check.  A column that is `false` everywhere teaches nobody what `true`
+would require. -/
+private def algorithmComputation : Verified.Computation :=
+  Testing.AlgorithmProof.exampleClaim.computation "AlgorithmProof.sumRange"
+
+/-- Built with `Attest.selfCheckMain` from the accepting value rather than with
+the constant spelled out by hand — the discipline the other fourteen `mainC`
+definitions predate.  The constant the binary tests is then pinned by
+`programHash`, because the `main` is inside the hashed text. -/
+private def algorithmMainC : String :=
+  Attest.selfCheckMain "l_AlgorithmProof_sumRange" 1
+
+private def algorithmArtifact : Attest.Artifact := {
+  computation := algorithmComputation
+  route := .provedStraightLine
+  mainC := algorithmMainC }
+
+private def algorithmEmitted : Except (Array String) String :=
+  Attest.emitFor algorithmArtifact.computation algorithmArtifact.route
+    algorithmArtifact.mainC
+
+/-! ### The entries -/
+
+private def registry : List Attest.ProgramEntry := [
+  { name := "verified-decide"
+    summary := "40 + 2, as a hand-built straight line: the smallest end-to-end \
+      unit in the package"
+    emitted := Testing.VerifiedDecide.emittedC
+    certifiedValue := some 42
+    entryPoint := "l_VerifiedDecide_addFortyTwo"
+    shape := Attest.ProgramShape.ofComputation Testing.VerifiedDecide.computation
+    parameters := [("addends", "40 and 2")]
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfComputation Testing.VerifiedDecide.computation
+    leanSide := .artifactOnly verifiedDecideArtifact
+      "the only Decision here is `Decision.forResult computation 42`, which \
+       decides that the computation returns 42.  That is a statement about the \
+       program's own output, not about mathematics: there is no reference \
+       function above it, so a run corroborates the number and nothing else." },
+
+  { name := "mertens"
+    summary := "Σ_{q ≤ 99, q odd} ⌊65536/q⌋, as a 64-bit straight-line fold"
+    emitted := Testing.MertensCertificate.emittedC
+    certifiedValue := some (Testing.MertensCertificate.expectedValue : Nat)
+    entryPoint := "l_MertensCert_oddFloorSum"
+    shape := Attest.ProgramShape.ofComputation Testing.MertensCertificate.computation
+    parameters := [
+      ("certHeight", toString Testing.MertensCertificate.certHeight),
+      ("certScale", toString Testing.MertensCertificate.certScale),
+      ("expectedValue", toString Testing.MertensCertificate.expectedValue)]
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfComputation Testing.MertensCertificate.computation
+    leanSide := .chained mertensArtifact
+      (Attest.ChainProof.ofDecision mertensArtifact
+        Testing.MertensCertificate.decision rfl
+        "Σ_{q ≤ 99, q odd} ⌊65536/q⌋ = 192509 \
+         (Testing.MertensCertificate.referenceSum = expectedValue)"
+        "Testing.MertensCertificate.decision") },
+
+  { name := "wide-mertens"
+    summary := "Σ_{q ≤ 99, q odd} ⌊2⁶⁴/q⌋ on a two-limb accumulator; the entry \
+      point returns a flag"
+    emitted := Testing.WideMertensCertificate.emittedC
+    certifiedValue := some 1
+    entryPoint := "l_MertensCert_wideOddFloorSum"
+    shape :=
+      Attest.ProgramShape.ofComputation Testing.WideMertensCertificate.computation
+    parameters := [
+      ("certHeight", toString Testing.WideMertensCertificate.certHeight),
+      ("certScale", "2^64"),
+      ("expectedHi", toString Testing.WideMertensCertificate.expectedHi),
+      ("expectedLo", toString Testing.WideMertensCertificate.expectedLo)]
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfComputation Testing.WideMertensCertificate.computation
+    leanSide := .chained wideMertensArtifact
+      (Attest.ChainProof.ofDecision wideMertensArtifact
+        Testing.WideMertensCertificate.decision rfl
+        "Σ_{q ≤ 99, q odd} ⌊2⁶⁴/q⌋ = 2·2⁶⁴ + 17298892628578376934 \
+         (Testing.WideMertensCertificate.referenceSum = expectedValue)"
+        "Testing.WideMertensCertificate.decision") },
+
+  { name := "squarefree-mertens"
+    summary := "the §14.1 odd-squarefree Mertens sum Σ 2⁶⁴/φ(q) over odd \
+      squarefree q ≤ 30; the entry point returns a flag"
+    emitted := Testing.SquarefreeMertensCertificate.emittedC
+    certifiedValue := some 1
+    entryPoint := "l_MertensCert_oddSquarefreeMertens"
+    shape := Attest.ProgramShape.ofComputation
+      Testing.SquarefreeMertensCertificate.computation
+    parameters := [
+      ("certHeight", toString Testing.SquarefreeMertensCertificate.certHeight),
+      ("certScale", "2^64"),
+      ("expectedHi", toString Testing.SquarefreeMertensCertificate.expectedHi),
+      ("expectedLo", toString Testing.SquarefreeMertensCertificate.expectedLo)]
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfComputation Testing.SquarefreeMertensCertificate.computation
+    leanSide := .chained squarefreeMertensArtifact
+      (Attest.ChainProof.ofDecision squarefreeMertensArtifact
+        Testing.SquarefreeMertensCertificate.decision rfl
+        "the odd-squarefree Mertens sum to 30 equals \
+         2·2⁶⁴ + 9362787364540279089 \
+         (Testing.SquarefreeMertensCertificate.referenceSum = expectedValue)"
+        "Testing.SquarefreeMertensCertificate.decision") },
+
+  { name := "reflected"
+    summary := "the same §14.1 sum, authored as a Verified.Reflect.Program and \
+      discharged through the structural bridge"
+    emitted := Testing.ReflectedCertificate.emittedC
+    certifiedValue := some 1
+    entryPoint := "l_MertensCert_reflectedOddSquarefreeMertens"
+    shape := (Attest.ProgramShape.ofProgram Testing.ReflectedCertificate.program
+      ).withComputation Testing.ReflectedCertificate.computation
+    parameters := [
+      ("certHeight", toString Testing.SquarefreeMertensCertificate.certHeight),
+      ("certScale", "2^64"),
+      ("expectedValue",
+        toString Testing.SquarefreeMertensCertificate.expectedValue)]
+    denotation := some {
+      theoremName := "Testing.ReflectedCertificate.returns_iff"
+      statement :=
+        "computation.Returns 1 ↔ program.denote = some 1 — the bridge from the \
+         CCIR model to the Lean-level fold, via Reflect.returns_iff_denote"
+      atTheseParameters := true }
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfProgram Testing.ReflectedCertificate.program
+    leanSide := .chained reflectedArtifact
+      (Attest.ChainProof.ofDecision reflectedArtifact
+        Testing.ReflectedCertificate.decision rfl
+        "the odd-squarefree Mertens sum to 30 equals \
+         2·2⁶⁴ + 9362787364540279089 \
+         (Testing.SquarefreeMertensCertificate.referenceSum = expectedValue)"
+        "Testing.ReflectedCertificate.decision") },
+
+  { name := "fixedpoint"
+    summary := "Σ_{n = 1..150} ⌊n·10¹⁸ / 2⁴⁸⌋ by half-limb 128-bit products \
+      and a cross-limb dyadic shift"
+    emitted := Testing.FixedPointCertificate.emittedC
+    certifiedValue := some (Testing.FixedPointCertificate.expectedValue : Nat)
+    entryPoint := "l_FixedPoint_mulShiftSum"
+    shape := (Attest.ProgramShape.ofProgram Testing.FixedPointCertificate.program
+      ).withComputation Testing.FixedPointCertificate.computation
+    parameters := [
+      ("count", toString Testing.FixedPointCertificate.count),
+      ("bigC", toString Testing.FixedPointCertificate.bigC),
+      ("shift", toString Testing.FixedPointCertificate.shift),
+      ("expectedValue", toString Testing.FixedPointCertificate.expectedValue)]
+    denotation := some {
+      theoremName := "Testing.FixedPointCertificate.returns_iff"
+      statement :=
+        "computation.Returns 40234404 ↔ program.denote = some 40234404, from \
+         Reflect.toComputation_returns"
+      atTheseParameters := true }
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfProgram Testing.FixedPointCertificate.program
+    leanSide := .chained fixedPointArtifact
+      (Attest.ChainProof.ofDecision fixedPointArtifact
+        Testing.FixedPointCertificate.decision rfl
+        "Σ_{n = 1..150} ⌊n·10¹⁸ / 2⁴⁸⌋ = 40234404 \
+         (Testing.FixedPointCertificate.referenceSum = expectedValue)"
+        "Testing.FixedPointCertificate.decision") },
+
+  { name := "rolled-10m"
+    summary := "the fixed-point fold at 10⁷ iterations, emitted as a while \
+      loop: a 2 KB artifact for a computation the unrolled form cannot express"
+    emitted := Testing.RolledFixedPoint.emittedC
     routeLabel := Attest.EmissionRoute.rolledLoop
-      Testing.RolledFixedPoint.program "FixedPoint.rolled10M" |>.label,
-    certifiedValue := some (Testing.RolledFixedPoint.expectedBig : Nat) },
-  { name := "proth", emitted := Testing.ProthCertificate.emittedC,
-    certifiedValue := some 0 },
-  { name := "mobius-array", emitted := Testing.ArrayMobiusCertificate.emittedC,
-    certifiedValue := some (Testing.ArrayMobiusCertificate.expected : Nat) },
-  { name := "mobius-seg", emitted := Testing.ArraySegCertificate.emittedC,
-    certifiedValue := some (Testing.ArraySegCertificate.expected : Nat) },
-  { name := "cdem-abel", emitted := Testing.AbelScanCertificate.emittedC,
-    certifiedValue := some (Testing.AbelScanCertificate.expected : Nat) },
-  { name := "dirichlet-ladder",
-    emitted := Testing.DirichletLadderCertificate.emittedC,
-    certifiedValue := some (Testing.DirichletLadderCertificate.expected : Nat) },
-  { name := "rs62-ladder-sl", emitted := Testing.RS62LadderCertificate.emittedCSL,
-    certifiedValue := some (Testing.RS62LadderCertificate.expectedSL : Nat) },
-  { name := "rs62-ladder-su", emitted := Testing.RS62LadderCertificate.emittedCSU,
-    certifiedValue := some (Testing.RS62LadderCertificate.expectedSU : Nat) }
+      Testing.RolledFixedPoint.program "FixedPoint.rolled10M" |>.label
+    certifiedValue := some (Testing.RolledFixedPoint.expectedBig : Nat)
+    entryPoint := "l_FixedPoint_rolled10M"
+    shape := Attest.ProgramShape.ofProgram Testing.RolledFixedPoint.program
+    parameters := [
+      ("bigCount", toString Testing.RolledFixedPoint.bigCount),
+      ("bigC", toString Testing.FixedPointCertificate.bigC),
+      ("shift", toString Testing.FixedPointCertificate.shift),
+      ("expectedBig", toString Testing.RolledFixedPoint.expectedBig)]
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfProgram Testing.RolledFixedPoint.program
+    leanSide := .unbindable
+      "an Artifact needs a Computation, and Program.toComputation at 10⁷ trips \
+       would unroll 10⁷ × 21 statements — which is exactly the size the rolled \
+       route exists to avoid.  Nothing in Lean therefore reproduces this C, so \
+       receiptBinds can never be applied to a receipt for it.  There is also \
+       no theorem relating this program's denotation to any reference \
+       function." },
+
+  { name := "proth"
+    summary := "3^((N−1)/2) mod N for the 91-bit Proth prime \
+      N = 274877906947·2⁵² + 1, by Montgomery multiplication in 64-bit \
+      registers with no division"
+    emitted := Testing.ProthCertificate.emittedC
+    routeLabel := Attest.EmissionRoute.rolledLoop
+      Testing.ProthCertificate.program "ProthCertificate" |>.label
+    certifiedValue := some 0
+    entryPoint := "l_ProthCertificate"
+    shape := Attest.ProgramShape.ofProgram Testing.ProthCertificate.program
+    parameters := [
+      ("n", toString Testing.ProthCertificate.n),
+      ("kbits", toString Testing.ProthCertificate.kbits),
+      ("k", toString Testing.ProthCertificate.k),
+      ("a", toString Testing.ProthCertificate.a),
+      ("N = k·2ⁿ + 1", toString Testing.ProthCertificate.N)]
+    denotation := some {
+      theoremName := "Ports.TGProth.prothProgram_denote"
+      statement :=
+        "(prothProgram n kbits k a).denote = some (if a^((N−1)/2) % N = N − 1 \
+         then 0 else 1), under 32 ≤ n, kbits ≤ 64, 0 < k < 2^kbits, \
+         2⁶⁴ < N < 2¹²⁷ and 0 < a"
+      atTheseParameters := false
+      gap :=
+        "this certificate never instantiates it.  The hypotheses hold at these \
+         parameters and discharging them is arithmetic, but until it is done \
+         the theorem is about a family and the ledger will not report it as \
+         being about this binary." }
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfProgram Testing.ProthCertificate.program
+    leanSide := .unbindable
+      "rolled emission with no Computation: Program.toComputation would unroll \
+       the Montgomery ladder.  The denotation theorem above exists but is not \
+       instantiated here, so nothing connects this binary's 0 to N's \
+       primality." },
+
+  { name := "mobius-array"
+    summary := "L + Σ_{n < L} μ(n) at L = 100000, by a segmented array \
+      sieve — the Mertens function offset to stay non-negative in u64, not the \
+      squarefree count"
+    emitted := Testing.ArrayMobiusCertificate.emittedC
+    routeLabel := Attest.arrayRolledLabel
+    certifiedValue := some (Testing.ArrayMobiusCertificate.expected : Nat)
+    entryPoint := "l_ArrayMobius_rolled100k"
+    shape := Attest.ProgramShape.ofAProgram Testing.ArrayMobiusCertificate.program
+    parameters := [
+      ("segment", toString Testing.ArrayMobiusCertificate.segment),
+      ("expected", toString Testing.ArrayMobiusCertificate.expected)]
+    denotation := some {
+      theoremName := "Ports.ArrayMobius (namespace Check, `example`s)"
+      statement :=
+        "(mobiusProgram L).denote = some (reference L) is checked by the kernel \
+         at L = 8, 16 and 24"
+      atTheseParameters := false
+      gap :=
+        "the spot-checks are at L = 8, 16, 24; this artifact runs at \
+         L = 100000.  There is no theorem for general L." }
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfAProgram Testing.ArrayMobiusCertificate.program
+    leanSide := .unbindable
+      "emitted by AProgram.emitRolled, and Attest.emitFor has no array route: \
+       EmissionRoute knows Lower.compileProgram and Reflect.emitRolled and \
+       nothing else.  No Artifact reproduces this C, so no receipt for it can \
+       be checked in the kernel." },
+
+  { name := "mobius-seg"
+    summary := "the windowed Mertens/Σμ(m)/m residue over [1, 32768], eight \
+      windows of 4096 cells, on a two-limb accumulator; the entry point returns \
+      a count of FAILED threshold tests, so 0 is the certified answer and 4 is \
+      what this configuration produces"
+    emitted := Testing.ArraySegCertificate.emittedC
+    routeLabel := Attest.arrayRolledLabel
+    certifiedValue := some (Testing.ArraySegCertificate.expected : Nat)
+    entryPoint := "l_ArraySeg_mertens32k"
+    shape := Attest.ProgramShape.ofAProgram Testing.ArraySegCertificate.program
+    parameters := [
+      ("window length", "4096"),
+      ("windows", "8"),
+      ("range", "[1, 32768]"),
+      ("bound numerator", "755"),
+      ("bound denominator", "10000"),
+      ("expected", toString Testing.ArraySegCertificate.expected)]
+    denotation := some {
+      theoremName := "Ports.ArraySegSieve (namespace Check, `example`s)"
+      statement :=
+        "(mertensProbe r).denote = some (refM 1 24) and companions, checked by \
+         the kernel on a 24-cell probe"
+      atTheseParameters := false
+      gap :=
+        "the probes run over 24 cells; this artifact runs over 32768.  There is \
+         no theorem for the general configuration." }
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfAProgram Testing.ArraySegCertificate.program
+    leanSide := .unbindable
+      "emitted by AProgram.emitRolled; see `mobius-array`.  No Artifact \
+       reproduces this C." },
+
+  { name := "cdem-abel"
+    summary := "the CDEM Abel increment scan over [1, 40]: five segments of \
+      eight, weight scale 10⁶, K = 30; the entry point returns a count of \
+      FAILED guards, so the certified answer is 0"
+    emitted := Testing.AbelScanCertificate.emittedC
+    routeLabel := Attest.arrayRolledLabel
+    certifiedValue := some (Testing.AbelScanCertificate.expected : Nat)
+    entryPoint := "l_CDEMAbel_scan40"
+    shape := Attest.ProgramShape.ofAProgram Testing.AbelScanCertificate.program
+    parameters := [
+      ("weight scale", "1000000"),
+      ("K bound", "30"),
+      ("segment length", "8"),
+      ("segments", "5"),
+      ("range", "[1, 40]"),
+      ("expected", toString Testing.AbelScanCertificate.expected)]
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfAProgram Testing.AbelScanCertificate.program
+    leanSide := .unbindable
+      "emitted by AProgram.emitRolled, and — unlike the two sieves — there is \
+       not even a kernel spot-check: Ports.CDEMAbelScan carries a reference \
+       fold in `namespace Ref` and no theorem or `example` tying denote to it. \
+       The corroboration is an emit-time reference and bench/ref_abel.c, \
+       neither of which is Lean." },
+
+  { name := "dirichlet-ladder"
+    summary := "the Platt Theorem 7.1 finite content: a violation count over \
+      156 zero records for a conjugate character pair mod 400000"
+    emitted := Testing.DirichletLadderCertificate.emittedC
+    routeLabel := Attest.arrayRolledLabel
+    certifiedValue := some (Testing.DirichletLadderCertificate.expected : Nat)
+    entryPoint := "l_DirichletLadder_rolled156"
+    shape :=
+      Attest.ProgramShape.ofAProgram Testing.DirichletLadderCertificate.program
+    parameters := [
+      ("modulus q", "400000"),
+      ("zero records", "156"),
+      ("blocks per record", "78"),
+      ("words per record", "13"),
+      ("expected violations", toString Testing.DirichletLadderCertificate.expected)]
+    denotation := some {
+      theoremName := "Ports.DirichletLadder (namespace Check, `example`s)"
+      statement :=
+        "(seededTest goodStream).denote = some (refViolations (testCfg 6 …) \
+         goodStream), plus ten mutated-stream cases"
+      atTheseParameters := false
+      gap :=
+        "every `example` is at `testCfg`; this artifact runs at `sourceCfg`. \
+         The mutation cases show the checker is not vacuous at the test \
+         configuration and say nothing about this one." }
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfAProgram Testing.DirichletLadderCertificate.program
+    leanSide := .unbindable
+      "emitted by AProgram.emitRolled; see `mobius-array`.  No Artifact \
+       reproduces this C." },
+
+  { name := "rs62-ladder-sl"
+    summary := "the RS62 ladder increment over 65536 candidates from 101, 256 \
+      trial-division rounds each, rounding DOWN at every prime"
+    emitted := Testing.RS62LadderCertificate.emittedCSL
+    routeLabel := Attest.arrayRolledLabel
+    certifiedValue := some (Testing.RS62LadderCertificate.expectedSL : Nat)
+    entryPoint := "l_RS62_ladderSL65k"
+    shape := Attest.ProgramShape.ofAProgram Testing.RS62LadderCertificate.programSL
+    parameters := [
+      ("n0", toString Testing.RS62LadderCertificate.n0),
+      ("f (candidates)", toString Testing.RS62LadderCertificate.f),
+      ("B (rounds each)", toString Testing.RS62LadderCertificate.B),
+      ("rounding", "down"),
+      ("expectedSL", toString Testing.RS62LadderCertificate.expectedSL)]
+    denotation := some {
+      theoremName := "Ports.RS62LadderProgram.ladderProgram_denote"
+      statement :=
+        "(ladderProgram …).denote = (ladderScalarProgram …).denote — the array \
+         lift agrees with the scalar program"
+      atTheseParameters := true
+      gap :=
+        "it relates two programs to each other and neither to a reference \
+         function.  The obligation that would do that, \
+         Ports.RS62LadderProgram.LadderEncoding, is STATED AND NOT \
+         DISCHARGED." }
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfAProgram Testing.RS62LadderCertificate.programSL
+    leanSide := .unbindable
+      "emitted by AProgram.emitRolled; see `mobius-array`.  No Artifact \
+       reproduces this C." },
+
+  { name := "rs62-ladder-su"
+    summary := "the same RS62 ladder increment, rounding UP at every prime"
+    emitted := Testing.RS62LadderCertificate.emittedCSU
+    routeLabel := Attest.arrayRolledLabel
+    certifiedValue := some (Testing.RS62LadderCertificate.expectedSU : Nat)
+    entryPoint := "l_RS62_ladderSU65k"
+    shape := Attest.ProgramShape.ofAProgram Testing.RS62LadderCertificate.programSU
+    parameters := [
+      ("n0", toString Testing.RS62LadderCertificate.n0),
+      ("f (candidates)", toString Testing.RS62LadderCertificate.f),
+      ("B (rounds each)", toString Testing.RS62LadderCertificate.B),
+      ("rounding", "up"),
+      ("expectedSU", toString Testing.RS62LadderCertificate.expectedSU)]
+    denotation := some {
+      theoremName := "Ports.RS62LadderProgram.ladderProgram_denote"
+      statement :=
+        "(ladderProgram …).denote = (ladderScalarProgram …).denote — the array \
+         lift agrees with the scalar program"
+      atTheseParameters := true
+      gap :=
+        "it relates two programs to each other and neither to a reference \
+         function.  The obligation that would do that, \
+         Ports.RS62LadderProgram.LadderEncoding, is STATED AND NOT \
+         DISCHARGED." }
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfAProgram Testing.RS62LadderCertificate.programSU
+    leanSide := .unbindable
+      "emitted by AProgram.emitRolled; see `mobius-array`.  No Artifact \
+       reproduces this C." },
+
+  { name := "algorithm-sumrange"
+    summary := "Σ_{i < 10} (i mod M) mod M compared against 45: the one \
+      registered program with Algorithm.Ensures AND ProgramRefinement above it"
+    emitted := algorithmEmitted
+    certifiedValue := some 1
+    entryPoint := "l_AlgorithmProof_sumRange"
+    shape := (Attest.ProgramShape.ofProgram
+      (Testing.AlgorithmProof.program Testing.AlgorithmProof.exampleInput)
+      ).withComputation algorithmComputation
+    parameters := [
+      ("count", toString Testing.AlgorithmProof.exampleInput.count),
+      ("expected", toString Testing.AlgorithmProof.exampleInput.expected),
+      ("M", "2^64")]
+    denotation := some {
+      theoremName := "Testing.AlgorithmProof.program_denote"
+      statement :=
+        "(program input).denote = some (if sumRangeMod input.count = \
+         input.expected % M then 1 else 0), for EVERY input — proved \
+         structurally through the fold bridge, never by evaluating the loop"
+      atTheseParameters := true }
+    listing := Thunk.mk fun _ =>
+      Attest.listingOfProgram
+        (Testing.AlgorithmProof.program Testing.AlgorithmProof.exampleInput)
+    leanSide := .chained algorithmArtifact
+      (Attest.ChainProof.ofClaim algorithmArtifact "AlgorithmProof.sumRange"
+        Testing.AlgorithmProof.exampleClaim rfl
+        "(List.range 10).foldl (fun acc i => (acc + i % M) % M) 0 = 45 % M \
+         (Testing.AlgorithmProof.proposition exampleInput)"
+        "Testing.AlgorithmProof.certified — Ensures (reference_sound) composed \
+         with ProgramRefinement (compilation) by CertifiedAlgorithm.claim") }
 ]
+
+/-- The cross-check units, derived from the registry so the two cannot drift. -/
+private def nativeCerts : List NativeCheck.Cert :=
+  registry.map NativeCheck.Cert.ofEntry
 
 /-! ## Receipt verbs -/
 
@@ -298,6 +769,8 @@ def main (args : List String) : IO UInt32 :=
   | ["emit-rolled-10m-c", file] => emitRolled10M file
   | "check-native" :: rest => NativeCheck.run nativeCerts rest
   | "attest" :: rest => NativeCheck.run nativeCerts ("--attest" :: rest)
+  | "ledger" :: rest => Attest.Ledger.ledgerVerb registry rest
+  | "describe" :: rest => Attest.Ledger.describeVerb registry rest
   | "attest-keygen" :: rest => attestKeygen rest
   | "verify-receipt" :: rest => verifyReceipt rest
   | ["emit-clight-fixedpoint-v", file] =>

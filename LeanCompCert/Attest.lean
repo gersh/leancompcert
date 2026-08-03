@@ -2,6 +2,7 @@ import LeanCompCert.Attest.Crypto
 import LeanCompCert.Attest.Receipt
 import LeanCompCert.Attest.Admission
 import LeanCompCert.Attest.Tool
+import LeanCompCert.Attest.Ledger
 
 /-!
 # `LeanCompCert.Attest` — the run-receipt standard
@@ -25,6 +26,14 @@ The two are distinguishable mechanically: they require different
 `#print axioms` on a downstream theorem says which was used.
 
 The guide is `docs/use-case-3-attested-run-receipts.md`.
+
+## The ledger
+
+`LeanCompCert/Attest/Ledger.lean` adds the *bookkeeping* half: a registry of
+compiled programs, what is in each, and which have actually been run.  It is
+also axiom-free, and it keeps three facts visibly apart — **compiled**, **run**,
+and **chain proved** — so that a green run can never be read as a green proof.
+See `docs/program-ledger.md`.
 -/
 
 namespace LeanCompCert.Attest

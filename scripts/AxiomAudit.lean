@@ -60,6 +60,8 @@ import LeanCompCert.Verified.Algorithm.ArrayBridge
 import LeanCompCert.Ports.ArraySieveCount
 import LeanCompCert.Ports.ArrayMobiusDenotation
 import LeanCompCert.Attest
+import LeanCompCert.Attest.LedgerReport
+import LeanCompCert.Testing.AlgorithmProof
 import LeanCompCertTests.Attest
 
 
@@ -448,3 +450,21 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCertTests.Attest.compiles_in_kernel
 #print axioms LeanCompCertTests.Attest.source_in_kernel
 #print axioms LeanCompCertTests.Attest.binds_programHash
+
+-- The program ledger (`LeanCompCert/Attest/Ledger.lean`).  Also axiom-free, and
+-- for the same reason: it RECORDS runs, it never lets one become a theorem.
+-- `ChainProof.prop_of_receipt` is what makes the ledger's `chain proved` column
+-- more than a label — it is the composition a `.chained` entry licenses, and it
+-- still takes `RunAdmission` as a hypothesis.
+#print axioms LeanCompCert.Attest.ChainProof.prop_of_receipt
+#print axioms LeanCompCert.Attest.ChainProof.prop_of_receipt_proved
+
+-- The one registered program with `Algorithm.Ensures` AND `ProgramRefinement`
+-- above it, and therefore the one whose `chain proved` column is `true` on the
+-- strongest evidence in the package.  `program_denote` is proved structurally
+-- for every input; the loop is never evaluated.
+#print axioms LeanCompCert.Testing.AlgorithmProof.sumRangeMod_eq_foldl
+#print axioms LeanCompCert.Testing.AlgorithmProof.reference_sound
+#print axioms LeanCompCert.Testing.AlgorithmProof.program_denote
+#print axioms LeanCompCert.Testing.AlgorithmProof.example_program_accepts
+#print axioms LeanCompCert.Testing.AlgorithmProof.example_result

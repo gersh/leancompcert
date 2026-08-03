@@ -10,6 +10,7 @@ import LeanCompCert.Testing.RolledFixedPoint
 import LeanCompCert.Testing.PackedCoverageCertificate
 import LeanCompCert.Testing.AlgorithmProof
 import LeanCompCert.Verified.ClightEmit
+import LeanCompCert.Attest.LedgerReport
 import LeanCompCertTests.Docs
 import LeanCompCertTests.Attest
 
@@ -315,6 +316,145 @@ private def testAttestTool : IO Unit := do
       |>.startsWith Attest.schemaVersion)
     "the signed payload must be a prefix of the receipt file"
 
+/-! ## The program ledger
+
+The ledger's value is entirely in its refusals, so what is tested is that each
+refusal fires.  A ledger that only ever prints `RUN` and `PROVED` would pass a
+happy-path test and be worthless.
+
+`defectsOf` is checked against a registration that is right and against four
+that are wrong in one way each — and the four are the ways two internally
+consistent halves come to be about different things. -/
+private def ledgerArtifact : Attest.Artifact := LeanCompCertTests.Attest.artifact
+
+private def ledgerEmitted : Except (Array String) String :=
+  Attest.emitFor ledgerArtifact.computation ledgerArtifact.route
+    ledgerArtifact.mainC
+
+/-- A `ChainProof` for the test artifact, accepting `204`. -/
+private def ledgerChain : Attest.ChainProof ledgerArtifact :=
+  Attest.ChainProof.ofDecision ledgerArtifact
+    (Verified.Decision.forResult ledgerArtifact.computation 204) rfl
+    "the computation returns 204" "LeanCompCertTests.ledgerChain"
+
+private def ledgerEntry : Attest.ProgramEntry := {
+  name := "ledger-test"
+  summary := "Σ_{k < 8} (k+1)² = 204"
+  emitted := ledgerEmitted
+  certifiedValue := some 204
+  entryPoint := "l_Attest_squareSum"
+  shape := Attest.ProgramShape.ofComputation ledgerArtifact.computation
+  leanSide := .chained ledgerArtifact ledgerChain }
+
+private def testProgramLedger : IO Unit := do
+  -- A correct registration has no defects.
+  check (Attest.Ledger.defectsOf ledgerEntry).isEmpty
+    "a consistent ledger entry reported a defect"
+  check (Attest.Ledger.defectsOf
+      { ledgerEntry with leanSide := .artifactOnly ledgerArtifact "none" }).isEmpty
+    "an artifact-only entry reported a defect"
+  -- 1. The binary self-checks one number and the proved arrow consumes another.
+  check (!(Attest.Ledger.defectsOf
+      { ledgerEntry with certifiedValue := some 205 }).isEmpty)
+    "a chain consuming a different value than the binary tests was accepted"
+  -- 2. A chain with nothing for the binary to have tested.
+  check (!(Attest.Ledger.defectsOf
+      { ledgerEntry with certifiedValue := none }).isEmpty)
+    "a chain with no certifiedValue was accepted"
+  -- 3. A route label the artifact's route contradicts.
+  check (!(Attest.Ledger.defectsOf
+      { ledgerEntry with routeLabel := "rolled-loop" }).isEmpty)
+    "a route label contradicting the artifact was accepted"
+  check (!(Attest.Ledger.defectsOf
+      { ledgerEntry with routeLabel := Attest.arrayRolledLabel }).isEmpty)
+    "the array-rolled label on a straight-line artifact was accepted"
+  -- 4. The artifact does not re-emit the C that is compiled.
+  check (!(Attest.Ledger.defectsOf
+      { ledgerEntry with emitted := .ok "int main(void) { return 0; }" }).isEmpty)
+    "an artifact that does not reproduce the compiled C was accepted"
+  -- The three states are read off independently.
+  check (ledgerEntry.chainProved && ledgerEntry.bindable)
+    "a chained entry must be both chain proved and bindable"
+  check (!(Attest.ProgramEntry.chainProved
+      { ledgerEntry with leanSide := .artifactOnly ledgerArtifact "none" })
+    && Attest.ProgramEntry.bindable
+      { ledgerEntry with leanSide := .artifactOnly ledgerArtifact "none" })
+    "an artifact-only entry must be bindable and NOT chain proved"
+  check (!(Attest.ProgramEntry.chainProved
+      { ledgerEntry with leanSide := .unbindable "none" })
+    && !(Attest.ProgramEntry.bindable
+      { ledgerEntry with leanSide := .unbindable "none" }))
+    "an unbindable entry must be neither bindable nor chain proved"
+  -- The run record round-trips, and is refused rather than patched up.
+  let record : Attest.RunRecord := {
+    schema := Attest.runRecordSchema
+    name := "ledger-test"
+    recordedAt := "2026-08-02T00:00:00Z"
+    sourceDigest := String.ofList (List.replicate 64 'a')
+    sourceBytes := 448
+    ccompVersion := "The CompCert C verified compiler, version 3.17"
+    ccompDigest := String.ofList (List.replicate 64 'b')
+    linkDescription := "freestanding test"
+    machine := "machine test-harness"
+    exitCode := 0
+    outcome := .agrees
+    certifiedValue := "204"
+    receiptPath := "-" }
+  let text := record.render
+  check (Attest.RunRecord.parse text == some record)
+    "run record round trip changed"
+  check ((Attest.RunRecord.parse (text ++ "extra\n")).isNone)
+    "a run record with an extra line must be refused"
+  -- The format is thirteen NON-EMPTY lines and `parse` enforces that, so
+  -- `render` must never produce an empty field: a record its own reader
+  -- refuses is indistinguishable from a missing one.
+  check (Attest.RunRecord.parse
+      ({ record with ccompVersion := "", machine := "  " } : Attest.RunRecord).render
+    |>.isSome)
+    "a record with an empty field must still round trip"
+  check ((Attest.RunRecord.parse
+      (text.replace "leancompcert-run/1" "leancompcert-run/2")).isNone)
+    "a run record with an unknown schema must be refused"
+  check ((Attest.RunRecord.parse (text.replace "agrees" "victory")).isNone)
+    "a run record with an unknown outcome must be refused"
+  -- `compiled` and `executed` are different facts about the same attempt, and
+  -- neither is "the run passed" — that is `outcome = .agrees` and nothing else.
+  check (Attest.RunOutcome.compiled .linkFailed
+      && !(Attest.RunOutcome.executed .linkFailed))
+    "a link failure means ccomp accepted the C and nothing ran"
+  check (!(Attest.RunOutcome.compiled .compileFailed))
+    "a compile failure must not read as compiled"
+  check (Attest.RunOutcome.executed .abnormal
+      && Attest.RunOutcome.executed .disagrees)
+    "a killed artifact and a disagreement both executed"
+  check (Attest.RunOutcome.executed .abnormal
+      && Attest.RunOutcome.abnormal != Attest.RunOutcome.agrees)
+    "executing is not agreeing"
+  -- 5. An entry with no Artifact must not be filed under the straight-line
+  -- route, which is the one whose proved chain covers an emission it is not.
+  check (!(Attest.Ledger.defectsOf
+      { ledgerEntry with
+        leanSide := .unbindable "no Computation at this scale" }).isEmpty)
+    "an unbindable entry defaulting to the straight-line route was accepted"
+  check (Attest.Ledger.defectsOf
+      { ledgerEntry with
+        leanSide := .unbindable "no Computation at this scale"
+        routeLabel := Attest.arrayRolledLabel }).isEmpty
+    "an unbindable entry with a route no Artifact claims reported a defect"
+  -- 6. A gap with no explanation is an omission, not a refusal.
+  check (!(Attest.Ledger.defectsOf
+      { ledgerEntry with
+        leanSide := .unbindable ""
+        routeLabel := Attest.arrayRolledLabel }).isEmpty)
+    "an unexplained gap was accepted"
+  check (!(Attest.Ledger.defectsOf
+      { ledgerEntry with leanSide := .artifactOnly ledgerArtifact "  " }).isEmpty)
+    "a whitespace-only gap was accepted"
+  -- 7. A declared entry point that does not occur in the compiled text.
+  check (!(Attest.Ledger.defectsOf
+      { ledgerEntry with entryPoint := "l_NoSuchSymbol" }).isEmpty)
+    "an entry point absent from the emitted C was accepted"
+
 def main : IO Unit := do
   testSymbols
   testInterpreter
@@ -332,6 +472,7 @@ def main : IO Unit := do
   testFixedPointCertificate
   testRolledEmission
   testDirectClight
+  testProgramLedger
   LeanCompCertTests.Docs.run
   testAttestTool
   IO.println "LeanCompCert tests passed"
