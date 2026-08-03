@@ -92,6 +92,11 @@ import LeanCompCert.Ports.RS62LadderEncoding
 import LeanCompCert.Verified.Algorithm.ArrayBridge
 import LeanCompCert.Ports.ArraySieveCount
 import LeanCompCert.Ports.ArrayMobiusDenotation
+import LeanCompCert.Verified.ArrayScalarBlock
+import LeanCompCert.Ports.SingSeriesC17
+import LeanCompCert.Ports.RS62MertensFirst
+import LeanCompCert.Ports.PsiFixedCheck
+import LeanCompCert.Ports.RamareWM217
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 
