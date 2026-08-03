@@ -8,6 +8,67 @@ incoming register file, proves the staged register values under `Inv`, and
 assembles `gfRun_spec` — the body is defined at every visited index, its
 effect on the carried registers is exactly `gfRound`, and the invariant is
 preserved.  Nothing here evaluates a fold, and nothing here is a certificate.
+
+The layer's own endgame is `gfProgram_denote`: the whole program denotes the
+good flag of the flat `gfRound` fold, with no fold evaluated, so the theorem
+costs the same at `len = 8` and at `len = 99999`.  `gfFold_blocked`
+re-associates that flat fold into `c.len` blocks of `c.R` rounds.
+
+## What still stands between `gfProgram_denote` and the consumer's atom
+
+The atom is `AnalyticNT.LargeSieve.gFold_cert : gFold 99999 2 (gTermFx 1) =
+true`.  Four links are needed and **none of them is proved anywhere yet**;
+until all four exist, no axiom about this program may be stated and no
+campaign entry may claim `evaluates_atom_predicate`.
+
+1. **The run admission** (the one axiom, when the rest is done):
+   `(gFoldComputation cfg).Returns 1`, carried to
+   `(gfProgram cfg).denote = some 1` by `Reflect.returns_iff_denote` and
+   `gfProgram_wf`.  Mechanical; the `Computation` is packaged on the
+   consumer side, as `sweepComputation` is for the (C.17) port.
+
+2. **One block is one candidate.**  `Ports/GFoldCheckSpec.lean` already has
+   the reference objects (`gfTerm`, `gfAcc`, `mantX`, `hitAt`, `candPass`,
+   `bState`, `bAcc`, `orFold`) and the extraction lemmas
+   (`orFold_extract`, `candPass_of_orFold`), but **not** the theorem that
+   ties them to `gfRound`: that `bState c j v c.R` runs `c.tdiv + 1` trial
+   rounds agreeing with `TrialDivisionBlockSpec.tdbBlock`, adds the
+   candidate's ceiling term to the accumulator exactly once at round
+   `c.tdiv`, drives the mantissa/exponent pair along `mantX`, and leaves
+   `pass = orFold c n acc c.bmax`.  This is pure `Nat` induction — no
+   register appears in it — and it is the missing `rows_of_denote`.
+
+3. **The factorisation is the totient** (consumer side, needs Mathlib):
+   `gfTerm (c.tdiv + 1) n = gTermFx n`, i.e. `tdbBlock` computes
+   `Nat.totient`/`Squarefree` for `n ≤ 10⁵` given `c.tdiv = 317` (so the
+   divisors `2 … 319` cover `√10⁵ < 317`).  The mirror statement for the
+   (C.17) port is `Vinogradov.TrialTotient.termOf_eq_intNum`.
+
+4. **The fixed-point check implies the certificate's `ℚ` comparison**
+   (consumer side; the analytic core, and by far the largest of the four).
+   The oracle `ext/analytic_nt/scripts/gfold_machine_replay.py` states it
+   exactly: with `a* = ⌊log₂ n^b⌋`,
+
+   ```text
+   vA / 2³² ≤ ceCand (n, a*,     b)      and      vB / 2³² ≤ ceCand (n, a*+1, b)
+   ```
+
+   which needs, in order: that the truncated mantissa `X = 2⁶⁴ + xlo`
+   carried by `mantX` under-estimates `n^b / 2^kk` (an induction over the
+   `advX` recurrence, one floor per step, renormalised by the proved band
+   `advX_ge`/`advX_lt`); that the two-digit fixed-point long division
+   `pade = c1·2²⁰ + c2·2⁸` under-estimates `2³²·cePade (X/2⁶⁴)`; and then
+   `cePade_mono` (already proved, `LargeSieve/GFoldCompCertNT.lean`) to
+   move from the truncated mantissa to `n^b/2^k`, with `ceSinh_mono` and
+   `cePade_le_ceL2LB` doing the same for candidate `B`.  `gFold_complete`
+   (also already proved there) then turns the per-`n` inequalities into
+   the atom's own Boolean.
+
+The emitted C is a function of `Ports/GFoldCheck.lean` alone, which this
+module does not touch: re-emitting after layer 2 landed reproduces
+`bench/artifacts/gfold_prod.c` byte for byte
+(sha256 `7ba7e5d5583b8e23da646ff8bcc055698995fca91da4023cef20cf6fe8b62482`),
+so the measured run recorded there still describes exactly this program.
 -/
 
 namespace LeanCompCert.Ports.GFoldCheck
