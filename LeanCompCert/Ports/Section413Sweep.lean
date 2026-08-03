@@ -302,4 +302,99 @@ def hmV2OK (R N : Nat) : Bool :=
   decide (s.headAcc ≤ 47734021 * (SCALE : Int)) &&
     decide (10000000 * s.mainAcc ≤ 4 * 3605763 * (SCALE : Int))
 
+/-! ## Atom 3: the two exact (4.31) windows
+
+The same sweep once more, now keeping the whole `g_v` table, followed by
+the `K₁/K₂` event scan that reads the table at divisor-derived indices —
+mirroring `section413KZScan` downstream operation for operation. -/
+
+def cneg (I : Cell) : Cell := ⟨-I.hi, -I.lo⟩
+
+def csub (I J : Cell) : Cell := cadd I (cneg J)
+
+def cmax (I J : Cell) : Cell := ⟨max I.lo J.lo, max I.hi J.hi⟩
+
+/-- Sweep state that keeps the table. -/
+structure TabState where
+  acc : Array Cell
+  g : Cell
+  table : Array Cell
+
+def tabStep (R : Nat) (w : Cell) (s : TabState) (X : Nat) : TabState :=
+  let ad := stepDivisors R X w (s.acc, czero)
+  let g' := cadd s.g ad.2
+  ⟨ad.1, g', s.table.push g'⟩
+
+def tabRun (v R N : Nat) : TabState :=
+  (List.range N).foldl
+    (fun s i =>
+      let X := i + 1
+      tabStep R (if v = 2 then weightV2 R X else weightV1 R X) s X)
+    ⟨Array.replicate (N + 1) czero, czero, #[czero]⟩
+
+/-- Pairing sum of `f` over the divisors of `n` coprime to `v`. -/
+def kDivSum (v n : Nat) (f : Nat → Cell) : Cell :=
+  (List.range (Nat.sqrt n)).foldl
+    (fun c i =>
+      let r := i + 1
+      if n % r = 0 then
+        let c1 := if Nat.gcd r v = 1 then cadd c (f r) else c
+        if n / r ≠ r then
+          if Nat.gcd (n / r) v = 1 then cadd c1 (f (n / r)) else c1
+        else c1
+      else c) czero
+
+def k1First (G : Nat → Cell) (n s : Nat) : Cell :=
+  cratSMul (-1) s (csub (G (n / s - 1)) (G (n / s)))
+
+def k1Second (G : Nat → Cell) (q s : Nat) : Cell :=
+  cratSMul 1 (2 * s) (csub (G (q / s - 1)) (G (q / s)))
+
+def k2First (G : Nat → Cell) (n s : Nat) : Cell :=
+  csmul ((n / s : Nat) : Int) (csub (G (n / s - 1)) (G (n / s)))
+
+def k2Second (G : Nat → Cell) (q s : Nat) : Cell :=
+  csmul (-((q / s : Nat) : Int)) (csub (G (q / s - 1)) (G (q / s)))
+
+def k1Delta (G : Nat → Cell) (v n : Nat) : Cell :=
+  cadd (kDivSum v n (k1First G n))
+    (if n % 2 = 0 then kDivSum v (n / 2) (k1Second G (n / 2)) else czero)
+
+def k2Delta (G : Nat → Cell) (v n : Nat) : Cell :=
+  cadd (kDivSum v n (k2First G n))
+    (if n % 2 = 0 then kDivSum v (n / 2) (k2Second G (n / 2)) else czero)
+
+def unitCell (k1 k2 : Cell) (n : Nat) : Cell :=
+  cadd k1 (cmax (cdivNat k2 n) (cdivNat k2 (n + 1)))
+
+structure KState where
+  k1 : Cell
+  k2 : Cell
+  ok : Bool
+
+def kStep (G : Nat → Cell) (v lo : Nat) (boundNum : Int) (boundDen n : Nat)
+    (p : KState) : KState :=
+  let d1 := k1Delta G v (n + 1)
+  let d2 := k2Delta G v (n + 1)
+  let k1' := cadd p.k1 d1
+  let k2' := cadd p.k2 d2
+  let unit := unitCell k1' k2' (n + 1)
+  let checked := decide (n + 1 < lo ∨
+    unit.hi * (boundDen : Int) ≤ boundNum * (SCALE : Int))
+  ⟨k1', k2', p.ok && checked⟩
+
+def kRun (G : Nat → Cell) (v lo : Nat) (boundNum : Int) (boundDen N : Nat) :
+    KState :=
+  (List.range N).foldl (fun p n => kStep G v lo boundNum boundDen n p)
+    ⟨czero, czero, true⟩
+
+/-- **Atom 3's model Boolean** at `R = 999`, `N = 99999`: intended to imply
+`section413Window431BothFixedCertificate` downstream. -/
+def windowOK (R N : Nat) : Bool :=
+  let T1 := (tabRun 1 R N).table
+  let ok1 := (kRun (fun k => T1[k]!) 1 40 36393 100000 N).ok
+  let T2 := (tabRun 2 R N).table
+  let ok2 := (kRun (fun k => T2[k]!) 2 16 37273 100000 N).ok
+  ok1 && ok2
+
 end LeanCompCert.Ports.Section413Sweep
