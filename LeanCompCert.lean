@@ -92,6 +92,9 @@ import LeanCompCert.Ports.RS62LadderEncoding
 import LeanCompCert.Verified.Algorithm.ArrayBridge
 import LeanCompCert.Ports.ArraySieveCount
 import LeanCompCert.Ports.ArrayMobiusDenotation
+import LeanCompCert.Ports.GFoldCheck
+import LeanCompCert.Ports.GFoldCheckRun
+import LeanCompCert.Ports.GFoldCheckSpec
 import LeanCompCert.Attest
 
 /-! # LeanCompCert -/
