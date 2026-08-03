@@ -60,6 +60,8 @@ open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.Frontend
 open LeanCompCert.Verified.Straight
 
+set_option maxRecDepth 4000
+
 /-! ## §1 Parameters -/
 
 /-- One instance of the family: candidates `n ∈ [lo, lo + len)`, `tdiv + 1`
@@ -244,30 +246,48 @@ def blkCa2 : List Assign :=
       (.bin .lshr (.reg 27) (.bin .add (.reg 15) (.lit 2)))⟩
   , ⟨29, .bin .ge (.reg 28) (.lit (2 ^ 63))⟩ ]
 
-/-- The two normalised advances, the init value, and the mantissa select. -/
-def blkCa3 : List Assign :=
+/-- The two normalised advances and the init value. -/
+def blkCa3x : List Assign :=
   [ ⟨30, sel (.reg 29)
       (.bin .mul (.bin .sub (.reg 28) (.lit (2 ^ 63))) (.lit 2))
       (.bin .mul (.bin .sub (.reg 28) (.lit (2 ^ 62))) (.lit 4))⟩
-  , ⟨31, .bin .shl (.bin .sub (.reg 8) (.reg 16)) (.bin .sub (.lit 64) (.reg 15))⟩
-  , ⟨13, sel (.reg 19) (sel (.reg 18) (.reg 31) (.reg 30)) (.reg 13)⟩ ]
+  , ⟨31, .bin .shl (.bin .sub (.reg 8) (.reg 16)) (.bin .sub (.lit 64) (.reg 15))⟩ ]
 
-/-- The mantissa exponent update. -/
-def blkCa4 : List Assign :=
-  [ ⟨48, .bin .add (.bin .add (.reg 14) (.reg 15)) (.reg 29)⟩
-  , ⟨14, sel (.reg 19)
+/-- The mantissa select. -/
+def blkCa3y : List Assign :=
+  [ ⟨13, sel (.reg 19) (sel (.reg 18) (.reg 31) (.reg 30)) (.reg 13)⟩ ]
+
+/-- The two normalised advances, the init value, and the mantissa select. -/
+def blkCa3 : List Assign := blkCa3x ++ blkCa3y
+
+/-- The unclamped exponent update. -/
+def blkCa4x : List Assign :=
+  [ ⟨48, .bin .add (.bin .add (.reg 14) (.reg 15)) (.reg 29)⟩ ]
+
+/-- The exponent select. -/
+def blkCa4y : List Assign :=
+  [ ⟨14, sel (.reg 19)
       (sel (.reg 18) (.reg 15)
         (sel (.bin .le (.reg 48) (.lit KCAP)) (.reg 48) (.lit KCAP)))
       (.reg 14)⟩ ]
 
+/-- The mantissa exponent update. -/
+def blkCa4 : List Assign := blkCa4x ++ blkCa4y
+
 /-- Masked accumulation and the mantissa init/advance. -/
 def blkCa : List Assign := blkCa1 ++ blkCa2 ++ blkCa3 ++ blkCa4
 
-/-- The truncated 25-bit mantissa and the Padé numerator. -/
-def blkCb1 : List Assign :=
-  [ ⟨32, .bin .add (.bin .lshr (.reg 13) (.lit 40)) (.lit (2 ^ 24))⟩
-  , ⟨33, .bin .mul (.bin .sub (.bin .mul (.reg 32) (.reg 32)) (.lit (2 ^ 48)))
+/-- The truncated 25-bit mantissa. -/
+def blkCb1x : List Assign :=
+  [ ⟨32, .bin .add (.bin .lshr (.reg 13) (.lit 40)) (.lit (2 ^ 24))⟩ ]
+
+/-- The Padé numerator. -/
+def blkCb1y : List Assign :=
+  [ ⟨33, .bin .mul (.bin .sub (.bin .mul (.reg 32) (.reg 32)) (.lit (2 ^ 48)))
       (.lit 3)⟩ ]
+
+/-- The truncated 25-bit mantissa and the Padé numerator. -/
+def blkCb1 : List Assign := blkCb1x ++ blkCb1y
 
 /-- The Padé denominator and the shifted numerator. -/
 def blkCb2 : List Assign :=
@@ -340,21 +360,56 @@ def gfBody (c : Params) : List Instr :=
   [ .binop 42 .udiv (.reg 41) (.reg 32) ] ++
   block cursor (blkF c)
 
+/-- After decode, reset and `⌊log₂⌋`: the peel divisions' divisor lives in
+register `9`. -/
+def st1 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (run k (idxDivStep c.R k s) (blkA1 c)) blkA2
+
+/-- After the two peel divisions. -/
+def st2 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  divStep 11 .udiv 10 9 (divStep 10 .udiv 1 9 (st1 c k s))
+
+/-- After the peel and the totient decode: the term division's divisor lives
+in register `20`. -/
+def st3 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (run k (run k (st2 c k s) blkBa1) blkBa2) blkBb
+
+/-- After the term division. -/
+def st4 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  divStep 22 .udiv 21 20 (st3 c k s)
+
+/-- After the accumulator step, the mantissa update and the Padé operands:
+the Padé divisions' divisor lives in register `34`. -/
+def st5 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (run k (run k (run k (run k (run k (run k (run k (run k (run k
+    (st4 c k s)
+    blkCa1a) blkCa1b) blkCa2) blkCa3x) blkCa3y) blkCa4x) blkCa4y)
+    blkCb1x) blkCb1y) blkCb2
+
+/-- After the first Padé division. -/
+def st6 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  divStep 36 .udiv 35 34 (st5 c k s)
+
+/-- After the remainder step. -/
+def st7 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (st6 c k s) blkD
+
+/-- After the second Padé division. -/
+def st8 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  divStep 38 .udiv 37 34 (st7 c k s)
+
+/-- After candidate `A` and the sinh numerator: the sinh division's divisor
+lives in register `32`. -/
+def st9 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (st8 c k s) blkE
+
+/-- After the sinh division. -/
+def st10 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  divStep 42 .udiv 41 32 (st9 c k s)
+
 /-- The `Nat`-level meaning of one flat round. -/
 def gfRun (c : Params) (k : Nat) (s : RegState) : RegState :=
-  let s := idxDivStep c.R k s
-  let s := run k s (blkA c)
-  let s := divStep 10 .udiv 1 9 s
-  let s := divStep 11 .udiv 10 9 s
-  let s := run k s blkB
-  let s := divStep 22 .udiv 21 20 s
-  let s := run k s blkC
-  let s := divStep 36 .udiv 35 34 s
-  let s := run k s blkD
-  let s := divStep 38 .udiv 37 34 s
-  let s := run k s blkE
-  let s := divStep 42 .udiv 41 32 s
-  run k s (blkF c)
+  run k (run k (run k (st10 c k s) (blkF1 c)) blkF2) blkF3
 
 /-- Initialisation: the good flag, cofactor, totient product and mantissa
 exponent start at `1`; the accumulator starts at the seed. -/
@@ -403,24 +458,68 @@ theorem blkB_room : ∀ a ∈ blkB, cursor + depth a.expr ≤ 128 := by
     List.mem_cons, List.not_mem_nil, or_false] at ha
   rcases ha with ((rfl|rfl)|(rfl|rfl))|(rfl|rfl) <;> simp [depth, sel, cursor]
 
-theorem blkC_wf : ∀ a ∈ blkC, a.WF cursor := by
+theorem blkC_pieces : ∀ a ∈ blkC,
+    a.WF cursor ∧ cursor + depth a.expr ≤ 128 := by
   intro a ha
-  simp only [blkC, blkCa, blkCa1, blkCa1a, blkCa1b, blkCa2, blkCa3, blkCa4,
-    blkCb, blkCb1, blkCb2, List.mem_append, List.mem_cons, List.not_mem_nil,
-    or_false] at ha
-  rcases ha with
-    ((rfl|rfl)|((rfl|rfl)|((rfl|rfl|rfl)|((rfl|rfl|rfl)|(rfl|rfl)))))|((rfl|rfl)|(rfl|rfl)) <;>
-    exact ⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩
+  have ha' : a ∈ (blkCa1a ++ blkCa1b) ++
+      (blkCa2 ++ ((blkCa3x ++ blkCa3y) ++ (blkCa4x ++ blkCa4y))) ++
+      ((blkCb1x ++ blkCb1y) ++ blkCb2) := ha
+  rcases List.mem_append.mp ha' with h | h
+  · rcases List.mem_append.mp h with h | h
+    · rcases List.mem_append.mp h with h | h
+      · simp only [blkCa1a, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl | rfl <;>
+          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+            by simp [depth, sel, cursor]⟩
+      · simp only [blkCa1b, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl | rfl <;>
+          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+            by simp [depth, sel, cursor]⟩
+    rcases List.mem_append.mp h with h | h
+    · simp only [blkCa2, List.mem_cons, List.not_mem_nil, or_false] at h
+      rcases h with rfl | rfl | rfl <;>
+        exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+          by simp [depth, sel, cursor]⟩
+    rcases List.mem_append.mp h with h | h
+    · rcases List.mem_append.mp h with h | h
+      · simp only [blkCa3x, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl | rfl <;>
+          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+            by simp [depth, sel, cursor]⟩
+      · simp only [blkCa3y, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl <;>
+          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+            by simp [depth, sel, cursor]⟩
+    · rcases List.mem_append.mp h with h | h
+      · simp only [blkCa4x, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl <;>
+          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+            by simp [depth, sel, cursor]⟩
+      · simp only [blkCa4y, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl <;>
+          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+            by simp [depth, sel, cursor]⟩
+  · rcases List.mem_append.mp h with h | h
+    · rcases List.mem_append.mp h with h | h
+      · simp only [blkCb1x, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl <;>
+          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+            by simp [depth, sel, cursor]⟩
+      · simp only [blkCb1y, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl <;>
+          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+            by simp [depth, sel, cursor]⟩
+    · simp only [blkCb2, List.mem_cons, List.not_mem_nil, or_false] at h
+      rcases h with rfl | rfl <;>
+        exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+          by simp [depth, sel, cursor]⟩
+
+theorem blkC_wf : ∀ a ∈ blkC, a.WF cursor :=
+  fun a ha => (blkC_pieces a ha).1
 
 theorem blkC_room :
-    ∀ a ∈ blkC, cursor + depth a.expr ≤ 128 := by
-  intro a ha
-  simp only [blkC, blkCa, blkCa1, blkCa1a, blkCa1b, blkCa2, blkCa3, blkCa4,
-    blkCb, blkCb1, blkCb2, List.mem_append, List.mem_cons, List.not_mem_nil,
-    or_false] at ha
-  rcases ha with
-    ((rfl|rfl)|((rfl|rfl)|((rfl|rfl|rfl)|((rfl|rfl|rfl)|(rfl|rfl)))))|((rfl|rfl)|(rfl|rfl)) <;>
-    simp [depth, sel, cursor]
+    ∀ a ∈ blkC, cursor + depth a.expr ≤ 128 :=
+  fun a ha => (blkC_pieces a ha).2
 
 theorem blkD_wf : ∀ a ∈ blkD, a.WF cursor := by
   intro a ha
@@ -445,20 +544,31 @@ theorem blkE_room : ∀ a ∈ blkE, cursor + depth a.expr ≤ 128 := by
   simp only [blkE, List.mem_cons, List.not_mem_nil, or_false] at ha
   rcases ha with rfl|rfl|rfl <;> simp [depth, cursor]
 
-theorem blkF_wf (c : Params) : ∀ a ∈ blkF c, a.WF cursor := by
+theorem blkF_pieces (c : Params) : ∀ a ∈ blkF c,
+    a.WF cursor ∧ cursor + depth a.expr ≤ 128 := by
   intro a ha
-  simp only [blkF, blkF1, blkF2, blkF3, List.mem_append, List.mem_cons,
-    List.not_mem_nil, or_false] at ha
-  rcases ha with (rfl|rfl|rfl|rfl)|((rfl|rfl|rfl)|(rfl|rfl|rfl)) <;>
-    exact ⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩
+  have ha' : a ∈ blkF1 c ++ (blkF2 ++ blkF3) := ha
+  rcases List.mem_append.mp ha' with h | h
+  · simp only [blkF1, List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with rfl | rfl | rfl | rfl <;>
+      exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+        by simp [depth, sel, cursor]⟩
+  rcases List.mem_append.mp h with h | h
+  · simp only [blkF2, List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with rfl | rfl | rfl <;>
+      exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+        by simp [depth, sel, cursor]⟩
+  · simp only [blkF3, List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with rfl | rfl | rfl <;>
+      exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
+        by simp [depth, sel, cursor]⟩
+
+theorem blkF_wf (c : Params) : ∀ a ∈ blkF c, a.WF cursor :=
+  fun a ha => (blkF_pieces c a ha).1
 
 theorem blkF_room (c : Params) :
-    ∀ a ∈ blkF c, cursor + depth a.expr ≤ 128 := by
-  intro a ha
-  simp only [blkF, blkF1, blkF2, blkF3, List.mem_append, List.mem_cons,
-    List.not_mem_nil, or_false] at ha
-  rcases ha with (rfl|rfl|rfl|rfl)|((rfl|rfl|rfl)|(rfl|rfl|rfl)) <;>
-    simp [depth, sel, cursor]
+    ∀ a ∈ blkF c, cursor + depth a.expr ≤ 128 :=
+  fun a ha => (blkF_pieces c a ha).2
 
 set_option maxRecDepth 8000 in
 set_option maxHeartbeats 1000000 in
@@ -1066,8 +1176,14 @@ theorem blkCa1a_spec (k : Nat) (t : RegState) (acc t0m sq tq22 xlo : Nat)
     omega
   have e3 : xlo / 2 ^ 47 % M = xlo / 2 ^ 47 :=
     Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hxlo)
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
-    ?_⟩ <;>
+  refine ⟨run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, ?_, ?_⟩ <;>
     simp [run, blkCa1a, evalExpr, denoteOp, RegState.set,
       h4, h18, h3, h22, h13, e1, e2, e3, lit47,
       Nat.shiftRight_eq_div_pow, Nat.mod_eq_of_lt hacc,
@@ -1105,7 +1221,14 @@ theorem blkCa1b_spec (k : Nat) (t : RegState) (xlo n : Nat)
       Nat.mul_lt_mul_of_lt_of_lt hdivlt hn17
     have h2 : (2:Nat) ^ 17 * 2 ^ 17 < M := by decide
     omega
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+  refine ⟨run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+    run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
     ?_, ?_⟩ <;>
     simp [run, blkCa1b, evalExpr, denoteOp, RegState.set,
       h24, h13, h8, e4, e5, e6, hshl, lit47,
@@ -1218,5 +1341,629 @@ theorem blkCa2_spec (k : Nat) (t : RegState) (xlo n a : Nat)
       h25, h26, h8, h15, eB, e62, e45, hshl62, hshl45, et1, et2, ea2, et3,
       es12, esT, hAdvUnfold, lit1, lit2, lit45, lit62', lit63n,
       Nat.shiftRight_eq_div_pow, ge_iff_le]
+
+/-- **Stage Ca3x**: the renormalised advance and the init value. -/
+theorem blkCa3x_spec (k : Nat) (t : RegState) (x2 n a : Nat)
+    (h28 : t 28 = x2) (h29 : t 29 = (if 2 ^ 63 ≤ x2 then 1 else 0))
+    (h8 : t 8 = n) (h16 : t 16 = 2 ^ a) (h15 : t 15 = a)
+    (hx2lt : x2 < M) (hx2ge : 2 ^ 62 ≤ x2)
+    (hna : 2 ^ a ≤ n) (hna' : n < 2 ^ (a + 1)) (ha : a ≤ 16)
+    (hn17 : n < 2 ^ 17) :
+    run k t blkCa3x 0 = t 0 ∧ run k t blkCa3x 1 = t 1 ∧
+    run k t blkCa3x 2 = t 2 ∧ run k t blkCa3x 3 = t 3 ∧
+    run k t blkCa3x 4 = t 4 ∧ run k t blkCa3x 5 = t 5 ∧
+    run k t blkCa3x 7 = t 7 ∧ run k t blkCa3x 8 = t 8 ∧
+    run k t blkCa3x 13 = t 13 ∧
+    run k t blkCa3x 14 = t 14 ∧ run k t blkCa3x 15 = t 15 ∧
+    run k t blkCa3x 16 = t 16 ∧ run k t blkCa3x 17 = t 17 ∧
+    run k t blkCa3x 18 = t 18 ∧ run k t blkCa3x 19 = t 19 ∧
+    run k t blkCa3x 22 = t 22 ∧ run k t blkCa3x 29 = t 29 ∧
+    run k t blkCa3x 30 =
+      (if 2 ^ 63 ≤ x2 then (x2 - 2 ^ 63) * 2 else (x2 - 2 ^ 62) * 4) ∧
+    run k t blkCa3x 31 = (n - 2 ^ a) * 2 ^ (64 - a) := by
+  have hMeq : M = 2 ^ 64 := rfl
+  have e64 := subExact 64 a (by omega) (by decide)
+  have esubn := subExact n (2 ^ a) hna (by omega)
+  have hnsub : n - 2 ^ a < 2 ^ a := by omega
+  have hp64a : (2:Nat) ^ a * 2 ^ (64 - a) = 2 ^ 64 := by
+    rw [← Nat.pow_add]
+    congr 1
+    omega
+  have h31lt : (n - 2 ^ a) * 2 ^ (64 - a) < M := by
+    have h1 : (n - 2 ^ a) * 2 ^ (64 - a) < 2 ^ a * 2 ^ (64 - a) :=
+      Nat.mul_lt_mul_of_lt_of_le hnsub (Nat.le_refl _) (Nat.two_pow_pos _)
+    omega
+  have hshl31 : (n - 2 ^ a) <<< (64 - a) = (n - 2 ^ a) * 2 ^ (64 - a) :=
+    Nat.shiftLeft_eq _ _
+  have e31 : (n - 2 ^ a) * 2 ^ (64 - a) % M = (n - 2 ^ a) * 2 ^ (64 - a) :=
+    Nat.mod_eq_of_lt h31lt
+  by_cases hg : 2 ^ 63 ≤ x2
+  · have es63 := subExact x2 (2 ^ 63) hg hx2lt
+    have es63' : (x2 + (M - 9223372036854775808)) % M
+        = x2 - 9223372036854775808 := es63
+    have h30lt : (x2 - 2 ^ 63) * 2 < M := by omega
+    have e30 : (x2 - 9223372036854775808) * 2 % M
+        = (x2 - 9223372036854775808) * 2 := Nat.mod_eq_of_lt h30lt
+    refine ⟨run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+      ?_, ?_⟩ <;>
+      simp [run, blkCa3x, evalExpr, denoteOp, RegState.set, sel,
+        h28, h29, h8, h16, h15, hg, es63', e30, e64, esubn,
+        hshl31, e31, lit1, lit2, lit4, lit62n, lit63n, lit64,
+        Nat.mod_eq_of_lt hx2lt]
+  · have hx2lt63 : x2 < 2 ^ 63 := by omega
+    have es62 := subExact x2 (2 ^ 62) hx2ge hx2lt
+    have es62' : (x2 + (M - 4611686018427387904)) % M
+        = x2 - 4611686018427387904 := es62
+    have h30lt : (x2 - 2 ^ 62) * 4 < M := by omega
+    have e30 : (x2 - 4611686018427387904) * 4 % M
+        = (x2 - 4611686018427387904) * 4 := Nat.mod_eq_of_lt h30lt
+    refine ⟨run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
+      ?_, ?_⟩ <;>
+      simp [run, blkCa3x, evalExpr, denoteOp, RegState.set, sel,
+        h28, h29, h8, h16, h15, hg, es62', e30, e64, esubn,
+        hshl31, e31, lit1, lit2, lit4, lit62n, lit63n, lit64,
+        Nat.mod_eq_of_lt hx2lt]
+
+/-- **Stage Ca3y**: the mantissa select. -/
+theorem blkCa3y_spec (k : Nat) (t : RegState) (xloI xloA xlo tqm t0m : Nat)
+    (h31 : t 31 = xloI) (h30 : t 30 = xloA) (h13 : t 13 = xlo)
+    (h19 : t 19 = tqm) (h18 : t 18 = t0m)
+    (hI : xloI < M) (hA : xloA < M) (hxlo : xlo < M)
+    (htqm : tqm ≤ 1) (ht0m : t0m ≤ 1) :
+    run k t blkCa3y 0 = t 0 ∧ run k t blkCa3y 1 = t 1 ∧
+    run k t blkCa3y 2 = t 2 ∧ run k t blkCa3y 3 = t 3 ∧
+    run k t blkCa3y 4 = t 4 ∧ run k t blkCa3y 5 = t 5 ∧
+    run k t blkCa3y 7 = t 7 ∧ run k t blkCa3y 8 = t 8 ∧
+    run k t blkCa3y 14 = t 14 ∧ run k t blkCa3y 15 = t 15 ∧
+    run k t blkCa3y 16 = t 16 ∧ run k t blkCa3y 17 = t 17 ∧
+    run k t blkCa3y 18 = t 18 ∧ run k t blkCa3y 19 = t 19 ∧
+    run k t blkCa3y 22 = t 22 ∧ run k t blkCa3y 29 = t 29 ∧
+    run k t blkCa3y 13 =
+      (if tqm = 1 then (if t0m = 1 then xloI else xloA) else xlo) := by
+  rcases (show tqm = 0 ∨ tqm = 1 by omega) with rfl | rfl <;>
+    rcases (show t0m = 0 ∨ t0m = 1 by omega) with rfl | rfl <;>
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+      ?_⟩ <;>
+    simp [run, blkCa3y, evalExpr, denoteOp, RegState.set, sel,
+      h31, h30, h13, h19, h18, lit1,
+      Nat.mod_eq_of_lt hI, Nat.mod_eq_of_lt hA, Nat.mod_eq_of_lt hxlo]
+
+/-- **Stage Ca4x**: the unclamped exponent update. -/
+theorem blkCa4x_spec (k : Nat) (t : RegState) (kk a g : Nat)
+    (h14 : t 14 = kk) (h15 : t 15 = a) (h29 : t 29 = g)
+    (hkk : kk ≤ KCAP) (ha : a ≤ 16) (hgle : g ≤ 1) :
+    run k t blkCa4x 0 = t 0 ∧ run k t blkCa4x 1 = t 1 ∧
+    run k t blkCa4x 2 = t 2 ∧ run k t blkCa4x 3 = t 3 ∧
+    run k t blkCa4x 4 = t 4 ∧ run k t blkCa4x 5 = t 5 ∧
+    run k t blkCa4x 7 = t 7 ∧ run k t blkCa4x 8 = t 8 ∧
+    run k t blkCa4x 13 = t 13 ∧ run k t blkCa4x 14 = t 14 ∧
+    run k t blkCa4x 15 = t 15 ∧ run k t blkCa4x 16 = t 16 ∧
+    run k t blkCa4x 17 = t 17 ∧ run k t blkCa4x 18 = t 18 ∧
+    run k t blkCa4x 19 = t 19 ∧ run k t blkCa4x 22 = t 22 ∧
+    run k t blkCa4x 48 = kk + a + g := by
+  have e1 : (kk + a) % M = kk + a := Nat.mod_eq_of_lt (by
+    have : KCAP + 17 < M := by decide
+    omega)
+  have e2 : (kk + a + g) % M = kk + a + g := Nat.mod_eq_of_lt (by
+    have : KCAP + 18 < M := by decide
+    omega)
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    ?_⟩ <;>
+    simp [run, blkCa4x, evalExpr, denoteOp, RegState.set,
+      h14, h15, h29, e1, e2,
+      Nat.mod_eq_of_lt (show kk < M from by
+        have : KCAP < M := by decide
+        omega),
+      Nat.mod_eq_of_lt (show a < M from by
+        have : (17:Nat) < M := by decide
+        omega)]
+
+/-- **Stage Ca4y**: the exponent select. -/
+theorem blkCa4y_spec (k : Nat) (t : RegState) (kk a kkN tqm t0m : Nat)
+    (h14 : t 14 = kk) (h15 : t 15 = a) (h48 : t 48 = kkN)
+    (h19 : t 19 = tqm) (h18 : t 18 = t0m)
+    (hkk : kk ≤ KCAP) (ha : a ≤ 16) (hkkN : kkN ≤ KCAP + 17)
+    (htqm : tqm ≤ 1) (ht0m : t0m ≤ 1) :
+    run k t blkCa4y 0 = t 0 ∧ run k t blkCa4y 1 = t 1 ∧
+    run k t blkCa4y 2 = t 2 ∧ run k t blkCa4y 3 = t 3 ∧
+    run k t blkCa4y 4 = t 4 ∧ run k t blkCa4y 5 = t 5 ∧
+    run k t blkCa4y 7 = t 7 ∧ run k t blkCa4y 8 = t 8 ∧
+    run k t blkCa4y 13 = t 13 ∧ run k t blkCa4y 15 = t 15 ∧
+    run k t blkCa4y 16 = t 16 ∧ run k t blkCa4y 17 = t 17 ∧
+    run k t blkCa4y 18 = t 18 ∧ run k t blkCa4y 19 = t 19 ∧
+    run k t blkCa4y 22 = t 22 ∧ run k t blkCa4y 29 = t 29 ∧
+    run k t blkCa4y 14 =
+      (if tqm = 1 then
+        (if t0m = 1 then a else if kkN ≤ KCAP then kkN else KCAP)
+       else kk) := by
+  have hkkM : kk < M := by
+    have : KCAP < M := by decide
+    omega
+  have haM : a < M := by
+    have : (17:Nat) < M := by decide
+    omega
+  have hkkNM : kkN < M := by
+    have : KCAP + 17 < M := by decide
+    omega
+  by_cases hcl : kkN ≤ KCAP <;>
+    rcases (show tqm = 0 ∨ tqm = 1 by omega) with rfl | rfl <;>
+    rcases (show t0m = 0 ∨ t0m = 1 by omega) with rfl | rfl <;>
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+      ?_⟩ <;>
+    simp [run, blkCa4y, evalExpr, denoteOp, RegState.set, sel,
+      h14, h15, h48, h19, h18, hcl, lit1, litKCAP,
+      Nat.mod_eq_of_lt hkkM, Nat.mod_eq_of_lt haM, Nat.mod_eq_of_lt hkkNM]
+
+/-- **Stage Cb1x**: the truncated 25-bit mantissa. -/
+theorem blkCb1x_spec (k : Nat) (t : RegState) (x : Nat)
+    (h13 : t 13 = x) (hx : x < M) :
+    run k t blkCb1x 0 = t 0 ∧ run k t blkCb1x 1 = t 1 ∧
+    run k t blkCb1x 2 = t 2 ∧ run k t blkCb1x 3 = t 3 ∧
+    run k t blkCb1x 4 = t 4 ∧ run k t blkCb1x 5 = t 5 ∧
+    run k t blkCb1x 7 = t 7 ∧ run k t blkCb1x 8 = t 8 ∧
+    run k t blkCb1x 13 = t 13 ∧ run k t blkCb1x 14 = t 14 ∧
+    run k t blkCb1x 17 = t 17 ∧ run k t blkCb1x 18 = t 18 ∧
+    run k t blkCb1x 19 = t 19 ∧
+    run k t blkCb1x 32 = x / 2 ^ 40 + 2 ^ 24 := by
+  have hdivlt : x / 2 ^ 40 < 2 ^ 24 := by
+    refine (Nat.div_lt_iff_lt_mul (by decide)).mpr ?_
+    have h1 : (2:Nat) ^ 24 * 2 ^ 40 = 2 ^ 64 := by decide
+    have h2 : M = 2 ^ 64 := rfl
+    omega
+  have e1 : x / 1099511627776 % M = x / 1099511627776 := Nat.mod_eq_of_lt (by
+    have h1 : x / 1099511627776 ≤ x := Nat.div_le_self _ _
+    omega)
+  have e2 : (x / 1099511627776 + 16777216) % M
+      = x / 1099511627776 + 16777216 := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : x / 2 ^ 40 < 2 ^ 24 := hdivlt
+    have h2 : (33554432:Nat) < M := by decide
+    omega
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [run, blkCb1x, evalExpr, denoteOp, RegState.set,
+      h13, e1, e2, lit24n, lit40,
+      Nat.shiftRight_eq_div_pow, Nat.mod_eq_of_lt hx]
+
+/-- **Stage Cb1y**: the Padé numerator. -/
+theorem blkCb1y_spec (k : Nat) (t : RegState) (y : Nat)
+    (h32 : t 32 = y) (hyge : 2 ^ 24 ≤ y) (hylt : y < 2 ^ 25) :
+    run k t blkCb1y 0 = t 0 ∧ run k t blkCb1y 1 = t 1 ∧
+    run k t blkCb1y 2 = t 2 ∧ run k t blkCb1y 3 = t 3 ∧
+    run k t blkCb1y 4 = t 4 ∧ run k t blkCb1y 5 = t 5 ∧
+    run k t blkCb1y 7 = t 7 ∧ run k t blkCb1y 8 = t 8 ∧
+    run k t blkCb1y 13 = t 13 ∧ run k t blkCb1y 14 = t 14 ∧
+    run k t blkCb1y 17 = t 17 ∧ run k t blkCb1y 18 = t 18 ∧
+    run k t blkCb1y 19 = t 19 ∧ run k t blkCb1y 32 = t 32 ∧
+    run k t blkCb1y 33 = (y * y - 2 ^ 48) * 3 := by
+  have hy2lt : y * y < 2 ^ 50 := by
+    have h1 : y * y < 2 ^ 25 * 2 ^ 25 := Nat.mul_lt_mul_of_lt_of_lt hylt hylt
+    have h2 : (2:Nat) ^ 25 * 2 ^ 25 = 2 ^ 50 := by decide
+    omega
+  have hy2ge : 2 ^ 48 ≤ y * y := by
+    have h1 : (2:Nat) ^ 24 * 2 ^ 24 ≤ y * y := Nat.mul_le_mul hyge hyge
+    have h2 : (2:Nat) ^ 24 * 2 ^ 24 = 2 ^ 48 := by decide
+    omega
+  have e3 : y * y % M = y * y := Nat.mod_eq_of_lt (by
+    have : (2:Nat) ^ 50 < M := by decide
+    omega)
+  have e4 := subExact (y * y) (2 ^ 48) hy2ge (by
+    have : (2:Nat) ^ 50 < M := by decide
+    omega)
+  have e4' : (y * y + (M - 281474976710656)) % M
+      = y * y - 281474976710656 := e4
+  have e5 : (y * y - 281474976710656) * 3 % M
+      = (y * y - 281474976710656) * 3 := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : (y * y - 281474976710656) * 3 ≤ 2 ^ 50 * 3 :=
+      Nat.mul_le_mul_right _ (by omega)
+    have h2 : (2:Nat) ^ 50 * 3 < M := by decide
+    omega
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [run, blkCb1y, evalExpr, denoteOp, RegState.set,
+      h32, e3, e4', e5, lit3, lit48n,
+      Nat.mod_eq_of_lt (show y < M from by
+        have : (2:Nat) ^ 25 < M := by decide
+        omega)]
+
+/-- **Stage Cb2**: the Padé denominator and the shifted numerator. -/
+theorem blkCb2_spec (k : Nat) (t : RegState) (y pnum : Nat)
+    (h32 : t 32 = y) (h33 : t 33 = pnum)
+    (hyge : 2 ^ 24 ≤ y) (hylt : y < 2 ^ 25) (hpn : pnum ≤ 3 * 2 ^ 50) :
+    run k t blkCb2 0 = t 0 ∧ run k t blkCb2 1 = t 1 ∧
+    run k t blkCb2 2 = t 2 ∧ run k t blkCb2 3 = t 3 ∧
+    run k t blkCb2 4 = t 4 ∧ run k t blkCb2 5 = t 5 ∧
+    run k t blkCb2 7 = t 7 ∧ run k t blkCb2 8 = t 8 ∧
+    run k t blkCb2 13 = t 13 ∧ run k t blkCb2 14 = t 14 ∧
+    run k t blkCb2 17 = t 17 ∧ run k t blkCb2 18 = t 18 ∧
+    run k t blkCb2 19 = t 19 ∧ run k t blkCb2 32 = t 32 ∧
+    run k t blkCb2 34 = y * y + y * 2 ^ 26 + 2 ^ 48 ∧
+    run k t blkCb2 35 = pnum * 2 ^ 12 := by
+  have hy2lt : y * y < 2 ^ 50 := by
+    have h1 : y * y < 2 ^ 25 * 2 ^ 25 := Nat.mul_lt_mul_of_lt_of_lt hylt hylt
+    have h2 : (2:Nat) ^ 25 * 2 ^ 25 = 2 ^ 50 := by decide
+    omega
+  have e1 : y * y % M = y * y := Nat.mod_eq_of_lt (by
+    have : (2:Nat) ^ 50 < M := by decide
+    omega)
+  have hshl26 : y <<< 26 = y * 2 ^ 26 := Nat.shiftLeft_eq _ _
+  have hy26lt : y * 2 ^ 26 < 2 ^ 51 := by
+    have h1 : y * 2 ^ 26 < 2 ^ 25 * 2 ^ 26 :=
+      Nat.mul_lt_mul_of_lt_of_le hylt (Nat.le_refl _) (by decide)
+    have h2 : (2:Nat) ^ 25 * 2 ^ 26 = 2 ^ 51 := by decide
+    omega
+  have e2 : y * 2 ^ 26 % M = y * 2 ^ 26 := Nat.mod_eq_of_lt (by
+    have : (2:Nat) ^ 51 < M := by decide
+    omega)
+  have e3 : (y * y + y * 2 ^ 26) % M = y * y + y * 2 ^ 26 :=
+    Nat.mod_eq_of_lt (by
+      have : (2:Nat) ^ 50 + 2 ^ 51 < M := by decide
+      omega)
+  have e4 : (y * y + y * 2 ^ 26 + 2 ^ 48) % M = y * y + y * 2 ^ 26 + 2 ^ 48 :=
+    Nat.mod_eq_of_lt (by
+      have : (2:Nat) ^ 50 + 2 ^ 51 + 2 ^ 48 < M := by decide
+      omega)
+  have hshl12 : pnum <<< 12 = pnum * 2 ^ 12 := Nat.shiftLeft_eq _ _
+  have e5 : pnum * 2 ^ 12 % M = pnum * 2 ^ 12 := Nat.mod_eq_of_lt (by
+    have h1 : pnum * 2 ^ 12 ≤ 3 * 2 ^ 50 * 2 ^ 12 :=
+      Nat.mul_le_mul_right _ hpn
+    have h2 : (3:Nat) * 2 ^ 50 * 2 ^ 12 < M := by decide
+    omega)
+  have hshl26' : y <<< 26 = y * 67108864 := hshl26
+  have e2' : y * 67108864 % M = y * 67108864 := e2
+  have e3' : (y * y + y * 67108864) % M = y * y + y * 67108864 := e3
+  have e4' : (y * y + y * 67108864 + 281474976710656) % M
+      = y * y + y * 67108864 + 281474976710656 := e4
+  have hshl12' : pnum <<< 12 = pnum * 4096 := hshl12
+  have e5' : pnum * 4096 % M = pnum * 4096 := e5
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [run, blkCb2, evalExpr, denoteOp, RegState.set,
+      h32, h33, hshl26', hshl12', e1, e2', e3', e4', e5', lit12, lit26,
+      lit48n,
+      Nat.mod_eq_of_lt (show y < M from by
+        have : (2:Nat) ^ 25 < M := by decide
+        omega),
+      Nat.mod_eq_of_lt (show pnum < M from by
+        have : (3:Nat) * 2 ^ 50 < M := by decide
+        omega)]
+
+/-- **Stage D**: the Padé remainder step. -/
+theorem blkD_spec (k : Nat) (t : RegState) (p12 pden : Nat)
+    (h35 : t 35 = p12) (h36 : t 36 = p12 / pden) (h34 : t 34 = pden)
+    (hp12 : p12 < M) (hpden : 0 < pden) (hpdenlt : pden < 2 ^ 52) :
+    run k t blkD 0 = t 0 ∧ run k t blkD 1 = t 1 ∧
+    run k t blkD 2 = t 2 ∧ run k t blkD 3 = t 3 ∧
+    run k t blkD 4 = t 4 ∧ run k t blkD 5 = t 5 ∧
+    run k t blkD 7 = t 7 ∧ run k t blkD 8 = t 8 ∧
+    run k t blkD 13 = t 13 ∧ run k t blkD 14 = t 14 ∧
+    run k t blkD 17 = t 17 ∧ run k t blkD 18 = t 18 ∧
+    run k t blkD 19 = t 19 ∧ run k t blkD 32 = t 32 ∧
+    run k t blkD 34 = t 34 ∧ run k t blkD 36 = t 36 ∧
+    run k t blkD 37 = (p12 - p12 / pden * pden) * 2 ^ 12 := by
+  have hle : p12 / pden * pden ≤ p12 := Nat.div_mul_le_self _ _
+  have e1 : p12 / pden % M = p12 / pden :=
+    Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hp12)
+  have e2 : p12 / pden * pden % M = p12 / pden * pden :=
+    Nat.mod_eq_of_lt (by omega)
+  have e3 := subExact p12 (p12 / pden * pden) hle hp12
+  have hdm := Nat.div_add_mod p12 pden
+  have hcomm : p12 / pden * pden = pden * (p12 / pden) := Nat.mul_comm _ _
+  have hrem : p12 - p12 / pden * pden < pden := by
+    have := Nat.mod_lt p12 hpden
+    omega
+  have hshl : (p12 - p12 / pden * pden) <<< 12
+      = (p12 - p12 / pden * pden) * 4096 := Nat.shiftLeft_eq _ _
+  have e4 : (p12 - p12 / pden * pden) * 4096 % M
+      = (p12 - p12 / pden * pden) * 4096 := by
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : (p12 - p12 / pden * pden) * 2 ^ 12 < 2 ^ 52 * 2 ^ 12 :=
+      Nat.mul_lt_mul_of_lt_of_le (by omega) (Nat.le_refl _) (by decide)
+    have h2 : (2:Nat) ^ 52 * 2 ^ 12 = 2 ^ 64 := by decide
+    have h3 : M = 2 ^ 64 := rfl
+    omega
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [run, blkD, evalExpr, denoteOp, RegState.set,
+      h35, h36, h34, e1, e2, e3, e4, hshl, lit12,
+      Nat.mod_eq_of_lt hp12,
+      Nat.mod_eq_of_lt (show pden < M from by
+        have : (2:Nat) ^ 52 < M := by decide
+        omega)]
+
+/-- **Stage E**: the Padé recombination, candidate `A`, and the sinh
+numerator. -/
+theorem blkE_spec (k : Nat) (t : RegState) (c1 c2 kk1 y : Nat)
+    (h36 : t 36 = c1) (h38 : t 38 = c2) (h14 : t 14 = kk1) (h32 : t 32 = y)
+    (hc1 : c1 < 2 ^ 12) (hc2 : c2 < 2 ^ 12) (hkk1 : kk1 ≤ KCAP)
+    (hyge : 2 ^ 24 ≤ y) (hylt : y < 2 ^ 25) :
+    run k t blkE 0 = t 0 ∧ run k t blkE 3 = t 3 ∧
+    run k t blkE 4 = t 4 ∧ run k t blkE 5 = t 5 ∧
+    run k t blkE 7 = t 7 ∧ run k t blkE 8 = t 8 ∧
+    run k t blkE 13 = t 13 ∧ run k t blkE 14 = t 14 ∧
+    run k t blkE 17 = t 17 ∧ run k t blkE 18 = t 18 ∧
+    run k t blkE 19 = t 19 ∧ run k t blkE 32 = t 32 ∧
+    run k t blkE 40 = kk1 * CL + (c1 * 2 ^ 20 + c2 * 2 ^ 8) ∧
+    run k t blkE 41 = (2 ^ 50 - y * y) * 2 ^ 6 + y - 1 := by
+  have hshl20 : c1 <<< 20 = c1 * 2 ^ 20 := Nat.shiftLeft_eq _ _
+  have hshl8 : c2 <<< 8 = c2 * 2 ^ 8 := Nat.shiftLeft_eq _ _
+  have hc120 : c1 * 2 ^ 20 < 2 ^ 32 := by
+    have h1 : c1 * 2 ^ 20 < 2 ^ 12 * 2 ^ 20 :=
+      Nat.mul_lt_mul_of_lt_of_le hc1 (Nat.le_refl _) (by decide)
+    have h2 : (2:Nat) ^ 12 * 2 ^ 20 = 2 ^ 32 := by decide
+    omega
+  have hc28 : c2 * 2 ^ 8 < 2 ^ 20 := by
+    have h1 : c2 * 2 ^ 8 < 2 ^ 12 * 2 ^ 8 :=
+      Nat.mul_lt_mul_of_lt_of_le hc2 (Nat.le_refl _) (by decide)
+    have h2 : (2:Nat) ^ 12 * 2 ^ 8 = 2 ^ 20 := by decide
+    omega
+  have e1 : c1 * 2 ^ 20 % M = c1 * 2 ^ 20 := Nat.mod_eq_of_lt (by
+    have : (2:Nat) ^ 32 < M := by decide
+    omega)
+  have e2 : c2 * 2 ^ 8 % M = c2 * 2 ^ 8 := Nat.mod_eq_of_lt (by
+    have : (2:Nat) ^ 20 < M := by decide
+    omega)
+  have e3 : (c1 * 2 ^ 20 + c2 * 2 ^ 8) % M = c1 * 2 ^ 20 + c2 * 2 ^ 8 :=
+    Nat.mod_eq_of_lt (by
+      have : (2:Nat) ^ 32 + 2 ^ 20 < M := by decide
+      omega)
+  have hkkCL : kk1 * CL ≤ KCAP * CL := Nat.mul_le_mul_right _ hkk1
+  have e4 : kk1 * CL % M = kk1 * CL := Nat.mod_eq_of_lt (by
+    have : KCAP * CL < M := by decide
+    omega)
+  have e5 : (kk1 * CL + (c1 * 2 ^ 20 + c2 * 2 ^ 8)) % M
+      = kk1 * CL + (c1 * 2 ^ 20 + c2 * 2 ^ 8) := Nat.mod_eq_of_lt (by
+    have : KCAP * CL + (2 ^ 32 + 2 ^ 20) < M := by decide
+    omega)
+  have hy2le : y * y ≤ 2 ^ 50 := by
+    have h1 : y * y < 2 ^ 25 * 2 ^ 25 := Nat.mul_lt_mul_of_lt_of_lt hylt hylt
+    have h2 : (2:Nat) ^ 25 * 2 ^ 25 = 2 ^ 50 := by decide
+    omega
+  have e6 : y * y % M = y * y := Nat.mod_eq_of_lt (by
+    have : (2:Nat) ^ 50 < M := by decide
+    omega)
+  have e7 := subExact (2 ^ 50) (y * y) hy2le (by decide)
+  have hshl6 : (2 ^ 50 - y * y) <<< 6 = (2 ^ 50 - y * y) * 2 ^ 6 :=
+    Nat.shiftLeft_eq _ _
+  have e8 : (2 ^ 50 - y * y) * 2 ^ 6 % M = (2 ^ 50 - y * y) * 2 ^ 6 :=
+    Nat.mod_eq_of_lt (by
+      have h1 : (2 ^ 50 - y * y) * 2 ^ 6 ≤ 2 ^ 50 * 2 ^ 6 :=
+        Nat.mul_le_mul_right _ (by omega)
+      have h2 : (2:Nat) ^ 50 * 2 ^ 6 < M := by decide
+      omega)
+  have e9 : ((2 ^ 50 - y * y) * 2 ^ 6 + y) % M = (2 ^ 50 - y * y) * 2 ^ 6 + y :=
+    Nat.mod_eq_of_lt (by
+      have h1 : (2 ^ 50 - y * y) * 2 ^ 6 ≤ 2 ^ 50 * 2 ^ 6 :=
+        Nat.mul_le_mul_right _ (by omega)
+      have h2 : (2:Nat) ^ 50 * 2 ^ 6 + 2 ^ 25 < M := by decide
+      omega)
+  have e10 := subExact ((2 ^ 50 - y * y) * 2 ^ 6 + y) 1 (by omega) (by
+    have h1 : (2 ^ 50 - y * y) * 2 ^ 6 ≤ 2 ^ 50 * 2 ^ 6 :=
+      Nat.mul_le_mul_right _ (by omega)
+    have h2 : (2:Nat) ^ 50 * 2 ^ 6 + 2 ^ 25 < M := by decide
+    omega)
+  have hshl20' : c1 <<< 20 = c1 * 1048576 := hshl20
+  have hshl8' : c2 <<< 8 = c2 * 256 := hshl8
+  have e1' : c1 * 1048576 % M = c1 * 1048576 := e1
+  have e2' : c2 * 256 % M = c2 * 256 := e2
+  have e3' : (c1 * 1048576 + c2 * 256) % M = c1 * 1048576 + c2 * 256 := e3
+  have e5' : (kk1 * CL + (c1 * 1048576 + c2 * 256)) % M
+      = kk1 * CL + (c1 * 1048576 + c2 * 256) := e5
+  have e7' : (1125899906842624 + (M - y * y)) % M
+      = 1125899906842624 - y * y := e7
+  have hshl6' : (1125899906842624 - y * y) <<< 6
+      = (1125899906842624 - y * y) * 64 := Nat.shiftLeft_eq _ _
+  have e8' : (1125899906842624 - y * y) * 64 % M
+      = (1125899906842624 - y * y) * 64 := e8
+  have e9' : ((1125899906842624 - y * y) * 64 + y) % M
+      = (1125899906842624 - y * y) * 64 + y := e9
+  have e10' : ((1125899906842624 - y * y) * 64 + y + (M - 1)) % M
+      = (1125899906842624 - y * y) * 64 + y - 1 := e10
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [run, blkE, evalExpr, denoteOp, RegState.set,
+      h36, h38, h14, h32, hshl20', hshl8', hshl6', e1', e2', e3', e4, e5',
+      e6, e7', e8', e9', e10', lit1, lit6, lit8, lit20, lit50n, litCL,
+      Nat.mod_eq_of_lt (show y < M from by
+        have : (2:Nat) ^ 25 < M := by decide
+        omega),
+      Nat.mod_eq_of_lt (show c1 < M from by
+        have : (2:Nat) ^ 12 < M := by decide
+        omega),
+      Nat.mod_eq_of_lt (show c2 < M from by
+        have : (2:Nat) ^ 12 < M := by decide
+        omega),
+      Nat.mod_eq_of_lt (show kk1 < M from by
+        have : KCAP < M := by decide
+        omega)]
+
+/-- **Stage F1**: candidate `B`, the pair index, and the gates. -/
+theorem blkF1_spec (c : Params) (k : Nat) (t : RegState)
+    (kk1 sinh t0m n acc1 : Nat)
+    (h14 : t 14 = kk1) (h42 : t 42 = sinh) (h18 : t 18 = t0m)
+    (h8 : t 8 = n) (h4 : t 4 = acc1)
+    (hkk1pos : 1 ≤ kk1) (hkk1 : kk1 ≤ KCAP) (hsinh : sinh ≤ 3 * 2 ^ 30 + 2)
+    (ht0m : t0m ≤ 1) (hn17 : n < 2 ^ 17) (hacc : acc1 < M)
+    (hsplit : c.split < 2 ^ 17) :
+    run k t (blkF1 c) 0 = t 0 ∧ run k t (blkF1 c) 1 = t 1 ∧
+    run k t (blkF1 c) 2 = t 2 ∧ run k t (blkF1 c) 3 = t 3 ∧
+    run k t (blkF1 c) 4 = t 4 ∧ run k t (blkF1 c) 5 = t 5 ∧
+    run k t (blkF1 c) 7 = t 7 ∧ run k t (blkF1 c) 13 = t 13 ∧
+    run k t (blkF1 c) 14 = t 14 ∧ run k t (blkF1 c) 17 = t 17 ∧
+    run k t (blkF1 c) 19 = t 19 ∧ run k t (blkF1 c) 40 = t 40 ∧
+    run k t (blkF1 c) 43 = (kk1 + 1) * CL - sinh ∧
+    run k t (blkF1 c) 45 = (t0m ||| (if n ≤ c.split then 1 else 0)) ∧
+    run k t (blkF1 c) 46 = (if acc1 ≤ ACAP then 1 else 0) := by
+  have hCL : (kk1 + 1) * CL < M := by
+    have h1 : (kk1 + 1) * CL ≤ (KCAP + 1) * CL :=
+      Nat.mul_le_mul_right _ (by omega)
+    have h2 : (KCAP + 1) * CL < M := by decide
+    omega
+  have e1 : (kk1 + 1) % M = kk1 + 1 := Nat.mod_eq_of_lt (by
+    have : KCAP + 1 < M := by decide
+    omega)
+  have e2 : (kk1 + 1) * CL % M = (kk1 + 1) * CL := Nat.mod_eq_of_lt hCL
+  have hsle : sinh ≤ (kk1 + 1) * CL := by
+    have h1 : 2 * CL ≤ (kk1 + 1) * CL := Nat.mul_le_mul_right _ (by omega)
+    have h2 : (3:Nat) * 2 ^ 30 + 2 ≤ 2 * CL := by decide
+    omega
+  have e3 := subExact ((kk1 + 1) * CL) sinh hsle hCL
+  have hor : ∀ P : Prop, ∀ _ : Decidable P,
+      (t0m ||| (if P then (1:Nat) else 0)) % M
+        = t0m ||| (if P then 1 else 0) := by
+    intro P inst
+    exact or_mod _ _ ht0m (bitLe _)
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [run, blkF1, evalExpr, denoteOp, RegState.set,
+      h14, h42, h18, h8, h4, e1, e2, e3, hor, lit1, litCL, litACAP,
+      Nat.mod_eq_of_lt hacc,
+      Nat.mod_eq_of_lt (show sinh < M from by
+        have : (3:Nat) * 2 ^ 30 + 2 < M := by decide
+        omega),
+      Nat.mod_eq_of_lt (show c.split < M from by
+        have : (2:Nat) ^ 17 < M := by decide
+        omega)]
+
+/-- **Stage F1, the pair index**: exact only in the exponent rounds. -/
+theorem blkF1_spec44 (c : Params) (k : Nat) (t : RegState) (q : Nat)
+    (h7 : t 7 = q) (hq : c.tdiv ≤ q) (hqM : q + 1 < M)
+    (htd : c.tdiv < M) :
+    run k t (blkF1 c) 44 = q - c.tdiv + 1 := by
+  have e1 := subExact q c.tdiv hq (by omega)
+  have e2 : (q - c.tdiv + 1) % M = q - c.tdiv + 1 :=
+    Nat.mod_eq_of_lt (by omega)
+  simp [run, blkF1, evalExpr, denoteOp, RegState.set, h7, e1, e2, lit1,
+    Nat.mod_eq_of_lt htd]
+
+/-- **Stage F2, always**: the comparison registers are bits. -/
+theorem blkF2_bits (k : Nat) (t : RegState) :
+    run k t blkF2 0 = t 0 ∧ run k t blkF2 1 = t 1 ∧
+    run k t blkF2 2 = t 2 ∧ run k t blkF2 3 = t 3 ∧
+    run k t blkF2 4 = t 4 ∧ run k t blkF2 5 = t 5 ∧
+    run k t blkF2 13 = t 13 ∧ run k t blkF2 14 = t 14 ∧
+    run k t blkF2 17 = t 17 ∧ run k t blkF2 19 = t 19 ∧
+    run k t blkF2 45 = t 45 ∧ run k t blkF2 46 = t 46 ∧
+    run k t blkF2 50 ≤ 1 ∧ run k t blkF2 51 ≤ 1 ∧ run k t blkF2 52 ≤ 1 := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [run, blkF2, evalExpr, denoteOp, RegState.set] <;>
+    split <;> simp
+
+/-- **Stage F2, exponent rounds**: the two threshold comparisons and the
+mantissa guard, exactly. -/
+theorem blkF2_spec (k : Nat) (t : RegState) (acc1 b vA vB xlo1 : Nat)
+    (h4 : t 4 = acc1) (h44 : t 44 = b) (h40 : t 40 = vA) (h43 : t 43 = vB)
+    (h13 : t 13 = xlo1)
+    (hacc : acc1 < M) (hb : b ≤ 48) (hvA : vA < 2 ^ 43) (hvB : vB < 2 ^ 43)
+    (hx : xlo1 < M) :
+    run k t blkF2 0 = t 0 ∧ run k t blkF2 1 = t 1 ∧
+    run k t blkF2 2 = t 2 ∧ run k t blkF2 3 = t 3 ∧
+    run k t blkF2 4 = t 4 ∧ run k t blkF2 5 = t 5 ∧
+    run k t blkF2 13 = t 13 ∧ run k t blkF2 14 = t 14 ∧
+    run k t blkF2 17 = t 17 ∧ run k t blkF2 19 = t 19 ∧
+    run k t blkF2 45 = t 45 ∧ run k t blkF2 46 = t 46 ∧
+    run k t blkF2 50 = (if acc1 * b % M ≤ vA * 2 ^ 12 + CC * b then 1 else 0) ∧
+    run k t blkF2 51 = (if acc1 * b % M ≤ vB * 2 ^ 12 + CC * b then 1 else 0) ∧
+    run k t blkF2 52 = (if xlo1 ≤ 2 ^ 64 - 2 ^ 50 then 1 else 0) := by
+  have hshlA : vA <<< 12 = vA * 2 ^ 12 := Nat.shiftLeft_eq _ _
+  have hshlB : vB <<< 12 = vB * 2 ^ 12 := Nat.shiftLeft_eq _ _
+  have eA : vA * 2 ^ 12 % M = vA * 2 ^ 12 := Nat.mod_eq_of_lt (by
+    have h1 : vA * 2 ^ 12 < 2 ^ 43 * 2 ^ 12 :=
+      Nat.mul_lt_mul_of_lt_of_le hvA (Nat.le_refl _) (by decide)
+    have h2 : (2:Nat) ^ 43 * 2 ^ 12 < M := by decide
+    omega)
+  have eB' : vB * 2 ^ 12 % M = vB * 2 ^ 12 := Nat.mod_eq_of_lt (by
+    have h1 : vB * 2 ^ 12 < 2 ^ 43 * 2 ^ 12 :=
+      Nat.mul_lt_mul_of_lt_of_le hvB (Nat.le_refl _) (by decide)
+    have h2 : (2:Nat) ^ 43 * 2 ^ 12 < M := by decide
+    omega)
+  have eCC : CC * b % M = CC * b := Nat.mod_eq_of_lt (by
+    have h1 : CC * b ≤ CC * 48 := Nat.mul_le_mul_left _ hb
+    have h2 : CC * 48 < M := by decide
+    omega)
+  have eSA : (vA * 2 ^ 12 + CC * b) % M = vA * 2 ^ 12 + CC * b :=
+    Nat.mod_eq_of_lt (by
+      have h1 : vA * 2 ^ 12 < 2 ^ 43 * 2 ^ 12 :=
+        Nat.mul_lt_mul_of_lt_of_le hvA (Nat.le_refl _) (by decide)
+      have h2 : CC * b ≤ CC * 48 := Nat.mul_le_mul_left _ hb
+      have h3 : (2:Nat) ^ 43 * 2 ^ 12 + CC * 48 < M := by decide
+      omega)
+  have eSB : (vB * 2 ^ 12 + CC * b) % M = vB * 2 ^ 12 + CC * b :=
+    Nat.mod_eq_of_lt (by
+      have h1 : vB * 2 ^ 12 < 2 ^ 43 * 2 ^ 12 :=
+        Nat.mul_lt_mul_of_lt_of_le hvB (Nat.le_refl _) (by decide)
+      have h2 : CC * b ≤ CC * 48 := Nat.mul_le_mul_left _ hb
+      have h3 : (2:Nat) ^ 43 * 2 ^ 12 + CC * 48 < M := by decide
+      omega)
+  have hshlA' : vA <<< 12 = vA * 4096 := hshlA
+  have hshlB' : vB <<< 12 = vB * 4096 := hshlB
+  have eA' : vA * 4096 % M = vA * 4096 := eA
+  have eB'' : vB * 4096 % M = vB * 4096 := eB'
+  have eSA' : (vA * 4096 + CC * b) % M = vA * 4096 + CC * b := eSA
+  have eSB' : (vB * 4096 + CC * b) % M = vB * 4096 + CC * b := eSB
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [run, blkF2, evalExpr, denoteOp, RegState.set,
+      h4, h44, h40, h43, h13, hshlA', hshlB', eA', eB'', eCC, eSA', eSB',
+      lit12, litCC, litGuardn,
+      Nat.mod_eq_of_lt hacc, Nat.mod_eq_of_lt hx,
+      Nat.mod_eq_of_lt (show b < M from by
+        have : (49:Nat) < M := by decide
+        omega)]
+
+/-- **Stage F3**: the hit, the pass accumulation, and the verdict. -/
+theorem blkF3_spec (k : Nat) (t : RegState)
+    (cap bal hA hB gd tqm lastm pass0 good : Nat)
+    (h46 : t 46 = cap) (h45 : t 45 = bal) (h50 : t 50 = hA) (h51 : t 51 = hB)
+    (h52 : t 52 = gd) (h19 : t 19 = tqm) (h17 : t 17 = lastm)
+    (h5 : t 5 = pass0) (h0 : t 0 = good)
+    (hcap : cap ≤ 1) (hbal : bal ≤ 1) (hhA : hA ≤ 1) (hhB : hB ≤ 1)
+    (hgd : gd ≤ 1) (htqm : tqm ≤ 1) (hlastm : lastm ≤ 1)
+    (hpass : pass0 ≤ 1) (hgood : good ≤ 1) :
+    run k t blkF3 1 = t 1 ∧ run k t blkF3 2 = t 2 ∧
+    run k t blkF3 3 = t 3 ∧ run k t blkF3 4 = t 4 ∧
+    run k t blkF3 13 = t 13 ∧ run k t blkF3 14 = t 14 ∧
+    run k t blkF3 5 =
+      (if tqm = 1 then pass0 ||| cap * (bal * (hA ||| gd * hB)) else pass0) ∧
+    run k t blkF3 0 =
+      (if lastm = 1 then
+        good * (if tqm = 1 then pass0 ||| cap * (bal * (hA ||| gd * hB))
+                else pass0)
+       else good) := by
+  have hgh : gd * hB ≤ 1 := by
+    rcases (show gd = 0 ∨ gd = 1 by omega) with rfl | rfl <;> omega
+  have hor1 : hA ||| gd * hB ≤ 1 := bit_or_le _ _ hhA hgh
+  have e1 : (gd * hB) % M = gd * hB := Nat.mod_eq_of_lt (by
+    have : (2:Nat) ≤ M := by decide
+    omega)
+  have e2 := or_mod hA (gd * hB) hhA hgh
+  have hbo : bal * (hA ||| gd * hB) ≤ 1 := by
+    rcases (show bal = 0 ∨ bal = 1 by omega) with rfl | rfl <;> omega
+  have e3 : (bal * (hA ||| gd * hB)) % M = bal * (hA ||| gd * hB) :=
+    Nat.mod_eq_of_lt (by
+      have : (2:Nat) ≤ M := by decide
+      omega)
+  have hhit : cap * (bal * (hA ||| gd * hB)) ≤ 1 := by
+    rcases (show cap = 0 ∨ cap = 1 by omega) with rfl | rfl <;> omega
+  have e4 : (cap * (bal * (hA ||| gd * hB))) % M
+      = cap * (bal * (hA ||| gd * hB)) := Nat.mod_eq_of_lt (by
+    have : (2:Nat) ≤ M := by decide
+    omega)
+  have e5 := or_mod pass0 (cap * (bal * (hA ||| gd * hB))) hpass hhit
+  have hp1 : pass0 ||| cap * (bal * (hA ||| gd * hB)) ≤ 1 :=
+    bit_or_le _ _ hpass hhit
+  have e6 : ∀ x : Nat, x ≤ 1 → (good * x) % M = good * x := by
+    intro x hx
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : good * x ≤ 1 := by
+      rcases (show good = 0 ∨ good = 1 by omega) with rfl | rfl <;> omega
+    have : (2:Nat) ≤ M := by decide
+    omega
+  rcases (show tqm = 0 ∨ tqm = 1 by omega) with rfl | rfl <;>
+    rcases (show lastm = 0 ∨ lastm = 1 by omega) with rfl | rfl <;>
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp [run, blkF3, evalExpr, denoteOp, RegState.set, sel,
+      h46, h45, h50, h51, h52, h19, h17, h5, h0,
+      e1, e2, e3, e4, e5, e6 _ hpass, e6 _ hp1, lit0, lit1,
+      Nat.mod_eq_of_lt (show pass0 < M from by
+        have : (2:Nat) ≤ M := by decide
+        omega),
+      Nat.mod_eq_of_lt (show good < M from by
+        have : (2:Nat) ≤ M := by decide
+        omega)]
 
 end LeanCompCert.Ports.GFoldCheck
