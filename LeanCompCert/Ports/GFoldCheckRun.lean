@@ -79,7 +79,7 @@ open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.Frontend
 open LeanCompCert.Verified.Straight
 
-set_option maxRecDepth 20000
+set_option maxRecDepth 4000
 
 /-! ## §9 The per-round quantities, named
 
@@ -684,6 +684,12 @@ private theorem shift12_lt (r d : Nat) (hr : r < d) (hd : d < 2 ^ 52) :
     Nat.mul_le_mul_right _ (by omega)
   exact Nat.lt_of_lt_of_le h1 (Nat.le_trans h2 (by decide))
 
+/-- The shifted Padé numerator stays inside a word.  No `omega`: at this
+call site the local context is forty hypotheses deep, which is what makes
+`omega` hit `maxRecDepth`, and the bound is a two-step `le`/`lt` chain. -/
+private theorem p12_lt (p : Nat) (hp : p ≤ 3 * 2 ^ 50) : p * 2 ^ 12 < M :=
+  Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ hp) (by decide)
+
 /-- The mantissa's low word is a `2²⁴` quantity. -/
 private theorem u_lt (x : Nat) (hx : x < M) : x / 2 ^ 40 < 2 ^ 24 := by
   refine (Nat.div_lt_iff_lt_mul (by decide)).mpr ?_
@@ -955,11 +961,7 @@ private theorem selFacts (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
         _ ≤ 2 ^ 26 * yOf c k s := Nat.mul_le_mul_right _ h2
         _ = yOf c k s * 2 ^ 26 := Nat.mul_comm _ _
     omega
-  have hp12M : pnumOf c k s * 2 ^ 12 < M := by
-    have h1 : pnumOf c k s * 2 ^ 12 ≤ 3 * 2 ^ 50 * 2 ^ 12 :=
-      Nat.mul_le_mul_right _ hpnum
-    have h2 : (3:Nat) * 2 ^ 50 * 2 ^ 12 < M := by decide
-    omega
+  have hp12M : pnumOf c k s * 2 ^ 12 < M := p12_lt _ hpnum
   have hc1 : c1Of c k s < 2 ^ 12 := by
     unfold c1Of
     refine Nat.div_lt_iff_lt_mul (by omega) |>.mpr ?_
