@@ -20,8 +20,24 @@ slot0 G   slot1 cells   slot2 minMargin+2^(C+6)   slot3 cubeRoot
 slot4 ⌊log₂⌋            slot5 violations
 ```
 
-A nonzero `slot5` is a failed margin **or** a failed guard — the mark budget,
-the `⌊log₂ r⌋` step, or the cube-root increment budget.
+followed by the four failure classes in `slot6 … slot9`, which sum to `slot5`.
+
+## The emitted `main` carries a verdict
+
+It exits `0` **exactly when** the aggregate is `0`, and otherwise names the
+class:
+
+| exit | class | meaning |
+| ---: | --- | --- |
+| `0` | — | accepted |
+| `1` | `INCONSISTENT` | the four classes do not sum to the aggregate |
+| `2` | `budget_marktable` | the mark cursor had not finished: the sieve was truncated |
+| `3` | `guard_log2` | one `⌊log₂ r⌋` increment did not suffice |
+| `4` | `budget_cuberoot` | the certified cube root was still advanceable |
+| `5` | `margin` | the per-cell margin went negative — the clause failed |
+
+The three budgets and guards come first because they retract the run: on those
+cells the margin was not tested at all.
 
 Emission only; no proof obligation is discharged here.
 -/
@@ -32,16 +48,73 @@ open LeanCompCert.Ports.Prop1224Cell
 
 namespace Bench.Prop1224CellEmit
 
-def hostedDriver (name : String) (cells : Nat) : String :=
+/-- One failure class: its label, its offset inside the class block, and the
+exit status the driver returns when it is the first nonzero one.  The list is
+given in **scan order**, so the classes that invalidate a run come before the
+classes that are a result. -/
+abbrev Class := String × Nat × Nat
+
+/-- A hosted driver that prints the result cells and then **decides**.
+
+`base` is the first result cell, `slots` how many of them the chain reads, and
+`classBase` the slot at which the class counters start.  The emitted `main` returns `0` only when every
+class counter is zero, `1` when the classes do not sum to the aggregate (a
+split that has come adrift is a reason to trust neither number), and otherwise
+the status of the first nonzero class in scan order. -/
+def verdictDriver (name : String) (cells base slots classBase : Nat)
+    (classes : List Class) (diags : List (String × Nat)) (sumIsExact : Bool) :
+    String :=
+  let cell (i : Nat) : String := "cells[" ++ toString (base + i) ++ "]"
+  let classLine (x : Class) : String :=
+    "    printf(\"class " ++ x.1 ++ " %llu\\n\", (unsigned long long)" ++
+      cell (classBase + x.2.1) ++ ");\n" ++
+    "    sum += " ++ cell (classBase + x.2.1) ++ ";\n"
+  let diagLine (x : String × Nat) : String :=
+    "    printf(\"diag " ++ x.1 ++ " %llu\\n\", (unsigned long long)" ++
+      cell x.2 ++ ");\n"
+  let verdictLine (x : Class) : String :=
+    "    if (" ++ cell (classBase + x.2.1) ++ " != UINT64_C(0)) {\n" ++
+    "        printf(\"verdict FAIL " ++ x.1 ++ "\\n\");\n" ++
+    "        return " ++ toString x.2.2 ++ ";\n    }\n"
+  let consistency :=
+    if sumIsExact then
+      "    if (sum != r) {\n" ++
+      "        printf(\"verdict INCONSISTENT classes %llu aggregate %llu\\n\",\n" ++
+      "               (unsigned long long)sum, (unsigned long long)r);\n" ++
+      "        return 1;\n    }\n"
+    else
+      -- the aggregate collapses several conditions per row, so the classes
+      -- bound it from above rather than equalling it; what must hold is that
+      -- they vanish together
+      "    if ((sum == UINT64_C(0)) != (r == UINT64_C(0)) || sum < r) {\n" ++
+      "        printf(\"verdict INCONSISTENT classes %llu aggregate %llu\\n\",\n" ++
+      "               (unsigned long long)sum, (unsigned long long)r);\n" ++
+      "        return 1;\n    }\n"
   "\n#include <stdio.h>\n" ++
   "static uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
   "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    uint64_t sum = 0;\n" ++
   "    printf(\"violations %llu\\n\", (unsigned long long)r);\n" ++
-  "    for (int i = 0; i < 6; i++)\n" ++
+  "    for (int i = 0; i < " ++ toString slots ++ "; i++)\n" ++
   "        printf(\"slot%d %llu\\n\", i,\n" ++
-  "               (unsigned long long)cells[" ++ toString cells ++ " - 12 + i]);\n" ++
+  "               (unsigned long long)cells[" ++ toString base ++ " + i]);\n" ++
+  String.join (classes.map classLine) ++
+  String.join (diags.map diagLine) ++
+  consistency ++
+  String.join (classes.map verdictLine) ++
+  "    printf(\"verdict PASS\\n\");\n" ++
   "    return 0;\n}\n"
+
+
+/-- The four classes, in scan order: the three that retract the run, then the
+margin.  Slot offsets follow `Ports.Prop1224Cell.violRegs`,
+`[Margin, Mark, Log2, Cbrt]`. -/
+def classes : List Class :=
+  [ ("budget_marktable", 1, 2)
+  , ("guard_log2", 2, 3)
+  , ("budget_cuberoot", 3, 4)
+  , ("margin", 0, 5) ]
 
 def parsePrimes (s : String) : List Nat :=
   (s.splitOn ",").filterMap (fun t => t.trim.toNat?)
@@ -80,7 +153,9 @@ def main (args : List String) : IO UInt32 := do
       match p.emitRolled name with
       | .error errs => (for e in errs do IO.eprintln e); return 1
       | .ok src =>
-          IO.FS.writeFile out (src ++ hostedDriver name p.arrayLen)
+          IO.FS.writeFile out
+            (src ++ verdictDriver name p.arrayLen (p.arrayLen - 12) 6 6 classes
+              [] true)
           IO.println s!"q={q} lo={lo} hi={c.hi} root={c.root} name={name}"
           IO.println s!"  tableLen={c.tableLen} markSteps={c.markSteps} period={c.period}"
           IO.println s!"  bodyLen={p.body.length} arrayLen={p.arrayLen} loopCount={p.loopCount}"

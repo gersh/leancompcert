@@ -456,7 +456,9 @@ def R2Cfg.tableBase (c : R2Cfg) : Nat := 5 * c.segLen + 1
 def R2Cfg.streamBase (c : R2Cfg) : Nat := c.tableBase + c.tableLen + 1
 def R2Cfg.streamSink (c : R2Cfg) : Nat := c.streamBase + 2 * c.streamCap
 def R2Cfg.resultBase (c : R2Cfg) : Nat := c.streamSink + 2
-def R2Cfg.arrayLen (c : R2Cfg) : Nat := c.resultBase + 12
+/-- Nineteen result cells: the ten the chain reads, then the nine per-class
+violation counters that sum to slot `9`. -/
+def R2Cfg.arrayLen (c : R2Cfg) : Nat := c.resultBase + 19
 
 /-! ## Register allocation
 
@@ -493,6 +495,31 @@ def rNe : Nat := 194    -- latched test point
 def rPl : Nat := 195    -- latched payload
 def rXm : Nat := 196    -- mantissa
 def rAa : Nat := 197    -- log bits so far
+
+/-! ### The nine failure classes, counted apart
+
+`rViol` is the aggregate and stays the program's output.  Alongside it the loop
+keeps one counter per way the run can fail, because a reader given only their
+sum cannot tell a **result** from a **retracted run**.  Three are the
+mathematics — clause 1 at each test point, clause 2 at each test point, and
+clause 1 once more in the epilogue at `hi`.  The other six say the arithmetic
+left the range in which it is exact, or that terms are missing, so on that
+window neither clause was tested at all. -/
+
+def rVUp : Nat := 350      -- clause 1 failed at a test point
+def rVLo : Nat := 351      -- clause 2 failed at a test point
+def rVTail : Nat := 352    -- clause 1 failed in the epilogue, at `hi`
+def rVMark : Nat := 353    -- the mark cursor did not reach the end of the table
+def rVCap : Nat := 354     -- a test point was pushed past `streamCap`
+def rVDrain : Nat := 355   -- the window turned over with the stream undrained
+def rVGap : Nat := 356     -- the test-point gap did not fit 16 bits
+def rVSqrt : Nat := 357    -- one `⌊√n⌋` increment did not suffice
+def rVLog2 : Nat := 358    -- one `⌊log₂ n⌋` increment did not suffice
+
+/-- The per-class counters in the order they occupy result slots `10 … 18`.
+They sum to `rViol`.  `bench/R2SegEmit.lean` labels them in this order. -/
+def violRegs : List Nat :=
+  [rVUp, rVLo, rVTail, rVMark, rVCap, rVDrain, rVGap, rVSqrt, rVLog2]
 
 def regCount : Nat := 400
 def outputReg : Nat := 190      -- `rViol`
@@ -617,6 +644,7 @@ def R2Cfg.markBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 155 .ne (.reg rPi) (.lit K))
   , .scalar (.binop 156 .mul (.reg 154) (.reg 155))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 156))
+  , .scalar (.binop rVMark .add (.reg rVMark) (.reg 156))
   ]
 
 /-! ## Phase two: classification and compaction -/
@@ -680,6 +708,7 @@ def R2Cfg.classBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 130 .mul (.reg 116) (.reg 129))      -- doPush
   , .scalar (.binop 131 .sub (.reg 116) (.reg 130))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 131))
+  , .scalar (.binop rVCap .add (.reg rVCap) (.reg 131))
   , .scalar (.binop 132 .shl (.reg rWc) (.lit 1))
   , .scalar (.binop 133 .add (.reg 132) (.lit c.streamBase))
   , .scalar (.binop 134 .mul (.reg 130) (.reg 133))
@@ -726,6 +755,7 @@ def R2Cfg.logBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 217 .ge (.reg rNe) (.reg rTh))
   , .scalar (.binop 218 .mul (.reg 217) (.reg 208))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 218))
+  , .scalar (.binop rVLog2 .add (.reg rVLog2) (.reg 218))
     -- the normalised mantissa, reset at the entry's first round.  The mask is
     -- the only thing between a register shift amount and C's undefined
     -- behaviour at a width of 64: `rEx ≤ 62` always, so it is a no-op.
@@ -813,6 +843,7 @@ def R2Cfg.logBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 288 .sub (.lit 1) (.reg 287))
   , .scalar (.binop 289 .mul (.reg 288) (.reg 247))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 289))
+  , .scalar (.binop rVGap .add (.reg rVGap) (.reg 289))
   , .scalar (.binop 290 .sub (.reg 286) (.lit 1))
   , .scalar (.binop 291 .mul (.reg 290) (.lit g))
   , .scalar (.binop 292 .mul (.reg 291) (.reg 247))
@@ -824,6 +855,7 @@ def R2Cfg.logBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 296 .gt (.reg 294) (.reg 295))
   , .scalar (.binop 297 .mul (.reg 296) (.reg 247))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 297))
+  , .scalar (.binop rVUp .add (.reg rVUp) (.reg 297))
     -- the last linear step, onto `n` itself
   , .scalar (.binop 298 .mul (.reg 247) (.lit g))
   , .scalar (.binop rD .add (.reg rD) (.reg 298))
@@ -838,6 +870,7 @@ def R2Cfg.logBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 304 .ge (.reg rNe) (.reg rSq2))
   , .scalar (.binop 305 .mul (.reg 304) (.reg 247))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 305))
+  , .scalar (.binop rVSqrt .add (.reg rVSqrt) (.reg 305))
     -- the running lower bound for `2^S·log n`, refreshed at every entry that
     -- computed a logarithm; a stale one is still a lower bound
   , .scalar (.binop 306 .mul (.reg 273) (.reg 247))
@@ -869,6 +902,7 @@ def R2Cfg.logBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 323 .lt (.reg 321) (.reg 322))
   , .scalar (.binop 324 .mul (.reg 323) (.reg 247))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 324))
+  , .scalar (.binop rVLo .add (.reg rVLo) (.reg 324))
     -- advance
   , .scalar (.binop 325 .mul (.reg 247) (.reg rNe))
   , .scalar (.binop 326 .mul (.reg 314) (.reg rPrev))
@@ -891,6 +925,7 @@ def R2Cfg.tailBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 334 .lt (.reg rEc) (.reg rWc))
   , .scalar (.binop 335 .mul (.reg 334) (.reg 331))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 335))
+  , .scalar (.binop rVDrain .add (.reg rVDrain) (.reg 335))
   , .scalar (.binop rWc .mul (.reg rWc) (.reg 332))
   , .scalar (.binop rEc .mul (.reg rEc) (.reg 332))
   , .scalar (.binop rK .mul (.reg rK) (.reg 332))
@@ -922,6 +957,11 @@ def R2Cfg.init (c : R2Cfg) (s : R2Seed) : List AInstr :=
 def storeResult (c : R2Cfg) (slot reg : Nat) : List AInstr :=
   [ .scalar (.mov 90 (.lit (c.resultBase + slot))), .store 90 reg ]
 
+/-- Store a run of registers into consecutive result cells from `slot`. -/
+def storeResults (c : R2Cfg) : Nat → List Nat → List AInstr
+  | _, [] => []
+  | slot, r :: rs => storeResult c slot r ++ storeResults c (slot + 1) rs
+
 /-- The epilogue advances the linear part from the last test point to `hi`,
 runs clause 1 once more there, and stores the carry-out of a chained run. -/
 def R2Cfg.epilogue (c : R2Cfg) : List AInstr :=
@@ -934,11 +974,12 @@ def R2Cfg.epilogue (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 344 .add (.lit (biasOf S)) (.reg rThr))
   , .scalar (.binop 345 .gt (.reg 343) (.reg 344))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 345))
+  , .scalar (.binop rVTail .add (.reg rVTail) (.reg 345))
   ] ++
   storeResult c 0 rD ++ storeResult c 1 rErr ++ storeResult c 2 rPrev ++
   storeResult c 3 rTerms ++ storeResult c 4 rSq ++ storeResult c 5 rEx ++
   storeResult c 6 rTh ++ storeResult c 7 rLn ++ storeResult c 8 rThr ++
-  storeResult c 9 rViol
+  storeResult c 9 rViol ++ storeResults c 10 violRegs
 
 def r2Program (c : R2Cfg) (s : R2Seed) : AProgram := {
   regCount := regCount
@@ -993,11 +1034,20 @@ theorem init_all (c : R2Cfg) (s : R2Seed) :
     (c.init s).all (ainstrWFB regCount) = true :=
   all_append (storeLits_all _) (seedRegs_all _ (seedList_ok c s))
 
+theorem storeResults_all (c : R2Cfg) : ∀ (slot : Nat) (l : List Nat),
+    l.all (fun r => decide (r < regCount)) = true →
+    (storeResults c slot l).all (ainstrWFB regCount) = true
+  | _, [], _ => rfl
+  | slot, a :: t, h => by
+      simp only [List.all_cons, Bool.and_eq_true] at h
+      exact all_append (storeResult_all c slot a (of_decide_eq_true h.1))
+        (storeResults_all c (slot + 1) t h.2)
+
 theorem epilogue_all (c : R2Cfg) :
     c.epilogue.all (ainstrWFB regCount) = true :=
   all_append (by rfl)
     (all_append (all_append (all_append (all_append (all_append (all_append
-      (all_append (all_append (all_append
+      (all_append (all_append (all_append (all_append
         (storeResult_all c 0 rD (by decide)) (storeResult_all c 1 rErr (by decide)))
         (storeResult_all c 2 rPrev (by decide)))
         (storeResult_all c 3 rTerms (by decide)))
@@ -1007,6 +1057,7 @@ theorem epilogue_all (c : R2Cfg) :
         (storeResult_all c 7 rLn (by decide)))
         (storeResult_all c 8 rThr (by decide)))
         (storeResult_all c 9 rViol (by decide)))
+        (storeResults_all c 10 violRegs (by decide)))
 
 /-- **The bridge's side condition.** -/
 theorem r2Program_wf (c : R2Cfg) (s : R2Seed) : (r2Program c s).WF :=

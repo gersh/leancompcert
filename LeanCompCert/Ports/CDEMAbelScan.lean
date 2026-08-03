@@ -265,7 +265,9 @@ def Cfg.muBase (c : Cfg) : Nat := c.pn
 def Cfg.winBase (c : Cfg) : Nat := c.muBase + c.k1
 def Cfg.sink (c : Cfg) : Nat := c.winBase + c.segLen
 def Cfg.resultBase (c : Cfg) : Nat := c.sink + 1
-def Cfg.arrayLen (c : Cfg) : Nat := c.resultBase + 12
+/-- Sixteen result cells: the twelve the chain reads, then the four per-class
+violation counters that sum to slot `11`. -/
+def Cfg.arrayLen (c : Cfg) : Nat := c.resultBase + 16
 
 /-- Bisection rounds needed: the initial bracket is at most `⌈W/t⌉ − ⌈W/(t+1)⌉`
 wide, which is at most `W` at `t = 1`.  `Nat.log2 W + 2` covers it. -/
@@ -320,6 +322,23 @@ def rVHi : Nat := 28
 def rTv : Nat := 29
 def rK : Nat := 30       -- the current integer `k`, latched
 
+/-! ### The four failure classes, counted apart
+
+Every one of `CDEMAbelScan`'s checks is a **guard**: the scan states no
+inequality of its own, it produces the increments a later Abel summation
+consumes.  So all four say the same kind of thing — the run left the range in
+which its arithmetic is exact — but they say it about four different budgets,
+and a reader has to know which. -/
+
+def rVDiv : Nat := 245    -- the weight quotient `⌊W/s⌋` exceeded `2³¹`
+def rVMark : Nat := 246   -- the divisor cursor had not finished at the last mark step
+def rVSqrt : Nat := 247   -- one `⌊√k⌋` increment did not suffice
+def rVBisect : Nat := 248 -- the bisection bracket had not closed at the last round
+
+/-- The per-class counters in the order they occupy result slots `12 … 15`.
+They sum to `rViol`. -/
+def violRegs : List Nat := [rVDiv, rVMark, rVSqrt, rVBisect]
+
 def regCount : Nat := 256
 def outputReg : Nat := rViol
 
@@ -337,6 +356,11 @@ def storeLits (l : List (Nat × Nat)) : List AInstr :=
 
 def storeResult (c : Cfg) (slot reg : Nat) : List AInstr :=
   [ .scalar (.mov 240 (.lit (c.resultBase + slot))), .store 240 reg ]
+
+/-- Store a run of registers into consecutive result cells from `slot`. -/
+def storeResults (c : Cfg) : Nat → List Nat → List AInstr
+  | _, [] => []
+  | slot, r :: rs => storeResult c slot r ++ storeResults c (slot + 1) rs
 
 /-- `(lo, hi) = ra · rb`, the half-limb circuit of `Verified.MulWide.hl`
 written out.  `s0 … s7` are scratch registers, all clobbered. -/
@@ -400,6 +424,7 @@ def okBody (c : Cfg) (rs gate ok : Nat) : List AInstr :=
   , .scalar (.binop 102 .gt (.reg 100) (.lit 2147483648))  -- a too large?
   , .scalar (.binop 102 .mul (.reg 102) (.reg gate))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 102))
+  , .scalar (.binop rVDiv .add (.reg rVDiv) (.reg 102))
   , .scalar (.binop 103 .mul (.reg 100) (.reg 100))        -- a²
   , .scalar (.binop 104 .lt (.reg rK) (.reg 103))          -- k < a²
   , .scalar (.binop 105 .sub (.lit 1) (.reg 104))          -- k ≥ a²
@@ -541,7 +566,8 @@ def Cfg.markBody (c : Cfg) : List AInstr :=
     , .scalar (.binop 134 .mul (.reg 134) (.reg 41))
     , .scalar (.binop 135 .lt (.reg rD) (.lit c.kBound))
     , .scalar (.binop 134 .mul (.reg 134) (.reg 135))
-    , .scalar (.binop rViol .add (.reg rViol) (.reg 134)) ]
+    , .scalar (.binop rViol .add (.reg rViol) (.reg 134))
+    , .scalar (.binop rVMark .add (.reg rVMark) (.reg 134)) ]
 
 /-! ### The accumulation phase: `bsSteps + 1` iterations per integer -/
 
@@ -578,6 +604,7 @@ def Cfg.accHead (c : Cfg) : List AInstr :=
     , .scalar (.binop 154 .ge (.reg rK) (.reg rT2))
     , .scalar (.binop 154 .mul (.reg 154) (.reg 140))
     , .scalar (.binop rViol .add (.reg rViol) (.reg 154))
+  , .scalar (.binop rVSqrt .add (.reg rVSqrt) (.reg 154))
       -- G(k) = |1 − F(k)|
     , .scalar (.binop 155 .sub (.lit 1) (.reg rF))
     , .scalar (.binop 156 .ge (.reg 155) (.lit 9223372036854775808))
@@ -641,6 +668,7 @@ def Cfg.accBisect (c : Cfg) : List AInstr :=
       .scalar (.binop 202 .ne (.reg rSl) (.reg rSh))
     , .scalar (.binop 202 .mul (.reg 202) (.reg 141))
     , .scalar (.binop rViol .add (.reg rViol) (.reg 202))
+  , .scalar (.binop rVBisect .add (.reg rVBisect) (.reg 202))
     , .scalar (.binop 203 .mul (.reg 165) (.reg 141))
     ] ++ mulWideBody 203 rSh 204 205 180 181 182 183 184 185 186 187
     ++ addWideBody rVLo rVHi 204 205 188
@@ -688,7 +716,7 @@ def Cfg.epilogue (c : Cfg) : List AInstr :=
   storeResult c 4 rVLo ++ storeResult c 5 rVHi ++
   storeResult c 6 rTv ++ storeResult c 7 rF ++
   storeResult c 8 rE ++ storeResult c 9 rT ++
-  storeResult c 10 rD ++ storeResult c 11 rViol
+  storeResult c 10 rD ++ storeResult c 11 rViol ++ storeResults c 12 violRegs
 
 def abelProgram (c : Cfg) : AProgram := {
   regCount := regCount
@@ -781,6 +809,15 @@ theorem body_all (c : Cfg) : c.body.all (ainstrWFB regCount) = true := by
 theorem init_all (c : Cfg) : (c.init).all (ainstrWFB regCount) = true :=
   all_append (storeLits_all _) (seedRegs_all _ (seedList_ok c))
 
+theorem storeResults_all (c : Cfg) : ∀ (slot : Nat) (l : List Nat),
+    l.all (fun r => decide (r < regCount)) = true →
+    (storeResults c slot l).all (ainstrWFB regCount) = true
+  | _, [], _ => rfl
+  | slot, a :: t, h => by
+      simp only [List.all_cons, Bool.and_eq_true] at h
+      exact all_append (storeResult_all c slot a (of_decide_eq_true h.1))
+        (storeResults_all c (slot + 1) t h.2)
+
 theorem epilogue_all (c : Cfg) : (c.epilogue).all (ainstrWFB regCount) = true :=
   all_append (storeResult_all c 0 rUpLo (by decide))
     (all_append (storeResult_all c 1 rUpHi (by decide))
@@ -793,7 +830,8 @@ theorem epilogue_all (c : Cfg) : (c.epilogue).all (ainstrWFB regCount) = true :=
     (all_append (storeResult_all c 8 rE (by decide))
     (all_append (storeResult_all c 9 rT (by decide))
     (all_append (storeResult_all c 10 rD (by decide))
-      (storeResult_all c 11 rViol (by decide))))))))))))
+    (all_append (storeResult_all c 11 rViol (by decide))
+      (storeResults_all c 12 violRegs (by decide)))))))))))))
 
 /-- **The bridge's side condition.** -/
 theorem abelProgram_wf (c : Cfg) : (abelProgram c).WF :=

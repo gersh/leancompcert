@@ -27,12 +27,27 @@ lake env lean --run bench/ArraySegEmit.lean MODE LO SEGLEN SEGCOUNT OUT [EXPECTE
                accumulator limbs, `⌈√(hi+1)⌉` and its square; the seeds are the
                two limbs.
 
-Two drivers are emitted.  Without `EXPECTED` the driver is *hosted*: it
-prints the result cells, which is what a chained run needs and what the
-reference cross-check compares against.  With `EXPECTED` the driver is
-*freestanding*: it returns `0` exactly when the artifact's output — the number
-of failed threshold tests — equals `EXPECTED`, which is the shape
-`check-native` and the timing runs use.
+## The emitted `main` carries a verdict
+
+Both drivers exit `0` **exactly when** the artifact's own acceptance condition
+held: no threshold test failed.  The hosted driver additionally prints the
+result cells a chained run needs, and one line per **clause**, so a failure
+names itself instead of arriving as a total:
+
+| exit | class | modes |
+| ---: | --- | --- |
+| `0` | — | accepted |
+| `1` | `INCONSISTENT` | the classes do not sum to the aggregate |
+| `2` | `hurst_upper` / `mobius_upper` | the residue above its majorant |
+| `3` | `hurst_lower` / `mobius_lower` | the residue below its majorant |
+| `4` | `cdem_upper` | `Q(n) − (6/π²)n > b√n` |
+| `5` | `cdem_lower` | `(6/π²)(n+1) − Q(n) > b√n` |
+
+With `EXPECTED` the driver is *freestanding*: no `printf`, same acceptance
+condition.  `EXPECTED` is an **additional** demand — exit `1` if the artifact
+did not reproduce it — and never a substitute for acceptance: a run that
+reproduces a nonzero violation count exits `2`, because reproducing a failure
+is not passing.
 
 Emission only; no proof obligation is discharged here.
 -/
@@ -43,22 +58,96 @@ open LeanCompCert.Ports.ArraySegSieve
 
 namespace Bench.ArraySegEmit
 
-def hostedDriver (name : String) (cells slots : Nat) : String :=
+/-- One failure class: its label, its offset inside the class block, and the
+exit status the driver returns when it is the first nonzero one.  The list is
+given in **scan order**, so the classes that invalidate a run come before the
+classes that are a result. -/
+abbrev Class := String × Nat × Nat
+
+/-- A hosted driver that prints the result cells and then **decides**.
+
+`base` is the first result cell, `slots` how many of them the chain reads, and
+`classBase` the slot at which the class counters start.  The emitted `main` returns `0` only when every
+class counter is zero, `1` when the classes do not sum to the aggregate (a
+split that has come adrift is a reason to trust neither number), and otherwise
+the status of the first nonzero class in scan order. -/
+def verdictDriver (name : String) (cells base slots classBase : Nat)
+    (classes : List Class) (diags : List (String × Nat)) (sumIsExact : Bool) :
+    String :=
+  let cell (i : Nat) : String := "cells[" ++ toString (base + i) ++ "]"
+  let classLine (x : Class) : String :=
+    "    printf(\"class " ++ x.1 ++ " %llu\\n\", (unsigned long long)" ++
+      cell (classBase + x.2.1) ++ ");\n" ++
+    "    sum += " ++ cell (classBase + x.2.1) ++ ";\n"
+  let diagLine (x : String × Nat) : String :=
+    "    printf(\"diag " ++ x.1 ++ " %llu\\n\", (unsigned long long)" ++
+      cell x.2 ++ ");\n"
+  let verdictLine (x : Class) : String :=
+    "    if (" ++ cell (classBase + x.2.1) ++ " != UINT64_C(0)) {\n" ++
+    "        printf(\"verdict FAIL " ++ x.1 ++ "\\n\");\n" ++
+    "        return " ++ toString x.2.2 ++ ";\n    }\n"
+  let consistency :=
+    if sumIsExact then
+      "    if (sum != r) {\n" ++
+      "        printf(\"verdict INCONSISTENT classes %llu aggregate %llu\\n\",\n" ++
+      "               (unsigned long long)sum, (unsigned long long)r);\n" ++
+      "        return 1;\n    }\n"
+    else
+      -- the aggregate collapses several conditions per row, so the classes
+      -- bound it from above rather than equalling it; what must hold is that
+      -- they vanish together
+      "    if ((sum == UINT64_C(0)) != (r == UINT64_C(0)) || sum < r) {\n" ++
+      "        printf(\"verdict INCONSISTENT classes %llu aggregate %llu\\n\",\n" ++
+      "               (unsigned long long)sum, (unsigned long long)r);\n" ++
+      "        return 1;\n    }\n"
   "\n#include <stdio.h>\n" ++
   "static uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
   "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    uint64_t sum = 0;\n" ++
   "    printf(\"violations %llu\\n\", (unsigned long long)r);\n" ++
   "    for (int i = 0; i < " ++ toString slots ++ "; i++)\n" ++
   "        printf(\"slot%d %llu\\n\", i,\n" ++
-  "               (unsigned long long)cells[" ++ toString cells ++ " - 8 + i]);\n" ++
+  "               (unsigned long long)cells[" ++ toString base ++ " + i]);\n" ++
+  String.join (classes.map classLine) ++
+  String.join (diags.map diagLine) ++
+  consistency ++
+  String.join (classes.map verdictLine) ++
+  "    printf(\"verdict PASS\\n\");\n" ++
   "    return 0;\n}\n"
 
+/-- The freestanding driver.  Acceptance is `r == 0`; a supplied `EXPECTED` is
+an **additional** demand (exit `1` if the artifact did not reproduce it), never
+a substitute for it — reproducing a nonzero count exits `2`. -/
 def exitDriver (name : String) (cells expected : Nat) : String :=
   "\nstatic uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
   "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
-  "    return r == UINT64_C(" ++ toString expected ++ ") ? 0 : 1;\n}\n"
+  "    if (r != UINT64_C(" ++ toString expected ++ ")) return 1;\n" ++
+  "    return r == UINT64_C(0) ? 0 : 2;\n}\n"
+
+/-- The classes each mode's residue keeps, in scan order.
+
+Every one of them is a **clause**: this file's residues carry no budgets and no
+in-loop guards, so there is nothing here that says "the run was invalid", only
+statements that failed.  `plattstronglive` has a single class because
+`mobiusLiveResidue` folds the two sides into `|V|` before it compares; there is
+nothing to separate, and the block has a realisation theorem proved about it. -/
+def classesOf : String → List Class
+  | "mertens" | "mertens2" | "mertenslive" | "mertenslive2" =>
+      [ ("hurst_upper", 0, 2), ("hurst_lower", 1, 3)
+      , ("cdem_upper", 2, 4), ("cdem_lower", 3, 5) ]
+  | "platt211" | "plattstrong" =>
+      [ ("mobius_upper", 0, 2), ("mobius_lower", 1, 3) ]
+  | "plattstronglive" => [ ("mobius_majorant", 0, 2) ]
+  | _ => []
+
+/-- How many of the result cells the chain reads, per mode. -/
+def slotsOf : String → Nat
+  | "mertens" | "mertens2" => 7
+  | "mertenslive" | "mertenslive2" => 4
+  | "platt211" | "plattstrong" => 3
+  | _ => 4
 
 end Bench.ArraySegEmit
 
@@ -103,10 +192,13 @@ def main (args : List String) : IO UInt32 := do
               (mobLiveSeed lo (seeds[0]?.getD dflt.tLo) (seeds[1]?.getD dflt.tHi))
             pure (mobiusLiveProgram c k s)
         | _ => do IO.eprintln "bad MODE"; return 1
+      let base := p.arrayLen - 16
       let driver :=
         match expected.bind String.toNat? with
         | some n => exitDriver name p.arrayLen n
-        | none => hostedDriver name p.arrayLen 7
+        | none =>
+            verdictDriver name p.arrayLen base (slotsOf mode) 8
+              (classesOf mode) [] true
       match p.emitRolled name with
       | .error errs => (for e in errs do IO.eprintln e); return 1
       | .ok src =>

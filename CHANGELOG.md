@@ -2,6 +2,65 @@
 
 ## Unreleased
 
+- **Every emitted `main` now carries a verdict, and the `ψ` clause is tested
+  against `√n` rather than `⌊√n⌋`.**  Eight bench emitters emitted a `main`
+  that printed a result and then `return 0` unconditionally, so a passing run
+  meant only "it ran".  `array_seg_platt` sat on record as `pass` while its own
+  stdout read `violations 3`.
+  - **The acceptance condition is the exit status.**  `Prop1224CellEmit`,
+    `ExpFixEmit`, `Prop1224RowEmit`, `AbelEmit`, `ArraySegEmit`, `PsiSegEmit`,
+    `ArraySegBatch` and `R2SegEmit` now exit `0` **iff** the artifact's own
+    violation register is `0`, and otherwise return a status that names the
+    class.  Where a freestanding driver takes an `EXPECTED` value, that value
+    is now an *additional* demand rather than a substitute for acceptance: a
+    run that reproduces a nonzero violation count exits `2`, because
+    reproducing a failure is not passing.
+  - **Failure classes are counted apart.**  Each port keeps one counter per way
+    it can fail, stored in result cells of its own, with the aggregate
+    unchanged and still the program's output — so `denote` means exactly what
+    it meant.  The drivers check that the classes reconstruct the aggregate and
+    refuse to report a verdict when they do not.  The split matters most where
+    the classes mean *opposite* things: a `ψ` stream-budget overrun drops
+    positive terms, which makes clause 1 easier and clause 2 harder, so in an
+    aggregate it is indistinguishable from — and the opposite of — a genuine
+    lower-bound failure.
+  - **`PsiSegSieve` clause 1 was false at the one point where it is tight.**
+    `max (ψ(x) − x)/√x = 0.7905927544` is **attained**, at the prime
+    `x = 110 102 617`, and `0.79059276` is that number rounded up.  Substituting
+    `⌊√n⌋` for `√n` costs up to `0.791` absolute against a margin of
+    `5.9·10⁻⁵`, so the artifact reported a violation where the clause holds —
+    exactly one integer below `1.11·10⁸`, which no smoke slice could reach.
+    Clause 1 is now `V² ≤ cUp16²·n`, exact in integers, `128`-bit on both sides
+    from `32×32` products.  That is the *same* claim, not a weaker one; the
+    discarded floor form is kept as the reported diagnostic `floorform_only`,
+    which is outside the aggregate because it is not a failure.  `S ≤ 48` is
+    now a hard requirement (`cUp16Fits`), since `cUp16²` must fit a word.
+    Production sizing `lo = 32 383, L = 1 048 576, N = 1 000` (`hi ≈ 1.05·10⁹`)
+    now reports `violations 0`, every class `0`, `floorform_only 1`, exit `0`,
+    in 177.6 s; the residual at `hi = 10⁸` is bit-for-bit the value
+    `bench/results/psi_fold.md` §7 records.
+  - **The floor/ceil-root audit.**  Every clause in this repository that
+    substitutes an integer root into a majorant was measured.  `ψ`'s clause 2
+    (`√2`, min ratio `−0.9241`), `R₂*`'s (`1.93`, max ratio `1.2574` at
+    `n = 59 753`) and CDEM's (`b = 0.0755` from `n = 9 243`, `b = 0.0285` from
+    `n = 437 601`) all have room and no floor-form failures in range.  Hurst's
+    `0.571` does not: over `[33, 3·10⁷]` the `⌊√n⌋` form fails at
+    `n = 33, 114, 199, 200` and the claim holds at all four.  `seg_chain.sh`'s
+    default `LO = 9243` clears them, but a run started at `33` would report
+    four spurious violations.  Recorded, not repaired.
+  - **The generated C changed for all eight**, so their stamps invalidate, and
+    two `check-native` translation units move with them (`cdem-abel`,
+    `mobius-seg`) because their ports gained counters.  The other twelve are
+    byte-identical by SHA-256, as are all eight emitters that already emitted a
+    genuine verdict — `MertensCDEMEmit`, `DeficitProductEmit`,
+    `TrialDivisionEmit`, `RS62Emit`, `TGSieveEmit`, `ArrayMobiusEmit`,
+    `RolledEmit` — checked by emitting the same configuration from both trees.
+  - Gates: `lake build` 257 jobs; `check-native --force` 14/14 agree, 0 cached;
+    `AxiomAudit` 327 prints all within `[propext, Classical.choice,
+    Quot.sound]`; the partition is 35 audited and 5 carriers;
+    `test-compcert.sh` and `verify-trusted.sh` pass.  The whole of
+    `receiptBinds` still closes by `decide +kernel`: 113 s and 26.44 GB.
+
 - **`ArrayBridge`: the array machine gets the refinement combinator
   `docs/algorithm-to-proof.md` §3 promised.**  Three modules now carry an array
   port, and the doc says which is which:
