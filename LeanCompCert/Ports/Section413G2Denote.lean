@@ -398,4 +398,272 @@ theorem muxS_frame (k : Nat) (s : RegState) (dst gate x y sc j : Nat)
   simp only [muxS, List.mem_cons, List.not_mem_nil, or_false] at hi
   rcases hi with rfl | rfl | rfl | rfl <;> simp only [sdest] <;> omega
 
+/-! ### `smDecomp`: sign bit, magnitude, and the magnitude guard -/
+
+/-- The two instructions before the select. -/
+def smPre (h63 w sg : Nat) : List Instr :=
+  [ .binop sg .ge (.reg w) (.lit h63)
+  , .binop 108 .sub (.lit 0) (.reg w) ]
+
+/-- The three instructions after it: the gated magnitude guard. -/
+def smPost (cap gate mg : Nat) : List Instr :=
+  [ .binop 110 .gt (.reg mg) (.lit cap)
+  , .binop 110 .mul (.reg 110) (.reg gate)
+  , .binop rViol .bor (.reg rViol) (.reg 110) ]
+
+/-- `Section413G2Program.smDecomp`, as a scalar block with its two bounds
+abstracted. -/
+def smDecompG (h63 cap gate w sg mg : Nat) : List Instr :=
+  smPre h63 w sg ++ muxS mg sg 108 w 109 ++ smPost cap gate mg
+
+theorem smDecomp_lift (gate w sg mg : Nat) :
+    smDecomp gate w sg mg = lift (smDecompG H63 CAP gate w sg mg) := rfl
+
+theorem smDecompG_noDiv (h63 cap gate w sg mg : Nat) :
+    (smDecompG h63 cap gate w sg mg).all NoDivI = true := rfl
+
+theorem smPre_spec (k : Nat) (s : RegState) (h63 w sg : Nat)
+    (hh : h63 % M = h63) (hsg : sg ≠ 108) (hw : w ≠ sg) :
+    srun k s (smPre h63 w sg) sg = (if h63 ≤ s w then 1 else 0) ∧
+      srun k s (smPre h63 w sg) 108 = tsub 0 (s w) := by
+  constructor <;>
+    simp only [smPre, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+      Option.getD_some, hh, zero_mod_M, tsub, if_true, ge_iff_le,
+      if_neg hsg, if_neg (Ne.symm hsg), if_neg hw, if_neg (Ne.symm hw)]
+
+theorem smPre_frame (k : Nat) (s : RegState) (h63 w sg j : Nat)
+    (h1 : j ≠ sg) (h2 : j ≠ 108) :
+    srun k s (smPre h63 w sg) j = s j := by
+  refine srun_untouched k j _ ?_ s
+  intro i hi
+  simp only [smPre, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with rfl | rfl <;> simp only [sdest] <;> omega
+
+theorem smPost_spec (k : Nat) (s : RegState) (cap gate mg : Nat)
+    (hc : cap % M = cap) (hs : ∀ j, s j < M)
+    (h1 : mg ≠ 110) (h2 : gate ≠ 110) :
+    srun k s (smPost cap gate mg) rViol
+      = s rViol ||| ((if cap < s mg then 1 else 0) * s gate) := by
+  have hM0 : 0 < M := M_pos
+  have hM1 : (1:Nat) < M := by decide
+  have hgM : s gate < M := hs gate
+  have hvM : s rViol < M := hs rViol
+  have key : srun k s (smPost cap gate mg) rViol
+      = (s rViol ||| ((if cap < s mg then (1:Nat) else 0) * s gate) % M) % M := by
+    simp only [smPost, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+      Option.getD_some, hc, if_true, if_false, gt_iff_lt,
+      if_neg h1, if_neg (Ne.symm h1), if_neg h2, if_neg (Ne.symm h2),
+      show (rViol : Nat) ≠ 110 by decide,
+      show (110 : Nat) ≠ rViol by decide]
+  have e1 : ((if cap < s mg then (1:Nat) else 0) * s gate) % M
+      = (if cap < s mg then (1:Nat) else 0) * s gate := by
+    refine Nat.mod_eq_of_lt ?_
+    split <;> omega
+  have e2 : (if cap < s mg then (1:Nat) else 0) * s gate < M := by
+    split <;> omega
+  rw [key, e1, lor_mod_M hvM e2]
+
+theorem smPost_frame (k : Nat) (s : RegState) (cap gate mg j : Nat)
+    (h1 : j ≠ 110) (h2 : j ≠ rViol) :
+    srun k s (smPost cap gate mg) j = s j := by
+  refine srun_untouched k j _ ?_ s
+  intro i hi
+  simp only [smPost, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with rfl | rfl | rfl <;> simp only [sdest] <;> omega
+
+/-- The whole block writes only `sg`, `mg`, `rViol` and the three fixed
+scratch registers `108`–`110`. -/
+theorem smDecompG_frame (k : Nat) (s : RegState) (h63 cap gate w sg mg j : Nat)
+    (h1 : j ≠ sg) (h2 : j ≠ mg) (h3 : j ≠ rViol)
+    (h4 : j ≠ 108) (h5 : j ≠ 109) (h6 : j ≠ 110) :
+    srun k s (smDecompG h63 cap gate w sg mg) j = s j := by
+  rw [smDecompG, srun_append, srun_append, smPost_frame _ _ _ _ _ _ h6 h3,
+    muxS_frame _ _ _ _ _ _ _ _ h2 h5, smPre_frame _ _ _ _ _ _ h1 h4]
+
+/-- **The decomposition computes `tmag`, and guards the magnitude.** -/
+theorem smDecompG_spec (k : Nat) (s : RegState) (h63 cap gate w sg mg : Nat)
+    (hh : h63 % M = h63) (hc : cap % M = cap) (hs : ∀ j, s j < M)
+    (hsg0 : sg ≠ rViol) (hsg8 : sg ≠ 108) (hsg9 : sg ≠ 109) (hsgA : sg ≠ 110)
+    (hmg0 : mg ≠ rViol) (hmg9 : mg ≠ 109) (hmgA : mg ≠ 110)
+    (hgt8 : gate ≠ 108) (hgt9 : gate ≠ 109) (hgtA : gate ≠ 110)
+    (hw8 : w ≠ 108) (hw9 : w ≠ 109)
+    (hsgmg : sg ≠ mg) (hwsg : w ≠ sg) (hgsg : gate ≠ sg) (hgmg : gate ≠ mg) :
+    srun k s (smDecompG h63 cap gate w sg mg) sg = (if h63 ≤ s w then 1 else 0) ∧
+    srun k s (smDecompG h63 cap gate w sg mg) mg
+      = (if h63 ≤ s w then tsub 0 (s w) else s w) ∧
+    srun k s (smDecompG h63 cap gate w sg mg) rViol
+      = s rViol |||
+        ((if cap < (if h63 ≤ s w then tsub 0 (s w) else s w) then 1 else 0) * s gate) := by
+  -- stage 1: the two instructions before the select
+  have h1s := smPre_spec k s h63 w sg hh hsg8 hwsg
+  have h1lt : ∀ j, srun k s (smPre h63 w sg) j < M :=
+    srun_lt_of_lt k (smPre h63 w sg) s hs
+  have h1w : srun k s (smPre h63 w sg) w = s w :=
+    smPre_frame k s h63 w sg w hwsg hw8
+  have h1g : srun k s (smPre h63 w sg) gate = s gate :=
+    smPre_frame k s h63 w sg gate hgsg hgt8
+  have h1v : srun k s (smPre h63 w sg) rViol = s rViol :=
+    smPre_frame k s h63 w sg rViol (Ne.symm hsg0) (by decide)
+  -- stage 2: the select
+  have h2m := muxS_spec k (srun k s (smPre h63 w sg)) mg sg 108 w 109
+    (Ne.symm hmg9) (Ne.symm hsg9) (by decide) (Ne.symm hw9)
+    (by rw [h1s.1]; split <;> omega) h1lt
+  have h2lt : ∀ j, srun k (srun k s (smPre h63 w sg)) (muxS mg sg 108 w 109) j < M :=
+    srun_lt_of_lt k _ _ h1lt
+  have h2s : srun k (srun k s (smPre h63 w sg)) (muxS mg sg 108 w 109) sg
+      = srun k s (smPre h63 w sg) sg :=
+    muxS_frame k _ mg sg 108 w 109 sg hsgmg hsg9
+  have h2g : srun k (srun k s (smPre h63 w sg)) (muxS mg sg 108 w 109) gate
+      = srun k s (smPre h63 w sg) gate :=
+    muxS_frame k _ mg sg 108 w 109 gate hgmg hgt9
+  have h2v : srun k (srun k s (smPre h63 w sg)) (muxS mg sg 108 w 109) rViol
+      = srun k s (smPre h63 w sg) rViol :=
+    muxS_frame k _ mg sg 108 w 109 rViol (Ne.symm hmg0) (by decide)
+  -- the magnitude, in closed form
+  have hmag : srun k (srun k s (smPre h63 w sg)) (muxS mg sg 108 w 109) mg
+      = (if h63 ≤ s w then tsub 0 (s w) else s w) := by
+    rw [h2m, h1s.1, h1s.2, h1w]
+    by_cases hb : h63 ≤ s w
+    · rw [if_pos hb, if_pos hb, if_pos rfl]
+    · rw [if_neg hb, if_neg hb, if_neg (by decide : ¬ (0:Nat) = 1)]
+  -- stage 3: the guard
+  refine ⟨?_, ?_, ?_⟩
+  · rw [smDecompG, srun_append, srun_append,
+      smPost_frame _ _ _ _ _ _ hsgA hsg0, h2s, h1s.1]
+  · rw [smDecompG, srun_append, srun_append,
+      smPost_frame _ _ _ _ _ _ hmgA hmg0, hmag]
+  · rw [smDecompG, srun_append, srun_append,
+      smPost_spec k _ cap gate mg hc h2lt hmgA hgtA, hmag, h2g, h1g, h2v, h1v]
+
+/-- The `CAP`/`H63` instantiation: the block computes `tmag` and adds the
+magnitude violation to `rViol`, exactly as `tcmul` reads it. -/
+theorem smDecomp_tmag (k : Nat) (s : RegState) (gate w sg mg : Nat)
+    (hs : ∀ j, s j < M)
+    (hsg0 : sg ≠ rViol) (hsg8 : sg ≠ 108) (hsg9 : sg ≠ 109) (hsgA : sg ≠ 110)
+    (hmg0 : mg ≠ rViol) (hmg9 : mg ≠ 109) (hmgA : mg ≠ 110)
+    (hgt8 : gate ≠ 108) (hgt9 : gate ≠ 109) (hgtA : gate ≠ 110)
+    (hw8 : w ≠ 108) (hw9 : w ≠ 109)
+    (hsgmg : sg ≠ mg) (hwsg : w ≠ sg) (hgsg : gate ≠ sg) (hgmg : gate ≠ mg) :
+    srun k s (smDecompG H63 CAP gate w sg mg) sg = (tmag (s w)).1 ∧
+    srun k s (smDecompG H63 CAP gate w sg mg) mg = (tmag (s w)).2 ∧
+    srun k s (smDecompG H63 CAP gate w sg mg) rViol
+      = s rViol ||| (bnat (CAP < (tmag (s w)).2) * s gate) := by
+  have h := smDecompG_spec k s H63 CAP gate w sg mg H63_mod CAP_mod hs
+    hsg0 hsg8 hsg9 hsgA hmg0 hmg9 hmgA hgt8 hgt9 hgtA hw8 hw9
+    hsgmg hwsg hgsg hgmg
+  simp only [tmag, bnat]
+  exact h
+
+/-! ### `cmpLtBody`: the strict signed sign-magnitude comparison -/
+
+/-- `Section413G2Program.cmpLtBody`, as a scalar block.  No literal in it is
+larger than `1`, so nothing here needs abstracting. -/
+def cmpLtS (sa la ha sb lb hb dst : Nat) : List Instr :=
+  [ .binop 126 .lt (.reg ha) (.reg hb)
+  , .binop 127 .eq (.reg ha) (.reg hb)
+  , .binop 128 .lt (.reg la) (.reg lb)
+  , .binop 129 .lt (.reg hb) (.reg ha)
+  , .binop 130 .lt (.reg lb) (.reg la)
+  , .binop 131 .mul (.reg 127) (.reg 128)
+  , .binop 131 .add (.reg 131) (.reg 126)
+  , .binop 139 .mul (.reg 127) (.reg 130)
+  , .binop 139 .add (.reg 139) (.reg 129)
+  , .binop 140 .sub (.lit 1) (.reg sb)
+  , .binop 141 .mul (.reg sa) (.reg 140)
+  , .binop 142 .mul (.reg sa) (.reg sb)
+  , .binop 142 .mul (.reg 142) (.reg 139)
+  , .binop 143 .sub (.lit 1) (.reg sa)
+  , .binop 143 .mul (.reg 143) (.reg 140)
+  , .binop 143 .mul (.reg 143) (.reg 131)
+  , .binop dst .add (.reg 141) (.reg 142)
+  , .binop dst .add (.reg dst) (.reg 143) ]
+
+theorem cmpLtBody_lift (sa la ha sb lb hb dst : Nat) :
+    cmpLtBody sa la ha sb lb hb dst = lift (cmpLtS sa la ha sb lb hb dst) := rfl
+
+theorem cmpLtS_noDiv (sa la ha sb lb hb dst : Nat) :
+    (cmpLtS sa la ha sb lb hb dst).all NoDivI = true := rfl
+
+/-- The scratch registers `cmpLtBody` clobbers. -/
+def CmpClear (r : Nat) : Prop :=
+  r ≠ 126 ∧ r ≠ 127 ∧ r ≠ 128 ∧ r ≠ 129 ∧ r ≠ 130 ∧ r ≠ 131 ∧
+  r ≠ 139 ∧ r ≠ 140 ∧ r ≠ 141 ∧ r ≠ 142 ∧ r ≠ 143
+
+/-- The flag algebra of the comparison, with the machine's truncations, as a
+statement about seven bits.  All eight quantities the block forms are at most
+`2`, so every `% M` is the identity; this is what the `128`-way split
+checks. -/
+theorem cmpLt_arith (a b A B C D E : Nat)
+    (ha : a ≤ 1) (hb : b ≤ 1) (hA : A ≤ 1) (hB : B ≤ 1) (hC : C ≤ 1)
+    (hD : D ≤ 1) (hE : E ≤ 1) :
+    (((a * ((1 + (M - b)) % M)) % M
+        + ((a * b) % M * (((B * E) % M + D) % M)) % M) % M
+      + ((((1 + (M - a)) % M * ((1 + (M - b)) % M)) % M
+          * (((B * C) % M + A) % M)) % M)) % M
+      = a * (1 - b) + a * b * (D + B * E) + (1 - a) * (1 - b) * (A + B * C) := by
+  have m0 : (0:Nat) % M = 0 := by decide
+  have m1 : (1:Nat) % M = 1 := by decide
+  have m2 : (2:Nat) % M = 2 := by decide
+  have m3 : (3:Nat) % M = 3 := by decide
+  rw [msub_bit ha, msub_bit hb]
+  rcases (by omega : a = 0 ∨ a = 1) with rfl | rfl <;>
+  rcases (by omega : b = 0 ∨ b = 1) with rfl | rfl <;>
+  rcases (by omega : A = 0 ∨ A = 1) with rfl | rfl <;>
+  rcases (by omega : B = 0 ∨ B = 1) with rfl | rfl <;>
+  rcases (by omega : C = 0 ∨ C = 1) with rfl | rfl <;>
+  rcases (by omega : D = 0 ∨ D = 1) with rfl | rfl <;>
+  rcases (by omega : E = 0 ∨ E = 1) with rfl | rfl <;>
+  simp only [Nat.mul_zero, Nat.zero_mul, Nat.mul_one, Nat.one_mul,
+    Nat.add_zero, Nat.zero_add, Nat.sub_zero, Nat.sub_self, m0, m1, m2, m3]
+
+set_option maxHeartbeats 1000000 in
+/-- **The comparison block computes `tlt`.** -/
+theorem cmpLtS_spec (k : Nat) (s : RegState) (sa la ha sb lb hb dst : Nat)
+    (hf : ∀ r ∈ [sa, la, ha, sb, lb, hb], CmpClear r)
+    (hdst : dst ≠ 143)
+    (hsa : s sa ≤ 1) (hsb : s sb ≤ 1) :
+    srun k s (cmpLtS sa la ha sb lb hb dst) dst
+      = tlt (s sa) (s la) (s ha) (s sb) (s lb) (s hb) := by
+  obtain ⟨a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11⟩ := hf sa (by simp)
+  obtain ⟨b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11⟩ := hf la (by simp)
+  obtain ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11⟩ := hf ha (by simp)
+  obtain ⟨d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11⟩ := hf sb (by simp)
+  obtain ⟨e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11⟩ := hf lb (by simp)
+  obtain ⟨f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11⟩ := hf hb (by simp)
+  have key : srun k s (cmpLtS sa la ha sb lb hb dst) dst
+      = (((s sa * ((1 + (M - s sb)) % M)) % M
+          + ((s sa * s sb) % M
+              * ((((if s ha = s hb then (1:Nat) else 0)
+                    * (if s lb < s la then (1:Nat) else 0)) % M
+                  + (if s hb < s ha then (1:Nat) else 0)) % M)) % M) % M
+        + ((((1 + (M - s sa)) % M * ((1 + (M - s sb)) % M)) % M
+            * ((((if s ha = s hb then (1:Nat) else 0)
+                  * (if s la < s lb then (1:Nat) else 0)) % M
+                + (if s ha < s hb then (1:Nat) else 0)) % M)) % M)) % M := by
+    simp only [cmpLtS, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+      Option.getD_some, one_mod_M, if_true, if_false, reduceIte,
+      Nat.reduceEqDiff, reduceCtorEq, if_neg hdst, if_neg (Ne.symm hdst),
+      a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, b1, b2, b3, b4, b5, b6,
+      b7, b8, b9, b10, b11, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, d1,
+      d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, e1, e2, e3, e4, e5, e6, e7,
+      e8, e9, e10, e11, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11]
+    rfl
+  rw [key]
+  simp only [tlt, bnat]
+  exact cmpLt_arith (s sa) (s sb) _ _ _ _ _ hsa hsb
+    (by split <;> omega) (by split <;> omega) (by split <;> omega)
+    (by split <;> omega) (by split <;> omega)
+
+/-- The comparison writes only `dst` and the eleven fixed scratch
+registers. -/
+theorem cmpLtS_frame (k : Nat) (s : RegState) (sa la ha sb lb hb dst j : Nat)
+    (h0 : j ≠ dst) (hj : CmpClear j) :
+    srun k s (cmpLtS sa la ha sb lb hb dst) j = s j := by
+  obtain ⟨j1, j2, j3, j4, j5, j6, j7, j8, j9, j10, j11⟩ := hj
+  refine srun_untouched k j _ ?_ s
+  intro i hi
+  simp only [cmpLtS, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl <;>
+    simp only [sdest] <;> omega
+
 end LeanCompCert.Ports.Section413G2Denote
