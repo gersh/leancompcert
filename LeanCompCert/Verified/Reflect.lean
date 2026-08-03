@@ -770,6 +770,57 @@ theorem preamble_correct (regCount : Nat) :
         simp only [CCEnv.set, if_neg hId]
         exact hRegs i (Nat.lt_of_le_of_ne (Nat.le_of_lt_succ hi) hEq)
 
+/-- The preamble writes the comparison scratch and registers `0 … regCount-1`
+and nothing else.  The rolled emitter needs this for the loop counter, which
+the emitted C *declaration* initialises and which the preamble must therefore
+leave alone. -/
+theorem preamble_preserves (id : CCIR.LocalId) (hScratch : id ≠ ⟨0⟩) :
+    ∀ (regCount : Nat), (∀ i, i < regCount → id ≠ ⟨i + 1⟩) →
+    ∀ (env envOut : CCEnv),
+      evalCCSequence env (preamble regCount) = some envOut →
+      envOut id = env id := by
+  intro regCount
+  induction regCount with
+  | zero =>
+      intro _ env envOut hRun
+      replace hRun : ((evalCCAssignStep env scratchLocal
+          (.uintLit .u8 0)).bind (fun env => evalCCSequence env [])) =
+            some envOut := hRun
+      unfold evalCCAssignStep at hRun
+      rw [show evalOperand env (.uintLit .u8 0 : CCIR.Operand) =
+          some ((0 : Nat) : Int) from by
+            show normalizeCC .u8 ((0 : Nat) : Int) = _
+            rw [normalizeCC_u8_def]
+            rfl] at hRun
+      injection hRun with h
+      rw [← h]
+      show (if id = scratchLocal.id then _ else env id) = env id
+      exact if_neg hScratch
+  | succ n ih =>
+      intro hNe env envOut hRun
+      have hPreamble : preamble (n + 1) =
+          preamble n ++ [.assign (regLocal n) (.uintLit .u64 0)] := by
+        unfold preamble
+        rw [List.range_succ, List.map_append]
+        rfl
+      rw [hPreamble, evalCCSequence_append] at hRun
+      cases hMid : evalCCSequence env (preamble n) with
+      | none => rw [hMid] at hRun; exact absurd hRun (by simp)
+      | some envMid =>
+          rw [hMid] at hRun
+          replace hRun : ((evalCCAssignStep envMid (regLocal n)
+              (.uintLit .u64 0)).bind (fun env => evalCCSequence env [])) =
+                some envOut := hRun
+          unfold evalCCAssignStep at hRun
+          rw [show evalOperand envMid (.uintLit .u64 0 : CCIR.Operand) =
+              some ((0 : Nat) : Int) from normalizeCC_u64_natCast 0] at hRun
+          injection hRun with h
+          rw [← h]
+          show (if id = (regLocal n).id then _ else envMid id) = env id
+          rw [if_neg (show ¬(id = (regLocal n).id) from
+            hNe n (Nat.lt_succ_self n))]
+          exact ih (fun i hi => hNe i (Nat.lt_succ_of_lt hi)) env envMid hMid
+
 theorem foldBody_correct
     (regCount : Nat) (body : List Instr)
     (hWF : ∀ instr ∈ body, instr.WF regCount)
@@ -821,22 +872,14 @@ computes exactly the program's Lean-level denotation. This is a structural
 theorem — no per-certificate evaluation of the CCIR model is ever needed
 again.
 -/
-theorem Program.evalCC_compile (p : Program) (hWF : p.WF) :
-    ((evalCCSequence Verified.emptyCCEnv p.compile).bind
-        (fun env => env ⟨p.output + 1⟩)) =
+theorem Program.evalCC_compileCore (p : Program) (hWF : p.WF)
+    (env0 : CCEnv) (hInv0 : StateInv p.regCount initialState env0) :
+    ((evalCCSequence env0 (compileInstrs 0 p.init ++
+        (foldTrace p.loopCount (fun index => compileInstrs index p.body) ++
+          compileInstrs 0 p.epilogue))).bind
+      (fun env => env ⟨p.output + 1⟩)) =
       p.denote.map (fun n => (n : Int)) := by
   obtain ⟨hOutput, hInit, hBody, hEpilogue⟩ := hWF
-  obtain ⟨env0, hPreamble, hRegs⟩ :=
-    preamble_correct p.regCount Verified.emptyCCEnv
-  have hInv0 : StateInv p.regCount initialState env0 :=
-    ⟨fun i hi => hRegs i hi, fun i _ => M_pos⟩
-  unfold Program.compile
-  rw [List.append_assoc, List.append_assoc]
-  rw [evalCCSequence_append, hPreamble]
-  show ((evalCCSequence env0 (compileInstrs 0 p.init ++
-      (foldTrace p.loopCount (fun index => compileInstrs index p.body) ++
-        compileInstrs 0 p.epilogue))).bind
-    (fun env => env ⟨p.output + 1⟩)) = _
   rw [evalCCSequence_append]
   have hInitStep := denoteInstrs_correct 0 p.regCount p.init hInit
     initialState env0 hInv0
@@ -909,6 +952,23 @@ theorem Program.evalCC_compile (p : Program) (hWF : p.WF) :
                           simp only [bind_some_option]
                           show env3 ⟨p.output + 1⟩ = some ((s3 p.output : Nat) : Int)
                           exact hEpilogueStep.1 p.output hOutput
+
+theorem Program.evalCC_compile (p : Program) (hWF : p.WF) :
+    ((evalCCSequence Verified.emptyCCEnv p.compile).bind
+        (fun env => env ⟨p.output + 1⟩)) =
+      p.denote.map (fun n => (n : Int)) := by
+  obtain ⟨env0, hPreamble, hRegs⟩ :=
+    preamble_correct p.regCount Verified.emptyCCEnv
+  have hInv0 : StateInv p.regCount initialState env0 :=
+    ⟨fun i hi => hRegs i hi, fun i _ => M_pos⟩
+  unfold Program.compile
+  rw [List.append_assoc, List.append_assoc]
+  rw [evalCCSequence_append, hPreamble]
+  show ((evalCCSequence env0 (compileInstrs 0 p.init ++
+      (foldTrace p.loopCount (fun index => compileInstrs index p.body) ++
+        compileInstrs 0 p.epilogue))).bind
+    (fun env => env ⟨p.output + 1⟩)) = _
+  exact Program.evalCC_compileCore p hWF env0 hInv0
 
 /-! ## Packaging: certificates without CCIR-model evaluation -/
 

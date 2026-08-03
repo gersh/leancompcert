@@ -777,7 +777,8 @@ after):
 - `Verified.Reflect`: `Program`, `Program.denote`, `Program.compile`,
   `Program.WF`, `Program.toComputation`, `toComputation_returns`,
   `Program.counterAugment`, and the rolled emission
-  (`Verified.Rolled.emitRolled`, `rolledTrace_eq_augmented`);
+  (`Verified.Rolled.emitRolled`, `rolledTrace_eq_augmented`,
+  `rolledResult_eq_denote`);
 - `Verified.Decide`: `Computation`, `Decision`, `verified_decide`;
 - `Verified.Limb`: the limb representation and its value theorems
   (`adc_val`, `sbb_val`, `lt_iff`, `mulLimbs_val`, `divModMSB_val`);
@@ -839,7 +840,9 @@ confirm that test can actually fail, and states plainly what is *not* covered.
 The roadmap's milestones are implemented (see [ROADMAP.md](ROADMAP.md)
 for per-milestone evidence and the precisely-stated boundaries: the
 direct-Clight semantics theorem covers the straight-line temp-only
-fragment; rolled artifacts retain correspondence-level assurance; the
+fragment; rolled artifacts are covered by the package's own restricted-C
+model under a fuelled counted-loop rule, and retain
+correspondence-level assurance against Clight; the
 Lean- and Coq-side results are tied by shared certified constants). A
 complete CompCert-built runtime and strict standalone builds remain
 outside scope. Lean's elaborator and kernel, Coq's kernel, and

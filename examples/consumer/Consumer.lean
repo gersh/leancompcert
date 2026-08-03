@@ -141,8 +141,8 @@ def emittedC : Except (Array String) String := do
 
 /-! ## Attested runs, from the public API alone
 
-`Attest.Artifact` is pure data: the computation, the emission route, and the
-`main`.  The C text is not something this file asserts — it is
+`Attest.Artifact` is pure data: an `ArtifactBody` (here, the computation) and
+the `main`.  The C text is not something this file asserts — it is
 `Artifact.source?`, computed by the package's own emitter — so there is nothing
 here that can be got wrong, and a receipt binds to that text or to nothing.
 
@@ -177,8 +177,7 @@ open LeanCompCert.Attest in
 /-- The artifact this project attests: the demo computation, the straight-line
 route, and the self-checking `main` above. -/
 def artifact : Artifact := {
-  computation
-  route := EmissionRoute.provedStraightLine
+  body := .straightLine computation
   mainC
 }
 
@@ -191,8 +190,8 @@ consumer's own theorem follows.  Nothing here is admitted; the hypotheses are
 where a deployment plugs in its two axioms. -/
 theorem demo_certificate_of_receipt
     (crypto : ReceiptCrypto) (receipt : RunReceipt) (nonce : String)
-    (bound : receiptBinds crypto artifact AttestationKind.localSignature ""
-      nonce ((expectedValue : Nat) : Int) receipt = true)
+    (bound : receiptBindsProved crypto artifact AttestationKind.localSignature
+      "" nonce ((expectedValue : Nat) : Int) receipt = true)
     (admitted : RunAdmission crypto artifact receipt) :
     referenceSum = expectedValue :=
   decide_of_receipt decision rfl bound admitted

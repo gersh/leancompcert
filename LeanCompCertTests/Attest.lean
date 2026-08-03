@@ -1,5 +1,6 @@
 import LeanCompCert.Attest
 import LeanCompCert.Verified.Package
+import LeanCompCert.Testing.RolledFixedPoint
 
 /-!
 # The receipt standard, exercised
@@ -76,8 +77,7 @@ def mainC : String := selfCheckMain "l_Attest_squareSum" expected
 /-- Pure data: no proof obligation, and the C text is not something the author
 supplies.  See `Artifact`. -/
 def artifact : Artifact := {
-  computation
-  route := EmissionRoute.provedStraightLine
+  body := .straightLine computation
   mainC
 }
 
@@ -250,8 +250,78 @@ theorem returns_of_admitted_receipt
     (bound : receiptBinds toyCrypto artifact AttestationKind.localSignature ""
       nonce ((expected : Nat) : Int) receipt = true)
     (admitted : RunAdmission toyCrypto artifact receipt) :
-    artifact.computation.Returns ((expected : Nat) : Int) :=
-  returns_of_receipt bound admitted
+    artifact.body.Returns ((expected : Nat) : Int) :=
+  returns_of_receipt bound rfl admitted
+
+/-! ## The rolled route, covered end to end
+
+The 10⁷-iteration rolled fixed-point certificate — the artifact that exists
+because its unrolled form is multi-gigabyte C — accepted by
+`receiptBindsProved`, whose extra clause is now a real coverage condition
+rather than a route tag.  What comes out is a statement about the
+counter-augmented program's ordinary Lean denotation. -/
+
+namespace Rolled
+
+open LeanCompCert.Testing.RolledFixedPoint
+
+/-- The rolled artifact.  Note that no `Computation` is supplied: the rolled
+form carries the program, and everything else is derived. -/
+def artifact : Artifact := {
+  body := .rolled program "FixedPoint.rolled10M"
+  mainC := LeanCompCert.Testing.RolledFixedPoint.mainC
+}
+
+/-! This is the *same* C the `rolled-10m` certificate emits and `check-native`
+compiles: `emitFor_rolled` says `emitFor (.rolled p e) m` is
+`emitRolled p e >>= (· ++ m)`, which is `RolledFixedPoint.emittedC` written
+out.  It is not asserted as a theorem here because identifying the two closed
+terms sends the *elaborator* (not the kernel) into evaluating the emitted
+string; `scripts/test-compcert.sh` checks the same identity on the bytes. -/
+
+/-- **The coverage condition, decided.**  Program well-formedness and a trip
+count below `2⁶⁴`; both program-sized, neither growing with the 10⁷
+iterations. -/
+theorem rolled_covered : artifact.coveredByProvedChain = true := by decide
+
+/-- **The strict check imposes nothing extra on this artifact.**  On a rolled
+artifact `receiptBindsProved` used to be identically `false`; here it reduces
+to `receiptBinds`, so anything the plain check accepts the strict one accepts
+too. -/
+theorem rolled_proved_is_binds (crypto : ReceiptCrypto)
+    (kind : AttestationKind) (params nonce : String) (value : Int)
+    (receipt : RunReceipt) :
+    receiptBindsProved crypto artifact kind params nonce value receipt =
+      receiptBinds crypto artifact kind params nonce value receipt := by
+  simp only [receiptBindsProved, rolled_covered, Bool.true_and]
+
+/-- **The rolled route is inside the proved C model.**  The model of the
+emitted `while`-loop function returns the counter-augmented program's
+denotation. -/
+theorem rolled_model_preserved :
+    artifact.body.modelResult = artifact.body.sourceResult :=
+  artifact.body.modelResult_eq_sourceResult rolled_covered
+
+/-- **The emitter runs in the kernel for the rolled route too**, so the join
+clause of `receiptBinds` is a `decide +kernel` here exactly as it is for the
+straight-line artifact. -/
+theorem rolled_source_in_kernel : artifact.source?.isSome = true := by
+  decide +kernel
+
+/-- **The acceptance.**  `receiptBindsProved` — the strict form, demanding
+coverage by the proved chain — applied to a rolled artifact, giving a fact
+about the program's Lean-level denotation.  Before this change the strict form
+refused every rolled artifact by construction. -/
+theorem denote_of_admitted_rolled_receipt
+    (crypto : ReceiptCrypto) (receipt : RunReceipt) (nonce : String)
+    (bound : receiptBindsProved crypto artifact AttestationKind.localSignature
+      "" nonce ((expectedBig : Nat) : Int) receipt = true)
+    (admitted : RunAdmission crypto artifact receipt) :
+    (program.counterAugment).denote = some expectedBig :=
+  (ArtifactBody.rolled_Returns_iff_denote program "FixedPoint.rolled10M"
+    expectedBig).mp (returns_of_receipt_proved bound admitted)
+
+end Rolled
 
 /-! ## The tool's byte surgery
 

@@ -45,11 +45,14 @@ statements, and a 256-bit digest of 2 KB is a few dozen compression-function
 blocks — comfortable.  The check's cost is the *source* size, and is
 independent of how long the artifact ran.
 
-## The two emission routes, and which one the proved chain covers
+## The two emission routes, and what covers them
 
-Read `EmissionRoute` before using this.  One of the two routes is fully covered
-by the proved chain and the other is not, and the difference is recorded in the
-data rather than left to prose.
+Read `ArtifactBody` before using this.  **Both** routes are now inside the
+proved C model — the rolled `while` loop as of
+`Reflect.rolledResult_eq_denote` — and coverage is recorded in the data rather
+than left to prose: `ArtifactBody.coveredByProvedChain` is a decidable,
+program-sized side condition, and `ArtifactBody.modelResult_eq_sourceResult`
+is what it buys.
 -/
 
 namespace LeanCompCert.Attest
@@ -58,71 +61,167 @@ open LeanCompCert.Verified
 
 /-! ## Emission routes -/
 
-/-- How the C text handed to `ccomp` was produced from the computation.
-
-**`provedStraightLine`** — the translation unit is `Lower.compileProgram`'s
-output for `computation.fn`, i.e. the emission of exactly the statements the
-`Computation` carries.  `Computation.result_preserved` is about *those*
-statements, so the chain from "the C model returns `v`" back to "the CCIR
-computation returns `v`" is proved end to end.
-
-**`rolledLoop`** — the translation unit is `emitRolled`'s `while`-loop form for
-a `Reflect.Program`.  This is the route that makes a 10⁷-iteration computation
-a 2 KB artifact, and it is the one you want at scale.  ⚠ **It is not covered by
-the proved C model.**  `Proof.PureSemantics.evalCStmt` interprets `C.CStmt`
-assignments and nothing else — a `whileLoop` evaluates to `none` — so there is
-no `result_preserved` for the rolled unit.  What *is* proved is the CCIR-level
-statement `Verified.Reflect.rolledTrace_eq_augmented`: the rolled dynamic trace
-equals the counter-augmented program's unrolled trace.  The missing link is
-between the C `while` statement and that trace.
-
-Consequences, stated plainly: on the rolled route a discharger's
-`RunAdmission.denotes` field bundles one further unproved step — that the
-rolled C's `while` loop realises the unrolled statement sequence — on top of
-the empirical claim that a run happened.  That step is exactly the kind of
-thing CompCert's own semantics would settle and this package has not yet
-mechanised.  Use `provedStraightLine` wherever the unrolled unit is small
-enough to emit, and record the rolled route honestly where it is not. -/
-inductive EmissionRoute where
-  /-- Emission of the `Computation`'s own lowered statements.  Fully covered by
-  `Computation.result_preserved`. -/
-  | provedStraightLine
-  /-- `emitRolled`'s `while`-loop form for `program` under the C entry point
-  `entry`.  Compact, and **not** covered by the proved C model. -/
-  | rolledLoop (program : Reflect.Program) (entry : String)
-
-/-- Whether the emitted text is inside the package's proved C model.
-
-`false` for the rolled route.  A consumer that wants only the fully-proved
-chain requires this to be `true`; `receiptBindsProved` does exactly that. -/
-def EmissionRoute.coveredByProvedChain : EmissionRoute → Bool
-  | .provedStraightLine => true
-  | .rolledLoop _ _ => false
-
 /-- The route's name, as it appears in the signed payload.  A receipt produced
-under one route cannot be presented under the other. -/
+under one route cannot be presented under the other.
+
+The tag carries no payload: what the route was *applied to* lives in
+`ArtifactBody`, where it cannot be stated inconsistently with the computation.
+See that type for why. -/
+inductive EmissionRoute where
+  /-- Emission of a `Computation`'s own lowered statements. -/
+  | provedStraightLine
+  /-- `emitRolled`'s `while`-loop form for a `Reflect.Program`. -/
+  | rolledLoop
+  deriving DecidableEq, Repr, Inhabited
+
 def EmissionRoute.label : EmissionRoute → String
   | .provedStraightLine => "straight-line"
-  | .rolledLoop _ _ => "rolled-loop"
+  | .rolledLoop => "rolled-loop"
 
-/-! ## The artifact: a computation together with the exact bytes compiled -/
+/-! ## The artifact: what was compiled, and the exact bytes compiled
 
-/-- The emitter, as a function of the computation and the route.
+### Why this is an inductive and not a record with a route field
+
+Coverage by the proved chain is a **relation between the route and the
+computation**, not a property of the route alone.  On the rolled route the C
+text is `emitRolled`'s output for a `Reflect.Program`, and what the proved
+chain says about it is a statement about *that program's* counter-augmented
+unrolling — so a `⟨computation, route⟩` pair could name one program in the
+route and carry a `Computation` for a different one, and every check in this
+file would still pass.
+
+It cannot be repaired by comparing the two: comparing `Computation`s means
+comparing their `statements`, and for a 10⁷-iteration artifact that list is
+astronomically large — exactly what rolled emission exists to avoid.
+
+So the rolled form carries **only the program**, and everything derived from it
+— the emitted C, the CCIR trace, the source meaning — is computed here.  There
+is no second thing to agree with, and therefore nothing to get wrong. -/
+
+/-- **What was compiled.**  One constructor per emission route, each carrying
+exactly the data its emitter consumes.
+
+`straightLine` carries a `Computation`: the emitter's input *is* the
+computation, so the pair cannot disagree.
+
+`rolled` carries a `Reflect.Program` and the C entry point.  Its computation is
+not supplied — `sourceResult` below is the counter-augmented program's
+denotation, which `Reflect.counterAugment_sourceResult` shows is the source
+result of the (never materialised) unrolled `Computation` for
+`program.counterAugment`. -/
+inductive ArtifactBody where
+  /-- Emission of the `Computation`'s own lowered statements. -/
+  | straightLine (computation : Computation)
+  /-- `emitRolled`'s `while`-loop form for `program` under C entry point
+  `entry`. -/
+  | rolled (program : Reflect.Program) (entry : String)
+
+def ArtifactBody.route : ArtifactBody → EmissionRoute
+  | .straightLine _ => .provedStraightLine
+  | .rolled _ _ => .rolledLoop
+
+/-- **The emitter.**
 
 `mainC` is the self-checking `main` the certificates append after the
 translation unit — the one whose exit status is `0` exactly when the computed
 value equals the certified constant.  It is part of the hashed text because it
 is part of the text handed to `ccomp`. -/
-def emitFor (computation : Computation) (route : EmissionRoute)
-    (mainC : String) : Except (Array String) String :=
-  match route with
-  | .provedStraightLine => do
+def emitFor : ArtifactBody → String → Except (Array String) String
+  | .straightLine computation, mainC => do
       let (_, source) ←
         Lower.compileProgram .portable { functions := #[computation.fn] }
       pure (source ++ mainC)
-  | .rolledLoop program entry => do
+  | .rolled program entry, mainC => do
       let source ← Reflect.emitRolled program entry
       pure (source ++ mainC)
+
+/-- The rolled emitter, unfolded once, so that a consumer can identify an
+artifact's C with a certificate's without asking the elaborator to evaluate
+either. -/
+theorem emitFor_rolled (program : Reflect.Program) (entry mainC : String) :
+    emitFor (.rolled program entry) mainC =
+      (Reflect.emitRolled program entry).bind
+        (fun source => pure (source ++ mainC)) := rfl
+
+/-- **The meaning of the emitted text in the proved restricted-C model.**
+
+For the straight-line route this is `Computation.targetResult`, the model of
+the lowered statements.  For the rolled route it is `Reflect.rolledResult`, the
+model of the emitted `while`-loop function — declarations, prologue, the
+counted loop, epilogue — under `Proof.evalCSequenceFuel`. -/
+def ArtifactBody.modelResult : ArtifactBody → Option Int
+  | .straightLine computation => computation.targetResult
+  | .rolled program entry => Reflect.rolledResult program entry
+
+/-- **The source-level meaning the proved chain delivers.**
+
+For the straight-line route, the `Computation`'s own CCIR result.  For the
+rolled route, the counter-augmented program's denotation — ordinary Lean `Nat`
+arithmetic, which is what a consumer's equivalence lemma is stated against. -/
+def ArtifactBody.sourceResult : ArtifactBody → Option Int
+  | .straightLine computation => computation.sourceResult
+  | .rolled program _ =>
+      (program.counterAugment).denote.map (fun n => (n : Int))
+
+/-- The artifact computes this value. -/
+def ArtifactBody.Returns (body : ArtifactBody) (value : Int) : Prop :=
+  body.sourceResult = some value
+
+/-- **Whether the emitted text is inside the package's proved C model.**
+
+Not a property of the route: on the rolled route it is the decidable side
+condition under which `Reflect.rolledResult_eq_denote` holds — the program is
+well formed, and its trip count fits a `u64`.  Both are *program*-sized checks,
+independent of how long the artifact runs.
+
+A consumer that wants only the fully-proved chain requires this to be `true`;
+`receiptBindsProved` does exactly that. -/
+def ArtifactBody.coveredByProvedChain : ArtifactBody → Bool
+  | .straightLine _ => true
+  | .rolled program _ =>
+      decide program.WF && decide (program.loopCount < Reflect.M)
+
+/-- **The proved C model of the emitted text returns the source meaning.**
+
+One statement for both routes.  For `straightLine` it is
+`Computation.result_preserved`; for `rolled` it is
+`Reflect.rolledResult_eq_denote`, which relates the emitted `while` loop to the
+counter-augmented unrolling.  This is the theorem that makes the rolled route
+carry no unmechanised step. -/
+theorem ArtifactBody.modelResult_eq_sourceResult (body : ArtifactBody)
+    (covered : body.coveredByProvedChain = true) :
+    body.modelResult = body.sourceResult := by
+  cases body with
+  | straightLine computation => exact computation.result_preserved
+  | rolled program entry =>
+      simp only [coveredByProvedChain, Bool.and_eq_true, decide_eq_true_eq]
+        at covered
+      exact Reflect.rolledResult_eq_denote program entry covered.1 covered.2
+
+/-- On the rolled route, "this artifact returns `n`" is exactly "the
+counter-augmented program denotes `n`" — ordinary Lean `Nat` arithmetic, which
+is what a consumer's equivalence lemma is stated against. -/
+theorem ArtifactBody.rolled_Returns_iff_denote (program : Reflect.Program)
+    (entry : String) (n : Nat) :
+    (ArtifactBody.rolled program entry).Returns ((n : Nat) : Int) ↔
+      (program.counterAugment).denote = some n := by
+  constructor
+  · intro h
+    have hMap : (program.counterAugment).denote.map (fun n => (n : Int)) =
+        some ((n : Nat) : Int) := h
+    cases hDenote : (program.counterAugment).denote with
+    | none =>
+        rw [hDenote] at hMap
+        exact absurd hMap (by simp)
+    | some value =>
+        rw [hDenote] at hMap
+        have hValue : ((value : Nat) : Int) = ((n : Nat) : Int) :=
+          Option.some.inj hMap
+        exact congrArg some (by exact_mod_cast hValue)
+  · intro h
+    show (program.counterAugment).denote.map (fun n => (n : Int)) = _
+    rw [h]
+    rfl
 
 /-- The self-checking `main` a certificate appends: exit `0` exactly when the
 emitted function returns `value`, `1` when it does not.
@@ -139,25 +238,31 @@ def selfCheckMain (entry : String) (value : Nat) : String :=
   s!"    return {entry}() == UINT64_C({value}) ? 0 : 1;\n" ++
   "}\n"
 
-/-- **What was compiled: a computation, a route, and a `main`.**
+/-- **What was compiled: a body and a `main`.**
 
 Deliberately *pure data with no proof field*.  The C text is not a field the
 author supplies and asserts is right — it is `Artifact.source?`, computed from
-these three by this package's own emitter.  So there is nothing an author can
-get wrong here, and no obligation that could be discharged carelessly: a
-receipt binds to the emitter's output or to nothing.
+these two by this package's own emitter.  So there is nothing an author can get
+wrong here, and no obligation that could be discharged carelessly: a receipt
+binds to the emitter's output or to nothing.
 
 This is the whole join.  `receiptBinds` compares the receipt's `programHash`
 against the digest of `source?`, so a passing check says the signed record is
-about the C text *this computation* compiles to. -/
+about the C text *this body* compiles to. -/
 structure Artifact where
-  /-- The computation the proved chain is about. -/
-  computation : Computation
-  /-- Which emitter to use.  See `EmissionRoute`. -/
-  route : EmissionRoute
+  /-- What the proved chain is about, and which emitter it selects.
+  See `ArtifactBody`. -/
+  body : ArtifactBody
   /-- The self-checking `main` appended to the emitted translation unit.
   Build it with `selfCheckMain` from the certified value. -/
   mainC : String
+
+/-- The emission route, read off the body. -/
+def Artifact.route (a : Artifact) : EmissionRoute := a.body.route
+
+/-- Whether this artifact's emitted text is inside the proved C model. -/
+def Artifact.coveredByProvedChain (a : Artifact) : Bool :=
+  a.body.coveredByProvedChain
 
 /-- **The exact bytes handed to `ccomp`**, as this package emits them.
 
@@ -190,7 +295,7 @@ standard.  See `docs/use-case-3-attested-run-receipts.md` for the measurements
 and for where the remaining kernel cost actually sits (the `ReceiptCrypto`
 instance over `RunReceipt.payload`, not the emitter). -/
 def Artifact.source? (a : Artifact) : Option String :=
-  (emitFor a.computation a.route a.mainC).toOption
+  (emitFor a.body a.mainC).toOption
 
 /-! ## The receipt -/
 
@@ -399,13 +504,15 @@ def receiptBinds (crypto : ReceiptCrypto) (artifact : Artifact)
     && isP256Signature r.signature
     && crypto.signature.verify r.publicKey r.payload r.signature
 
-/-- `receiptBinds`, additionally demanding the emission route the proved C
-model covers.  Use this when you want the chain with no unmechanised step in
-it; see `EmissionRoute`. -/
+/-- `receiptBinds`, additionally demanding that the emitted text be covered by
+the proved C model.  Use this when you want the chain with no unmechanised step
+in it; both routes can satisfy it, and on the rolled route the extra clause is
+a decidable, program-sized side condition.  See
+`ArtifactBody.coveredByProvedChain`. -/
 def receiptBindsProved (crypto : ReceiptCrypto) (artifact : Artifact)
     (kind : AttestationKind) (params : String) (nonce : String) (value : Int)
     (r : RunReceipt) : Bool :=
-  artifact.route.coveredByProvedChain
+  artifact.coveredByProvedChain
     && receiptBinds crypto artifact kind params nonce value r
 
 /-! ## What a passing check forces -/
@@ -448,13 +555,12 @@ theorem receiptBinds_programHash {crypto : ReceiptCrypto} {artifact : Artifact}
     {kind : AttestationKind} {params nonce : String} {value : Int}
     {r : RunReceipt}
     (h : receiptBinds crypto artifact kind params nonce value r = true) :
-    ∃ source, emitFor artifact.computation artifact.route artifact.mainC
-        = .ok source
+    ∃ source, emitFor artifact.body artifact.mainC = .ok source
       ∧ r.programHash = crypto.digest.hashHex source := by
   obtain ⟨⟨source, hs, hd⟩, _⟩ := receiptBinds_sound h
   refine ⟨source, ?_, hd⟩
   unfold Artifact.source? at hs
-  cases he : emitFor artifact.computation artifact.route artifact.mainC with
+  cases he : emitFor artifact.body artifact.mainC with
   | error e => rw [he] at hs; exact absurd hs (by simp [Except.toOption])
   | ok text =>
       rw [he] at hs
@@ -562,19 +668,15 @@ theorem receiptBinds_false_of_digestName_ne {crypto : ReceiptCrypto}
     receiptBinds crypto artifact kind params nonce value r = false :=
   not_true_of fun hb => h (receiptBinds_sound hb).2.2.2.2.1
 
-/-- The strict form implies the plain one, and additionally pins the route. -/
+/-- The strict form implies the plain one, and additionally gives coverage by
+the proved C model — which, unlike before, both routes can have. -/
 theorem receiptBindsProved_sound {crypto : ReceiptCrypto} {artifact : Artifact}
     {kind : AttestationKind} {params nonce : String} {value : Int}
     {r : RunReceipt}
     (h : receiptBindsProved crypto artifact kind params nonce value r = true) :
-    artifact.route = EmissionRoute.provedStraightLine
+    artifact.coveredByProvedChain = true
       ∧ receiptBinds crypto artifact kind params nonce value r = true := by
   simp only [receiptBindsProved, Bool.and_eq_true] at h
-  refine ⟨?_, h.2⟩
-  cases hr : artifact.route with
-  | provedStraightLine => rfl
-  | rolledLoop p e =>
-      rw [hr] at h
-      simp [EmissionRoute.coveredByProvedChain] at h
+  exact h
 
 end LeanCompCert.Attest

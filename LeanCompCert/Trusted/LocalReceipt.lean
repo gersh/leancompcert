@@ -67,7 +67,7 @@ mechanically rather than by a warning in a docstring.
 ## What is still not admitted
 
 The conclusion is `RunAdmission`, and `RunAdmission` gives you
-`artifact.computation.Returns value` — a fact about the *computation*, not
+`artifact.body.Returns value` — a fact about the *computation*, not
 about your mathematics.  The step from there to the statement you care about is
 the encoding gap, it is yours, and it is deliberately not smuggled in here.  An
 admitted run gives you a number; it does not give you a theorem about number
@@ -115,45 +115,50 @@ axiom localSignedRun_admits : LocalRunAdmitted
 ```text
 ReceiptCrypto.SelfTested crypto
 receiptBinds crypto artifact .localSignature params nonce value receipt = true
-  ⟹  artifact.computation.Returns value
+artifact.coveredByProvedChain = true
+  ⟹  artifact.body.Returns value
 ```
 
 Carries `localSignedRun_admits`, and nothing else.  The step from
-`Computation.Returns` to a statement about the consumer's own reference
+`ArtifactBody.Returns` to a statement about the consumer's own reference
 function is the consumer's equivalence lemma, which is an ordinary theorem. -/
 theorem returns_of_localReceipt {crypto : ReceiptCrypto} {artifact : Artifact}
     {params nonce : String} {value : Int} {receipt : RunReceipt}
     (selfTested : ReceiptCrypto.SelfTested crypto)
     (bound : receiptBinds crypto artifact AttestationKind.localSignature
-      params nonce value receipt = true) :
-    artifact.computation.Returns value :=
-  returns_of_receipt bound
+      params nonce value receipt = true)
+    (covered : artifact.coveredByProvedChain = true) :
+    artifact.body.Returns value :=
+  returns_of_receipt bound covered
     (localSignedRun_admits crypto artifact params nonce value receipt
       selfTested bound)
 
-/-- The same, restricted to the emission route the package's proved C model
-covers, so that no unmechanised step sits between the compiled text and the
-computation.  See `Attest.EmissionRoute`. -/
+/-- The same, with coverage taken from `receiptBindsProved`, so that no
+unmechanised step sits between the compiled text and the source meaning.
+Available on both emission routes; see `Attest.ArtifactBody`. -/
 theorem returns_of_localReceipt_proved {crypto : ReceiptCrypto}
     {artifact : Artifact} {params nonce : String} {value : Int}
     {receipt : RunReceipt}
     (selfTested : ReceiptCrypto.SelfTested crypto)
     (bound : receiptBindsProved crypto artifact AttestationKind.localSignature
       params nonce value receipt = true) :
-    artifact.route = EmissionRoute.provedStraightLine
-      ∧ artifact.computation.Returns value :=
-  ⟨(receiptBindsProved_sound bound).1,
-    returns_of_localReceipt selfTested (receiptBindsProved_sound bound).2⟩
+    artifact.body.Returns value :=
+  returns_of_localReceipt selfTested (receiptBindsProved_sound bound).2
+    (receiptBindsProved_sound bound).1
 
 /-- Consumer-facing form: a locally-attested run discharges a `Decision`, and
 hence the proposition it decides. -/
 theorem decide_of_localReceipt {proposition : Prop} {crypto : ReceiptCrypto}
     {artifact : Artifact} {params nonce : String} {receipt : RunReceipt}
     (decision : Decision proposition)
-    (same : decision.computation = artifact.computation)
+    (same : artifact.body.sourceResult = decision.computation.sourceResult)
     (selfTested : ReceiptCrypto.SelfTested crypto)
-    (bound : receiptBinds crypto artifact AttestationKind.localSignature
+    (bound : receiptBindsProved crypto artifact AttestationKind.localSignature
       params nonce decision.acceptingValue receipt = true) : proposition :=
-  decision.prove (same ▸ returns_of_localReceipt selfTested bound)
+  decision.prove (by
+    have h := returns_of_localReceipt_proved selfTested bound
+    show decision.computation.sourceResult = some decision.acceptingValue
+    rw [← same]
+    exact h)
 
 end LeanCompCert.Trusted

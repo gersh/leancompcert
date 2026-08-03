@@ -436,6 +436,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Attest.receiptBinds_false_of_route_ne
 #print axioms LeanCompCert.Attest.receiptBinds_false_of_digestName_ne
 #print axioms LeanCompCert.Attest.receiptBindsProved_sound
+#print axioms LeanCompCert.Attest.emitFor_rolled
+#print axioms LeanCompCert.Attest.ArtifactBody.modelResult_eq_sourceResult
+#print axioms LeanCompCert.Attest.ArtifactBody.rolled_Returns_iff_denote
+#print axioms LeanCompCert.Attest.modelResult_of_receipt
 #print axioms LeanCompCert.Attest.returns_of_receipt
 #print axioms LeanCompCert.Attest.returns_of_receipt_proved
 #print axioms LeanCompCert.Attest.decide_of_receipt
@@ -468,3 +472,19 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Testing.AlgorithmProof.program_denote
 #print axioms LeanCompCert.Testing.AlgorithmProof.example_program_accepts
 #print axioms LeanCompCert.Testing.AlgorithmProof.example_result
+-- The rolled route, now inside the proved C model.  The `while` rule is
+-- fuelled and covers exactly the counted shape `emitRolled` produces; these
+-- are the theorems that say so, and the acceptance that a rolled artifact
+-- passes the STRICT `receiptBindsProved`.
+#print axioms LeanCompCert.Proof.evalCWhile_unroll
+#print axioms LeanCompCert.Proof.evalCStmtFuel_of_loopFree
+#print axioms LeanCompCert.Proof.evalCSequenceFuel_of_loopFree
+#print axioms LeanCompCert.Proof.lowerSequence_loopFree
+#print axioms LeanCompCert.Verified.Reflect.evalCWhile_rolled
+#print axioms LeanCompCert.Verified.Reflect.rolledResult_eq_denote
+#print axioms LeanCompCert.Verified.Reflect.counterAugment_sourceResult
+#print axioms LeanCompCertTests.Attest.Rolled.rolled_covered
+#print axioms LeanCompCertTests.Attest.Rolled.rolled_proved_is_binds
+#print axioms LeanCompCertTests.Attest.Rolled.rolled_model_preserved
+#print axioms LeanCompCertTests.Attest.Rolled.rolled_source_in_kernel
+#print axioms LeanCompCertTests.Attest.Rolled.denote_of_admitted_rolled_receipt

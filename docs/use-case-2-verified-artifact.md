@@ -82,7 +82,10 @@ ccomp -Iruntime/include -I"$(lean --print-prefix)/include" \
 gigabytes of C; `emitRolled` compiles the body once into a single
 `while` loop — a 2 KB artifact — and `rolledTrace_eq_augmented` proves
 the rolled form's semantics equals the standard unrolled semantics, so
-every theorem from step 1 still applies (Tutorial 5).
+every theorem from step 1 still applies (Tutorial 5).  The emitted `while`
+statement itself is in the proved C model too
+(`Reflect.rolledResult_eq_denote`), under a fuelled loop rule that covers
+exactly the counted shape the emitter produces.
 
 **5. Run the verification gates** over your artifact the way the
 acceptance suite does — `clightgen` acceptance, then the two

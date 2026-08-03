@@ -179,6 +179,12 @@ bona-fide `Program`, so packaging, bridge, and denotation theorems apply
 to it unchanged while the emitted artifact runs the rolled form. All
 M4 deliverables are complete.
 
+The last gap — that this was a *CCIR-level* correspondence, with the emitted
+C `while` statement itself outside the proved model — is closed under M9
+below: `Proof.evalCWhile` is a fuelled `while` rule for exactly the counted
+shape `rolledCFunction` emits, and `Reflect.rolledResult_eq_denote` runs the
+emitted statements in the proved C model and gets `p.counterAugment.denote`.
+
 Unrolled traces keep theorems honest at any size, but the *emitted C*
 must not be gigabytes at 10⁷ iterations. Add a counted-loop construct:
 static trip count, single back-edge, index register — deliberately far
@@ -462,11 +468,64 @@ applied to `RunReceipt.payload` — reducing `payload.length` alone is 28 s and
 character read walk an append chain — and not by the emitter. Reducing that is
 a separate, receipt-format-level item.
 
-**⚠ Still open in this area: the rolled route.** `EmissionRoute.rolledLoop` is
-outside the proved C model — `Proof.PureSemantics.evalCStmt` interprets
-assignments only, so a `whileLoop` evaluates to `none` — and
-`receiptBindsProved` therefore still demands the unrolled route. See
-`EmissionRoute`'s docstring for exactly what a rolled-route discharger bundles.
+**✅ The rolled route is now covered, and the `Artifact` shape changed to make
+that statable.**
+
+*The API change.*  `EmissionRoute.coveredByProvedChain` was a `Bool` on the
+route alone, and `Artifact` was `⟨computation, route, mainC⟩`.  That is the
+wrong shape: on the rolled route what the proved chain says is a statement
+about *the program the route names*, so a `⟨computation, route⟩` pair could
+name one program and carry a `Computation` for another and every check would
+still pass.  It cannot be repaired by comparing the two — comparing
+`Computation`s means comparing their `statements`, which for a 10⁷-iteration
+artifact is astronomically large, the precise thing rolled emission exists to
+avoid.  So `Artifact` is now `⟨body, mainC⟩` over
+
+```lean
+inductive ArtifactBody where
+  | straightLine (computation : Computation)
+  | rolled (program : Reflect.Program) (entry : String)
+```
+
+The rolled form carries **only the program**; its computation, its C, its CCIR
+trace and its source meaning are all derived (`ArtifactBody.sourceResult` is
+`program.counterAugment`'s denotation, which
+`Reflect.counterAugment_sourceResult` identifies with the source result of the
+never-materialised unrolled `Computation`).  There is nothing to get wrong.
+`coveredByProvedChain` moved to `ArtifactBody` and is a real, decidable side
+condition — `program.WF && program.loopCount < 2⁶⁴`, both program-sized.
+`ArtifactBody.modelResult_eq_sourceResult` is the one theorem that now covers
+both routes.  Existing straight-line artifacts change one line
+(`body := .straightLine computation`).
+
+*The semantics.*  `Proof.PureSemantics` gained `evalCDecl`, a fuelled
+`evalCWhile`, `evalCStmtFuel`/`evalCSequenceFuel`, and the generic unrolling
+rule `evalCWhile_unroll`.  Conservativity is `evalCStmtFuel_of_loopFree` plus
+`lowerSequence_loopFree`: every statement this package's lowering emits is an
+assignment, so nothing already proved moves.  The covered shape is exactly
+`rolledCFunction`'s — `u64` counter register, literal trip count, guard
+`v_k < UINT64_C(N)`, assignment-only body ending in the increment, fuel
+`N + 1`.  Nested loops, `break`, `goto`, a `return` in the body, a
+memory-reading guard, and fuel exhaustion are all `none`: a bounded semantics
+can only decline, never answer wrongly.
+
+*The chain.*  `Reflect.evalCWhile_rolled` discharges the guard by transporting
+the CCIR counter through `EnvRel`; `lowerSequence_rolledTrace` +
+`lowerSequence_correct` relate the loop's `loopCount` body copies to
+`rolledTrace`; `rolledTrace_eq_augmented` and a generalised
+`Program.evalCC_compileCore` finish at `p.counterAugment.denote`.  The result
+is `Reflect.rolledResult_eq_denote`, and
+`LeanCompCertTests.Attest.Rolled.denote_of_admitted_rolled_receipt` is the
+acceptance: the 10⁷-iteration rolled fixed-point certificate accepted by the
+**strict** `receiptBindsProved`, which before this change refused every rolled
+artifact by construction.
+
+The emitted C is unchanged, byte for byte: all fourteen `check-native` units
+have the SHA-256 digests they had before (`rolled-10m.c` is still
+`1d9a2280d979362d9f94361df8147de9d4c29212517c50db6335b5313ccf9622`), and
+`receiptBinds` still closes by `decide +kernel` at the same cost — the join at
+70 s / 16.8 GB and the whole check at 119 s / 26.4 GB, against 69 s / 16.8 GB
+and 108 s / 26.4 GB on the commit before.
 
 ## Non-goals
 
