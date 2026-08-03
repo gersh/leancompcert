@@ -12,9 +12,8 @@ attacks the first,
 (1)  (g2Program c).denote = some (c.tFlag)          [machine ⇒ model]
 ```
 
-by the `ArrayMobiusDenotation` / `SingSeriesC17` architecture: one *spec
-lemma per block*, proved against the total meaning `ArrayFoldBridge.arun`
-of a straight-line array block, composed along `arun_append`.
+by the `SingSeriesC17` architecture: one *spec lemma per block*, composed
+along `srun_append`.
 
 The body is 1446 instructions, but it is built from seven reusable
 sub-blocks — `guardBody`, `muxBody`, `smDecomp`, `cmpLtBody`, `selTriple`,
@@ -23,11 +22,44 @@ three times per iteration) is a pure composite.  Each sub-block is proved
 **once**, with variable register parameters, so the proof size is governed
 by the number of *distinct* blocks and not by the instruction count.
 
+## Two mechanical decisions that govern everything below
+
+**The blocks are proved in the SCALAR machine.**  All of them except the
+two array-access points are pure scalar code, and
+`Verified/ArrayScalarBlock.lean` says once that a lifted scalar block moves
+the register file exactly as `InstrBlock.srun` does and does not touch the
+array at all.  Pushing scalar instructions through `astep` instead carries
+the array along and inlines it at every read site — which is precisely
+where `Ports/ArrayMobiusDenotation.lean` stalled (its own docstring records
+the ~57 kB goal).  Each block therefore appears twice: once as a
+`List Instr` with a `rfl` bridge to the port's `List AInstr`
+(`guardBody_lift`, `muxBody_lift`, …), and once as a specification.
+
+**The literals are abstracted.**  `Nat.add` and `Nat.mul` recurse on their
+*second* argument, so a twenty-digit numeral sitting there unary-unfolds
+the moment anything whnfs the term — which a `simp only` chain over a
+branchless block does, at the `Decidable` instance of every comparison.
+So `guardG` takes its cap as a variable and is instantiated at `CAP`
+afterwards; `smDecompG` takes both `H63` and `CAP`.  The emitted program is
+**not** touched by any of this: every `_lift` bridge is `rfl`, so the
+production artifact's sha256 is unchanged.
+
 ## What is proved here
 
-See the closing `## OPEN` section for the precise statements that remain.
-Nothing below is an axiom, a `sorry`, or a weakened restatement of the
-obligation.
+* §1 — `arun_regs_frame`, `arun_arr_frame`, `arun_lt`,
+  `allDefined_of_alwaysDef`: the four facts about straight-line array
+  blocks that `Verified/ArrayFoldBridge.lean` does not state.
+* §3 — `guardG_tguard` (`guardBody` computes `tguard`), `muxS_spec`,
+  `smDecomp_tmag` (`smDecomp` computes `tmag` and the gated magnitude
+  violation), `cmpLtS_spec` (`cmpLtBody` computes `tlt`),
+  `selTripleS_spec`, and each block's frame lemma.
+* §4 — `Admissible`, and `production_admissible` / `smoke_admissible`.
+
+See the closing `## OPEN` section for the precise statements that remain —
+`mulWideBody`, `divP18Body`, `cmulBody`, `touchBody`, the six body stages
+and the loop.  Nothing in this file is an axiom, a `sorry`, or a weakened
+restatement of the obligation; every theorem here has axiom set
+`[propext, Classical.choice, Quot.sound]`.
 -/
 
 namespace LeanCompCert.Ports.Section413G2Denote
@@ -665,5 +697,275 @@ theorem cmpLtS_frame (k : Nat) (s : RegState) (sa la ha sb lb hb dst j : Nat)
   simp only [cmpLtS, List.mem_cons, List.not_mem_nil, or_false] at hi
   rcases hi with rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl <;>
     simp only [sdest] <;> omega
+
+/-! ### `selTriple`: the three-word select -/
+
+/-- `Section413G2Program.selTriple`, as a scalar block. -/
+def selTripleS (t sa la ha sb lb hb sd ld hd : Nat) : List Instr :=
+  muxS sd t sa sb 144 ++ muxS ld t la lb 144 ++ muxS hd t ha hb 144
+
+theorem selTriple_lift (t sa la ha sb lb hb sd ld hd : Nat) :
+    selTriple t sa la ha sb lb hb sd ld hd
+      = lift (selTripleS t sa la ha sb lb hb sd ld hd) := rfl
+
+theorem selTripleS_noDiv (t sa la ha sb lb hb sd ld hd : Nat) :
+    (selTripleS t sa la ha sb lb hb sd ld hd).all NoDivI = true := rfl
+
+/-- The block writes only the three destinations and `144`. -/
+theorem selTripleS_frame (k : Nat) (s : RegState)
+    (t sa la ha sb lb hb sd ld hd j : Nat)
+    (h1 : j ≠ sd) (h2 : j ≠ ld) (h3 : j ≠ hd) (h4 : j ≠ 144) :
+    srun k s (selTripleS t sa la ha sb lb hb sd ld hd) j = s j := by
+  rw [selTripleS, srun_append, srun_append,
+    muxS_frame _ _ _ _ _ _ _ _ h3 h4, muxS_frame _ _ _ _ _ _ _ _ h2 h4,
+    muxS_frame _ _ _ _ _ _ _ _ h1 h4]
+
+/-- **The triple select selects.** -/
+theorem selTripleS_spec (k : Nat) (s : RegState)
+    (t sa la ha sb lb hb sd ld hd : Nat)
+    (hts : t ≠ sd) (htl : t ≠ ld) (ht4 : t ≠ 144)
+    (hsa4 : sa ≠ 144) (hsb4 : sb ≠ 144)
+    (hlas : la ≠ sd) (hla4 : la ≠ 144) (hlbs : lb ≠ sd) (hlb4 : lb ≠ 144)
+    (hhas : ha ≠ sd) (hhal : ha ≠ ld) (hha4 : ha ≠ 144)
+    (hhbs : hb ≠ sd) (hhbl : hb ≠ ld) (hhb4 : hb ≠ 144)
+    (hsdl : sd ≠ ld) (hsdh : sd ≠ hd) (hsd4 : sd ≠ 144)
+    (hldh : ld ≠ hd) (hld4 : ld ≠ 144) (hhd4 : hd ≠ 144)
+    (ht1 : s t ≤ 1) (hs : ∀ j, s j < M) :
+    srun k s (selTripleS t sa la ha sb lb hb sd ld hd) sd
+        = (if s t = 1 then s sa else s sb) ∧
+      srun k s (selTripleS t sa la ha sb lb hb sd ld hd) ld
+        = (if s t = 1 then s la else s lb) ∧
+      srun k s (selTripleS t sa la ha sb lb hb sd ld hd) hd
+        = (if s t = 1 then s ha else s hb) := by
+  -- stage 1
+  have e1 : srun k s (muxS sd t sa sb 144) sd = (if s t = 1 then s sa else s sb) :=
+    muxS_spec k s sd t sa sb 144 (Ne.symm hsd4) (Ne.symm ht4) (Ne.symm hsa4)
+      (Ne.symm hsb4) ht1 hs
+  have l1 : ∀ j, srun k s (muxS sd t sa sb 144) j < M :=
+    srun_lt_of_lt k _ s hs
+  have t1 : srun k s (muxS sd t sa sb 144) t = s t :=
+    muxS_frame k s sd t sa sb 144 t hts ht4
+  have la1 : srun k s (muxS sd t sa sb 144) la = s la :=
+    muxS_frame k s sd t sa sb 144 la hlas hla4
+  have lb1 : srun k s (muxS sd t sa sb 144) lb = s lb :=
+    muxS_frame k s sd t sa sb 144 lb hlbs hlb4
+  have ha1 : srun k s (muxS sd t sa sb 144) ha = s ha :=
+    muxS_frame k s sd t sa sb 144 ha hhas hha4
+  have hb1 : srun k s (muxS sd t sa sb 144) hb = s hb :=
+    muxS_frame k s sd t sa sb 144 hb hhbs hhb4
+  -- stage 2
+  have e2 : srun k (srun k s (muxS sd t sa sb 144)) (muxS ld t la lb 144) ld
+      = (if s t = 1 then s la else s lb) := by
+    rw [muxS_spec k _ ld t la lb 144 (Ne.symm hld4) (Ne.symm ht4) (Ne.symm hla4)
+      (Ne.symm hlb4) (by rw [t1]; exact ht1) l1, t1, la1, lb1]
+  have l2 : ∀ j, srun k (srun k s (muxS sd t sa sb 144)) (muxS ld t la lb 144) j < M :=
+    srun_lt_of_lt k _ _ l1
+  have t2 : srun k (srun k s (muxS sd t sa sb 144)) (muxS ld t la lb 144) t = s t := by
+    rw [muxS_frame k _ ld t la lb 144 t htl ht4, t1]
+  have sd2 : srun k (srun k s (muxS sd t sa sb 144)) (muxS ld t la lb 144) sd
+      = (if s t = 1 then s sa else s sb) := by
+    rw [muxS_frame k _ ld t la lb 144 sd hsdl hsd4, e1]
+  have ha2 : srun k (srun k s (muxS sd t sa sb 144)) (muxS ld t la lb 144) ha = s ha := by
+    rw [muxS_frame k _ ld t la lb 144 ha hhal hha4, ha1]
+  have hb2 : srun k (srun k s (muxS sd t sa sb 144)) (muxS ld t la lb 144) hb = s hb := by
+    rw [muxS_frame k _ ld t la lb 144 hb hhbl hhb4, hb1]
+  refine ⟨?_, ?_, ?_⟩
+  · rw [selTripleS, srun_append, srun_append,
+      muxS_frame k _ hd t ha hb 144 sd hsdh hsd4, sd2]
+  · rw [selTripleS, srun_append, srun_append,
+      muxS_frame k _ hd t ha hb 144 ld hldh hld4, e2]
+  · rw [selTripleS, srun_append, srun_append,
+      muxS_spec k _ hd t ha hb 144 (Ne.symm hhd4) (Ne.symm ht4) (Ne.symm hha4)
+        (Ne.symm hhb4) (by rw [t2]; exact ht1) l2, t2, ha2, hb2]
+
+/-! ## §4 Admissibility
+
+The arithmetic side conditions under which the machine is expected to
+denote the transparent model.  Each one rules out a specific `u64` wrap or
+a specific undefined operation; none of them is about the mathematics of
+the sweep.  They are the `Admissible` predicate that
+`AProgramRefinement.ofDenotationOn` demands the decoder reject the
+complement of.
+-/
+
+/-- `Nat.sqrt` never grows its argument. -/
+theorem sqrt_le_self (n : Nat) : Nat.sqrt n ≤ n := by
+  have h := Nat.sqrt_le n
+  rcases Nat.eq_zero_or_pos (Nat.sqrt n) with h0 | h0
+  · omega
+  · have h1 : Nat.sqrt n * 1 ≤ Nat.sqrt n * Nat.sqrt n :=
+      Nat.mul_le_mul_left _ h0
+    omega
+
+theorem p_pos (c : Cfg) : 0 < c.p := by
+  show 0 < 2 * c.s + 2
+  omega
+
+/-- The configuration's arithmetic side conditions. -/
+structure Admissible (c : Cfg) : Prop where
+  /-- There is at least one candidate beyond the `μ(1)` seed. -/
+  capPos : 2 ≤ c.cap
+  /-- `selBody` divides by `c.rounds`. -/
+  roundsPos : 0 < c.rounds
+  /-- Every array index the body forms stays a `Nat` below the word size,
+  so the compiled `u64` address arithmetic is the mathematical one. -/
+  arrayLt : c.arrayLen < M
+  /-- The loop index does not wrap. -/
+  loopLt : c.loopCount < M
+
+/-- **The production configuration is admissible**: `cap = 10⁶`,
+`rounds = 999`, `checkLo = 33`. -/
+theorem loopCount_le (c : Cfg) :
+    c.loopCount ≤ (c.cap - 1) * c.rounds + c.cap * (2 * c.cap + 2) := by
+  have hs : c.s ≤ c.cap := sqrt_le_self c.cap
+  have e : c.loopCount = (c.cap - 1) * c.rounds + c.cap * (2 * c.s + 2) := rfl
+  rw [e]
+  exact Nat.add_le_add_left (Nat.mul_le_mul (Nat.le_refl _) (by omega)) _
+
+theorem production_admissible : Admissible production := by
+  have h := loopCount_le production
+  rw [show production.cap = 1000000 from rfl,
+    show production.rounds = 999 from rfl] at h
+  have hM : (1000000 - 1) * 999 + 1000000 * (2 * 1000000 + 2) < M := by decide
+  exact ⟨by decide, by decide, by decide, by omega⟩
+
+/-- The smoke configuration is admissible too. -/
+theorem smoke_admissible : Admissible smoke := by
+  have h := loopCount_le smoke
+  rw [show smoke.cap = 2000 from rfl, show smoke.rounds = 999 from rfl] at h
+  have hM : (2000 - 1) * 999 + 2000 * (2 * 2000 + 2) < M := by decide
+  exact ⟨by decide, by decide, by decide, by omega⟩
+
+/-! ## OPEN: what obligation (1) still needs
+
+Nothing below is proved.  Each item is stated here at the exact strength it
+has to be proved at; none of them is an axiom, a `sorry`, or a weakened
+restatement.  The scalar blocks are the ones `lift` puts into the scalar
+machine (`§3` above); the two that touch the array are stated over
+`AState`.
+
+### (1a) `mulWideBody` computes `Verified.MulWide.hl`
+
+```text
+theorem mulWideS_spec (k : Nat) (s : RegState)
+    (ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7 : Nat)
+    (hdistinct : <s0 … s7 pairwise distinct, and distinct from
+                  ra, rb, rlo, rhi; rlo ≠ rhi>)
+    (hs : ∀ j, s j < M) :
+    srun k s (mulWideS ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7) rlo
+        = (Verified.MulWide.hl (s ra) (s rb)).1 ∧
+      srun k s (mulWideS ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7) rhi
+        = (Verified.MulWide.hl (s ra) (s rb)).2
+```
+
+The arithmetic is already proved upstream (`Verified/MulWide.lean`,
+`hl_spec` and `hl_hi_lt`); what is owed is only that the eighteen
+instructions inline `hl`.  Three `% M` in the high-word accumulation are
+identities *because* `hl_hi_lt` bounds the result, so the two halves are
+not independent.  ⚠ The literal `4294967296` sits in the **second** operand
+of a `mul`, so this block must be stated with that literal abstracted, as
+`guardG` is.
+
+### (1b) `divP18Body` computes `tdiv18`
+
+```text
+theorem divP18S_spec (k : Nat) (s : RegState) (lo hi q qc : Nat)
+    (hfresh : <lo, hi, q, qc ∉ [168,175]; q ≠ qc; lo ≠ q; lo ≠ qc>)
+    (hs : ∀ j, s j < M) :
+    srun k s (divP18S lo hi q qc) q  = (tdiv18 (s lo) (s hi)).1 ∧
+    srun k s (divP18S lo hi q qc) qc = (tdiv18 (s lo) (s hi)).2
+```
+
+`Section413G2Program` §9 already proves `tdiv18_eq`: on every input the
+width guards admit, `tdiv18` **is** the proved exact divider
+`(divP18q, divP18ceil)`.  So all that is owed here is the transcription —
+forty-six instructions against `tld`/`ttail`, whose only content is that
+each of the six `% M` per digit is the identity below the quotient cap.
+⚠ `4194304` and `D5` both occur as second operands of `mul`/`udiv`; they
+must be abstracted.
+
+### (1c) `cmulBody` computes `tcmul`
+
+```text
+theorem cmulS_spec (k : Nat) (s : RegState)
+    (gate aLo aHi bLo bHi cLo cHi : Nat)
+    (hfresh : <gate, aLo, aHi, bLo, bHi, cLo, cHi outside [100,179]
+               and ≠ rViol; cLo ≠ cHi>)
+    (hs : ∀ j, s j < M) :
+    srun k s (cmulS gate aLo aHi bLo bHi cLo cHi) cLo
+        = (tcmul (s gate) (s aLo) (s aHi) (s bLo) (s bHi) (s rViol)).1 ∧
+      srun k s (cmulS gate aLo aHi bLo bHi cLo cHi) cHi
+        = (tcmul (s gate) (s aLo) (s aHi) (s bLo) (s bHi) (s rViol)).2.1 ∧
+      srun k s (cmulS gate aLo aHi bLo bHi cLo cHi) rViol
+        = (tcmul (s gate) (s aLo) (s aHi) (s bLo) (s bHi) (s rViol)).2.2
+```
+
+This is pure composition of (1a), (1b), `smDecomp_tmag`, `cmpLtS_spec` and
+`selTripleS_spec` along `srun_append`, in the order `cmulBody` writes them:
+four `smDecomp`, four `mulWide`, the sign canonicalization, two `cmpLt`,
+four `selTriple`, two `cmpLt`, two `selTriple`, `divP18`, five
+instructions, `divP18`, five instructions.  Every one of those calls is at
+**concrete** register numbers, so no further freshness hypothesis appears.
+
+### (1d) `touchBody` computes `ttouch`
+
+The first statement that touches the array, so it is stated over `AState`
+and `arun`, with `obsT` the observation of §5's loop package:
+
+```text
+theorem touchBody_spec (c : Cfg) (k : Nat) (st : AState) (g dSlot : Nat)
+    (hadm : Admissible c) (hInv : Inv c st)
+    (hidx : <the slot index is in range: (st.regs g * st.regs dSlot) % M
+             + c.plane2 < c.arrayLen>) :
+    AllDefined c.arrayLen k st (c.touchBody g dSlot) ∧
+      obsT (arun k st (c.touchBody g dSlot))
+        = c.ttouch (st.regs g) (st.regs dSlot) (obsT st)
+```
+
+`touchBody` has two `load`s and two `store`s, so it is exactly the place
+where `lift` stops applying and the index-range half of admissibility is
+consumed: `denoteAInstr` returns `none` when the index register is at least
+`arrayLen`.  The gating discipline — `base = g * dSlot % M` with `g ∈ {0,1}`
+— is what makes the three indices `base`, `base + plane1`, `base + plane2`
+in range, and that argument needs `dSlot ≤ c.cap`, which is a consequence
+of `Inv` and not of `Admissible`.
+
+### (1e) the six body stages, the body, and the loop
+
+```text
+theorem body_defined (c : Cfg) (idx : Nat) (st : AState)
+    (hadm : Admissible c) (hidx : idx < c.loopCount) (hInv : Inv c st) :
+    AllDefined c.arrayLen idx st c.body
+
+theorem body_obs (c : Cfg) (idx : Nat) (st : AState)
+    (hadm : Admissible c) (hidx : idx < c.loopCount) (hInv : Inv c st) :
+    obsT (arun idx st c.body) = c.tstep idx (obsT st)
+
+theorem body_inv (c : Cfg) (idx : Nat) (st : AState)
+    (hadm : Admissible c) (hidx : idx < c.loopCount) (hInv : Inv c st) :
+    Inv c (arun idx st c.body)
+
+theorem init_reaches (c : Cfg) (hadm : Admissible c) :
+    denoteAInstrs c.arrayLen 0 initialAState c.init = some entry ∧
+      obsT entry = tInit
+```
+
+with `Inv c st` at least: every register and every array cell is a word;
+`st.regs 1 = 0` (the `rZero` constant); and the fourteen persistent
+registers agree with the observation.  `obsT` reads registers
+`0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13` and `st.arr` into a `TState`.
+These assemble by `Verified.Algorithm.ArrayBridge.ArrayLoop` — whose four
+fields are exactly `init_reaches`, `body_defined` + `denoteAInstrs_eq_arun`,
+`body_inv` and `body_obs`, with `epilogue_reads` trivial (`epilogue = []`,
+`output = rViol`) — into
+
+```text
+theorem g2Program_denote (c : Cfg) (hc : Admissible c) :
+    (g2Program c).denote = some (c.tFlag)
+```
+
+which is obligation (1).  `production_admissible` above discharges `hc` at
+the production configuration.
+-/
 
 end LeanCompCert.Ports.Section413G2Denote
