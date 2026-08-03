@@ -95,6 +95,8 @@ def pass1Of : Nat :=
 def goodOf : Nat :=
   if qOf c k = c.R - 1 then s 0 * pass1Of c k s else s 0
 
+/-- The mantissa's low word; `yOf = uOf + 2^24` by definition. -/
+def uOf : Nat := xlo1Of c k s / 2 ^ 40
 /-- The truncated 25-bit mantissa the checks read. -/
 def yOf : Nat := xlo1Of c k s / 2 ^ 40 + 2 ^ 24
 /-- The Padé numerator. -/
@@ -148,9 +150,12 @@ def st4f (c : Params) (k : Nat) (s : RegState) : RegState :=
 /-- After the exponent select. -/
 def st4g (c : Params) (k : Nat) (s : RegState) : RegState :=
   run k (st4f c k s) blkCa4y
+/-- After the mantissa's low word `u`. -/
+def st4u (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (st4g c k s) blkCb1u
 /-- After the 25-bit mantissa. -/
 def st4h (c : Params) (k : Nat) (s : RegState) : RegState :=
-  run k (st4g c k s) blkCb1x
+  run k (st4u c k s) blkCb1x
 /-- After the Padé numerator. -/
 def st4i (c : Params) (k : Nat) (s : RegState) : RegState :=
   run k (st4h c k s) blkCb1y
@@ -721,14 +726,17 @@ private theorem chase5 (j : Nat)
     (h3 : ∀ a ∈ blkCa2, a.dest ≠ j) (h4 : ∀ a ∈ blkCa3x, a.dest ≠ j)
     (h5 : ∀ a ∈ blkCa3y, a.dest ≠ j) (h6 : ∀ a ∈ blkCa4x, a.dest ≠ j)
     (h7 : ∀ a ∈ blkCa4y, a.dest ≠ j) (h8 : ∀ a ∈ blkCb1x, a.dest ≠ j)
-    (h9 : ∀ a ∈ blkCb1y, a.dest ≠ j) (h10 : ∀ a ∈ blkCb2, a.dest ≠ j) :
+    (h9 : ∀ a ∈ blkCb1y, a.dest ≠ j) (h10 : ∀ a ∈ blkCb2, a.dest ≠ j)
+    (h8u : ∀ a ∈ blkCb1u, a.dest ≠ j := by decide) :
     st5 c k s j = st4 c k s j := by
   rw [st5_eq]
   rw [run_untouched _ _ _ h10]
   show run k (st4h c k s) blkCb1y j = _
   rw [run_untouched _ _ _ h9]
-  show run k (st4g c k s) blkCb1x j = _
+  show run k (st4u c k s) blkCb1x j = _
   rw [run_untouched _ _ _ h8]
+  show run k (st4g c k s) blkCb1u j = _
+  rw [run_untouched _ _ _ h8u]
   show run k (st4f c k s) blkCa4y j = _
   rw [run_untouched _ _ _ h7]
   show run k (st4e c k s) blkCa4x j = _
@@ -756,6 +764,8 @@ theorem st5_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
     st5 c k s 4 = acc1Of c k s ∧ st5 c k s 13 = xlo1Of c k s ∧
     st5 c k s 14 = kk1Of c k s ∧
     st5 c k s 32 = yOf c k s ∧
+    st5 c k s 23 = uOf c k s ∧
+    st5 c k s 24 = yOf c k s * yOf c k s ∧
     st5 c k s 34 = pdenOf c k s ∧
     st5 c k s 35 = pnumOf c k s * 2 ^ 12 := by
   obtain ⟨hn2, hn17, hnbnd, hnM⟩ := candFacts hc hk
@@ -939,17 +949,35 @@ theorem st5_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
     show run k (st4e c k s) blkCa4x 13 = _
     rw [run_untouched _ _ _ (by decide)]
     exact E13
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, h32v⟩ :=
-    blkCb1x_spec k (st4g c k s) (xlo1Of c k s) G13 hx1M
+  -- the low word `u`, then `y = u + 2^24`
+  have huM : uOf c k s < 2 ^ 24 := by
+    refine (Nat.div_lt_iff_lt_mul (by decide)).mpr ?_
+    have hM : M = 2 ^ 64 := rfl
+    have h1 : (2:Nat) ^ 24 * 2 ^ 40 = 2 ^ 64 := by decide
+    have := hx1M
+    omega
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, u23v⟩ :=
+    blkCb1u_spec k (st4g c k s) (xlo1Of c k s) G13 hx1M
+  have U23 : st4u c k s 23 = uOf c k s := u23v
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, h32v⟩ :=
+    blkCb1x_spec k (st4u c k s) (uOf c k s) U23 huM
   have H32 : st4h c k s 32 = yOf c k s := h32v
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, i33v⟩ :=
-    blkCb1y_spec k (st4h c k s) (yOf c k s) H32 hyge hylt
+  have H23 : st4h c k s 23 = uOf c k s := by
+    show run k (st4u c k s) blkCb1x 23 = _
+    rw [run_untouched _ _ _ (by decide)]
+    exact U23
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, i33v⟩ :=
+    blkCb1y_spec k (st4h c k s) (uOf c k s) (yOf c k s) H23 rfl huM
   have I33 : st4i c k s 33 = pnumOf c k s := i33v
   have I32 : st4i c k s 32 = yOf c k s := by
     show run k (st4h c k s) blkCb1y 32 = _
     rw [run_untouched _ _ _ (by decide)]
     exact H32
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, j34v, j35v⟩ :=
+  have I23 : st4i c k s 23 = uOf c k s := by
+    show run k (st4h c k s) blkCb1y 23 = _
+    rw [run_untouched _ _ _ (by decide)]
+    exact H23
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, j24v, j34v, j35v⟩ :=
     blkCb2_spec k (st4i c k s) (yOf c k s) (pnumOf c k s)
       I32 I33 hyge hylt hpnle
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
@@ -987,7 +1015,9 @@ theorem st5_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
     rw [run_untouched _ _ _ (by decide)]
     show run k (st4h c k s) blkCb1y 4 = _
     rw [run_untouched _ _ _ (by decide)]
-    show run k (st4g c k s) blkCb1x 4 = _
+    show run k (st4u c k s) blkCb1x 4 = _
+    rw [run_untouched _ _ _ (by decide)]
+    show run k (st4g c k s) blkCb1u 4 = _
     rw [run_untouched _ _ _ (by decide)]
     show run k (st4f c k s) blkCa4y 4 = _
     rw [run_untouched _ _ _ (by decide)]
@@ -1006,19 +1036,27 @@ theorem st5_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
     rw [run_untouched _ _ _ (by decide)]
     show run k (st4h c k s) blkCb1y 13 = _
     rw [run_untouched _ _ _ (by decide)]
-    show run k (st4g c k s) blkCb1x 13 = _
+    show run k (st4u c k s) blkCb1x 13 = _
+    rw [run_untouched _ _ _ (by decide)]
+    show run k (st4g c k s) blkCb1u 13 = _
     rw [run_untouched _ _ _ (by decide)]
     exact G13
   · rw [st5_eq]
     rw [run_untouched _ _ _ (by decide)]
     show run k (st4h c k s) blkCb1y 14 = _
     rw [run_untouched _ _ _ (by decide)]
-    show run k (st4g c k s) blkCb1x 14 = _
+    show run k (st4u c k s) blkCb1x 14 = _
+    rw [run_untouched _ _ _ (by decide)]
+    show run k (st4g c k s) blkCb1u 14 = _
     rw [run_untouched _ _ _ (by decide)]
     exact G14
   · rw [st5_eq]
     rw [run_untouched _ _ _ (by decide)]
     exact I32
+  · rw [st5_eq]
+    rw [run_untouched _ _ _ (by decide)]
+    exact I23
+  · exact j24v
   · exact j34v
   · exact j35v
 
