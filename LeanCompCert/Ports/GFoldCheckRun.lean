@@ -1022,6 +1022,360 @@ theorem st5_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
   · exact j34v
   · exact j35v
 
+/-! ## WIP: stages 6-10 and the round assembly (untested drafts) -/
+
+/-- Untouched-register chase from `st5` to `st10`. -/
+private theorem chase10 (j : Nat) (hj36 : j ≠ 36) (hj37 : j ≠ 37)
+    (hj38 : j ≠ 38) (hj39 : j ≠ 39) (hj40 : j ≠ 40) (hj41 : j ≠ 41)
+    (hj42 : j ≠ 42) :
+    st10 c k s j = st5 c k s j := by
+  show divStep 42 .udiv 41 32 (st9 c k s) j = _
+  rw [divStep_ne _ _ _ _ _ _ hj42]
+  show run k (st8 c k s) blkE j = _
+  rw [run_untouched _ _ _ (by
+    intro a ha
+    simp only [blkE, List.mem_cons, List.not_mem_nil, or_false] at ha
+    rcases ha with rfl | rfl | rfl <;> simp only [] <;> omega)]
+  show divStep 38 .udiv 37 34 (st7 c k s) j = _
+  rw [divStep_ne _ _ _ _ _ _ hj38]
+  show run k (st6 c k s) blkD j = _
+  rw [run_untouched _ _ _ (by
+    intro a ha
+    simp only [blkD, List.mem_cons, List.not_mem_nil, or_false] at ha
+    subst ha
+    simp only []
+    omega)]
+  show divStep 36 .udiv 35 34 (st5 c k s) j = _
+  rw [divStep_ne _ _ _ _ _ _ hj36]
+
+/-- **Stage 10**: the Padé digits, candidate `A`, and the sinh value. -/
+theorem st10_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    st10 c k s 0 = s 0 ∧ st10 c k s 1 = m1Of c k s ∧
+    st10 c k s 2 = phi1Of c k s ∧ st10 c k s 3 = sq1Of c k s ∧
+    st10 c k s 5 = pass0Of c k s ∧
+    st10 c k s 7 = qOf c k ∧ st10 c k s 8 = nOf c k ∧
+    st10 c k s 17 = (if qOf c k = c.R - 1 then 1 else 0) ∧
+    st10 c k s 18 = (if qOf c k = c.tdiv then 1 else 0) ∧
+    st10 c k s 19 = (if c.tdiv ≤ qOf c k then 1 else 0) ∧
+    st10 c k s 4 = acc1Of c k s ∧ st10 c k s 13 = xlo1Of c k s ∧
+    st10 c k s 14 = kk1Of c k s ∧ st10 c k s 32 = yOf c k s ∧
+    st10 c k s 40 = vAOf c k s ∧ st10 c k s 42 = sinhOf c k s := by
+  obtain ⟨y0, y1, y2, y3, y5, y7, y8, y17, y18, y19, y4, y13, y14, y32,
+    y34, y35⟩ := st5_vals hc hk hs
+  obtain ⟨hx1M, hkk1p, hkk1c, hyge, hylt, hpnle, hpdge, hpdlt, hplt,
+    hc1, hc2, hvA, hvB, hsinh, hp12M⟩ := selFacts hc hk hs
+  have hMeq : M = 2 ^ 64 := rfl
+  have hpden0 : st5 c k s 34 ≠ 0 := by
+    rw [y34]
+    omega
+  -- Stage 6: the first Padé digit
+  have V36 : st6 c k s 36 = c1Of c k s := by
+    show divStep 36 .udiv 35 34 (st5 c k s) 36 = _
+    simp [divStep, RegState.set, denoteOp, y34, y35, hpden0]
+    show pnumOf c k s * 2 ^ 12 / pdenOf c k s % M = c1Of c k s
+    refine Nat.mod_eq_of_lt ?_
+    exact Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (by omega)
+  have f6 : ∀ j, j ≠ 36 → st6 c k s j = st5 c k s j := fun j hj =>
+    divStep_ne _ _ _ _ _ _ hj
+  -- Stage 7: the remainder step
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, w37⟩ :=
+    blkD_spec k (st6 c k s) (pnumOf c k s * 2 ^ 12) (pdenOf c k s)
+      (by rw [f6 35 (by decide)]; exact y35)
+      (by rw [V36])
+      (by rw [f6 34 (by decide)]; exact y34)
+      hp12M (by omega) hpdlt
+  have V37 : st7 c k s 37
+      = (pnumOf c k s * 2 ^ 12 - c1Of c k s * pdenOf c k s) * 2 ^ 12 := by
+    show run k (st6 c k s) blkD 37 = _
+    rw [w37]
+  have f7 : ∀ j, j ≠ 36 → j ≠ 37 → st7 c k s j = st5 c k s j := by
+    intro j hj36 hj37
+    show run k (st6 c k s) blkD j = _
+    rw [run_untouched _ _ _ (by
+      intro a ha
+      simp only [blkD, List.mem_cons, List.not_mem_nil, or_false] at ha
+      subst ha
+      simp only []
+      omega), f6 j hj36]
+  -- Stage 8: the second Padé digit
+  have V38 : st8 c k s 38 = c2Of c k s := by
+    show divStep 38 .udiv 37 34 (st7 c k s) 38 = _
+    have h34 : st7 c k s 34 = pdenOf c k s := by
+      rw [f7 34 (by decide) (by decide)]; exact y34
+    simp [divStep, RegState.set, denoteOp, h34, V37, hpden0.symm,
+      show pdenOf c k s ≠ 0 by omega]
+    show (pnumOf c k s * 2 ^ 12 - c1Of c k s * pdenOf c k s) * 2 ^ 12
+        / pdenOf c k s % M = c2Of c k s
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : (pnumOf c k s * 2 ^ 12 - c1Of c k s * pdenOf c k s) * 2 ^ 12
+        < pdenOf c k s * 2 ^ 12 := by
+      have hrem : pnumOf c k s * 2 ^ 12 - c1Of c k s * pdenOf c k s
+          < pdenOf c k s := by
+        have hdm := Nat.div_add_mod (pnumOf c k s * 2 ^ 12) (pdenOf c k s)
+        have hml := Nat.mod_lt (pnumOf c k s * 2 ^ 12)
+          (show 0 < pdenOf c k s by omega)
+        have hcm : c1Of c k s * pdenOf c k s
+            = pdenOf c k s * c1Of c k s := Nat.mul_comm _ _
+        unfold c1Of at *
+        omega
+      exact Nat.mul_lt_mul_of_lt_of_le hrem (Nat.le_refl _) (by decide)
+    have h2 : pdenOf c k s * 2 ^ 12 < 2 ^ 52 * 2 ^ 12 :=
+      Nat.mul_lt_mul_of_lt_of_le hpdlt (Nat.le_refl _) (by decide)
+    have h3 : (2:Nat) ^ 52 * 2 ^ 12 = 2 ^ 64 := by decide
+    exact Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (by omega)
+  have f8 : ∀ j, j ≠ 36 → j ≠ 37 → j ≠ 38 → st8 c k s j = st5 c k s j := by
+    intro j hj36 hj37 hj38
+    show divStep 38 .udiv 37 34 (st7 c k s) j = _
+    rw [divStep_ne _ _ _ _ _ _ hj38, f7 j hj36 hj37]
+  -- Stage 9: candidate A and the sinh numerator
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, z40, z41⟩ :=
+    blkE_spec k (st8 c k s) (c1Of c k s) (c2Of c k s) (kk1Of c k s)
+      (yOf c k s)
+      (by rw [f8 36 (by decide) (by decide) (by decide)]; exact V36)
+      V38
+      (by rw [f8 14 (by decide) (by decide) (by decide)]; exact y14)
+      (by rw [f8 32 (by decide) (by decide) (by decide)]; exact y32)
+      hc1 hc2 hkk1c hyge hylt
+  have V40 : st9 c k s 40 = vAOf c k s := by
+    show run k (st8 c k s) blkE 40 = _
+    rw [z40]
+    rfl
+  have V41 : st9 c k s 41
+      = (2 ^ 50 - yOf c k s * yOf c k s) * 2 ^ 6 + yOf c k s - 1 := by
+    show run k (st8 c k s) blkE 41 = _
+    rw [z41]
+  have f9 : ∀ j, j ≠ 36 → j ≠ 37 → j ≠ 38 → j ≠ 39 → j ≠ 40 → j ≠ 41 →
+      st9 c k s j = st5 c k s j := by
+    intro j hj36 hj37 hj38 hj39 hj40 hj41
+    show run k (st8 c k s) blkE j = _
+    rw [run_untouched _ _ _ (by
+      intro a ha
+      simp only [blkE, List.mem_cons, List.not_mem_nil, or_false] at ha
+      rcases ha with rfl | rfl | rfl <;> simp only [] <;> omega),
+      f8 j hj36 hj37 hj38]
+  -- Stage 10: the sinh value
+  have hy0 : st9 c k s 32 ≠ 0 := by
+    rw [f9 32 (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide), y32]
+    have := hyge
+    omega
+  have V42 : st10 c k s 42 = sinhOf c k s := by
+    show divStep 42 .udiv 41 32 (st9 c k s) 42 = _
+    have h32 : st9 c k s 32 = yOf c k s := by
+      rw [f9 32 (by decide) (by decide) (by decide) (by decide) (by decide)
+        (by decide)]
+      exact y32
+    simp [divStep, RegState.set, denoteOp, h32, V41,
+      show yOf c k s ≠ 0 by omega]
+    show ((2 ^ 50 - yOf c k s * yOf c k s) * 2 ^ 6 + yOf c k s - 1)
+        / yOf c k s % M = sinhOf c k s
+    refine Nat.mod_eq_of_lt ?_
+    have h1 : ((2 ^ 50 - yOf c k s * yOf c k s) * 2 ^ 6 + yOf c k s - 1)
+        / yOf c k s
+        ≤ (2 ^ 50 - yOf c k s * yOf c k s) * 2 ^ 6 + yOf c k s - 1 :=
+      Nat.div_le_self _ _
+    have h2 : (2 ^ 50 - yOf c k s * yOf c k s) * 2 ^ 6 ≤ 2 ^ 50 * 2 ^ 6 :=
+      Nat.mul_le_mul_right _ (by omega)
+    have h3 : (2:Nat) ^ 50 * 2 ^ 6 + 2 ^ 25 < M := by decide
+    have h4 : yOf c k s < 2 ^ 25 := hylt
+    omega
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [chase10 0 (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]
+    exact y0
+  · rw [chase10 1 (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]
+    exact y1
+  · rw [chase10 2 (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]
+    exact y2
+  · rw [chase10 3 (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]
+    exact y3
+  · rw [chase10 5 (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]
+    exact y5
+  · rw [chase10 7 (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]
+    exact y7
+  · rw [chase10 8 (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]
+    exact y8
+  · rw [chase10 17 (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)]
+    exact y17
+  · rw [chase10 18 (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)]
+    exact y18
+  · rw [chase10 19 (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)]
+    exact y19
+  · rw [chase10 4 (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide)]
+    exact y4
+  · rw [chase10 13 (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)]
+    exact y13
+  · rw [chase10 14 (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)]
+    exact y14
+  · rw [chase10 32 (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)]
+    exact y32
+  · show divStep 42 .udiv 41 32 (st9 c k s) 40 = _
+    rw [divStep_ne _ _ _ _ _ _ (by decide)]
+    exact V40
+  · exact V42
+
+/-- Bit-valued `if` against its condition. -/
+private theorem bitIf {P : Prop} [Decidable P] (x y : Nat) :
+    (if (if P then (1:Nat) else 0) = 1 then x else y) = if P then x else y := by
+  by_cases h : P <;> simp [h]
+
+/-- The position flip between the mask form and `gfRound`'s guard. -/
+private theorem posFlip {c : Params} {k : Nat} (x y : Nat) :
+    (if c.tdiv ≤ qOf c k then x else y)
+      = (if qOf c k < c.tdiv then y else x) := by
+  by_cases h : c.tdiv ≤ qOf c k <;>
+    [rw [if_pos h, if_neg (by omega)]; rw [if_neg h, if_pos (by omega)]]
+
+/-- The machine's `ballow` bit is `hitOf`'s. -/
+private theorem ballow_eq {c : Params} {k : Nat} (hq : c.tdiv ≤ qOf c k) :
+    ((if qOf c k = c.tdiv then (1:Nat) else 0) |||
+      (if nOf c k ≤ c.split then 1 else 0))
+      = (if qOf c k - c.tdiv + 1 = 1 ∨ nOf c k ≤ c.split then 1 else 0) := by
+  by_cases h1 : qOf c k = c.tdiv <;> by_cases h2 : nOf c k ≤ c.split
+  · rw [if_pos h1, if_pos h2, if_pos (Or.inr h2)]
+  · rw [if_pos h1, if_neg h2, if_pos (Or.inl (by omega))]
+  · rw [if_neg h1, if_pos h2, if_pos (Or.inr h2)]
+  · rw [if_neg h1, if_neg h2, if_neg (by
+      rintro (h | h)
+      · exact h1 (by omega)
+      · exact h2 h)]
+
+/-- **The round**: the body's effect on the carried registers is `gfRound`,
+and the invariant is preserved. -/
+theorem gfRun_spec (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    valsOf (gfRun c k s) = gfRound c k (valsOf s) ∧ Inv c (gfRun c k s) := by
+  obtain ⟨z0, z1, z2, z3, z5, z7, z8, z17, z18, z19, z4, z13, z14, z32,
+    z40, z42⟩ := st10_vals hc hk hs
+  obtain ⟨hx1M, hkk1p, hkk1c, hyge, hylt, hpnle, hpdge, hpdlt, hplt,
+    hc1b, hc2b, hvA, hvB, hsinhb, hp12M⟩ := selFacts hc hk hs
+  obtain ⟨hn2, hn17, hnbnd, hnM⟩ := candFacts hc hk
+  obtain ⟨hm1p, hm1M, hphi1p, hphi1M, hsq1, hprod1, hphiFp, hphiFbnd,
+    hphiFM', hsum, htq⟩ := peelFacts hc hk hs
+  obtain ⟨_, _, _, _, hsq0, _, hpass0⟩ := resetFacts hc hk hs
+  have hMeq : M = 2 ^ 64 := rfl
+  have haccM : acc1Of c k s < M := by
+    unfold acc1Of
+    exact Nat.mod_lt _ M_pos
+  -- Stage F1
+  obtain ⟨a0, a1, a2, a3, a4, a5, a7, a13, a14, a17, a19, a40, a43, a45,
+    a46⟩ :=
+    blkF1_spec c k (st10 c k s) (kk1Of c k s) (sinhOf c k s)
+      (if qOf c k = c.tdiv then 1 else 0) (nOf c k) (acc1Of c k s)
+      z14 z42 z18 z8 z4 hkk1p hkk1c hsinhb (maskLe _) hn17 haccM hc.splitLt
+  set tF1 := run k (st10 c k s) (blkF1 c) with htF1
+  -- the machine candidate B is `vBOf`
+  have a43' : tF1 43 = vBOf c k s := a43
+  by_cases hq : c.tdiv ≤ qOf c k
+  · -- exponent rounds
+    have hb48 : qOf c k - c.tdiv + 1 ≤ 48 := by
+      have h1 : qOf c k < c.R := Nat.mod_lt _ hc.RPos
+      have h2 := hc.bmaxLe
+      unfold Params.R at h1
+      omega
+    have a44 : tF1 44 = qOf c k - c.tdiv + 1 :=
+      blkF1_spec44 c k (st10 c k s) (qOf c k) z7 hq
+        (by
+          have h1 : qOf c k < c.R := Nat.mod_lt _ hc.RPos
+          have h2 := hc.RLtM
+          omega)
+        (by
+          have h1 : c.tdiv ≤ c.R := Nat.le_add_right _ _
+          have h2 := hc.RLtM
+          omega)
+    obtain ⟨b0, b1, b2, b3, b4, b5, b13, b14, b17, b19, b45, b46, b50,
+      b51, b52⟩ :=
+      blkF2_spec k tF1 (acc1Of c k s) (qOf c k - c.tdiv + 1) (vAOf c k s)
+        (vBOf c k s) (xlo1Of c k s)
+        (by rw [a4]) a44 (by rw [a40]) a43' (by rw [a13])
+        haccM hb48 hvA hvB hx1M
+    set tF2 := run k tF1 blkF2 with htF2
+    obtain ⟨c1f, c2f, c3f, c4f, c13f, c14f, c5v, c0v⟩ :=
+      blkF3_spec k tF2 (if acc1Of c k s ≤ ACAP then 1 else 0)
+        ((if qOf c k = c.tdiv then (1:Nat) else 0) |||
+          (if nOf c k ≤ c.split then 1 else 0))
+        (if acc1Of c k s * (qOf c k - c.tdiv + 1) % M
+            ≤ vAOf c k s * 2 ^ 12 + CC * (qOf c k - c.tdiv + 1) then 1 else 0)
+        (if acc1Of c k s * (qOf c k - c.tdiv + 1) % M
+            ≤ vBOf c k s * 2 ^ 12 + CC * (qOf c k - c.tdiv + 1) then 1 else 0)
+        (if xlo1Of c k s ≤ 2 ^ 64 - 2 ^ 50 then 1 else 0)
+        (if c.tdiv ≤ qOf c k then 1 else 0)
+        (if qOf c k = c.R - 1 then 1 else 0)
+        (pass0Of c k s) (s 0)
+        (by rw [b46, a46]) (by rw [b45, a45]) b50 b51 b52
+        (by rw [b19, a19]) (by rw [b17, a17]) (by rw [b5, a5]) (by
+          rw [b0, a0]; exact z0)
+        (maskLe _) (bit_or_le' _ _ (maskLe _) (maskLe _)) (maskLe _)
+        (maskLe _) (maskLe _) (maskLe _) (maskLe _) hpass0 hs.goodLe
+    -- identify the machine hit with `hitOf`
+    have hhit :
+        (if acc1Of c k s ≤ ACAP then (1:Nat) else 0) *
+          (((if qOf c k = c.tdiv then (1:Nat) else 0) |||
+            (if nOf c k ≤ c.split then 1 else 0)) *
+            ((if acc1Of c k s * (qOf c k - c.tdiv + 1) % M
+                ≤ vAOf c k s * 2 ^ 12 + CC * (qOf c k - c.tdiv + 1)
+              then (1:Nat) else 0) |||
+              (if xlo1Of c k s ≤ 2 ^ 64 - 2 ^ 50 then (1:Nat) else 0) *
+              (if acc1Of c k s * (qOf c k - c.tdiv + 1) % M
+                  ≤ vBOf c k s * 2 ^ 12 + CC * (qOf c k - c.tdiv + 1)
+                then (1:Nat) else 0)))
+        = hitOf c (nOf c k) (qOf c k - c.tdiv + 1) (acc1Of c k s)
+            (xlo1Of c k s) (kk1Of c k s) := by
+      rw [ballow_eq hq]
+      rfl
+    have h5v : gfRun c k s 5 = pass1Of c k s := by
+      show run k tF2 blkF3 5 = _
+      rw [c5v, hhit]
+      unfold pass1Of
+      rw [bitIf, posFlip]
+    have h0v : gfRun c k s 0 = goodOf c k s := by
+      show run k tF2 blkF3 0 = _
+      rw [c0v, hhit]
+      unfold goodOf pass1Of
+      rw [bitIf, bitIf, posFlip]
+    refine ⟨?_, ?_⟩
+    · rw [gfRound_eq]
+      show (⟨gfRun c k s 0, gfRun c k s 1, gfRun c k s 2, gfRun c k s 3,
+        gfRun c k s 4, gfRun c k s 5, gfRun c k s 13, gfRun c k s 14⟩ :
+          Vals) = _
+      have h1v : gfRun c k s 1 = m1Of c k s := by
+        show run k tF2 blkF3 1 = _
+        rw [c1f, b1, a1]
+        exact z1
+      have h2v : gfRun c k s 2 = phi1Of c k s := by
+        show run k tF2 blkF3 2 = _
+        rw [c2f, b2, a2]
+        exact z2
+      have h3v : gfRun c k s 3 = sq1Of c k s := by
+        show run k tF2 blkF3 3 = _
+        rw [c3f, b3, a3]
+        exact z3
+      have h4v : gfRun c k s 4 = acc1Of c k s := by
+        show run k tF2 blkF3 4 = _
+        rw [c4f, b4, a4]
+      have h13v : gfRun c k s 13 = xlo1Of c k s := by
+        show run k tF2 blkF3 13 = _
+        rw [c13f, b13, a13]
+      have h14v : gfRun c k s 14 = kk1Of c k s := by
+        show run k tF2 blkF3 14 = _
+        rw [c14f, b14, a14]
+      rw [h0v, h1v, h2v, h3v, h4v, h5v, h13v, h14v]
+    · sorry -- Inv, assembled below once in the combined case
+  · sorry -- trial rounds
+
+
 end Staged
 
 end LeanCompCert.Ports.GFoldCheck
