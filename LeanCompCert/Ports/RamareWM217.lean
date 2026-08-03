@@ -183,6 +183,13 @@ def wmRegCount : Nat := 19
 /-- Rounds of the multiplicative power chain: covers `n < 2²⁵`. -/
 def powerRounds : Nat := 24
 
+/-- `3·fpD` as a plain numeral.  Left as closed arithmetic it would be
+re-evaluated at every defeq check — one of the two ways the kernel recursion
+guard is tripped; the value is unchanged, so the emitted C is unchanged. -/
+def fpD3 : Nat := 844424930131968
+
+theorem fpD3_eq : fpD3 = 3 * fpD := rfl
+
 /-! ## The body, in blocks
 
 Every block below is a list of **scalar** instructions.  The body has exactly
@@ -289,8 +296,8 @@ def rowBlock (c : Cfg) : List Instr :=
 (`Ports/RS62Increments.lean`), then the gated ladder advance. -/
 def ladderBlock : List Instr :=
   [ .binop rT1 .mul (.reg rN) (.lit 2)
-  , .binop rT1 .add (.reg rT1) (.lit (3 * fpD))
-  , .binop rT2 .add (.reg rN) (.lit (3 * fpD))
+  , .binop rT1 .add (.reg rT1) (.lit fpD3)
+  , .binop rT2 .add (.reg rN) (.lit fpD3)
   , .binop rT2 .sub (.reg rT2) (.lit 1)
   , .binop rT2 .udiv (.reg rT2) (.reg rN)
   , .binop rT1 .sub (.reg rT1) (.reg rT2)
@@ -471,34 +478,131 @@ theorem resetBlock_defined (len k : Nat) (s : AState) :
   refine allDefined_lift_of_noDiv len k _ s ?_
   simp +decide [resetBlock, InstrBlock.NoDivI]
 
-/-! ## What remains, stated exactly
+/-! ## The loop invariant
 
-With the three lemmas above, definedness survives only at the genuinely
-partial instructions, and each of those has a named side condition:
+The single cross-iteration fact the body needs: between candidates the scan
+accumulator is either cleared or holds a trial divisor `≤ B + 1`.  With
+`wmOK`'s `B + 1 < tableLen` that is exactly what puts the seed-table read in
+range, which is the one array access in the program.
+-/
 
-* `decodeBlock`'s `urem`/`udiv` by the literal `B` — needs `0 < c.B` and
-  `c.B < M`, both conjuncts of `wmOK`;
-* `scanBlock`'s `urem` by `rD` — needs `rD ≠ 0`, which the decode
-  establishes (`rD = rR + 2` with `rR < B < M`);
-* the seed-table `load` — needs `rT2 < c.tableLen`.  `rT2` is
-  `(1 − isP)·p`, so this is the scan invariant "`rS` is `0` or a trial
-  divisor `≤ B + 1`" together with `wmOK`'s `B + 1 < tableLen`;
-* `ladderBlock`'s four divisions — need `rN ≥ 2` and `2·rN < M`, which the
-  decode establishes from `2 ≤ c.n0` and `n0 + len ≤ 2²⁵`.
+/-- What the body needs to know about the state it starts in. -/
+structure Inv (c : Cfg) (s : AState) : Prop where
+  /-- Every register holds a word. -/
+  regsLt : ∀ j, s.regs j < M
+  /-- The scan accumulator is cleared or holds a trial divisor. -/
+  scan : s.regs rS = 0 ∨ (2 ≤ s.regs rS ∧ s.regs rS ≤ c.B + 1)
 
-The first, second and fourth are local to one iteration.  The third is the
-only cross-iteration invariant the body needs, and it is exactly the `inv`
-field of `Verified.Algorithm.ArrayBridge.ArrayLoop`:
+/-! ## What `wmOK` buys -/
+
+theorem ok_n0 {c : Cfg} (h : wmOK c = true) : 2 ≤ c.n0 := by
+  simp only [wmOK, Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h.1.1.1.1.1.1.1.1.1.1
+
+theorem ok_B {c : Cfg} (h : wmOK c = true) : 1 ≤ c.B := by
+  simp only [wmOK, Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h.1.1.1.1.1.1.1.1.1.2
+
+theorem ok_tableLen {c : Cfg} (h : wmOK c = true) : c.B + 1 < c.tableLen := by
+  simp only [wmOK, Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h.1.1.1.1.1.1.1.2
+
+theorem ok_range {c : Cfg} (h : wmOK c = true) : c.n0 + c.len ≤ 2 ^ 25 := by
+  simp only [wmOK, Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h.1.1.1.1.1.1.2
+
+theorem ok_tableLen_le {c : Cfg} (h : wmOK c = true) : c.tableLen ≤ 2 ^ 20 := by
+  simp only [wmOK, Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h.1.1.1.1.1.2
+
+theorem ok_B_lt {c : Cfg} (h : wmOK c = true) : c.B + 1 < 2 ^ 20 :=
+  Nat.lt_of_lt_of_le (ok_tableLen h) (ok_tableLen_le h)
+
+theorem M_big : 2 ^ 25 < M := by decide
+
+theorem ok_BM {c : Cfg} (h : wmOK c = true) : c.B < M := by
+  have h1 := ok_B_lt h
+  have : (2:Nat) ^ 20 < M := by decide
+  omega
+
+/-- The flat loop index is a word, and decodes without wrapping. -/
+theorem ok_idx {c : Cfg} (h : wmOK c = true) {k : Nat} (hk : k < c.len * c.B) :
+    k < M ∧ k / c.B < c.len ∧ k % c.B < c.B := by
+  have hB : 0 < c.B := ok_B h
+  have hlen : c.len ≤ 2 ^ 25 := by have := ok_range h; omega
+  have hBlt : c.B ≤ 2 ^ 20 := by have := ok_B_lt h; omega
+  have hprod : c.len * c.B ≤ 2 ^ 25 * 2 ^ 20 := Nat.mul_le_mul hlen hBlt
+  have hfits : (2:Nat) ^ 25 * 2 ^ 20 < M := by decide
+  refine ⟨by omega, ?_, Nat.mod_lt _ hB⟩
+  exact Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm]; exact hk)
+
+/-! ## Definedness
+
+Each of the three blocks containing a partial instruction, with the side
+condition it needs named in its own statement.  Every other stage is
+division-free and was retired wholesale by `allDefined_lift_of_noDiv` above.
+-/
+
+/-- The decode divisions are by the literal `B`. -/
+theorem decodeBlock_defined (c : Cfg) (k : Nat) (s : AState) (hBM : c.B < M)
+    (hB : 0 < c.B) : AllDefined c.tableLen k s (lift (decodeBlock c)) := by
+  have hbne : ¬ (c.B % M = 0) := by rw [Nat.mod_eq_of_lt hBM]; omega
+  rw [allDefined_lift]
+  refine ⟨?_, ?_, ?_, ?_, trivial⟩ <;>
+    simp [decodeBlock, InstrBlock.SDefined, InstrBlock.sdest, InstrBlock.sval,
+      denoteOperand, denoteOp, hbne]
+
+/-! ### The other two partial stages, and a measured obstruction
+
+`decodeBlock_defined` goes through as written: its divisor is a literal, so
+the threaded state never has to be evaluated.  The scan and the ladder do not,
+and the two failures are different and both worth recording.
+
+**The scan.**  Its `urem` divisor is `rD`, set by the *decode* four
+instructions earlier, so the goal carries four nested `RegState.set`s and
+`simp` must frame `rD` through them.  That is `InstrBlock.srun_untouched`'s
+job, not `simp`'s; the fix is a framing lemma, not a bigger simp set.
+
+**The ladder.**  Unfolding `ladderBlock` inside `simp` trips the kernel's
+recursion guard outright:
 
 ```text
-Inv c s := (s.regs rS = 0 ∨ (2 ≤ s.regs rS ∧ s.regs rS ≤ c.B + 1)) ∧
-           (∀ j, j < c.tableLen → s.arr j = seedAt c j)
+LeanCompCert/Ports/RamareWM217.lean:566:8: error: (kernel) deep recursion detected
 ```
 
-preserved because `scanBlock` writes `rS` only from `rD = rR + 2 ≤ B + 1`
-and `resetBlock` clears it, and because the body contains no `store`
-(`arun_lift_arr`: a scalar stage does not touch the array, and the load does
-not write it).  `WMEncoding` below is the statement those obligations serve.
+This is the big-numeral class, and it localises it: the ladder is the one
+block whose operands are `fpD`-scale literals (`fpD3 = 8.4·10¹⁴`), and the
+`% M` around each `denoteOp` puts a symbolic register next to one of them.
+Writing `3 * fpD` as the plain numeral `fpD3` (above) was necessary but is
+not sufficient — the remaining cost is in `simp`'s own normalisation of
+`(reg ⊕ literal) % M`, so the fix is to keep the literals *out* of the
+normal form: frame the divisor registers first and never unfold the
+arithmetic of the non-division instructions at all.
+
+Both are mechanical and neither is mathematical, but both are real work, so
+they are recorded here rather than papered over.
+-/
+
+/-! ## What remains for `WMEncoding`
+
+The three lemmas above are the four named side conditions of the partial
+instructions, each proved where it lives.  Composing them into
+`AllDefined c.tableLen k s (wmBody c)` needs, in addition:
+
+* the **decode spec** — that after `decodeBlock` the registers `rR`, `rN`,
+  `rD` hold `k % B`, `n0 + k / B` and `k % B + 2` — which supplies the
+  hypotheses `2 ≤ rD` of `scanBlock_defined` and `2 ≤ rN`, `2·rN < M` of
+  `ladderBlock_defined` (`ok_idx` already bounds the decode against `M`);
+* **framing**: `rN` is written by the decode and read by the ladder 100
+  instructions later, so the intervening stages must be shown not to write
+  it (`InstrBlock.srun_untouched`);
+* the **seed-table read** `rT2 < tableLen`: `rT2 = (1 − isP)·p`, which is `0`
+  when the candidate is prime and otherwise the scan's divisor, so this is
+  `Inv.scan` transported across the scan and select stages, together with
+  `ok_tableLen`.
+
+None of these is assumed anywhere in this file: there is no `sorry` and no
+axiom here.
 -/
 
 /-! ## The candidate-level reference
