@@ -52,12 +52,13 @@ production artifact's sha256 is unchanged.
 * §3 — `guardG_tguard` (`guardBody` computes `tguard`), `muxS_spec`,
   `smDecomp_tmag` (`smDecomp` computes `tmag` and the gated magnitude
   violation), `cmpLtS_spec` (`cmpLtBody` computes `tlt`),
-  `selTripleS_spec`, and each block's frame lemma.
+  `selTripleS_spec`, `mulWideG_hl` (`mulWideBody` computes the upstream
+  `Verified.MulWide.hl`, hence by `hl_spec` the exact 128-bit product),
+  and each block's frame lemma.
 * §4 — `Admissible`, and `production_admissible` / `smoke_admissible`.
 
 See the closing `## OPEN` section for the precise statements that remain —
-`mulWideBody`, `divP18Body`, `cmulBody`, `touchBody`, the six body stages
-and the loop.  Nothing in this file is an axiom, a `sorry`, or a weakened
+`divP18Body`, `cmulBody`, `touchBody`, the six body stages and the loop.  Nothing in this file is an axiom, a `sorry`, or a weakened
 restatement of the obligation; every theorem here has axiom set
 `[propext, Classical.choice, Quot.sound]`.
 -/
@@ -778,6 +779,247 @@ theorem selTripleS_spec (k : Nat) (s : RegState)
       muxS_spec k _ hd t ha hb 144 (Ne.symm hhd4) (Ne.symm ht4) (Ne.symm hha4)
         (Ne.symm hhb4) (by rw [t2]; exact ht1) l2, t2, ha2, hb2]
 
+/-! ### `mulWideBody`: the half-limb 128-bit product
+
+Split in two: `mulWideG_raw` is the register bookkeeping — the eighteen
+instructions inline `mwRaw`, the machine's own truncated circuit — and
+`mwRaw_hl` is the arithmetic, which reduces `mwRaw` at the production
+constants to the upstream-proved `Verified.MulWide.hl`.
+-/
+
+/-- `CDEMAbelScan.mulWideBody`, as a scalar block with its two half-limb
+constants abstracted. -/
+def mulWideG (mask base ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7 : Nat) :
+    List Instr :=
+  [ .binop s0 .band (.reg ra) (.lit mask)
+  , .binop s1 .lshr (.reg ra) (.lit 32)
+  , .binop s2 .band (.reg rb) (.lit mask)
+  , .binop s3 .lshr (.reg rb) (.lit 32)
+  , .binop s4 .mul (.reg s0) (.reg s2)
+  , .binop s5 .mul (.reg s0) (.reg s3)
+  , .binop s6 .mul (.reg s1) (.reg s2)
+  , .binop s7 .mul (.reg s1) (.reg s3)
+  , .binop s0 .add (.reg s5) (.reg s6)
+  , .binop s1 .lt (.reg s0) (.reg s5)
+  , .binop s2 .shl (.reg s0) (.lit 32)
+  , .binop rlo .add (.reg s4) (.reg s2)
+  , .binop s3 .lt (.reg rlo) (.reg s4)
+  , .binop s5 .lshr (.reg s0) (.lit 32)
+  , .binop s6 .mul (.reg s1) (.lit base)
+  , .binop rhi .add (.reg s7) (.reg s5)
+  , .binop rhi .add (.reg rhi) (.reg s6)
+  , .binop rhi .add (.reg rhi) (.reg s3) ]
+
+theorem mulWideBody_lift (ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7 : Nat) :
+    mulWideBody ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7
+      = lift (mulWideG 4294967295 4294967296 ra rb rlo rhi
+          s0 s1 s2 s3 s4 s5 s6 s7) := rfl
+
+theorem mulWideG_noDiv (mask base ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7 : Nat) :
+    (mulWideG mask base ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7).all NoDivI
+      = true := rfl
+
+/-- **The machine's half-limb product circuit**, with every truncation it
+performs written out.  `mwRaw 4294967295 4294967296` is `MulWide.hl`
+(`mwRaw_hl`). -/
+def mwRaw (mask base a b : Nat) : Nat × Nat :=
+  let a0 := (a &&& mask) % M
+  let a1 := (a >>> 32) % M
+  let b0 := (b &&& mask) % M
+  let b1 := (b >>> 32) % M
+  let p00 := (a0 * b0) % M
+  let p01 := (a0 * b1) % M
+  let p10 := (a1 * b0) % M
+  let p11 := (a1 * b1) % M
+  let mid := (p01 + p10) % M
+  let cm := if mid < p01 then 1 else 0
+  let lo := (p00 + (mid <<< 32) % M) % M
+  let cl := if lo < p00 then 1 else 0
+  (lo, ((((p11 + (mid >>> 32) % M) % M + (cm * base) % M) % M) + cl) % M)
+
+/-- The scratch registers are pairwise distinct … -/
+def Distinct8 (s0 s1 s2 s3 s4 s5 s6 s7 : Nat) : Prop :=
+  s0 ≠ s1 ∧ s0 ≠ s2 ∧ s0 ≠ s3 ∧ s0 ≠ s4 ∧
+  s0 ≠ s5 ∧ s0 ≠ s6 ∧ s0 ≠ s7 ∧ s1 ≠ s2 ∧
+  s1 ≠ s3 ∧ s1 ≠ s4 ∧ s1 ≠ s5 ∧ s1 ≠ s6 ∧
+  s1 ≠ s7 ∧ s2 ≠ s3 ∧ s2 ≠ s4 ∧ s2 ≠ s5 ∧
+  s2 ≠ s6 ∧ s2 ≠ s7 ∧ s3 ≠ s4 ∧ s3 ≠ s5 ∧
+  s3 ≠ s6 ∧ s3 ≠ s7 ∧ s4 ≠ s5 ∧ s4 ≠ s6 ∧
+  s4 ≠ s7 ∧ s5 ≠ s6 ∧ s5 ≠ s7 ∧ s6 ≠ s7
+
+/-- … and none of the operands is one of them. -/
+def NotIn8 (r s0 s1 s2 s3 s4 s5 s6 s7 : Nat) : Prop :=
+  r ≠ s0 ∧ r ≠ s1 ∧ r ≠ s2 ∧ r ≠ s3 ∧ r ≠ s4 ∧ r ≠ s5 ∧ r ≠ s6 ∧ r ≠ s7
+
+set_option maxHeartbeats 1000000 in
+/-- **The eighteen instructions inline `mwRaw`.** -/
+theorem mulWideG_raw (k : Nat) (s : RegState)
+    (mask base ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7 : Nat)
+    (hmask : mask % M = mask) (hbase : base % M = base)
+    (hD : Distinct8 s0 s1 s2 s3 s4 s5 s6 s7)
+    (hra : NotIn8 ra s0 s1 s2 s3 s4 s5 s6 s7)
+    (hrb : NotIn8 rb s0 s1 s2 s3 s4 s5 s6 s7)
+    (hrlo : NotIn8 rlo s0 s1 s2 s3 s4 s5 s6 s7)
+    (hrhi : NotIn8 rhi s0 s1 s2 s3 s4 s5 s6 s7)
+    (hlohi : rlo ≠ rhi) :
+    srun k s (mulWideG mask base ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7) rlo
+        = (mwRaw mask base (s ra) (s rb)).1 ∧
+      srun k s (mulWideG mask base ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7) rhi
+        = (mwRaw mask base (s ra) (s rb)).2 := by
+  have h32 : (32:Nat) % M = 32 := by decide
+  obtain ⟨p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26, p27⟩ := hD
+  obtain ⟨q0, q1, q2, q3, q4, q5, q6, q7⟩ := hra
+  obtain ⟨w0, w1, w2, w3, w4, w5, w6, w7⟩ := hrb
+  obtain ⟨x0, x1, x2, x3, x4, x5, x6, x7⟩ := hrlo
+  obtain ⟨y0, y1, y2, y3, y4, y5, y6, y7⟩ := hrhi
+  constructor <;>
+    simp only [mulWideG, mwRaw, srun, sdest, sval, denoteOperand, denoteOp,
+      RegState.set, Option.getD_some, hmask, hbase, h32, if_true, if_false,
+      p0, (Ne.symm p0), p1, (Ne.symm p1), p2, (Ne.symm p2), p3,
+      (Ne.symm p3), p4, (Ne.symm p4), p5, (Ne.symm p5), p6, (Ne.symm p6),
+      p7, (Ne.symm p7), p8, (Ne.symm p8), p9, (Ne.symm p9), p10,
+      (Ne.symm p10), p11, (Ne.symm p11), p12, (Ne.symm p12), p13,
+      (Ne.symm p13), p14, (Ne.symm p14), p15, (Ne.symm p15), p16,
+      (Ne.symm p16), p17, (Ne.symm p17), p18, (Ne.symm p18), p19,
+      (Ne.symm p19), p20, (Ne.symm p20), p21, (Ne.symm p21), p22,
+      (Ne.symm p22), p23, (Ne.symm p23), p24, (Ne.symm p24), p25,
+      (Ne.symm p25), p26, (Ne.symm p26), p27, (Ne.symm p27), q0, q1, q2,
+      q3, q4, q5, q6, q7, w0, w1, w2, w3, w4, w5, w6, w7, x0, x1, x2, x3,
+      x4, x5, x6, x7, y0, y1, y2, y3, y4, y5, y6, y7, hlohi,
+      (Ne.symm hlohi), (Ne.symm x0), (Ne.symm x1), (Ne.symm x2),
+      (Ne.symm x3), (Ne.symm x4), (Ne.symm x5), (Ne.symm x6), (Ne.symm x7),
+      (Ne.symm y0), (Ne.symm y1), (Ne.symm y2), (Ne.symm y3), (Ne.symm y4),
+      (Ne.symm y5), (Ne.symm y6), (Ne.symm y7), (Ne.symm q0), (Ne.symm q1),
+      (Ne.symm q2), (Ne.symm q3), (Ne.symm q4), (Ne.symm q5), (Ne.symm q6),
+      (Ne.symm q7), (Ne.symm w0), (Ne.symm w1), (Ne.symm w2), (Ne.symm w3),
+      (Ne.symm w4), (Ne.symm w5), (Ne.symm w6), (Ne.symm w7)]
+
+/-- Three nested `u64` truncations of a sum that the final value bounds. -/
+theorem mod_chain3 (x y z w : Nat) (h : x + y + z + w < M) :
+    (((x + y) % M + z) % M + w) % M = x + y + z + w := by
+  have h1 : (x + y) % M = x + y := Nat.mod_eq_of_lt (by omega)
+  rw [h1]
+  have h2 : (x + y + z) % M = x + y + z := Nat.mod_eq_of_lt (by omega)
+  rw [h2]
+  exact Nat.mod_eq_of_lt h
+
+set_option maxHeartbeats 1000000 in
+/-- **The machine's circuit is `Verified.MulWide.hl`.**  The upstream
+`hl_spec` then gives the exact 128-bit product; `hl_hi_lt` is what makes the
+three truncations in the high-word accumulation identities, so the two
+halves of the circuit are not independent. -/
+theorem mwRaw_hl (a b : Nat) (ha : a < M) (hb : b < M) :
+    mwRaw 4294967295 4294967296 a b = Verified.MulWide.hl a b := by
+  have hMval : M = 4294967296 * 4294967296 := by decide
+  have hB64 : Verified.MulWide.B64 = M := by decide
+  have hB32 : Verified.MulWide.B32 = 4294967296 := rfl
+  have h32pos : 0 < 4294967296 := by decide
+  have h32M : (4294967296 : Nat) < M := by decide
+  -- bit operations as arithmetic
+  have hand : ∀ n : Nat, n &&& 4294967295 = n % 4294967296 := fun n => by
+    have := Nat.and_two_pow_sub_one_eq_mod n 32
+    simpa using this
+  have hshr : ∀ n : Nat, n >>> 32 = n / 4294967296 := fun n => by
+    have := Nat.shiftRight_eq_div_pow n 32
+    simpa using this
+  have hshl : ∀ n : Nat, n <<< 32 = n * 4294967296 := fun n => by
+    have := Nat.shiftLeft_eq n 32
+    simpa using this
+  -- the four half limbs
+  have haM : a % 4294967296 < 4294967296 := Nat.mod_lt _ h32pos
+  have hbM : b % 4294967296 < 4294967296 := Nat.mod_lt _ h32pos
+  have haD : a / 4294967296 < 4294967296 :=
+    (Nat.div_lt_iff_lt_mul h32pos).mpr (by rw [← hMval]; exact ha)
+  have hbD : b / 4294967296 < 4294967296 :=
+    (Nat.div_lt_iff_lt_mul h32pos).mpr (by rw [← hMval]; exact hb)
+  have ha0 : (a &&& 4294967295) % M = a % 4294967296 := by
+    rw [hand]; exact Nat.mod_eq_of_lt (Nat.lt_trans haM h32M)
+  have hb0 : (b &&& 4294967295) % M = b % 4294967296 := by
+    rw [hand]; exact Nat.mod_eq_of_lt (Nat.lt_trans hbM h32M)
+  have ha1 : (a >>> 32) % M = a / 4294967296 := by
+    rw [hshr]; exact Nat.mod_eq_of_lt (Nat.lt_trans haD h32M)
+  have hb1 : (b >>> 32) % M = b / 4294967296 := by
+    rw [hshr]; exact Nat.mod_eq_of_lt (Nat.lt_trans hbD h32M)
+  have ha1' : (a / 4294967296) % M = a / 4294967296 :=
+    Nat.mod_eq_of_lt (Nat.lt_trans haD h32M)
+  have hb1' : (b / 4294967296) % M = b / 4294967296 :=
+    Nat.mod_eq_of_lt (Nat.lt_trans hbD h32M)
+  have ha0' : (a % 4294967296) % M = a % 4294967296 :=
+    Nat.mod_eq_of_lt (Nat.lt_trans haM h32M)
+  have hb0' : (b % 4294967296) % M = b % 4294967296 :=
+    Nat.mod_eq_of_lt (Nat.lt_trans hbM h32M)
+  -- the four partial products fit in a word
+  have hprod : ∀ x y : Nat, x < 4294967296 → y < 4294967296 →
+      (x * y) % M = x * y := by
+    intro x y hx hy
+    refine Nat.mod_eq_of_lt ?_
+    rw [hMval]
+    exact Nat.mul_lt_mul_of_lt_of_lt hx hy
+  have hp00 := hprod _ _ haM hbM
+  have hp01 := hprod _ _ haM hbD
+  have hp10 := hprod _ _ haD hbM
+  have hp11 := hprod _ _ haD hbD
+  have hhi := Verified.MulWide.hl_hi_lt a b (by rw [hB64]; exact ha)
+    (by rw [hB64]; exact hb)
+  have hcm : ∀ (P : Prop) (_ : Decidable P),
+      ((if P then (1:Nat) else 0) * 4294967296) % M
+        = (if P then (1:Nat) else 0) * 4294967296 := by
+    intro P inst
+    refine Nat.mod_eq_of_lt ?_
+    split
+    · rw [Nat.one_mul]; exact h32M
+    · rw [Nat.zero_mul]; exact M_pos
+  have hmidlt : ∀ x : Nat, (x % M) / 4294967296 % M = (x % M) / 4294967296 :=
+    fun x => Nat.mod_eq_of_lt
+      (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (Nat.mod_lt _ M_pos))
+  simp only [Verified.MulWide.hl, Verified.MulWide.B32, hB64] at hhi
+  simp only [mwRaw, Verified.MulWide.hl, Verified.MulWide.B32, hB64,
+    ha0, hb0, ha1, hb1, ha0', hb0', ha1', hb1', hp00, hp01, hp10, hp11,
+    hshl, hshr, hmidlt, hcm, Prod.mk.injEq] at hhi ⊢
+  exact ⟨trivial, mod_chain3 _ _ _ _ hhi⟩
+
+/-- The block writes only `rlo`, `rhi` and the eight scratch registers. -/
+theorem mulWideG_frame (k : Nat) (s : RegState)
+    (mask base ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7 j : Nat)
+    (hlo : j ≠ rlo) (hhi : j ≠ rhi) (hj : NotIn8 j s0 s1 s2 s3 s4 s5 s6 s7) :
+    srun k s (mulWideG mask base ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7) j
+      = s j := by
+  obtain ⟨j0, j1, j2, j3, j4, j5, j6, j7⟩ := hj
+  refine srun_untouched k j _ ?_ s
+  intro i hi
+  simp only [mulWideG, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl <;>
+    simp only [sdest] <;>
+    first
+      | exact fun h => absurd h.symm j0 | exact fun h => absurd h.symm j1
+      | exact fun h => absurd h.symm j2 | exact fun h => absurd h.symm j3
+      | exact fun h => absurd h.symm j4 | exact fun h => absurd h.symm j5
+      | exact fun h => absurd h.symm j6 | exact fun h => absurd h.symm j7
+      | exact fun h => absurd h.symm hlo | exact fun h => absurd h.symm hhi
+
+/-- **`mulWideBody` computes `Verified.MulWide.hl`.**  With the upstream
+`hl_spec`, the eighteen instructions therefore compute the exact 128-bit
+product of the two registers. -/
+theorem mulWideG_hl (k : Nat) (s : RegState)
+    (ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7 : Nat)
+    (hD : Distinct8 s0 s1 s2 s3 s4 s5 s6 s7)
+    (hra : NotIn8 ra s0 s1 s2 s3 s4 s5 s6 s7)
+    (hrb : NotIn8 rb s0 s1 s2 s3 s4 s5 s6 s7)
+    (hrlo : NotIn8 rlo s0 s1 s2 s3 s4 s5 s6 s7)
+    (hrhi : NotIn8 rhi s0 s1 s2 s3 s4 s5 s6 s7)
+    (hlohi : rlo ≠ rhi) (hs : ∀ j, s j < M) :
+    srun k s (mulWideG 4294967295 4294967296 ra rb rlo rhi
+        s0 s1 s2 s3 s4 s5 s6 s7) rlo
+        = (Verified.MulWide.hl (s ra) (s rb)).1 ∧
+      srun k s (mulWideG 4294967295 4294967296 ra rb rlo rhi
+        s0 s1 s2 s3 s4 s5 s6 s7) rhi
+        = (Verified.MulWide.hl (s ra) (s rb)).2 := by
+  have h := mulWideG_raw k s 4294967295 4294967296 ra rb rlo rhi
+    s0 s1 s2 s3 s4 s5 s6 s7 (by decide) (by decide) hD hra hrb hrlo hrhi hlohi
+  constructor
+  · rw [h.1, mwRaw_hl (s ra) (s rb) (hs ra) (hs rb)]
+  · rw [h.2, mwRaw_hl (s ra) (s rb) (hs ra) (hs rb)]
+
 /-! ## §4 Admissibility
 
 The arithmetic side conditions under which the machine is expected to
@@ -844,29 +1086,7 @@ restatement.  The scalar blocks are the ones `lift` puts into the scalar
 machine (`§3` above); the two that touch the array are stated over
 `AState`.
 
-### (1a) `mulWideBody` computes `Verified.MulWide.hl`
-
-```text
-theorem mulWideS_spec (k : Nat) (s : RegState)
-    (ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7 : Nat)
-    (hdistinct : <s0 … s7 pairwise distinct, and distinct from
-                  ra, rb, rlo, rhi; rlo ≠ rhi>)
-    (hs : ∀ j, s j < M) :
-    srun k s (mulWideS ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7) rlo
-        = (Verified.MulWide.hl (s ra) (s rb)).1 ∧
-      srun k s (mulWideS ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7) rhi
-        = (Verified.MulWide.hl (s ra) (s rb)).2
-```
-
-The arithmetic is already proved upstream (`Verified/MulWide.lean`,
-`hl_spec` and `hl_hi_lt`); what is owed is only that the eighteen
-instructions inline `hl`.  Three `% M` in the high-word accumulation are
-identities *because* `hl_hi_lt` bounds the result, so the two halves are
-not independent.  ⚠ The literal `4294967296` sits in the **second** operand
-of a `mul`, so this block must be stated with that literal abstracted, as
-`guardG` is.
-
-### (1b) `divP18Body` computes `tdiv18`
+### (1a) `divP18Body` computes `tdiv18`
 
 ```text
 theorem divP18S_spec (k : Nat) (s : RegState) (lo hi q qc : Nat)
@@ -884,7 +1104,7 @@ each of the six `% M` per digit is the identity below the quotient cap.
 ⚠ `4194304` and `D5` both occur as second operands of `mul`/`udiv`; they
 must be abstracted.
 
-### (1c) `cmulBody` computes `tcmul`
+### (1b) `cmulBody` computes `tcmul`
 
 ```text
 theorem cmulS_spec (k : Nat) (s : RegState)
@@ -900,14 +1120,14 @@ theorem cmulS_spec (k : Nat) (s : RegState)
         = (tcmul (s gate) (s aLo) (s aHi) (s bLo) (s bHi) (s rViol)).2.2
 ```
 
-This is pure composition of (1a), (1b), `smDecomp_tmag`, `cmpLtS_spec` and
-`selTripleS_spec` along `srun_append`, in the order `cmulBody` writes them:
+This is pure composition of `mulWideG_hl`, (1a), `smDecomp_tmag`,
+`cmpLtS_spec` and `selTripleS_spec` along `srun_append`, in the order `cmulBody` writes them:
 four `smDecomp`, four `mulWide`, the sign canonicalization, two `cmpLt`,
 four `selTriple`, two `cmpLt`, two `selTriple`, `divP18`, five
 instructions, `divP18`, five instructions.  Every one of those calls is at
 **concrete** register numbers, so no further freshness hypothesis appears.
 
-### (1d) `touchBody` computes `ttouch`
+### (1c) `touchBody` computes `ttouch`
 
 The first statement that touches the array, so it is stated over `AState`
 and `arun`, with `obsT` the observation of §5's loop package:
@@ -930,7 +1150,7 @@ consumed: `denoteAInstr` returns `none` when the index register is at least
 in range, and that argument needs `dSlot ≤ c.cap`, which is a consequence
 of `Inv` and not of `Admissible`.
 
-### (1e) the six body stages, the body, and the loop
+### (1d) the six body stages, the body, and the loop
 
 ```text
 theorem body_defined (c : Cfg) (idx : Nat) (st : AState)
