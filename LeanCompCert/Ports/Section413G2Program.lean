@@ -69,7 +69,9 @@ asserts them):
 2. `tFlag c = 0 → g2SweepOK c.rounds c.checkLo c.cap = true` — that the
    transparent model with a clean flag equals the reference model.  The
    intended route is the encode/decode and divider lemmas of
-   `Ports/Section413Cells.lean` under the guard invariant.
+   `Ports/Section413Cells.lean` under the guard invariant.  Its divider
+   piece **is proved below** (§9, `tdiv18_eq`): on every guarded input the
+   transparent `10¹⁸` divider equals the proved `divP18q`/`divP18ceil`.
 
 Until both land, a run of the emitted artifact is evidence about the C
 only; the campaign registry entry `section413_g2_small_1e6` carries
@@ -679,29 +681,30 @@ def tlt (sa la ha sb lb hb : Nat) : Nat :=
   let mba := bnat (hb < ha) + bnat (ha = hb) * bnat (lb < la)
   sa * (1 - sb) + sa * sb * mba + (1 - sa) * (1 - sb) * mab
 
+/-- One truncated long-division step (`divP18Body`'s per-digit block):
+`Section413Cells.ldStep` with the machine's `u64` truncations. -/
+def tld (st : Nat × Nat) (dig : Nat) : Nat × Nat :=
+  ((st.1 * 4194304 % M + (st.2 * 4194304 % M + dig) % M / D5) % M,
+   (st.2 * 4194304 % M + dig) % M % D5)
+
+/-- The divider tail over an arbitrary digit list: the truncated long
+division and the exactness-corrected ceiling. -/
+def ttail (lo : Nat) (ds : List Nat) : Nat × Nat :=
+  let st := ds.foldl tld (0, 0)
+  let ex := bnat (lo &&& 262143 = 0) * bnat (st.2 = 0)
+  (st.1, (tsub 1 ex + st.1) % M)
+
 /-- The exact `10¹⁸` divider (`divP18Body`): floor and ceiling quotients of
 the magnitude `lo + 2⁶⁴·hi`, with the machine's truncations. -/
 def tdiv18 (lo hi : Nat) : Nat × Nat :=
   let yLo := ((lo >>> 18) + (hi <<< 46) % M) % M
   let yHi := hi >>> 18
-  let cur := yHi >>> 24
-  let q := cur / D5
-  let rem := cur % D5
-  let cur := (rem * 4194304 % M + ((yHi >>> 2) &&& 4194303)) % M
-  let q := (q * 4194304 % M + cur / D5) % M
-  let rem := cur % D5
-  let d2 := ((yLo >>> 44) + ((yHi &&& 3) * 1048576) % M) % M
-  let cur := (rem * 4194304 % M + d2) % M
-  let q := (q * 4194304 % M + cur / D5) % M
-  let rem := cur % D5
-  let cur := (rem * 4194304 % M + ((yLo >>> 22) &&& 4194303)) % M
-  let q := (q * 4194304 % M + cur / D5) % M
-  let rem := cur % D5
-  let cur := (rem * 4194304 % M + (yLo &&& 4194303)) % M
-  let q := (q * 4194304 % M + cur / D5) % M
-  let rem := cur % D5
-  let ex := bnat (lo &&& 262143 = 0) * bnat (rem = 0)
-  (q, (tsub 1 ex + q) % M)
+  ttail lo
+    [ yHi >>> 24
+    , (yHi >>> 2) &&& 4194303
+    , ((yLo >>> 44) + ((yHi &&& 3) * 1048576) % M) % M
+    , (yLo >>> 22) &&& 4194303
+    , yLo &&& 4194303 ]
 
 /-- The interval product (`cmulBody`): `(cLo, cHi, viol')`. -/
 def tcmul (gate aLo aHi bLo bHi viol : Nat) : Nat × Nat × Nat :=
@@ -864,5 +867,221 @@ def Cfg.tFlag (c : Cfg) : Nat := c.tRun.viol
 /-- The transparent model's final `g` cell (both endpoints encoded), for
 cross-checks. -/
 def Cfg.tG (c : Cfg) : Nat × Nat := (c.tRun.gLo, c.tRun.gHi)
+
+
+/-! ## §9 First simulation pieces: the truncated divider is the proved one
+
+The start of obligation (2) (`tFlag = 0 → g2SweepOK`): the transparent
+model's `10¹⁸` divider — truncations and all — equals the *proved* divider
+of `Ports/Section413Cells.lean` on every input the width guards admit.
+`tdiv18_eq` composes: one truncated long-division step below the quotient
+cap (`tld_eq_ldStep`), the five-digit run (`tld_run5`), the fold-free digit
+cleanup (`clean_digits`), and the tail characterization (`ttail_char`);
+`divP18q_spec`/`divP18ceil_spec` then give the exact `⌊x/10¹⁸⌋`/`⌈x/10¹⁸⌉`
+semantics.  The guarded regime is `x < 2¹²¹`; the guards cap each factor's
+magnitude at `2⁶⁰`, so every product the sweep divides is `≤ 2¹²⁰`.
+-/
+
+open LeanCompCert.Ports.Section413Cells (ldStep longDivStep ldStep_fold
+  divP18q divP18ceil divP18w digitsW shr18 divP18q_spec divP18ceil_spec)
+
+set_option linter.unusedSimpArgs false
+
+/-! Helper lemmas proved in Probe6 (inlined here). -/
+
+theorem tld_eq_ldStep (st : Nat × Nat) (dig : Nat)
+    (hq : st.1 < 4398046511104) (hr : st.2 < 3814697265625)
+    (hd : dig < 4194304) :
+    tld st dig = ldStep st dig := by
+  obtain ⟨q, r⟩ := st
+  simp only at hq hr
+  have h1 : r * 4194304 % 18446744073709551616 = r * 4194304 :=
+    Nat.mod_eq_of_lt (by omega)
+  have h2 : (r * 4194304 + dig) % 18446744073709551616 =
+      r * 4194304 + dig := Nat.mod_eq_of_lt (by omega)
+  have h3 : q * 4194304 % 18446744073709551616 = q * 4194304 :=
+    Nat.mod_eq_of_lt (by omega)
+  have h4 : (q * 4194304 + (r * 4194304 + dig) / 3814697265625) %
+      18446744073709551616 =
+      q * 4194304 + (r * 4194304 + dig) / 3814697265625 :=
+    Nat.mod_eq_of_lt (by omega)
+  simp only [tld, ldStep, LeanCompCert.Ports.Section413Cells.D5,
+    LeanCompCert.Ports.Section413Cells.B22, D5,
+    LeanCompCert.Verified.Reflect.M, Nat.reducePow]
+  rw [h1, h2, h3, h4]
+
+theorem tld_run5 (d4 d3 d2 d1 d0 : Nat)
+    (h4 : d4 < 4194304) (h3 : d3 < 4194304) (h2 : d2 < 4194304)
+    (h1 : d1 < 4194304) (h0 : d0 < 4194304)
+    (hv : ((d4 * 4194304 + d3) * 4194304 + d2) * 4194304 + d1
+      < 2417851639229258349412352) :
+    [d4, d3, d2, d1, d0].foldl tld (0, 0) =
+      [d4, d3, d2, d1, d0].foldl ldStep (0, 0) := by
+  have hD : (0:Nat) < 3814697265625 := by omega
+  simp only [List.foldl_cons, List.foldl_nil]
+  rw [tld_eq_ldStep (0, 0) d4 (by omega) (by omega) h4]
+  have e1 : ldStep (0, 0) d4 = (0, d4) := by
+    simp only [ldStep, LeanCompCert.Ports.Section413Cells.D5,
+      LeanCompCert.Ports.Section413Cells.B22, Prod.mk.injEq]
+    refine ⟨by omega, by omega⟩
+  rw [e1]
+  rw [tld_eq_ldStep (0, d4) d3 (by omega) (by omega) h3]
+  have e2 : ldStep (0, d4) d3 =
+      ((d4 * 4194304 + d3) / 3814697265625,
+       (d4 * 4194304 + d3) % 3814697265625) := by
+    simp only [ldStep, LeanCompCert.Ports.Section413Cells.D5,
+      LeanCompCert.Ports.Section413Cells.B22, Prod.mk.injEq]
+    exact ⟨by omega, trivial⟩
+  rw [e2]
+  rw [tld_eq_ldStep ((d4 * 4194304 + d3) / 3814697265625,
+    (d4 * 4194304 + d3) % 3814697265625) d2
+    (by show (d4 * 4194304 + d3) / 3814697265625 < 4398046511104; omega)
+    (by show (d4 * 4194304 + d3) % 3814697265625 < 3814697265625; omega) h2]
+  have e3 : ldStep ((d4 * 4194304 + d3) / 3814697265625,
+      (d4 * 4194304 + d3) % 3814697265625) d2 =
+      (((d4 * 4194304 + d3) * 4194304 + d2) / 3814697265625,
+       ((d4 * 4194304 + d3) * 4194304 + d2) % 3814697265625) := by
+    have h := longDivStep (d4 * 4194304 + d3) d2 4194304 3814697265625 hD
+    simp only [ldStep, LeanCompCert.Ports.Section413Cells.D5,
+      LeanCompCert.Ports.Section413Cells.B22, Prod.mk.injEq]
+    exact ⟨h.1.symm, h.2.symm⟩
+  rw [e3]
+  rw [tld_eq_ldStep (((d4 * 4194304 + d3) * 4194304 + d2) / 3814697265625,
+    ((d4 * 4194304 + d3) * 4194304 + d2) % 3814697265625) d1
+    (by show ((d4 * 4194304 + d3) * 4194304 + d2) / 3814697265625
+      < 4398046511104; omega)
+    (by show ((d4 * 4194304 + d3) * 4194304 + d2) % 3814697265625
+      < 3814697265625; omega) h1]
+  have e4 : ldStep (((d4 * 4194304 + d3) * 4194304 + d2) / 3814697265625,
+      ((d4 * 4194304 + d3) * 4194304 + d2) % 3814697265625) d1 =
+      ((((d4 * 4194304 + d3) * 4194304 + d2) * 4194304 + d1) / 3814697265625,
+       (((d4 * 4194304 + d3) * 4194304 + d2) * 4194304 + d1) %
+         3814697265625) := by
+    have h := longDivStep ((d4 * 4194304 + d3) * 4194304 + d2) d1 4194304
+      3814697265625 hD
+    simp only [ldStep, LeanCompCert.Ports.Section413Cells.D5,
+      LeanCompCert.Ports.Section413Cells.B22, Prod.mk.injEq]
+    exact ⟨h.1.symm, h.2.symm⟩
+  rw [e4]
+  rw [tld_eq_ldStep
+    ((((d4 * 4194304 + d3) * 4194304 + d2) * 4194304 + d1) / 3814697265625,
+     (((d4 * 4194304 + d3) * 4194304 + d2) * 4194304 + d1) % 3814697265625)
+    d0
+    (by show (((d4 * 4194304 + d3) * 4194304 + d2) * 4194304 + d1) /
+      3814697265625 < 4398046511104; omega)
+    (by show (((d4 * 4194304 + d3) * 4194304 + d2) * 4194304 + d1) %
+      3814697265625 < 3814697265625; omega) h0]
+
+/-! The main chain: `tdiv18 = ttail (messy digits)` definitionally, the
+digit list cleans up by a fold-free list equality, and the clean tail is
+evaluated by `tld_run5` + `ldStep_fold`. -/
+
+theorem clean_digits (lo hi : Nat) (hlo : lo < 18446744073709551616)
+    (_hhi : hi < 18446744073709551616) :
+      ([ (hi >>> 18) >>> 24
+       , ((hi >>> 18) >>> 2) &&& 4194303
+       , (((((lo >>> 18) + (hi <<< 46) % M) % M) >>> 44) + (((hi >>> 18) &&& 3) * 1048576) % M) % M
+       , ((((lo >>> 18) + (hi <<< 46) % M) % M) >>> 22) &&& 4194303
+       , (((lo >>> 18) + (hi <<< 46) % M) % M) &&& 4194303 ] : List Nat) =
+      [ hi / 262144 / 16777216
+      , hi / 262144 / 4 % 4194304
+      , (lo / 262144 + hi % 262144 * 70368744177664) / 17592186044416 + hi / 262144 % 4 * 1048576
+      , (lo / 262144 + hi % 262144 * 70368744177664) / 4194304 % 4194304
+      , (lo / 262144 + hi % 262144 * 70368744177664) % 4194304 ] := by
+  have hA22 : forall n : Nat, n &&& 4194303 = n % 4194304 := fun n => by
+    have := Nat.and_two_pow_sub_one_eq_mod n 22
+    simpa using this
+  have hA2 : forall n : Nat, n &&& 3 = n % 4 := fun n => by
+    have := Nat.and_two_pow_sub_one_eq_mod n 2
+    simpa using this
+  have hR : forall (n k : Nat), n >>> k = n / 2 ^ k :=
+    fun n k => Nat.shiftRight_eq_div_pow n k
+  have hL : hi <<< 46 = hi * 70368744177664 := by
+    have := Nat.shiftLeft_eq hi 46
+    simpa using this
+  have hyLo : (((lo >>> 18) + (hi <<< 46) % M) % M) = (lo / 262144 + hi % 262144 * 70368744177664) := by
+    rw [hR lo 18, hL]
+    simp only [LeanCompCert.Verified.Reflect.M, Nat.reducePow]
+    omega
+  have c4 : (hi >>> 18) >>> 24 = hi / 262144 / 16777216 := by
+    rw [hR hi 18, hR _ 24]
+  have c3 : ((hi >>> 18) >>> 2) &&& 4194303 = hi / 262144 / 4 % 4194304 := by
+    rw [hR hi 18, hR _ 2, hA22]
+  have c2 : (((((lo >>> 18) + (hi <<< 46) % M) % M) >>> 44) + (((hi >>> 18) &&& 3) * 1048576) % M) % M = (lo / 262144 + hi % 262144 * 70368744177664) / 17592186044416 + hi / 262144 % 4 * 1048576 := by
+    rw [hyLo, hR _ 44, hR hi 18, hA2]
+    simp only [LeanCompCert.Verified.Reflect.M, Nat.reducePow]
+    omega
+  have c1 : ((((lo >>> 18) + (hi <<< 46) % M) % M) >>> 22) &&& 4194303 = (lo / 262144 + hi % 262144 * 70368744177664) / 4194304 % 4194304 := by
+    rw [hyLo, hR _ 22, hA22]
+  have c0 : (((lo >>> 18) + (hi <<< 46) % M) % M) &&& 4194303 = (lo / 262144 + hi % 262144 * 70368744177664) % 4194304 := by
+    rw [hyLo, hA22]
+  rw [c4, c3, c2, c1, c0]
+
+theorem ttail_char (lo : Nat) (ds : List Nat) (q r : Nat)
+    (h : ds.foldl tld (0, 0) = (q, r)) (hq : q < 9223372036854775808) :
+    ttail lo ds =
+      (q, (if lo &&& 262143 = 0 ∧ r = 0 then 0 else 1) + q) := by
+  unfold ttail
+  rw [h]
+  dsimp only
+  simp only [bnat, tsub, LeanCompCert.Verified.Reflect.M, Nat.reducePow,
+    Prod.mk.injEq]
+  refine ⟨trivial, ?_⟩
+  by_cases h1 : lo &&& 262143 = 0 <;> by_cases h2 : r = 0 <;>
+    simp only [h1, h2, reduceIte, if_true, if_false, and_true, and_false,
+      true_and, false_and, and_self] <;>
+    omega
+
+set_option maxHeartbeats 16000000 in
+set_option maxRecDepth 40000 in
+/-- `tdiv18` through `ttail` at the clean digit list. -/
+theorem tdiv18_ttail_clean (lo hi : Nat) (hlo : lo < 18446744073709551616)
+    (hhi : hi < 18446744073709551616) :
+    tdiv18 lo hi = ttail lo
+      [ hi / 262144 / 16777216
+      , hi / 262144 / 4 % 4194304
+      , ((lo / 262144 + hi % 262144 * 70368744177664) / 17592186044416 + hi / 262144 % 4 * 1048576)
+      , (lo / 262144 + hi % 262144 * 70368744177664) / 4194304 % 4194304
+      , (lo / 262144 + hi % 262144 * 70368744177664) % 4194304 ] := by
+  unfold tdiv18
+  dsimp only
+  rw [clean_digits lo hi hlo hhi]
+
+set_option maxHeartbeats 16000000 in
+/-- **The transparent divider is the proved divider**, on every input the
+width guards admit (`x < 2^121`; guarded products are at most `2^120`). -/
+theorem tdiv18_eq (lo hi : Nat) (hlo : lo < 18446744073709551616)
+    (hhi : hi < 18446744073709551616)
+    (hx : lo + 18446744073709551616 * hi
+      < 2658455991569831745807614120560689152) :
+    tdiv18 lo hi = (divP18q lo hi, divP18ceil lo hi) := by
+  have hA18 : lo &&& 262143 = lo % 262144 := by
+    have := Nat.and_two_pow_sub_one_eq_mod lo 18
+    simpa using this
+  have hfold :
+      ([ hi / 262144 / 16777216
+       , hi / 262144 / 4 % 4194304
+       , ((lo / 262144 + hi % 262144 * 70368744177664) / 17592186044416 + hi / 262144 % 4 * 1048576)
+       , (lo / 262144 + hi % 262144 * 70368744177664) / 4194304 % 4194304
+       , (lo / 262144 + hi % 262144 * 70368744177664) % 4194304 ] : List Nat).foldl tld (0, 0) =
+      ((divP18w lo hi).1, (divP18w lo hi).2) :=
+    (tld_run5 (hi / 262144 / 16777216) (hi / 262144 / 4 % 4194304) ((lo / 262144 + hi % 262144 * 70368744177664) / 17592186044416 + hi / 262144 % 4 * 1048576) ((lo / 262144 + hi % 262144 * 70368744177664) / 4194304 % 4194304) ((lo / 262144 + hi % 262144 * 70368744177664) % 4194304) (by omega)
+      (by omega) (by omega) (by omega) (by omega) (by omega)).trans rfl
+  have hq1 : (divP18w lo hi).1 =
+      (lo + 18446744073709551616 * hi) / 1000000000000000000 :=
+    divP18q_spec lo hi hlo hhi
+  rw [tdiv18_ttail_clean lo hi hlo hhi]
+  rw [ttail_char lo _ _ _ hfold (by omega)]
+  simp only [LeanCompCert.Ports.Section413Cells.divP18ceil,
+    LeanCompCert.Ports.Section413Cells.E18, hA18, Prod.mk.injEq]
+  refine ⟨rfl, ?_⟩
+  have hqd : divP18q lo hi = (divP18w lo hi).1 := rfl
+  by_cases h1 : lo % 262144 = 0 <;>
+    by_cases h2 : (divP18w lo hi).2 = 0 <;>
+    simp only [h1, h2, if_true, if_false, and_true, and_false, true_and,
+      false_and, and_self] <;>
+    omega
+
+set_option linter.unusedSimpArgs true
 
 end LeanCompCert.Ports.Section413G2Program
