@@ -54,16 +54,29 @@ four instructions; `Verified/LogAccum.lean` proves that accumulating `logFix`
 this way reproduces `logFold` exactly, so `logFold_bracket` transfers verbatim
 and the error term `2·#terms` is still in the theorem.
 
-## The comparisons are one word, not two
+## The comparisons are shifted by 16, and clause 1 is squared
 
-A clause reads `D + 4·terms ≤ ⌊0.79059276·2^S⌋·⌊√n⌋`, and the right-hand side
-is a 70-bit product.  Rather than a 128-bit multiply and a 128-bit compare, both
-sides are shifted right by `16` first: `t = (D.lo >>> 16) + (D.hi <<< 48)` is
-exact because the overflow guard keeps `D.hi < 2⁸`, and the constants are
-pre-shifted at emit time — **downward on both sides**, so the test is strictly
-stronger than the clause.  What it costs is `2¹⁶` ulps of `2⁻⁴⁸`, i.e.
-`2.3·10⁻¹⁰` absolute against a margin of `10⁻⁸·√n ≥ 3·10⁻⁵`: seven orders of
-magnitude of slack, for `7` instructions instead of about `40`.
+Both clauses first shift the accumulator right by `16`:
+`t = (D.lo >>> 16) + (D.hi <<< 48)` is exact because the overflow guard keeps
+`D.hi < 2⁸`, and the constants are pre-shifted at emit time — **downward on
+both sides**.  What that costs is `2¹⁶` ulps of `2⁻⁴⁸`, i.e. `2.3·10⁻¹⁰`
+absolute, which is negligible against every margin below.
+
+Clause 2 then compares against `⌊√2·2^S⌋·⌊√n⌋` directly.  It may: its constant
+is not attained.  Over `[2, 1.11·10⁸]` the minimum of `(ψ(x) − x)/√x` is
+`−0.9241`, so the slack is about `0.49·√n` against a floor loss below `√2`.
+
+**Clause 1 may not, and used to.**  `max (ψ(x) − x)/√x = 0.7905927544` is
+attained at `x = 110 102 617`, and `0.79059276` is that number rounded up; the
+true margin there is `5.9·10⁻⁵` absolute while `cUp·(√n − ⌊√n⌋)` reaches
+`0.791`.  Testing `D + 4·terms ≤ cUp·⌊√n⌋` therefore *fails at the extremal
+point where the clause holds* — one integer below `1.11·10⁸`, and the reason a
+production `ψ` run reported a violation that no smoke slice could reproduce.
+Clause 1 is now `V² ≤ cUp16²·n`, exact in integers, `128`-bit on both sides and
+built from `32×32` products; `rVFloor` keeps the old form as a reported
+diagnostic so that the substitution loss stays visible.  It costs about `40`
+instructions, which is what the earlier one-word design was buying and could
+not afford to.
 
 ## What is proved here and what is not
 
@@ -134,6 +147,51 @@ def cDown (S : Nat) : Nat := Nat.sqrt (2 * 2 ^ (2 * S))
 
 def cUp16 (S : Nat) : Nat := cUp S / 65536
 def cDown16 (S : Nat) : Nat := cDown S / 65536
+
+/-! ### Clause 1 is tested by squaring, not against `⌊√n⌋`
+
+`cUp` is not a constant with headroom.  `max_{x} (ψ(x) − x)/√x = 0.7905927544`
+and is **attained**, at the prime `x = 110 102 617`; the clause's constant is
+the same number rounded up to eight places.  At that one point the true margin
+is `5.6·10⁻⁹` relative, i.e. `5.9·10⁻⁵` absolute.
+
+Substituting `⌊√n⌋` for `√n` — which is what `cUp16 · rSq` does — costs up to
+`cUp·(√n − ⌊√n⌋) < 0.791` absolute.  That is **four orders of magnitude larger
+than the margin**, and at `x = 110 102 617` it is decisive: the ratio against
+`⌊√x⌋` is `0.7906666`, which exceeds `cUp` by `7.4·10⁻⁵`.  A sieve over
+`[2, 1.11·10⁸]` finds exactly one integer at which the `⌊√n⌋` form fails and
+**none** at which the clause fails.  The conservatism that makes the floor form
+sound is exactly what makes it false at the extremal point, and no window
+sizing, budget or cap can reach it.
+
+So clause 1 is tested as `V² ≤ cUp16²·n` in exact integers, `V` being the
+biased-subtracted upper enclosure at scale `2^(S−16)`.  Both sides are
+`128`-bit and are built from `32×32` products, which is all the fragment has;
+`cUp16²` is an emit-time literal, which is why `S ≤ 48` is required — at
+`S = 49` it no longer fits a word.  The floor form is *kept*, as a diagnostic
+counter (`rVFloor`) that fires exactly when the substitution, and not the
+mathematics, is what failed.
+
+Clause 2 is left in floor form on purpose: its constant `√2` is not attained.
+Over `[2, 1.11·10⁸]` the minimum of `(ψ(x) − x)/√x` is `−0.9241`, at `x = 2`,
+so the slack is `0.49·√n` against a floor loss below `√2`; the tightest point
+in that range has slack `0.107`, and it grows like `√n`. -/
+
+/-- `cUp16²`, the clause-1 constant squared.  Below `2⁶⁴` exactly when
+`S ≤ 48`; `cUp16Fits` is the side condition and the emitter refuses to build
+a program that violates it. -/
+def cUp16Sq (S : Nat) : Nat := cUp16 S * cUp16 S
+
+def cUp16SqLo (S : Nat) : Nat := cUp16Sq S % 4294967296
+def cUp16SqHi (S : Nat) : Nat := cUp16Sq S / 4294967296
+
+/-- **The range of validity of the squared clause.**  `cUp16 S < 2³²` is what
+makes `cUp16Sq S` a `u64` literal and `cUp16SqHi S` a `32`-bit multiplier. -/
+def cUp16Fits (S : Nat) : Bool := decide (cUp16 S < 4294967296)
+
+example : cUp16Fits 48 = true := by decide
+
+example : cUp16Fits 49 = false := by decide
 
 /-- The per-term enclosure width, in ulps of `2^-S`: two from
 `logFix_bracket`, two from the `ln 2` conversion. -/
@@ -288,7 +346,10 @@ def PsiCfg.streamBase (c : PsiCfg) : Nat := c.ppBase + 2 * (c.ppLen + 1)
 def PsiCfg.streamSink (c : PsiCfg) : Nat := c.streamBase + 2 * c.streamCap
 def PsiCfg.primeSink (c : PsiCfg) : Nat := c.streamSink + 2
 def PsiCfg.resultBase (c : PsiCfg) : Nat := c.primeSink + 1
-def PsiCfg.arrayLen (c : PsiCfg) : Nat := c.resultBase + 8
+/-- Seventeen result cells: the eight carry-out slots the chain reads, then
+the eight per-class violation counters that sum to slot `7`, then the
+substitution diagnostic that is not a failure. -/
+def PsiCfg.arrayLen (c : PsiCfg) : Nat := c.resultBase + 17
 
 /-! ## Register allocation
 
@@ -324,7 +385,67 @@ def rTh : Nat := 195
 def rNe : Nat := 196
 def rPl : Nat := 197
 
-def regCount : Nat := 360
+/-! ### The eight failure classes, counted apart
+
+`rViol` is the **aggregate** and remains the program's output, so `denote`
+means exactly what it always meant.  Alongside it the loop keeps one counter
+per way the run can fail, because they do not mean the same thing and a
+reviewer holding only their sum cannot act on it.  Two of them are the
+mathematics:
+
+* `rVUp` — clause 1, `D + 4·terms ≤ ⌊0.79059276·2^S⌋·⌊√n⌋`, failed;
+* `rVLo` — clause 2, `D ≥ −⌊√2·2^S⌋·⌊√n⌋`, failed.
+
+The other six say the **run is not a test of the clauses at all**, which is
+close to the opposite claim: the artifact ran outside the range in which its
+own arithmetic is exact, so neither a pass nor a failure of the clauses above
+means anything on that window.
+
+* `rVCap` — a test point was pushed past `streamCap` and went to the sink, so
+  a term is **missing** from `D`.  A missing positive term pushes `D` down:
+  it makes clause 1 *easier* and clause 2 *harder*, so a budget overrun and a
+  genuine lower-bound failure look alike in the aggregate and are opposites in
+  fact;
+* `rVDrain` — the window turned over with the stream undrained: `logSteps` was
+  too small, and again terms are missing;
+* `rVGap` — `n − prev` did not fit `16` bits, so `2^S·(n − prev)` may have
+  wrapped;
+* `rVSqrt` — one increment of `⌊√n⌋` did not suffice (a test-point gap wider
+  than `2√n`);
+* `rVLog2` — one increment of `⌊log₂ n⌋` did not suffice;
+* `rVAcc` — the accumulator left `[0, 2^(S+24))`, which is what makes the
+  `>>> 16` comparison exact.
+
+Every increment of a class register sits immediately beside the `rViol`
+increment it mirrors, on the same guard value, so the eight sum to the
+aggregate by construction; the emitted driver checks that they do and refuses
+to report a verdict if they do not. -/
+
+def rVUp : Nat := 345      -- clause 1 failed
+def rVLo : Nat := 346      -- clause 2 failed
+def rVCap : Nat := 347     -- a push past `streamCap`
+def rVDrain : Nat := 348   -- the stream was undrained at window turnover
+def rVGap : Nat := 349     -- the test-point gap did not fit 16 bits
+def rVSqrt : Nat := 350    -- one `⌊√n⌋` increment did not suffice
+def rVLog2 : Nat := 351    -- one `⌊log₂ n⌋` increment did not suffice
+def rVAcc : Nat := 352     -- the accumulator left `[0, 2^(S+24))`
+
+/-- **Not a failure.**  The count of integers at which the discarded `⌊√n⌋`
+form of clause 1 would have fired while the clause itself held — the
+substitution loss, and nothing else.  It is reported and is deliberately *not*
+part of `rViol`. -/
+def rVFloor : Nat := 353
+
+/-- The per-class counters in the order they occupy result slots `8 … 15`.
+These eight sum to `rViol`.  `bench/PsiSegEmit.lean` labels them in this
+order; keep the two in step. -/
+def violRegs : List Nat :=
+  [rVUp, rVLo, rVCap, rVDrain, rVGap, rVSqrt, rVLog2, rVAcc]
+
+/-- Slot `16`: the diagnostic that is not a failure. -/
+def diagRegs : List Nat := [rVFloor]
+
+def regCount : Nat := 460
 def outputReg : Nat := 190      -- `rViol`
 
 /-! ## The sieve core, without the `μ` decoding -/
@@ -447,6 +568,7 @@ def PsiCfg.compactBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 231 .mul (.reg 228) (.reg 230))      -- doPush
   , .scalar (.binop 232 .sub (.reg 228) (.reg 231))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 232))
+  , .scalar (.binop rVCap .add (.reg rVCap) (.reg 232))
     -- the target pair of cells
   , .scalar (.binop 233 .shl (.reg rWcur) (.lit 1))
   , .scalar (.binop 234 .add (.reg 233) (.lit c.streamBase))
@@ -491,6 +613,7 @@ def PsiCfg.logBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 257 .ge (.reg rNe) (.reg rTh))       -- …and it did suffice
   , .scalar (.binop 258 .mul (.reg 257) (.reg 248))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 258))
+  , .scalar (.binop rVLog2 .add (.reg rVLog2) (.reg 258))
     -- the normalised mantissa, reset at the entry's first round
   , .scalar (.binop 259 .sub (.lit 62) (.reg rEx))
     -- the mask is the only thing between a *register* shift amount and C's
@@ -556,6 +679,7 @@ def PsiCfg.logBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 309 .sub (.lit 1) (.reg 308))
   , .scalar (.binop 310 .mul (.reg 309) (.reg 285))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 310))
+  , .scalar (.binop rVGap .add (.reg rVGap) (.reg 310))
   , .scalar (.binop 311 .shl (.reg 307) (.lit c.sc))
   , .scalar (.binop 312 .mul (.reg 311) (.reg 285))
   , .scalar (.binop rCar .lt (.reg rDlo) (.reg 312))
@@ -576,6 +700,7 @@ def PsiCfg.logBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 321 .ge (.reg rNe) (.reg rSq2))
   , .scalar (.binop 322 .mul (.reg 321) (.reg 285))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 322))
+  , .scalar (.binop rVSqrt .add (.reg rVSqrt) (.reg 322))
     -- clause 2, immediately before the jump: D ≥ −⌊√2·2^S⌋·⌊√n⌋
   , .scalar (.binop 323 .lshr (.reg rDlo) (.lit cmpShift))
   , .scalar (.binop 324 .shl (.reg rDhi) (.lit 48))
@@ -585,6 +710,7 @@ def PsiCfg.logBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 328 .lt (.reg 325) (.reg 327))
   , .scalar (.binop 329 .mul (.reg 328) (.reg 285))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 329))
+  , .scalar (.binop rVLo .add (.reg rVLo) (.reg 329))
     -- the jump: D ← D + the term
   , .scalar (.binop 330 .mul (.reg 306) (.reg 285))
   , .scalar (.binop rDlo .add (.reg rDlo) (.reg 330))
@@ -599,15 +725,70 @@ def PsiCfg.logBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 335 .lshr (.reg 334) (.lit cmpShift))
   , .scalar (.binop 336 .add (.reg 335) (.lit 1))
   , .scalar (.binop 337 .add (.reg 333) (.reg 336))
+    -- the discarded `⌊√n⌋` form, kept only to be reported: it is strictly
+    -- stronger than the clause and false at the clause's extremal point
   , .scalar (.binop 338 .mul (.reg rSq) (.lit (cUp16 c.sc)))
   , .scalar (.binop 339 .add (.lit (bias16Of c.sc)) (.reg 338))
   , .scalar (.binop 340 .gt (.reg 337) (.reg 339))
-  , .scalar (.binop 341 .mul (.reg 340) (.reg 285))
-  , .scalar (.binop rViol .add (.reg rViol) (.reg 341))
+    -- clause 1 itself: `V² ≤ cUp16²·n` in exact integers.  `V` is the
+    -- biased-subtracted upper enclosure at scale `2^(S−16)`, clamped to `0`
+    -- where the value is non-positive and the clause is trivial.
+  , .scalar (.binop 400 .gt (.reg 337) (.lit (bias16Of c.sc)))
+  , .scalar (.binop 401 .sub (.reg 337) (.lit (bias16Of c.sc)))
+  , .scalar (.binop 402 .mul (.reg 401) (.reg 400))        -- V
+    -- V², 128 bits.  `rVAcc`'s guard keeps `V < 2^(S+8)`, so at `S ≤ 48` the
+    -- doubled cross term `2·vh·vl` is below `2^57` and does not wrap.
+  , .scalar (.binop 403 .lshr (.reg 402) (.lit 32))        -- vh
+  , .scalar (.binop 404 .band (.reg 402) (.lit 4294967295))-- vl
+  , .scalar (.binop 405 .mul (.reg 404) (.reg 404))        -- vl²
+  , .scalar (.binop 406 .mul (.reg 403) (.reg 404))        -- vh·vl
+  , .scalar (.binop 407 .mul (.reg 403) (.reg 403))        -- vh²
+  , .scalar (.binop 408 .add (.reg 406) (.reg 406))        -- 2·vh·vl
+  , .scalar (.binop 409 .shl (.reg 408) (.lit 32))
+  , .scalar (.binop 410 .add (.reg 405) (.reg 409))        -- (V²).lo
+  , .scalar (.binop 411 .lt (.reg 410) (.reg 405))         -- carry out
+  , .scalar (.binop 412 .lshr (.reg 408) (.lit 32))
+  , .scalar (.binop 413 .add (.reg 407) (.reg 412))
+  , .scalar (.binop 414 .add (.reg 413) (.reg 411))        -- (V²).hi
+    -- cUp16²·n, 128 bits, from four `32×32` products.  The multiplier's two
+    -- halves are emit-time literals; `cUp16Fits` is why they are 32 bits.
+  , .scalar (.binop 415 .lshr (.reg rNe) (.lit 32))        -- nh
+  , .scalar (.binop 416 .band (.reg rNe) (.lit 4294967295))-- nl
+  , .scalar (.binop 417 .mul (.reg 416) (.lit (cUp16SqLo c.sc)))
+  , .scalar (.binop 418 .mul (.reg 416) (.lit (cUp16SqHi c.sc)))
+  , .scalar (.binop 419 .mul (.reg 415) (.lit (cUp16SqLo c.sc)))
+  , .scalar (.binop 420 .mul (.reg 415) (.lit (cUp16SqHi c.sc)))
+  , .scalar (.binop 421 .lshr (.reg 417) (.lit 32))
+  , .scalar (.binop 422 .add (.reg 418) (.reg 421))
+  , .scalar (.binop 423 .band (.reg 422) (.lit 4294967295))
+  , .scalar (.binop 424 .lshr (.reg 422) (.lit 32))
+  , .scalar (.binop 425 .add (.reg 419) (.reg 423))
+  , .scalar (.binop 426 .band (.reg 417) (.lit 4294967295))
+  , .scalar (.binop 427 .shl (.reg 425) (.lit 32))
+  , .scalar (.binop 428 .bor (.reg 427) (.reg 426))        -- (C²n).lo
+  , .scalar (.binop 429 .lshr (.reg 425) (.lit 32))
+  , .scalar (.binop 430 .add (.reg 420) (.reg 424))
+  , .scalar (.binop 431 .add (.reg 430) (.reg 429))        -- (C²n).hi
+    -- the 128-bit comparison; the two disjuncts are disjoint, so `add` is `or`
+  , .scalar (.binop 432 .gt (.reg 414) (.reg 431))
+  , .scalar (.binop 433 .eq (.reg 414) (.reg 431))
+  , .scalar (.binop 434 .gt (.reg 410) (.reg 428))
+  , .scalar (.binop 435 .mul (.reg 433) (.reg 434))
+  , .scalar (.binop 436 .add (.reg 432) (.reg 435))        -- V² > cUp16²·n
+  , .scalar (.binop 437 .mul (.reg 436) (.reg 285))
+  , .scalar (.binop rViol .add (.reg rViol) (.reg 437))
+  , .scalar (.binop rVUp .add (.reg rVUp) (.reg 437))
+    -- …and the substitution loss on its own: the floor form fired, the clause
+    -- held.  Reported, never added to `rViol`.
+  , .scalar (.binop 438 .sub (.lit 1) (.reg 436))
+  , .scalar (.binop 439 .mul (.reg 340) (.reg 438))
+  , .scalar (.binop 440 .mul (.reg 439) (.reg 285))
+  , .scalar (.binop rVFloor .add (.reg rVFloor) (.reg 440))
     -- the accumulator stayed below 2⁷², which is what makes the shift exact
   , .scalar (.binop 342 .ge (.reg rDhi) (.lit (guardHi c.sc)))
   , .scalar (.binop 343 .mul (.reg 342) (.reg 285))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 343))
+  , .scalar (.binop rVAcc .add (.reg rVAcc) (.reg 343))
   , .scalar (.binop rEcur .add (.reg rEcur) (.reg 285))
   ]
 
@@ -629,6 +810,7 @@ def PsiCfg.tailBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 290 .lt (.reg rEcur) (.reg rWcur))
   , .scalar (.binop 291 .mul (.reg 290) (.reg 87))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 291))
+  , .scalar (.binop rVDrain .add (.reg rVDrain) (.reg 291))
   , .scalar (.binop 292 .sub (.lit 1) (.reg 87))
   , .scalar (.binop rWcur .mul (.reg rWcur) (.reg 292))
   , .scalar (.binop rEcur .mul (.reg rEcur) (.reg 292))
@@ -684,10 +866,18 @@ constant between `prev` and `hi`.
 def storeResult (c : PsiCfg) (slot reg : Nat) : List AInstr :=
   [ .scalar (.mov 90 (.lit (c.resultBase + slot))), .store 90 reg ]
 
+/-- Store a run of registers into consecutive result cells, starting at
+`slot`.  Structural recursion, so the well-formedness proof is an induction
+and not a hundred-case `rfl`. -/
+def storeResults (c : PsiCfg) : Nat → List Nat → List AInstr
+  | _, [] => []
+  | slot, r :: rs => storeResult c slot r ++ storeResults c (slot + 1) rs
+
 def PsiCfg.epilogue (c : PsiCfg) : List AInstr :=
   storeResult c 0 rDlo ++ storeResult c 1 rDhi ++ storeResult c 2 rPrev ++
   storeResult c 3 rTerms ++ storeResult c 4 rSq ++ storeResult c 5 rEx ++
-  storeResult c 6 rTh ++ storeResult c 7 rViol
+  storeResult c 6 rTh ++ storeResult c 7 rViol ++
+  storeResults c 8 violRegs ++ storeResults c 16 diagRegs
 
 def psiProgram (c : PsiCfg) (s : PsiSeed) : AProgram := {
   regCount := regCount
@@ -742,17 +932,28 @@ theorem init_all (c : PsiCfg) (s : PsiSeed) :
     (c.init s).all (ainstrWFB regCount) = true :=
   all_append (storeLits_all _) (seedRegs_all _ (seedList_ok c s))
 
+theorem storeResults_all (c : PsiCfg) : ∀ (slot : Nat) (l : List Nat),
+    l.all (fun r => decide (r < regCount)) = true →
+    (storeResults c slot l).all (ainstrWFB regCount) = true
+  | _, [], _ => rfl
+  | slot, a :: t, h => by
+      simp only [List.all_cons, Bool.and_eq_true] at h
+      exact all_append (storeResult_all c slot a (of_decide_eq_true h.1))
+        (storeResults_all c (slot + 1) t h.2)
+
 theorem epilogue_all (c : PsiCfg) :
     c.epilogue.all (ainstrWFB regCount) = true :=
   all_append (all_append (all_append (all_append (all_append (all_append
-    (all_append
+    (all_append (all_append (all_append
       (storeResult_all c 0 rDlo (by decide)) (storeResult_all c 1 rDhi (by decide)))
       (storeResult_all c 2 rPrev (by decide)))
       (storeResult_all c 3 rTerms (by decide)))
       (storeResult_all c 4 rSq (by decide)))
       (storeResult_all c 5 rEx (by decide)))
       (storeResult_all c 6 rTh (by decide)))
-      (storeResult_all c 7 rViol (by decide))
+      (storeResult_all c 7 rViol (by decide)))
+      (storeResults_all c 8 violRegs (by decide)))
+      (storeResults_all c 16 diagRegs (by decide))
 
 /-- **The bridge's side condition.** -/
 theorem psiProgram_wf (c : PsiCfg) (s : PsiSeed) : (psiProgram c s).WF :=

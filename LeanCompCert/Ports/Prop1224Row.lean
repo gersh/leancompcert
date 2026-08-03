@@ -417,6 +417,40 @@ def rSKap : Nat := 209
 def rSQ : Nat := 210
 def rRows : Nat := 211
 
+/-! ### The eight failure classes, counted apart
+
+`rViol` is the aggregate and stays the program's output.  It merges three very
+different things — a sieve budget, a square-root certification, and the row's
+own enclosure certification, which itself merges five comparisons and then
+*collapses* them to one bit per row.  Kept apart:
+
+* `rVMark` — the mark cursor had not reached the end of the table at the last
+  mark step, so the sieve was silently truncated;
+* `rVRootHi`, `rVRootLo` — the emitted square root failed `v² ≤ Z` or
+  `Z < (v+1)²`.  They are opposite and cannot both fire on one root;
+* `rVLq`, `rVPhi`, `rVLog` — the `L(q)`, `φ(q)/q` or `log q` enclosure came out
+  **inverted**, lower bound above upper bound;
+* `rVKap`, `rVLam` — `κ*`'s lower bound, or `λ(q)`, collapsed to `0`.
+
+⚠ The last five count **conditions**, while `rViol` counts *rows* with at least
+one of them.  So they sum to at least the aggregate, with equality exactly when
+no row fails two at once; what always holds, and what the driver checks, is
+that they are all zero exactly when the aggregate is. -/
+
+def rVMark : Nat := 520
+def rVRootHi : Nat := 521
+def rVRootLo : Nat := 522
+def rVLq : Nat := 523
+def rVPhi : Nat := 524
+def rVLog : Nat := 525
+def rVKap : Nat := 526
+def rVLam : Nat := 527
+
+/-- The per-class counters in the order they occupy result slots `12 … 19`.
+`bench/Prop1224RowEmit.lean` labels them in this order. -/
+def violRegs : List Nat :=
+  [rVMark, rVRootHi, rVRootLo, rVLq, rVPhi, rVLog, rVKap, rVLam]
+
 def eqBase : Nat := 250   -- `rSlot = s`
 def endBase : Nat := 258  -- …and the slot's last round
 
@@ -642,6 +676,7 @@ def RowCfg.markBody (c : RowCfg) : List AInstr :=
   , .scalar (.binop 100 .ne (.reg rPi) (.lit K))
   , .scalar (.binop 101 .mul (.reg 99) (.reg 100))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 101))
+  , .scalar (.binop rVMark .add (.reg rVMark) (.reg 101))
   ]
 
 /-! ## Phase two, part one: the row's data, and the slot decode
@@ -803,6 +838,10 @@ def expRound : List AInstr :=
   , .scalar (.binop 227 .add (.reg 223) (.reg 226))
   , .scalar (.binop 227 .mul (.reg 227) (.reg 12))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 227))
+  , .scalar (.binop 528 .mul (.reg 223) (.reg 12))
+  , .scalar (.binop rVRootHi .add (.reg rVRootHi) (.reg 528))
+  , .scalar (.binop 529 .mul (.reg 226) (.reg 12))
+  , .scalar (.binop rVRootLo .add (.reg rVRootLo) (.reg 529))
   ]
 
 def expEngine (unroll : Nat) : List AInstr :=
@@ -975,19 +1014,31 @@ def RowCfg.finishBody (c : RowCfg) : List AInstr :=
   , .scalar (.binop 359 .gt (.reg 348) (.reg 356))
   , .scalar (.binop 360 .sub (.reg 348) (.reg 356))
   , .scalar (.binop 360 .mul (.reg 360) (.reg 359))
-    -- the row's own certification: the outward directions must be ordered
-  , .scalar (.binop 361 .gt (.reg 325) (.reg 326))
-  , .scalar (.binop 362 .gt (.reg 337) (.reg 339))
-  , .scalar (.binop 361 .add (.reg 361) (.reg 362))
-  , .scalar (.binop 362 .gt (.reg 279) (.reg 280))
-  , .scalar (.binop 361 .add (.reg 361) (.reg 362))
-  , .scalar (.binop 362 .eq (.reg 343) (.lit 0))
-  , .scalar (.binop 361 .add (.reg 361) (.reg 362))
-  , .scalar (.binop 362 .eq (.reg 348) (.lit 0))
-  , .scalar (.binop 361 .add (.reg 361) (.reg 362))
+    -- the row's own certification: the outward directions must be ordered.
+    -- Each comparison is landed in a register of its own first, so that the
+    -- collapsed aggregate below is unchanged and the five are still separable.
+  , .scalar (.binop 530 .gt (.reg 325) (.reg 326))     -- L(q) inverted
+  , .scalar (.binop 531 .gt (.reg 337) (.reg 339))     -- φ(q)/q inverted
+  , .scalar (.binop 532 .gt (.reg 279) (.reg 280))     -- log q inverted
+  , .scalar (.binop 533 .eq (.reg 343) (.lit 0))       -- κ* lower is 0
+  , .scalar (.binop 534 .eq (.reg 348) (.lit 0))       -- λ(q) is 0
+  , .scalar (.binop 361 .add (.reg 530) (.reg 531))
+  , .scalar (.binop 361 .add (.reg 361) (.reg 532))
+  , .scalar (.binop 361 .add (.reg 361) (.reg 533))
+  , .scalar (.binop 361 .add (.reg 361) (.reg 534))
   , .scalar (.binop 361 .ne (.reg 361) (.lit 0))
   , .scalar (.binop 361 .mul (.reg 361) (.reg endR))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 361))
+  , .scalar (.binop 362 .mul (.reg 530) (.reg endR))
+  , .scalar (.binop rVLq .add (.reg rVLq) (.reg 362))
+  , .scalar (.binop 362 .mul (.reg 531) (.reg endR))
+  , .scalar (.binop rVPhi .add (.reg rVPhi) (.reg 362))
+  , .scalar (.binop 362 .mul (.reg 532) (.reg endR))
+  , .scalar (.binop rVLog .add (.reg rVLog) (.reg 362))
+  , .scalar (.binop 362 .mul (.reg 533) (.reg endR))
+  , .scalar (.binop rVKap .add (.reg rVKap) (.reg 362))
+  , .scalar (.binop 362 .mul (.reg 534) (.reg endR))
+  , .scalar (.binop rVLam .add (.reg rVLam) (.reg 362))
   ] ++
   -- the aggregates
   ([ (rNemp, 359), (rCel0, 358), (rCel1, 360), (rSVar, 354), (rSLam, 348)
@@ -1054,11 +1105,17 @@ def RowCfg.init (c : RowCfg) : List AInstr :=
 def storeResult (c : RowCfg) (slot reg : Nat) : List AInstr :=
   [ .scalar (.mov 90 (.lit (c.resultBase + slot))), .store 90 reg ]
 
+/-- Store a run of registers into consecutive result cells from `slot`. -/
+def storeResults (c : RowCfg) : Nat → List Nat → List AInstr
+  | _, [] => []
+  | slot, r :: rs => storeResult c slot r ++ storeResults c (slot + 1) rs
+
 def RowCfg.epilogue (c : RowCfg) : List AInstr :=
   storeResult c 0 rViol ++ storeResult c 1 rRows ++ storeResult c 2 rSQ ++
   storeResult c 3 rCel0 ++ storeResult c 4 rCel1 ++ storeResult c 5 rSVar ++
   storeResult c 6 rSLam ++ storeResult c 7 rSF1 ++ storeResult c 8 rSPhi ++
-  storeResult c 9 rSCon ++ storeResult c 10 rSKap ++ storeResult c 11 rNemp
+  storeResult c 9 rSCon ++ storeResult c 10 rSKap ++ storeResult c 11 rNemp ++
+  storeResults c 12 violRegs
 
 def rowProgram (c : RowCfg) : AProgram := {
   regCount := regCount
@@ -1214,9 +1271,18 @@ theorem body_all (c : RowCfg) : c.body.all (ainstrWFB regCount) = true :=
     (markBody_all c) (deriveBody_all c)) (logEngine_all _)) (expEngine_all _))
     (latchBody_all c)) (finishBody_all c)) (tailBody_all c)
 
+theorem storeResults_all (c : RowCfg) : ∀ (slot : Nat) (l : List Nat),
+    l.all (fun r => decide (r < regCount)) = true →
+    (storeResults c slot l).all (ainstrWFB regCount) = true
+  | _, [], _ => rfl
+  | slot, a :: t, h => by
+      simp only [List.all_cons, Bool.and_eq_true] at h
+      exact all_append (storeResult_all c slot a (of_decide_eq_true h.1))
+        (storeResults_all c (slot + 1) t h.2)
+
 theorem epilogue_all (c : RowCfg) : c.epilogue.all (ainstrWFB regCount) = true :=
   all_append (all_append (all_append (all_append (all_append (all_append
-    (all_append (all_append (all_append (all_append (all_append
+    (all_append (all_append (all_append (all_append (all_append (all_append
     (storeResult_all c 0 rViol (by decide)) (storeResult_all c 1 rRows (by decide)))
     (storeResult_all c 2 rSQ (by decide)))
     (storeResult_all c 3 rCel0 (by decide)))
@@ -1227,7 +1293,8 @@ theorem epilogue_all (c : RowCfg) : c.epilogue.all (ainstrWFB regCount) = true :
     (storeResult_all c 8 rSPhi (by decide)))
     (storeResult_all c 9 rSCon (by decide)))
     (storeResult_all c 10 rSKap (by decide)))
-    (storeResult_all c 11 rNemp (by decide))
+    (storeResult_all c 11 rNemp (by decide)))
+    (storeResults_all c 12 violRegs (by decide))
 
 /-- **The bridge's side condition.** -/
 theorem rowProgram_wf (c : RowCfg) : (rowProgram c).WF :=

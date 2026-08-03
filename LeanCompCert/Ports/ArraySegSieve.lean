@@ -302,7 +302,9 @@ def Cfg.resultBase (c : Cfg) : Nat := 3 * c.segLen + c.tableLen + 2
 /-- Scratch cell the prime-collecting store aims at when it is not
 collecting.  It is never read. -/
 def Cfg.primeSink (c : Cfg) : Nat := c.resultBase + 7
-def Cfg.arrayLen (c : Cfg) : Nat := c.resultBase + 8
+/-- Sixteen result cells: eight for the carry-out a chained run reads, and
+eight for the per-class violation counters of whichever residue is fitted. -/
+def Cfg.arrayLen (c : Cfg) : Nat := c.resultBase + 16
 def Cfg.sentinel (c : Cfg) : Nat := c.segLen + 1
 def Cfg.firstPrime (c : Cfg) : Nat := c.bootPrimes.headD 2
 
@@ -587,6 +589,36 @@ def rS : Nat := 146      -- ⌊√n⌋
 def rSq : Nat := 147     -- (rS + 1)², the next square
 def rViol : Nat := 148   -- running count of failed per-integer tests
 
+/-! ### The clauses, counted apart
+
+Every residue in this file folds several clauses into one number.  They are not
+interchangeable: `M` above its majorant and `M` below it are opposite claims,
+and `Q` and `M` are different theorems.  Each clause therefore also has a
+counter of its own, stored in a result cell; the aggregate is unchanged and is
+still the program's output.
+
+The four `mertens` registers serve both the extremum program and the
+per-integer one, because they test the same four clauses — the first on the
+running extrema in the epilogue, the second at every integer in the loop — and
+no program fits both residues. -/
+
+def rVMHi : Nat := 172   -- Hurst, upper: `M(n) > 0.571·√n`
+def rVMLo : Nat := 173   -- Hurst, lower: `M(n) < −0.571·√n`
+def rVGHi : Nat := 174   -- CDEM clause 1: `Q(n) − (6/π²)n > b·√n`
+def rVGLo : Nat := 175   -- CDEM clause 2: `(6/π²)(n+1) − Q(n) > b·√n`
+def rVTHi : Nat := 176   -- `Σ μ(m)/m` above its majorant
+def rVTLo : Nat := 177   -- `Σ μ(m)/m` below its majorant
+
+/-- The `mertens` classes in result-slot order, from slot `8`. -/
+def mertensViolRegs : List Nat := [rVMHi, rVMLo, rVGHi, rVGLo]
+
+/-- The `Σ μ(m)/m` classes in result-slot order, from slot `8`.  Only the
+window-level program has two: `mobiusLiveResidue` folds the two sides into
+`|V|` before it compares, so it has one failure mode and nothing to separate —
+and it is the block `Ports/MobiusResidueRealisation.lean` proves a realisation
+theorem about, which is a second reason to leave it exactly as it is. -/
+def mobiusViolRegs : List Nat := [rVTHi, rVTLo]
+
 /-- `⌊0.571·2³²⌋` — Hurst's constant as a dyadic rational, rounded **down**,
 so that `(hurstA·s) >>> 32 ≤ 0.571·s ≤ 0.571·√n`. -/
 def hurstA : Nat := 571 * 2 ^ 32 / 1000
@@ -633,12 +665,21 @@ def mertensLiveResidue (bNum bDen : Nat) : List AInstr :=
   , .scalar (.binop 163 .sub (.reg 162) (.reg 160))
   , .scalar (.binop 164 .gt (.reg rG) (.reg 161))
   , .scalar (.binop 165 .lt (.reg rG) (.reg 163))
-    -- one counter, gated to the main accumulation phase
+    -- the aggregate, gated to the main accumulation phase …
   , .scalar (.binop 166 .add (.reg 158) (.reg 159))
   , .scalar (.binop 167 .add (.reg 164) (.reg 165))
   , .scalar (.binop 168 .add (.reg 166) (.reg 167))
   , .scalar (.binop 169 .mul (.reg 168) (.reg 133))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 169))
+    -- … and the same four clauses kept apart, on the same gate
+  , .scalar (.binop 178 .mul (.reg 158) (.reg 133))
+  , .scalar (.binop rVMHi .add (.reg rVMHi) (.reg 178))
+  , .scalar (.binop 179 .mul (.reg 159) (.reg 133))
+  , .scalar (.binop rVMLo .add (.reg rVMLo) (.reg 179))
+  , .scalar (.binop 180 .mul (.reg 164) (.reg 133))
+  , .scalar (.binop rVGHi .add (.reg rVGHi) (.reg 180))
+  , .scalar (.binop 181 .mul (.reg 165) (.reg 133))
+  , .scalar (.binop rVGLo .add (.reg rVGLo) (.reg 181))
   ]
 
 /-! ## Residue: the fixed-point `Σ μ(m)/m`
@@ -841,15 +882,23 @@ def seed (reg value : Nat) : List AInstr := [.scalar (.mov reg (.lit value))]
 def storeResult (c : Cfg) (slot reg : Nat) : List AInstr :=
   [ .scalar (.mov 90 (.lit (c.resultBase + slot))), .store 90 reg ]
 
-/-- A violation test `reg > bound`, accumulated into `92`. -/
-def gtTest (reg bound : Nat) : List AInstr :=
-  [ .scalar (.binop 91 .gt (.reg reg) (.lit bound))
-  , .scalar (.binop 92 .add (.reg 92) (.reg 91)) ]
+/-- Store a run of registers into consecutive result cells from `slot`. -/
+def storeResults (c : Cfg) : Nat → List Nat → List AInstr
+  | _, [] => []
+  | slot, r :: rs => storeResult c slot r ++ storeResults c (slot + 1) rs
 
-/-- A violation test `reg < bound`, accumulated into `92`. -/
-def ltTest (reg bound : Nat) : List AInstr :=
+/-- A violation test `reg > bound`, accumulated into the aggregate `92` **and**
+into its own class counter `cls`. -/
+def gtTest (cls reg bound : Nat) : List AInstr :=
+  [ .scalar (.binop 91 .gt (.reg reg) (.lit bound))
+  , .scalar (.binop 92 .add (.reg 92) (.reg 91))
+  , .scalar (.binop cls .add (.reg cls) (.reg 91)) ]
+
+/-- A violation test `reg < bound`, likewise. -/
+def ltTest (cls reg bound : Nat) : List AInstr :=
   [ .scalar (.binop 91 .lt (.reg reg) (.lit bound))
-  , .scalar (.binop 92 .add (.reg 92) (.reg 91)) ]
+  , .scalar (.binop 92 .add (.reg 92) (.reg 91))
+  , .scalar (.binop cls .add (.reg cls) (.reg 91)) ]
 
 /-- The output register: the number of failed epilogue tests. -/
 def outputReg : Nat := 92
@@ -905,13 +954,14 @@ def mertensEpilogue (c : Cfg) (bNum bDen : Nat) : List AInstr :=
   let thrM := hurstThreshold c.lo
   let thrG := cdemThreshold bNum bDen c.lo
   let lowG := cdemC + c.hi + 1
-  gtTest rMmax (mertensBias + thrM) ++
-  ltTest rMmin (mertensBias - thrM) ++
-  gtTest rGmax (gBias + thrG) ++
-  ltTest rGmin (gBias + lowG - thrG) ++
+  gtTest rVMHi rMmax (mertensBias + thrM) ++
+  ltTest rVMLo rMmin (mertensBias - thrM) ++
+  gtTest rVGHi rGmax (gBias + thrG) ++
+  ltTest rVGLo rGmin (gBias + lowG - thrG) ++
   storeResult c 0 rM ++ storeResult c 1 rQ ++ storeResult c 2 rG ++
   storeResult c 3 rMmax ++ storeResult c 4 rMmin ++
-  storeResult c 5 rGmax ++ storeResult c 6 rGmin
+  storeResult c 5 rGmax ++ storeResult c 6 rGmin ++
+  storeResults c 8 mertensViolRegs
 
 /-- The Mertens/squarefree residue program: `mertensM_hurst_sqrt` and the CDEM
 reproducible squarefree head, on one sieve pass. -/
@@ -937,7 +987,7 @@ carry-outs and the final `⌊√hi⌋` go to the result cells. -/
 def mertensLiveEpilogue (c : Cfg) : List AInstr :=
   [ .scalar (.mov outputReg (.reg rViol)) ] ++
   storeResult c 0 rM ++ storeResult c 1 rQ ++ storeResult c 2 rG ++
-  storeResult c 3 rS
+  storeResult c 3 rS ++ storeResults c 8 mertensViolRegs
 
 def mertensLiveProgram (c : Cfg) (s0 : Nat) (s : MertensSeed)
     (bNum bDen : Nat) : AProgram :=
@@ -993,9 +1043,10 @@ def mobiusInit (t : Nat) : List AInstr :=
   seed rT t ++ seed rTmax t ++ seed rTmin t
 
 def mobiusEpilogue (c : Cfg) (thr : Nat) : List AInstr :=
-  gtTest rTmax (tBias + thr) ++
-  ltTest rTmin (tBias - thr) ++
-  storeResult c 0 rT ++ storeResult c 1 rTmax ++ storeResult c 2 rTmin
+  gtTest rVTHi rTmax (tBias + thr) ++
+  ltTest rVTLo rTmin (tBias - thr) ++
+  storeResult c 0 rT ++ storeResult c 1 rTmax ++ storeResult c 2 rTmin ++
+  storeResults c 8 mobiusViolRegs
 
 /-- The `Σ μ(m)/m` residue program.  `thr` is `platt211Threshold c.hi` or
 `plattStrongerThreshold c.hi`. -/
@@ -1050,7 +1101,8 @@ def mobiusLiveInit (s : MobLiveSeed) : List AInstr :=
 def mobiusLiveEpilogue (c : Cfg) : List AInstr :=
   [ .scalar (.mov outputReg (.reg rMViol)) ] ++
   storeResult c 0 rTLo ++ storeResult c 1 rTHi ++
-  storeResult c 2 rCeil ++ storeResult c 3 rCeilSq
+  storeResult c 2 rCeil ++ storeResult c 3 rCeilSq ++
+  storeResult c 8 rMViol
 
 /-- The per-integer `Σ μ(m)/m` program at accumulator scale `2^(63+k)`.
 Requires `1 ≤ k ≤ 15` and `c.hi < 2^(64−k)`. -/
@@ -1147,19 +1199,30 @@ theorem storeResult_all (c : Cfg) (slot reg : Nat) (h : reg < regCount) :
   simp only [regCount] at h
   omega
 
-theorem gtTest_all (reg bound : Nat) (h : reg < regCount) :
-    (gtTest reg bound).all (ainstrWFB regCount) = true := by
+theorem gtTest_all (cls reg bound : Nat) (hc : cls < regCount)
+    (h : reg < regCount) :
+    (gtTest cls reg bound).all (ainstrWFB regCount) = true := by
   simp only [gtTest, regCount, List.all_cons, List.all_nil, ainstrWFB, instrWFB,
     operandWFB, Bool.and_true, Bool.and_eq_true, decide_eq_true_eq]
-  simp only [regCount] at h
+  simp only [regCount] at h hc
   omega
 
-theorem ltTest_all (reg bound : Nat) (h : reg < regCount) :
-    (ltTest reg bound).all (ainstrWFB regCount) = true := by
+theorem ltTest_all (cls reg bound : Nat) (hc : cls < regCount)
+    (h : reg < regCount) :
+    (ltTest cls reg bound).all (ainstrWFB regCount) = true := by
   simp only [ltTest, regCount, List.all_cons, List.all_nil, ainstrWFB, instrWFB,
     operandWFB, Bool.and_true, Bool.and_eq_true, decide_eq_true_eq]
-  simp only [regCount] at h
+  simp only [regCount] at h hc
   omega
+
+theorem storeResults_all (c : Cfg) : ∀ (slot : Nat) (l : List Nat),
+    l.all (fun r => decide (r < regCount)) = true →
+    (storeResults c slot l).all (ainstrWFB regCount) = true
+  | _, [], _ => rfl
+  | slot, a :: t, h => by
+      simp only [List.all_cons, Bool.and_eq_true] at h
+      exact all_append (storeResult_all c slot a (of_decide_eq_true h.1))
+        (storeResults_all c (slot + 1) t h.2)
 
 /-- **The bridge's side condition, once for every program this file builds.** -/
 theorem segProgram_wf (c : Cfg) {residue init epilogue : List AInstr}
@@ -1183,16 +1246,19 @@ theorem mertensInit_all (s : MertensSeed) :
 theorem mertensEpilogue_all (c : Cfg) (bNum bDen : Nat) :
     (mertensEpilogue c bNum bDen).all (ainstrWFB regCount) = true :=
   all_append (all_append (all_append (all_append (all_append (all_append
-    (all_append (all_append (all_append (all_append
-      (gtTest_all rMmax _ (by decide)) (ltTest_all rMmin _ (by decide)))
-      (gtTest_all rGmax _ (by decide))) (ltTest_all rGmin _ (by decide)))
+    (all_append (all_append (all_append (all_append (all_append
+      (gtTest_all rVMHi rMmax _ (by decide) (by decide))
+      (ltTest_all rVMLo rMmin _ (by decide) (by decide)))
+      (gtTest_all rVGHi rGmax _ (by decide) (by decide)))
+      (ltTest_all rVGLo rGmin _ (by decide) (by decide)))
       (storeResult_all c 0 rM (by decide)))
       (storeResult_all c 1 rQ (by decide)))
       (storeResult_all c 2 rG (by decide)))
       (storeResult_all c 3 rMmax (by decide)))
       (storeResult_all c 4 rMmin (by decide)))
       (storeResult_all c 5 rGmax (by decide)))
-      (storeResult_all c 6 rGmin (by decide))
+      (storeResult_all c 6 rGmin (by decide)))
+      (storeResults_all c 8 mertensViolRegs (by decide))
 
 theorem mertensLiveResidue_all (bNum bDen : Nat) :
     (mertensLiveResidue bNum bDen).all (ainstrWFB regCount) = true := by
@@ -1207,11 +1273,12 @@ theorem mertensLiveInit_all (s0 : Nat) (s : MertensSeed) :
 
 theorem mertensLiveEpilogue_all (c : Cfg) :
     (mertensLiveEpilogue c).all (ainstrWFB regCount) = true :=
-  all_append (all_append (all_append (all_append
+  all_append (all_append (all_append (all_append (all_append
     (by rfl) (storeResult_all c 0 rM (by decide)))
     (storeResult_all c 1 rQ (by decide)))
     (storeResult_all c 2 rG (by decide)))
-    (storeResult_all c 3 rS (by decide))
+    (storeResult_all c 3 rS (by decide)))
+    (storeResults_all c 8 mertensViolRegs (by decide))
 
 theorem mobiusInit_all (t : Nat) :
     (mobiusInit t).all (ainstrWFB regCount) = true :=
@@ -1220,11 +1287,13 @@ theorem mobiusInit_all (t : Nat) :
 
 theorem mobiusEpilogue_all (c : Cfg) (thr : Nat) :
     (mobiusEpilogue c thr).all (ainstrWFB regCount) = true :=
-  all_append (all_append (all_append (all_append
-    (gtTest_all rTmax _ (by decide)) (ltTest_all rTmin _ (by decide)))
+  all_append (all_append (all_append (all_append (all_append
+    (gtTest_all rVTHi rTmax _ (by decide) (by decide))
+    (ltTest_all rVTLo rTmin _ (by decide) (by decide)))
     (storeResult_all c 0 rT (by decide)))
     (storeResult_all c 1 rTmax (by decide)))
-    (storeResult_all c 2 rTmin (by decide))
+    (storeResult_all c 2 rTmin (by decide)))
+    (storeResults_all c 8 mobiusViolRegs (by decide))
 
 theorem mobiusLiveResidue_all (k : Nat) :
     (mobiusLiveResidue k).all (ainstrWFB regCount) = true := by
@@ -1240,11 +1309,12 @@ theorem mobiusLiveInit_all (s : MobLiveSeed) :
 
 theorem mobiusLiveEpilogue_all (c : Cfg) :
     (mobiusLiveEpilogue c).all (ainstrWFB regCount) = true :=
-  all_append (all_append (all_append (all_append
+  all_append (all_append (all_append (all_append (all_append
     (by rfl) (storeResult_all c 0 rTLo (by decide)))
     (storeResult_all c 1 rTHi (by decide)))
     (storeResult_all c 2 rCeil (by decide)))
-    (storeResult_all c 3 rCeilSq (by decide))
+    (storeResult_all c 3 rCeilSq (by decide)))
+    (storeResult_all c 8 rMViol (by decide))
 
 theorem mertensProgram_wf (c : Cfg) (s : MertensSeed) (bNum bDen : Nat) :
     (mertensProgram c s bNum bDen).WF :=

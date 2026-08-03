@@ -20,6 +20,10 @@ and one line is printed per job,
 job IDX hi=H thr211=T thrstrong=T'
 ```
 
+Each emitted `main` carries the same verdict `bench/ArraySegEmit.lean`'s does:
+exit `0` only when no threshold test failed, `1` if the two clause counters do
+not sum to the aggregate, `2` for `mobius_upper` and `3` for `mobius_lower`.
+
 A chained sweep is thousands of artifacts, and a `lean --run` per artifact
 pays the interpreter's start-up — which, when the machine is under memory
 pressure and the `.olean` page cache has been evicted, is minutes rather than
@@ -35,16 +39,68 @@ open LeanCompCert.Ports.ArraySegSieve
 
 namespace Bench.ArraySegBatch
 
-def hostedDriver (name : String) (cells slots : Nat) : String :=
+/-- One failure class: its label, its offset inside the class block, and the
+exit status the driver returns when it is the first nonzero one.  The list is
+given in **scan order**, so the classes that invalidate a run come before the
+classes that are a result. -/
+abbrev Class := String × Nat × Nat
+
+/-- A hosted driver that prints the result cells and then **decides**.
+
+`base` is the first result cell, `slots` how many of them the chain reads, and
+`classBase` the slot at which the class counters start.  The emitted `main` returns `0` only when every
+class counter is zero, `1` when the classes do not sum to the aggregate (a
+split that has come adrift is a reason to trust neither number), and otherwise
+the status of the first nonzero class in scan order. -/
+def verdictDriver (name : String) (cells base slots classBase : Nat)
+    (classes : List Class) (diags : List (String × Nat)) (sumIsExact : Bool) :
+    String :=
+  let cell (i : Nat) : String := "cells[" ++ toString (base + i) ++ "]"
+  let classLine (x : Class) : String :=
+    "    printf(\"class " ++ x.1 ++ " %llu\\n\", (unsigned long long)" ++
+      cell (classBase + x.2.1) ++ ");\n" ++
+    "    sum += " ++ cell (classBase + x.2.1) ++ ";\n"
+  let diagLine (x : String × Nat) : String :=
+    "    printf(\"diag " ++ x.1 ++ " %llu\\n\", (unsigned long long)" ++
+      cell x.2 ++ ");\n"
+  let verdictLine (x : Class) : String :=
+    "    if (" ++ cell (classBase + x.2.1) ++ " != UINT64_C(0)) {\n" ++
+    "        printf(\"verdict FAIL " ++ x.1 ++ "\\n\");\n" ++
+    "        return " ++ toString x.2.2 ++ ";\n    }\n"
+  let consistency :=
+    if sumIsExact then
+      "    if (sum != r) {\n" ++
+      "        printf(\"verdict INCONSISTENT classes %llu aggregate %llu\\n\",\n" ++
+      "               (unsigned long long)sum, (unsigned long long)r);\n" ++
+      "        return 1;\n    }\n"
+    else
+      -- the aggregate collapses several conditions per row, so the classes
+      -- bound it from above rather than equalling it; what must hold is that
+      -- they vanish together
+      "    if ((sum == UINT64_C(0)) != (r == UINT64_C(0)) || sum < r) {\n" ++
+      "        printf(\"verdict INCONSISTENT classes %llu aggregate %llu\\n\",\n" ++
+      "               (unsigned long long)sum, (unsigned long long)r);\n" ++
+      "        return 1;\n    }\n"
   "\n#include <stdio.h>\n" ++
   "static uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
   "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    uint64_t sum = 0;\n" ++
   "    printf(\"violations %llu\\n\", (unsigned long long)r);\n" ++
   "    for (int i = 0; i < " ++ toString slots ++ "; i++)\n" ++
   "        printf(\"slot%d %llu\\n\", i,\n" ++
-  "               (unsigned long long)cells[" ++ toString cells ++ " - 8 + i]);\n" ++
+  "               (unsigned long long)cells[" ++ toString base ++ " + i]);\n" ++
+  String.join (classes.map classLine) ++
+  String.join (diags.map diagLine) ++
+  consistency ++
+  String.join (classes.map verdictLine) ++
+  "    printf(\"verdict PASS\\n\");\n" ++
   "    return 0;\n}\n"
+
+
+/-- The two clauses of the `Σ μ(m)/m` residue, in scan order.  Identical to
+`bench/ArraySegEmit.lean`'s, because this file emits the same artifacts. -/
+def classes : List Class := [ ("mobius_upper", 0, 2), ("mobius_lower", 1, 3) ]
 
 def emitOne (idx mode loS lenS cntS : String) (out : String)
     (seed : Option Nat) : IO Bool := do
@@ -61,7 +117,9 @@ def emitOne (idx mode loS lenS cntS : String) (out : String)
   match p.emitRolled name with
   | .error errs => (for e in errs do IO.eprintln e); return false
   | .ok src =>
-      IO.FS.writeFile out (src ++ hostedDriver name p.arrayLen 7)
+      IO.FS.writeFile out
+        (src ++ verdictDriver name p.arrayLen (p.arrayLen - 16) 3 8 classes []
+          true)
       IO.println s!"job {idx} lo={lo} hi={c.hi} thr211={platt211Threshold c.hi} thrstrong={plattStrongerThreshold c.hi} arrayLen={p.arrayLen} loopCount={p.loopCount} bodyLen={p.body.length}"
       return true
 
