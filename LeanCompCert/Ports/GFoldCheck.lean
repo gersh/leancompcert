@@ -255,18 +255,25 @@ def blkCa2c : List Assign :=
 /-- The shifted product and the renormalisation case bit. -/
 def blkCa2 : List Assign := blkCa2a ++ blkCa2b ++ blkCa2c
 
-/-- `2⁶³` and `2⁶²`, def-wrapped so `simp` keeps them opaque. -/
-def L63 : Nat := 2 ^ 63
-/-- See `L63`. -/
-def L62 : Nat := 2 ^ 62
+/-- `2⁶³ − 1` and `2⁶² − 1`, def-wrapped so `simp` keeps them opaque.  The
+band masks: for `x₂ ∈ [2⁶³, 2⁶⁴)` the select bit is set and
+`x₂ &&& LM63 = x₂ − 2⁶³`; for `x₂ ∈ [2⁶², 2⁶³)` it is clear and
+`x₂ &&& LM62 = x₂ − 2⁶²`.  Band membership is `advX_ge`/`advX_lt`, proved
+theorems of the reference recurrence, so the selected register always
+carries the renormalised advance; the unselected one is discarded by the
+register-leaf select.  Replayed masked-vs-subtracted over the full
+production range: bit-identical everywhere (see the campaign's oracle). -/
+def LM63 : Nat := 2 ^ 63 - 1
+/-- See `LM63`. -/
+def LM62 : Nat := 2 ^ 62 - 1
 
-/-- The doubled advance. -/
+/-- The doubled advance, by band mask. -/
 def blkCa3w1 : List Assign :=
-  [ ⟨54, .bin .mul (.bin .sub (.reg 28) (.lit L63)) (.lit 2)⟩ ]
+  [ ⟨54, .bin .mul (.bin .band (.reg 28) (.lit LM63)) (.lit 2)⟩ ]
 
-/-- The quadrupled advance. -/
+/-- The quadrupled advance, by band mask. -/
 def blkCa3w2 : List Assign :=
-  [ ⟨55, .bin .mul (.bin .sub (.reg 28) (.lit L62)) (.lit 4)⟩ ]
+  [ ⟨55, .bin .mul (.bin .band (.reg 28) (.lit LM62)) (.lit 4)⟩ ]
 
 /-- The renormalisation select (register-leaf branches). -/
 def blkCa3x1 : List Assign :=
@@ -1493,38 +1500,33 @@ theorem blkCa2_spec (k : Nat) (t : RegState) (xlo n a : Nat)
 private theorem blkCa3w1_val54 (k : Nat) (t : RegState) (x2 : Nat)
     (h28 : t 28 = x2) (hg : 2 ^ 63 ≤ x2) (hx2lt : x2 < M) :
     run k t blkCa3w1 54 = (x2 - 2 ^ 63) * 2 := by
+  have hMeq : M = 2 ^ 64 := rfl
   have hgoal : run k t blkCa3w1 54
-      = ((t 28 + (M - L63 % M)) * 2) % M := by
+      = ((t 28 &&& LM63 % M) % M * 2) % M := by
     simp [run, blkCa3w1, evalExpr, denoteOp, RegState.set]
-  have hg' : L63 ≤ x2 := hg
-  have es63 := subExact x2 L63 hg' hx2lt
-  have e30 : (x2 - L63) * 2 % M = (x2 - L63) * 2 := by
-    refine Nat.mod_eq_of_lt ?_
-    have h1 : L63 = 2 ^ 63 := rfl
-    have h2 : M = 2 ^ 64 := rfl
-    omega
-  rw [hgoal, h28, (by decide : L63 % M = L63), Nat.mul_mod, es63,
-    (by decide : (2 : Nat) % M = 2), e30]
-  rfl
+  have hmask : x2 &&& LM63 = x2 % 2 ^ 63 :=
+    Nat.and_two_pow_sub_one_eq_mod x2 63
+  have hmod : x2 % 2 ^ 63 = x2 - 2 ^ 63 := by omega
+  have hlt63 : x2 - 2 ^ 63 < 2 ^ 63 := by omega
+  have e1 : (x2 - 2 ^ 63) % M = x2 - 2 ^ 63 := Nat.mod_eq_of_lt (by omega)
+  have e2 : (x2 - 2 ^ 63) * 2 % M = (x2 - 2 ^ 63) * 2 :=
+    Nat.mod_eq_of_lt (by omega)
+  rw [hgoal, (by decide : LM63 % M = LM63), h28, hmask, hmod, e1, e2]
 
 private theorem blkCa3w2_val55 (k : Nat) (t : RegState) (x2 : Nat)
     (h28 : t 28 = x2) (hx2ge : 2 ^ 62 ≤ x2) (hlt : x2 < 2 ^ 63) :
     run k t blkCa3w2 55 = (x2 - 2 ^ 62) * 4 := by
+  have hMeq : M = 2 ^ 64 := rfl
   have hgoal : run k t blkCa3w2 55
-      = ((t 28 + (M - L62 % M)) * 4) % M := by
+      = ((t 28 &&& LM62 % M) % M * 4) % M := by
     simp [run, blkCa3w2, evalExpr, denoteOp, RegState.set]
-  have hg2 : L62 ≤ x2 := hx2ge
-  have es62 := subExact x2 L62 hg2 (by
-    have h1 : M = 2 ^ 64 := rfl
-    omega)
-  have e30 : (x2 - L62) * 4 % M = (x2 - L62) * 4 := by
-    refine Nat.mod_eq_of_lt ?_
-    have h1 : L62 = 2 ^ 62 := rfl
-    have h2 : M = 2 ^ 64 := rfl
-    omega
-  rw [hgoal, h28, (by decide : L62 % M = L62), Nat.mul_mod, es62,
-    (by decide : (4 : Nat) % M = 4), e30]
-  rfl
+  have hmask : x2 &&& LM62 = x2 % 2 ^ 62 :=
+    Nat.and_two_pow_sub_one_eq_mod x2 62
+  have hmod : x2 % 2 ^ 62 = x2 - 2 ^ 62 := by omega
+  have e1 : (x2 - 2 ^ 62) % M = x2 - 2 ^ 62 := Nat.mod_eq_of_lt (by omega)
+  have e2 : (x2 - 2 ^ 62) * 4 % M = (x2 - 2 ^ 62) * 4 :=
+    Nat.mod_eq_of_lt (by omega)
+  rw [hgoal, (by decide : LM62 % M = LM62), h28, hmask, hmod, e1, e2]
 
 private theorem blkCa3x1_val30 (k : Nat) (t : RegState) (v54 v55 g : Nat)
     (h54 : t 54 = v54) (h55 : t 55 = v55) (h29 : t 29 = g) (hg : g ≤ 1)
@@ -1532,7 +1534,9 @@ private theorem blkCa3x1_val30 (k : Nat) (t : RegState) (v54 v55 g : Nat)
     run k t blkCa3x1 30 = (if g = 1 then v54 else v55) := by
   rcases (show g = 0 ∨ g = 1 by omega) with rfl | rfl <;>
     simp [run, blkCa3x1, sel, evalExpr, denoteOp, RegState.set,
-      h54, h55, h29, Nat.mod_eq_of_lt h54M, Nat.mod_eq_of_lt h55M]
+      h54, h55, h29, (by decide : (1:Nat) ^^^ 1 % M = 0),
+      (by decide : (0:Nat) ^^^ 1 % M = 1),
+      Nat.mod_eq_of_lt h54M, Nat.mod_eq_of_lt h55M]
 
 private theorem blkCa3x_val30 (k : Nat) (t : RegState) (x2 : Nat)
     (h28 : t 28 = x2) (h29 : t 29 = (if 2 ^ 63 ≤ x2 then 1 else 0))
@@ -1617,6 +1621,32 @@ private theorem blkCa3x_val30 (k : Nat) (t : RegState) (x2 : Nat)
       (run k (run k t blkCa3w1) blkCa3w2 54) ((x2 - 2 ^ 62) * 4) 0
       rfl V55 h29b (by omega) (hword2 54) (by omega)
     rw [hval, if_neg (by omega), if_neg hg]
+
+private theorem blkCa3x2_val31 (k : Nat) (u : RegState) (n a : Nat)
+    (h8 : u 8 = n) (h16 : u 16 = 2 ^ a) (h15 : u 15 = a)
+    (hna : 2 ^ a ≤ n) (hna' : n < 2 ^ (a + 1)) (ha : a ≤ 16)
+    (hn17 : n < 2 ^ 17) :
+    run k u blkCa3x2 31 = (n - 2 ^ a) * 2 ^ (64 - a) := by
+  have hMeq : M = 2 ^ 64 := rfl
+  have e64 := subExact 64 a (by omega) (by decide)
+  have esubn := subExact n (2 ^ a) hna (by omega)
+  have hnsub : n - 2 ^ a < 2 ^ a := by omega
+  have hp64a : (2:Nat) ^ a * 2 ^ (64 - a) = 2 ^ 64 := by
+    rw [← Nat.pow_add]
+    congr 1
+    omega
+  have h31lt : (n - 2 ^ a) * 2 ^ (64 - a) < M := by
+    have h1 : (n - 2 ^ a) * 2 ^ (64 - a) < 2 ^ a * 2 ^ (64 - a) :=
+      Nat.mul_lt_mul_of_lt_of_le hnsub (Nat.le_refl _) (Nat.two_pow_pos _)
+    omega
+  have hshl31 : (n - 2 ^ a) <<< (64 - a) = (n - 2 ^ a) * 2 ^ (64 - a) :=
+    Nat.shiftLeft_eq _ _
+  have e31 : (n - 2 ^ a) * 2 ^ (64 - a) % M = (n - 2 ^ a) * 2 ^ (64 - a) :=
+    Nat.mod_eq_of_lt h31lt
+  have hgoal : run k u blkCa3x2 31
+      = (((u 8 + (M - u 16)) % M) <<< ((64 + (M - u 15)) % M)) % M := by
+    simp [run, blkCa3x2, evalExpr, denoteOp, RegState.set]
+  rw [hgoal, h8, h16, h15, esubn, e64, hshl31, e31]
 
 /-- **Stage Ca3x**: the renormalised advance and the init value. -/
 theorem blkCa3x_spec (k : Nat) (t : RegState) (x2 n a : Nat)
