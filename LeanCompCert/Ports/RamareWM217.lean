@@ -1,6 +1,7 @@
 import LeanCompCert.Ports.RS62Increments
 import LeanCompCert.Verified.ScalarLift
 import LeanCompCert.Verified.ArrayBridge
+import LeanCompCert.Verified.ArrayScalarBlock
 
 /-!
 # The Helfgott (2.17) weighted-moment sweep as an array program
@@ -92,6 +93,9 @@ open LeanCompCert.Verified
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Ports.RS62
+open LeanCompCert.Verified.ArrayScalarBlock
+open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.InstrBlock (srun)
 
 /-! ## Configuration -/
 
@@ -179,128 +183,149 @@ def wmRegCount : Nat := 19
 /-- Rounds of the multiplicative power chain: covers `n < 2²⁵`. -/
 def powerRounds : Nat := 24
 
-/-! ## The body, in blocks -/
+/-! ## The body, in blocks
+
+Every block below is a list of **scalar** instructions.  The body has exactly
+one array instruction — the seed-table `load` — so it is written as
+
+```text
+lift (wmPre c) ++ (.load rT3 rT2 :: lift (wmPost c))
+```
+
+and `Verified/ArrayScalarBlock.lean` reduces each scalar stage to the
+ordinary scalar machine (`InstrBlock.srun`), carrying the array along
+untouched.  That is what keeps the transcription's goals small: the array is
+never pushed through a scalar `simp`.
+-/
 
 /-- Decode: `r = i % B`, `n = n0 + i / B`, `d = r + 2`. -/
-def decodeBlock (c : Cfg) : List AInstr :=
-  [ .scalar (.binop rR .urem .idx (.lit c.B))
-  , .scalar (.binop rN .udiv .idx (.lit c.B))
-  , .scalar (.binop rN .add (.reg rN) (.lit c.n0))
-  , .scalar (.binop rD .add (.reg rR) (.lit 2)) ]
+def decodeBlock (c : Cfg) : List Instr :=
+  [ .binop rR .urem .idx (.lit c.B)
+  , .binop rN .udiv .idx (.lit c.B)
+  , .binop rN .add (.reg rN) (.lit c.n0)
+  , .binop rD .add (.reg rR) (.lit 2) ]
 
 /-- One trial round:
 `s := if s = 0 ∧ d·d ≤ n ∧ n % d = 0 then d else s`. -/
-def scanBlock : List AInstr :=
-  [ .scalar (.binop rG .eq (.reg rS) (.lit 0))
-  , .scalar (.binop rT1 .mul (.reg rD) (.reg rD))
-  , .scalar (.binop rT1 .le (.reg rT1) (.reg rN))
-  , .scalar (.binop rG .mul (.reg rG) (.reg rT1))
-  , .scalar (.binop rT2 .urem (.reg rN) (.reg rD))
-  , .scalar (.binop rT2 .eq (.reg rT2) (.lit 0))
-  , .scalar (.binop rG .mul (.reg rG) (.reg rT2))
-  , .scalar (.binop rT1 .sub (.lit 1) (.reg rG))
-  , .scalar (.binop rT1 .mul (.reg rT1) (.reg rS))
-  , .scalar (.binop rT2 .mul (.reg rG) (.reg rD))
-  , .scalar (.binop rS .add (.reg rT1) (.reg rT2)) ]
+def scanBlock : List Instr :=
+  [ .binop rG .eq (.reg rS) (.lit 0)
+  , .binop rT1 .mul (.reg rD) (.reg rD)
+  , .binop rT1 .le (.reg rT1) (.reg rN)
+  , .binop rG .mul (.reg rG) (.reg rT1)
+  , .binop rT2 .urem (.reg rN) (.reg rD)
+  , .binop rT2 .eq (.reg rT2) (.lit 0)
+  , .binop rG .mul (.reg rG) (.reg rT2)
+  , .binop rT1 .sub (.lit 1) (.reg rG)
+  , .binop rT1 .mul (.reg rT1) (.reg rS)
+  , .binop rT2 .mul (.reg rG) (.reg rD)
+  , .binop rS .add (.reg rT1) (.reg rT2) ]
 
 /-- Commit gate and factor select: `isP = (s = 0)`, `p = isP ? n : s`. -/
-def selectBlock (c : Cfg) : List AInstr :=
-  [ .scalar (.binop rC .eq (.reg rR) (.lit (c.B - 1)))
-  , .scalar (.binop rIsP .eq (.reg rS) (.lit 0))
-  , .scalar (.binop rT1 .sub (.lit 1) (.reg rIsP))
-  , .scalar (.binop rT2 .mul (.reg rT1) (.reg rS))
-  , .scalar (.binop rT1 .mul (.reg rIsP) (.reg rN))
-  , .scalar (.binop rP .add (.reg rT1) (.reg rT2)) ]
+def selectBlock (c : Cfg) : List Instr :=
+  [ .binop rC .eq (.reg rR) (.lit (c.B - 1))
+  , .binop rIsP .eq (.reg rS) (.lit 0)
+  , .binop rT1 .sub (.lit 1) (.reg rIsP)
+  , .binop rT2 .mul (.reg rT1) (.reg rS)
+  , .binop rT1 .mul (.reg rIsP) (.reg rN)
+  , .binop rP .add (.reg rT1) (.reg rT2) ]
 
 /-- One power-chain round: `m := m·p`, `pow := pow ∨ (m = n)`. -/
-def powerRound : List AInstr :=
-  [ .scalar (.binop rM .mul (.reg rM) (.reg rP))
-  , .scalar (.binop rT1 .eq (.reg rM) (.reg rN))
-  , .scalar (.binop rPow .bor (.reg rPow) (.reg rT1)) ]
+def powerRound : List Instr :=
+  [ .binop rM .mul (.reg rM) (.reg rP)
+  , .binop rT1 .eq (.reg rM) (.reg rN)
+  , .binop rPow .bor (.reg rPow) (.reg rT1) ]
 
 /-- `pow = (∃ k ≤ powerRounds + 1, p^k = n)`, by a multiplication chain.
 Over-acceptance through mod-`2⁶⁴` collisions is sound: it only inflates. -/
-def powerBlock : List AInstr :=
-  [ .scalar (.mov rM (.reg rP))
-  , .scalar (.binop rPow .eq (.reg rM) (.reg rN)) ] ++
+def powerBlock : List Instr :=
+  [ .mov rM (.reg rP)
+  , .binop rPow .eq (.reg rM) (.reg rN) ] ++
   (List.range powerRounds).flatMap (fun _ => powerRound)
 
-/-- The ladder value charged to the candidate:
-`lam = isP ? L : (pow ? seeds[p] : 0)`.  The table index is clamped to `0`
-in the prime case, so the read stays in range. -/
-def lambdaBlock : List AInstr :=
-  [ .scalar (.binop rT1 .sub (.lit 1) (.reg rIsP))
-  , .scalar (.binop rT2 .mul (.reg rT1) (.reg rP))
-  , .load rT3 rT2
-  , .scalar (.binop rT1 .mul (.reg rT1) (.reg rPow))
-  , .scalar (.binop rT3 .mul (.reg rT1) (.reg rT3))
-  , .scalar (.binop rT2 .mul (.reg rIsP) (.reg rL))
-  , .scalar (.binop rLam .add (.reg rT2) (.reg rT3)) ]
+/-- The seed-table index, clamped to `0` in the prime case so the read stays
+in range: `t2 = (1 − isP)·p`. -/
+def lambdaPre : List Instr :=
+  [ .binop rT1 .sub (.lit 1) (.reg rIsP)
+  , .binop rT2 .mul (.reg rT1) (.reg rP) ]
+
+/-- After the load: `lam = isP ? L : (pow ? seeds[p] : 0)`. -/
+def lambdaPost : List Instr :=
+  [ .binop rT1 .mul (.reg rT1) (.reg rPow)
+  , .binop rT3 .mul (.reg rT1) (.reg rT3)
+  , .binop rT2 .mul (.reg rIsP) (.reg rL)
+  , .binop rLam .add (.reg rT2) (.reg rT3) ]
 
 /-- The dominating rescaled addend, gated by the commit:
 `acc += C · ((n·(⌊lam/2²⁰⌋ + 1)) >>> 24 + 1)`. -/
-def accBlock : List AInstr :=
-  [ .scalar (.binop rT1 .lshr (.reg rLam) (.lit 20))
-  , .scalar (.binop rT1 .add (.reg rT1) (.lit 1))
-  , .scalar (.binop rT1 .mul (.reg rT1) (.reg rN))
-  , .scalar (.binop rT1 .lshr (.reg rT1) (.lit 24))
-  , .scalar (.binop rT1 .add (.reg rT1) (.lit 1))
-  , .scalar (.binop rT1 .mul (.reg rT1) (.reg rC))
-  , .scalar (.binop rAcc .add (.reg rAcc) (.reg rT1)) ]
+def accBlock : List Instr :=
+  [ .binop rT1 .lshr (.reg rLam) (.lit 20)
+  , .binop rT1 .add (.reg rT1) (.lit 1)
+  , .binop rT1 .mul (.reg rT1) (.reg rN)
+  , .binop rT1 .lshr (.reg rT1) (.lit 24)
+  , .binop rT1 .add (.reg rT1) (.lit 1)
+  , .binop rT1 .mul (.reg rT1) (.reg rC)
+  , .binop rAcc .add (.reg rAcc) (.reg rT1) ]
 
 /-- The cap test: a committed accumulator beyond `capA` is a violation, so a
 `0` verdict certifies the width budget as well as the rows. -/
-def capBlock (c : Cfg) : List AInstr :=
-  [ .scalar (.binop rT1 .gt (.reg rAcc) (.lit c.capA))
-  , .scalar (.binop rT1 .mul (.reg rT1) (.reg rC))
-  , .scalar (.binop rBad .add (.reg rBad) (.reg rT1)) ]
+def capBlock (c : Cfg) : List Instr :=
+  [ .binop rT1 .gt (.reg rAcc) (.lit c.capA)
+  , .binop rT1 .mul (.reg rT1) (.reg rC)
+  , .binop rBad .add (.reg rBad) (.reg rT1) ]
 
 /-- The row test, at commits with `n ≥ lower`:
 violation unless `2500·acc < 20016·n²`. -/
-def rowBlock (c : Cfg) : List AInstr :=
-  [ .scalar (.binop rT1 .mul (.reg rN) (.reg rN))
-  , .scalar (.binop rT1 .mul (.reg rT1) (.lit 20016))
-  , .scalar (.binop rT2 .mul (.reg rAcc) (.lit 2500))
-  , .scalar (.binop rT2 .ge (.reg rT2) (.reg rT1))
-  , .scalar (.binop rLow .ge (.reg rN) (.lit c.lower))
-  , .scalar (.binop rT2 .mul (.reg rT2) (.reg rLow))
-  , .scalar (.binop rT2 .mul (.reg rT2) (.reg rC))
-  , .scalar (.binop rBad .add (.reg rBad) (.reg rT2)) ]
+def rowBlock (c : Cfg) : List Instr :=
+  [ .binop rT1 .mul (.reg rN) (.reg rN)
+  , .binop rT1 .mul (.reg rT1) (.lit 20016)
+  , .binop rT2 .mul (.reg rAcc) (.lit 2500)
+  , .binop rT2 .ge (.reg rT2) (.reg rT1)
+  , .binop rLow .ge (.reg rN) (.lit c.lower)
+  , .binop rT2 .mul (.reg rT2) (.reg rLow)
+  , .binop rT2 .mul (.reg rT2) (.reg rC)
+  , .binop rBad .add (.reg rBad) (.reg rT2) ]
 
 /-- `incUWord n`, instruction for instruction
 (`Ports/RS62Increments.lean`), then the gated ladder advance. -/
-def ladderBlock : List AInstr :=
-  [ .scalar (.binop rT1 .mul (.reg rN) (.lit 2))
-  , .scalar (.binop rT1 .add (.reg rT1) (.lit (3 * fpD)))
-  , .scalar (.binop rT2 .add (.reg rN) (.lit (3 * fpD)))
-  , .scalar (.binop rT2 .sub (.reg rT2) (.lit 1))
-  , .scalar (.binop rT2 .udiv (.reg rT2) (.reg rN))
-  , .scalar (.binop rT1 .sub (.reg rT1) (.reg rT2))
-  , .scalar (.binop rT2 .mul (.reg rN) (.lit 2))
-  , .scalar (.binop rT1 .udiv (.reg rT1) (.reg rT2))
-  , .scalar (.binop rT2 .add (.reg rN) (.lit fpD))
-  , .scalar (.binop rT2 .sub (.reg rT2) (.lit 1))
-  , .scalar (.binop rT1 .sub (.reg rT2) (.reg rT1))
-  , .scalar (.binop rT2 .sub (.reg rN) (.lit 1))
-  , .scalar (.binop rIU .udiv (.reg rT1) (.reg rT2))
-  , .scalar (.binop rT1 .mul (.reg rC) (.reg rIU))
-  , .scalar (.binop rL .add (.reg rL) (.reg rT1)) ]
+def ladderBlock : List Instr :=
+  [ .binop rT1 .mul (.reg rN) (.lit 2)
+  , .binop rT1 .add (.reg rT1) (.lit (3 * fpD))
+  , .binop rT2 .add (.reg rN) (.lit (3 * fpD))
+  , .binop rT2 .sub (.reg rT2) (.lit 1)
+  , .binop rT2 .udiv (.reg rT2) (.reg rN)
+  , .binop rT1 .sub (.reg rT1) (.reg rT2)
+  , .binop rT2 .mul (.reg rN) (.lit 2)
+  , .binop rT1 .udiv (.reg rT1) (.reg rT2)
+  , .binop rT2 .add (.reg rN) (.lit fpD)
+  , .binop rT2 .sub (.reg rT2) (.lit 1)
+  , .binop rT1 .sub (.reg rT2) (.reg rT1)
+  , .binop rT2 .sub (.reg rN) (.lit 1)
+  , .binop rIU .udiv (.reg rT1) (.reg rT2)
+  , .binop rT1 .mul (.reg rC) (.reg rIU)
+  , .binop rL .add (.reg rL) (.reg rT1) ]
 
 /-- Clear the scan accumulator at the last round of each candidate. -/
-def resetBlock : List AInstr :=
-  [ .scalar (.binop rT1 .sub (.lit 1) (.reg rC))
-  , .scalar (.binop rS .mul (.reg rT1) (.reg rS)) ]
+def resetBlock : List Instr :=
+  [ .binop rT1 .sub (.lit 1) (.reg rC)
+  , .binop rS .mul (.reg rT1) (.reg rS) ]
 
-/-- The loop body: 137 instructions, every one executed every iteration. -/
-def wmBody (c : Cfg) : List AInstr :=
-  decodeBlock c ++ scanBlock ++ selectBlock c ++ powerBlock ++
-    lambdaBlock ++ accBlock ++ capBlock c ++ rowBlock c ++ ladderBlock ++
+/-- Everything before the seed-table read. -/
+def wmPre (c : Cfg) : List Instr :=
+  decodeBlock c ++ scanBlock ++ selectBlock c ++ powerBlock ++ lambdaPre
+
+/-- Everything after it. -/
+def wmPost (c : Cfg) : List Instr :=
+  lambdaPost ++ accBlock ++ capBlock c ++ rowBlock c ++ ladderBlock ++
     resetBlock
+
+/-- The loop body: 137 instructions, every one executed every iteration,
+with the single array access in the middle. -/
+def wmBody (c : Cfg) : List AInstr :=
+  lift (wmPre c) ++ (.load rT3 rT2 :: lift (wmPost c))
 
 /-- Initialization: the two carried registers, then the seed table. -/
 def wmInit (c : Cfg) : List AInstr :=
-  [ .scalar (.mov rAcc (.lit c.acc0))
-  , .scalar (.mov rL (.lit c.seedL)) ] ++
+  lift [ .mov rAcc (.lit c.acc0), .mov rL (.lit c.seedL) ] ++
   c.seeds.flatMap (fun e =>
     [ .scalar (.mov rT1 (.lit e.1))
     , .scalar (.mov rT2 (.lit e.2))
@@ -319,117 +344,81 @@ def wmProgram (c : Cfg) : AProgram :=
 
 /-! ## Well-formedness -/
 
-private theorem decodeBlock_wf (c : Cfg) :
-    ∀ a ∈ decodeBlock c, a.WF wmRegCount := by
-  intro a ha
-  simp only [decodeBlock, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h|h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
+/-- Register bounds for one operand, as a Boolean. -/
+def operandOK : Operand → Bool
+  | .reg j => decide (j < wmRegCount)
+  | _ => true
 
-private theorem scanBlock_wf : ∀ a ∈ scanBlock, a.WF wmRegCount := by
-  intro a ha
-  simp only [scanBlock, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h|h|h|h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
+/-- Register bounds for a scalar instruction, as a Boolean. -/
+def instrOK : Instr → Bool
+  | .mov d src => decide (d < wmRegCount) && operandOK src
+  | .binop d _ l r => decide (d < wmRegCount) && operandOK l && operandOK r
 
-private theorem selectBlock_wf (c : Cfg) :
-    ∀ a ∈ selectBlock c, a.WF wmRegCount := by
-  intro a ha
-  simp only [selectBlock, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h|h|h|h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
+theorem operand_wf_of_ok {o : Operand} (h : operandOK o = true) :
+    o.WF wmRegCount := by
+  cases o with
+  | reg j => simpa [operandOK, Operand.WF] using h
+  | lit v => exact trivial
+  | idx => exact trivial
 
-private theorem powerRound_wf : ∀ a ∈ powerRound, a.WF wmRegCount := by
-  intro a ha
-  simp only [powerRound, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
+theorem wf_of_instrOK {i : Instr} (h : instrOK i = true) : i.WF wmRegCount := by
+  cases i with
+  | mov d src =>
+      simp only [instrOK, Bool.and_eq_true, decide_eq_true_eq] at h
+      exact ⟨h.1, operand_wf_of_ok h.2⟩
+  | binop d op l r =>
+      simp only [instrOK, Bool.and_eq_true, decide_eq_true_eq] at h
+      exact ⟨h.1.1, operand_wf_of_ok h.1.2, operand_wf_of_ok h.2⟩
 
-private theorem powerBlock_wf : ∀ a ∈ powerBlock, a.WF wmRegCount := by
+theorem lift_wf {xs : List Instr} (h : xs.all instrOK = true) :
+    ∀ a ∈ lift xs, a.WF wmRegCount := by
   intro a ha
-  simp only [powerBlock, List.mem_append, List.mem_cons, List.mem_flatMap,
-    List.not_mem_nil, or_false] at ha
-  rcases ha with (h|h) | ⟨_, _, h⟩
-  · subst h; simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
-  · subst h; simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
-  · exact powerRound_wf a h
+  obtain ⟨i, hi, rfl⟩ := mem_lift ha
+  exact wf_of_instrOK ((List.all_eq_true.mp h) i hi)
 
-private theorem lambdaBlock_wf : ∀ a ∈ lambdaBlock, a.WF wmRegCount := by
-  intro a ha
-  simp only [lambdaBlock, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
+private theorem powerBlock_ok : powerBlock.all instrOK = true := by
+  simp only [powerBlock, List.all_append, List.all_cons, List.all_nil,
+    List.all_flatMap, Bool.and_eq_true]
+  refine ⟨⟨?_, ?_, trivial⟩, ?_⟩
+  · simp +decide [instrOK, operandOK, wmRegCount, rM, rP]
+  · simp +decide [instrOK, operandOK, wmRegCount, rPow, rM, rN]
+  · rw [List.all_eq_true]
+    intro x _
+    simp +decide [powerRound, instrOK, operandOK, wmRegCount, rM, rP, rN,
+      rT1, rPow]
 
-private theorem accBlock_wf : ∀ a ∈ accBlock, a.WF wmRegCount := by
-  intro a ha
-  simp only [accBlock, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
+theorem wmPre_ok (c : Cfg) : (wmPre c).all instrOK = true := by
+  simp only [wmPre, List.all_append, Bool.and_eq_true]
+  refine ⟨⟨⟨⟨?_, ?_⟩, ?_⟩, powerBlock_ok⟩, ?_⟩ <;>
+    simp +decide [decodeBlock, scanBlock, selectBlock, lambdaPre, instrOK,
+      operandOK, wmRegCount, rBad, rAcc, rL, rS, rN, rR, rD, rG, rT1, rT2,
+      rM, rP, rIsP, rPow, rLam, rC, rT3, rLow, rIU]
 
-private theorem capBlock_wf (c : Cfg) : ∀ a ∈ capBlock c, a.WF wmRegCount := by
-  intro a ha
-  simp only [capBlock, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
-
-private theorem rowBlock_wf (c : Cfg) : ∀ a ∈ rowBlock c, a.WF wmRegCount := by
-  intro a ha
-  simp only [rowBlock, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
-
-private theorem ladderBlock_wf : ∀ a ∈ ladderBlock, a.WF wmRegCount := by
-  intro a ha
-  simp only [ladderBlock, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h|h|h|h|h|h|h|h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
-
-private theorem resetBlock_wf : ∀ a ∈ resetBlock, a.WF wmRegCount := by
-  intro a ha
-  simp only [resetBlock, List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with h|h <;> subst h <;>
-    simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
+theorem wmPost_ok (c : Cfg) : (wmPost c).all instrOK = true := by
+  simp +decide [wmPost, lambdaPost, accBlock, capBlock, rowBlock,
+    ladderBlock, resetBlock, List.all_append, instrOK, operandOK,
+    wmRegCount, rBad, rAcc, rL, rS, rN, rR, rD, rG, rT1, rT2, rM, rP,
+    rIsP, rPow, rLam, rC, rT3, rLow, rIU]
 
 theorem wmBody_wf (c : Cfg) : ∀ a ∈ wmBody c, a.WF wmRegCount := by
   intro a ha
-  rw [wmBody] at ha
   rcases List.mem_append.mp ha with h | h
-  rotate_left
-  · exact resetBlock_wf a h
-  rcases List.mem_append.mp h with h | h
-  rotate_left
-  · exact ladderBlock_wf a h
-  rcases List.mem_append.mp h with h | h
-  rotate_left
-  · exact rowBlock_wf c a h
-  rcases List.mem_append.mp h with h | h
-  rotate_left
-  · exact capBlock_wf c a h
-  rcases List.mem_append.mp h with h | h
-  rotate_left
-  · exact accBlock_wf a h
-  rcases List.mem_append.mp h with h | h
-  rotate_left
-  · exact lambdaBlock_wf a h
-  rcases List.mem_append.mp h with h | h
-  rotate_left
-  · exact powerBlock_wf a h
-  rcases List.mem_append.mp h with h | h
-  rotate_left
-  · exact selectBlock_wf c a h
-  rcases List.mem_append.mp h with h | h
-  · exact decodeBlock_wf c a h
-  · exact scanBlock_wf a h
+  · exact lift_wf (wmPre_ok c) a h
+  · rcases List.mem_cons.mp h with rfl | h
+    · exact ⟨by simp [wmRegCount, rT3], by simp [wmRegCount, rT2]⟩
+    · exact lift_wf (wmPost_ok c) a h
 
 theorem wmInit_wf (c : Cfg) : ∀ a ∈ wmInit c, a.WF wmRegCount := by
   intro a ha
-  simp only [wmInit, List.mem_append, List.mem_cons, List.mem_flatMap,
-    List.not_mem_nil, or_false] at ha
-  rcases ha with (h | h) | ⟨e, _, he⟩
-  · subst h; simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
-  · subst h; simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
-  · rcases he with h|h|h <;> subst h <;>
-      simp +decide [AInstr.WF, Instr.WF, Operand.WF, wmRegCount]
+  rcases List.mem_append.mp ha with h | h
+  · refine lift_wf ?_ a h
+    simp +decide [instrOK, operandOK, wmRegCount, rAcc, rL]
+  · obtain ⟨e, _, he⟩ := List.mem_flatMap.mp h
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at he
+    rcases he with rfl | rfl | rfl
+    · exact ⟨by simp [wmRegCount, rT1], trivial⟩
+    · exact ⟨by simp [wmRegCount, rT2], trivial⟩
+    · exact ⟨by simp [wmRegCount, rT1], by simp [wmRegCount, rT2]⟩
 
 /-- **The program is well formed** at every configuration, so
 `AProgram.evalCC_compile` applies: the compiled trace and the emitted C
@@ -440,6 +429,77 @@ theorem wmProgram_wf (c : Cfg) : (wmProgram c).WF := by
   · exact wmBody_wf c
   · intro a ha
     exact absurd ha (by simp [wmProgram])
+
+/-! ## Definedness
+
+`ArrayMobiusDenotation` records definedness as the obligation that blocked
+its transcription.  Here it costs three lines per partial instruction,
+because `allDefined_lift_of_noDiv` retires every division-free stage at
+once.  What is left is exactly the genuinely partial instructions: the
+`urem`/`udiv` of the decode, the `urem` of the scan, the four divisions of
+the ladder, and the single array read.
+-/
+
+/-- The division-free tail of the pre-load stage: everything after the trial
+round. -/
+def wmPreTail (c : Cfg) : List Instr :=
+  selectBlock c ++ powerBlock ++ lambdaPre
+
+theorem wmPre_eq (c : Cfg) :
+    wmPre c = decodeBlock c ++ scanBlock ++ wmPreTail c := by
+  simp [wmPre, wmPreTail, List.append_assoc]
+
+/-- **The select/power/lambda stage is defined, unconditionally.**  One line,
+because it contains no division and `allDefined_lift_of_noDiv` does the rest. -/
+theorem wmPreTail_defined (c : Cfg) (len k : Nat) (s : AState) :
+    AllDefined len k s (lift (wmPreTail c)) := by
+  refine allDefined_lift_of_noDiv len k _ s ?_
+  simp +decide [wmPreTail, selectBlock, powerBlock, powerRound, lambdaPre,
+    List.all_append, List.all_flatMap, InstrBlock.NoDivI]
+
+/-- **The post-load stage up to the ladder is defined, unconditionally.** -/
+theorem lambdaPost_acc_cap_row_defined (c : Cfg) (len k : Nat) (s : AState) :
+    AllDefined len k s
+      (lift (lambdaPost ++ accBlock ++ capBlock c ++ rowBlock c)) := by
+  refine allDefined_lift_of_noDiv len k _ s ?_
+  simp +decide [lambdaPost, accBlock, capBlock, rowBlock, List.all_append,
+    InstrBlock.NoDivI]
+
+/-- **The reset stage is defined, unconditionally.** -/
+theorem resetBlock_defined (len k : Nat) (s : AState) :
+    AllDefined len k s (lift resetBlock) := by
+  refine allDefined_lift_of_noDiv len k _ s ?_
+  simp +decide [resetBlock, InstrBlock.NoDivI]
+
+/-! ## What remains, stated exactly
+
+With the three lemmas above, definedness survives only at the genuinely
+partial instructions, and each of those has a named side condition:
+
+* `decodeBlock`'s `urem`/`udiv` by the literal `B` — needs `0 < c.B` and
+  `c.B < M`, both conjuncts of `wmOK`;
+* `scanBlock`'s `urem` by `rD` — needs `rD ≠ 0`, which the decode
+  establishes (`rD = rR + 2` with `rR < B < M`);
+* the seed-table `load` — needs `rT2 < c.tableLen`.  `rT2` is
+  `(1 − isP)·p`, so this is the scan invariant "`rS` is `0` or a trial
+  divisor `≤ B + 1`" together with `wmOK`'s `B + 1 < tableLen`;
+* `ladderBlock`'s four divisions — need `rN ≥ 2` and `2·rN < M`, which the
+  decode establishes from `2 ≤ c.n0` and `n0 + len ≤ 2²⁵`.
+
+The first, second and fourth are local to one iteration.  The third is the
+only cross-iteration invariant the body needs, and it is exactly the `inv`
+field of `Verified.Algorithm.ArrayBridge.ArrayLoop`:
+
+```text
+Inv c s := (s.regs rS = 0 ∨ (2 ≤ s.regs rS ∧ s.regs rS ≤ c.B + 1)) ∧
+           (∀ j, j < c.tableLen → s.arr j = seedAt c j)
+```
+
+preserved because `scanBlock` writes `rS` only from `rD = rR + 2 ≤ B + 1`
+and `resetBlock` clears it, and because the body contains no `store`
+(`arun_lift_arr`: a scalar stage does not touch the array, and the load does
+not write it).  `WMEncoding` below is the statement those obligations serve.
+-/
 
 /-! ## The candidate-level reference
 
