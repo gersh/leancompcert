@@ -102,6 +102,7 @@ import LeanCompCert.Ports.RamareWM217
 import LeanCompCert.Ports.GFoldCheck
 import LeanCompCert.Ports.GFoldCheckRun
 import LeanCompCert.Ports.GFoldCheckSpec
+import LeanCompCert.Ports.G2WeakHeadEuler
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 
