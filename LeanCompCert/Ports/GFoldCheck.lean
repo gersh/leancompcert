@@ -236,15 +236,24 @@ def blkCa1b : List Assign :=
 /-- Masked accumulation and the mantissa half-word split. -/
 def blkCa1 : List Assign := blkCa1a ++ blkCa1b
 
-/-- The shifted product and the renormalisation case bit. -/
-def blkCa2 : List Assign :=
-  [ ⟨27, .bin .mul (.reg 25) (.reg 8)⟩
-  , ⟨28, .bin .add
+/-- The low partial product. -/
+def blkCa2a : List Assign :=
+  [ ⟨27, .bin .mul (.reg 25) (.reg 8)⟩ ]
+
+/-- The shifted product. -/
+def blkCa2b : List Assign :=
+  [ ⟨28, .bin .add
       (.bin .add
         (.bin .mul (.reg 8) (.bin .shl (.lit 1) (.bin .sub (.lit 62) (.reg 15))))
         (.bin .mul (.reg 26) (.bin .shl (.lit 1) (.bin .sub (.lit 45) (.reg 15)))))
-      (.bin .lshr (.reg 27) (.bin .add (.reg 15) (.lit 2)))⟩
-  , ⟨29, .bin .ge (.reg 28) (.lit (2 ^ 63))⟩ ]
+      (.bin .lshr (.reg 27) (.bin .add (.reg 15) (.lit 2)))⟩ ]
+
+/-- The renormalisation case bit. -/
+def blkCa2c : List Assign :=
+  [ ⟨29, .bin .ge (.reg 28) (.lit (2 ^ 63))⟩ ]
+
+/-- The shifted product and the renormalisation case bit. -/
+def blkCa2 : List Assign := blkCa2a ++ blkCa2b ++ blkCa2c
 
 /-- The two normalised advances and the init value. -/
 def blkCa3x : List Assign :=
@@ -476,10 +485,21 @@ theorem blkC_pieces : ∀ a ∈ blkC,
           exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
             by simp [depth, sel, cursor]⟩
     rcases List.mem_append.mp h with h | h
-    · simp only [blkCa2, List.mem_cons, List.not_mem_nil, or_false] at h
-      rcases h with rfl | rfl | rfl <;>
-        exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩,
-          by simp [depth, sel, cursor]⟩
+    · rcases List.mem_append.mp (show a ∈ blkCa2a ++ blkCa2b ++ blkCa2c
+        from h) with h | h
+      · rcases List.mem_append.mp h with h | h
+        · simp only [blkCa2a, List.mem_cons, List.not_mem_nil, or_false] at h
+          rcases h with rfl <;>
+            exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor],
+              rfl⟩, by simp [depth, sel, cursor]⟩
+        · simp only [blkCa2b, List.mem_cons, List.not_mem_nil, or_false] at h
+          rcases h with rfl <;>
+            exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor],
+              rfl⟩, by simp [depth, sel, cursor]⟩
+      · simp only [blkCa2c, List.mem_cons, List.not_mem_nil, or_false] at h
+        rcases h with rfl <;>
+          exact ⟨⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor],
+            rfl⟩, by simp [depth, sel, cursor]⟩
     rcases List.mem_append.mp h with h | h
     · rcases List.mem_append.mp h with h | h
       · simp only [blkCa3x, List.mem_cons, List.not_mem_nil, or_false] at h
@@ -1229,10 +1249,16 @@ theorem blkCa1b_spec (k : Nat) (t : RegState) (xlo n : Nat)
     run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
     run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
     run_untouched _ _ _ (by decide) _, run_untouched _ _ _ (by decide) _,
-    ?_, ?_⟩ <;>
-    simp [run, blkCa1b, evalExpr, denoteOp, RegState.set,
-      h24, h13, h8, e4, e5, e6, hshl, lit47,
-      Nat.mod_eq_of_lt hxlo]
+    ?_, ?_⟩
+  · have hgoal : run k t blkCa1b 25
+        = (t 13 + (M - t 24 <<< (47 % M) % M)) % M := by
+      simp [run, blkCa1b, evalExpr, denoteOp, RegState.set]
+    rw [hgoal, lit47, h24, h13, hshl, e4]
+    exact e5
+  · have hgoal : run k t blkCa1b 26 = t 24 * t 8 % M := by
+      simp [run, blkCa1b, evalExpr, denoteOp, RegState.set]
+    rw [hgoal, h24, h8]
+    exact e6
 
 /-- **Stage Ca2**: the shifted product and the renormalisation case bit. -/
 theorem blkCa2_spec (k : Nat) (t : RegState) (xlo n a : Nat)
@@ -1335,12 +1361,58 @@ theorem blkCa2_spec (k : Nat) (t : RegState) (xlo n a : Nat)
     omega
   have hAdvUnfold : n * 2 ^ (62 - a) + xlo / 2 ^ 47 * n * 2 ^ (45 - a)
       + (xlo - xlo / 2 ^ 47 * 2 ^ 47) * n / 2 ^ (a + 2) = advX n a xlo := rfl
+  have hsplit : run k t blkCa2 = run k (run k (run k t blkCa2a) blkCa2b) blkCa2c := by
+    show run k t (blkCa2a ++ blkCa2b ++ blkCa2c) = _
+    rw [run_append, run_append]
+  have lit47' : (47 : Nat) % M = 47 := by decide
+  have lit2' : (2 : Nat) % M = 2 := by decide
+  have V27 : run k t blkCa2a 27 = (xlo - xlo / 2 ^ 47 * 2 ^ 47) * n := by
+    have hgoal : run k t blkCa2a 27 = t 25 * t 8 % M := by
+      simp [run, blkCa2a, evalExpr, denoteOp, RegState.set]
+    rw [hgoal, h25, h8]
+    exact eB
+  have t2f : ∀ j, j ≠ 27 → run k t blkCa2a j = t j := by
+    intro j hj
+    refine run_untouched _ _ _ ?_ _
+    intro a ha
+    simp only [blkCa2a, List.mem_cons, List.not_mem_nil, or_false] at ha
+    subst ha
+    simp only []
+    omega
+  have V28 : run k (run k t blkCa2a) blkCa2b 28 = advX n a xlo := by
+    have hgoal : ∀ u : RegState, run k u blkCa2b 28
+        = (u 8 * (1 % M) <<< ((62 + (M - u 15)) % M)
+           + u 26 * (1 % M) <<< ((45 + (M - u 15)) % M)
+           + u 27 >>> ((u 15 + 2) % M)) % M := by
+      intro u
+      simp [run, blkCa2b, evalExpr, denoteOp, RegState.set]
+    have hshl62' : (1:Nat) <<< (62 - a) = 2 ^ (62 - a) := by
+      rw [Nat.shiftLeft_eq, Nat.one_mul]
+    have hshl45' : (1:Nat) <<< (45 - a) = 2 ^ (45 - a) := by
+      rw [Nat.shiftLeft_eq, Nat.one_mul]
+    rw [hgoal, t2f 8 (by decide), t2f 15 (by decide), t2f 26 (by decide), V27,
+      h8, h15, h26, (by decide : (1:Nat) % M = 1), e62, e45, hshl62', hshl45',
+      ea2, Nat.shiftRight_eq_div_pow, hAdvUnfold]
+    exact esT
+  have V29 : run k (run k (run k t blkCa2a) blkCa2b) blkCa2c 29
+      = (if 2 ^ 63 ≤ advX n a xlo then 1 else 0) := by
+    have hgoal : ∀ u : RegState, run k u blkCa2c 29
+        = (if u 28 ≥ 9223372036854775808 % M then 1 else 0) := by
+      intro u
+      simp [run, blkCa2c, evalExpr, denoteOp, RegState.set]
+    rw [hgoal]
+    have h28v : run k (run k t blkCa2a) blkCa2b 28 = advX n a xlo := V28
+    simp only [h28v, (by decide : (9223372036854775808 : Nat) % M
+      = 9223372036854775808), ge_iff_le]
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
     ?_, ?_⟩ <;>
-    simp [run, blkCa2, evalExpr, denoteOp, RegState.set,
-      h25, h26, h8, h15, eB, e62, e45, hshl62, hshl45, et1, et2, ea2, et3,
-      es12, esT, hAdvUnfold, lit1, lit2, lit45, lit62', lit63n,
-      Nat.shiftRight_eq_div_pow, ge_iff_le]
+    first
+      | (rw [hsplit, run_untouched _ _ _ (by decide),
+          run_untouched _ _ _ (by decide), run_untouched _ _ _ (by decide)])
+      | (rw [hsplit]
+         exact V28)
+      | (rw [hsplit]
+         exact V29)
 
 /-- **Stage Ca3x**: the renormalised advance and the init value. -/
 theorem blkCa3x_spec (k : Nat) (t : RegState) (x2 n a : Nat)
