@@ -347,4 +347,685 @@ theorem tstep_clean_of_tFlag (c : Cfg) (h : c.tFlag = 0) {k : Nat}
   rw [← tRunUpto_succ]
   exact tRunUpto_viol_zero_of_tFlag c h hk
 
+/-! ## §9 Sign and magnitude of an encoded endpoint
+
+`smDecomp`, in the transparent model `tmag`, splits an encoded word into
+its sign bit and its magnitude.  Both halves are exactly the sign and the
+`natAbs` of the `Int` the word decodes to. -/
+
+theorem decodeZ_eq (w : Nat) :
+    decodeZ w = if w < 9223372036854775808 then (w : Int)
+      else (w : Int) - 18446744073709551616 := rfl
+
+theorem encodeZ_eq (z : Int) :
+    encodeZ z = (z % 18446744073709551616).toNat := rfl
+
+theorem bnat_eq_bnat {p q : Prop} [Decidable p] [Decidable q] (h : p ↔ q) :
+    bnat p = bnat q := by
+  unfold bnat
+  by_cases hp : p
+  · rw [if_pos hp, if_pos (h.mp hp)]
+  · rw [if_neg hp, if_neg (fun hq => hp (h.mpr hq))]
+
+theorem decodeZ_lt_zero_iff (w : Nat) (hw : w < M) :
+    decodeZ w < 0 ↔ 9223372036854775808 ≤ w := by
+  rw [decodeZ_eq]
+  simp only [M_val] at hw
+  split <;> omega
+
+theorem natAbs_decodeZ (w : Nat) (hw : w < M) :
+    (decodeZ w).natAbs =
+      if 9223372036854775808 ≤ w then 18446744073709551616 - w else w := by
+  rw [decodeZ_eq]
+  simp only [M_val] at hw
+  split <;> split <;> omega
+
+theorem tmag_sign (w : Nat) (hw : w < M) :
+    (tmag w).1 = bnat (decodeZ w < 0) :=
+  bnat_eq_bnat (decodeZ_lt_zero_iff w hw).symm
+
+theorem tmag_mag (w : Nat) (hw : w < M) : (tmag w).2 = (decodeZ w).natAbs := by
+  show (if H63 ≤ w then tsub 0 w else w) = (decodeZ w).natAbs
+  rw [tsub_zero, natAbs_decodeZ w hw]
+  simp only [M_val, H63_val] at *
+  split <;> omega
+
+/-- `encodeZ` on a small nonnegative value is the identity. -/
+theorem encodeZ_ofNat (n : Nat) (h : n < 9223372036854775808) :
+    encodeZ (n : Int) = n := by
+  rw [encodeZ_eq]
+  omega
+
+/-- The machine's `0 − q` on a small nonnegative quotient is `encodeZ` of
+its negation. -/
+theorem tsub_zero_encodeZ_neg (n : Nat) (h : n < 9223372036854775808) :
+    tsub 0 n = encodeZ (-(n : Int)) := by
+  rw [encodeZ_eq, tsub_zero]
+  simp only [M_val]
+  omega
+
+/-! ## §10 Canonical 128-bit sign-magnitude triples
+
+`cmulBody` carries each of the four partial products as a sign bit and a
+two-word magnitude, canonicalized so that a set sign bit implies a nonzero
+magnitude.  `Rep s lo hi z` says that triple stands for `z`. -/
+
+/-- `(s, lo, hi)` is the machine's canonical sign-magnitude form of `z`. -/
+structure Rep (s lo hi : Nat) (z : Int) : Prop where
+  /-- The sign bit. -/
+  sign : s = bnat (z < 0)
+  /-- The two words are the magnitude, little-endian. -/
+  mag : lo + M * hi = z.natAbs
+  /-- Both words are `u64`s. -/
+  lo_lt : lo < M
+  /-- Both words are `u64`s. -/
+  hi_lt : hi < M
+
+theorem Rep.s_le_one {s lo hi : Nat} {z : Int} (r : Rep s lo hi z) : s ≤ 1 := by
+  rw [r.sign]; exact bnat_le_one _
+
+theorem Rep.smVal_eq {s lo hi : Nat} {z : Int} (r : Rep s lo hi z) :
+    smVal s (lo + M * hi) = z := by
+  rw [r.sign, r.mag]
+  exact LeanCompCert.Ports.Section413Cells.smVal_of_val z
+
+/-- The 128-bit comparison of two words against a fixed limb base. -/
+theorem lt128 (x y u v : Nat) (hx : x < M) (hu : u < M) :
+    bnat (y < v) + bnat (y = v) * bnat (x < u)
+      = bnat (x + M * y < u + M * v) := by
+  simp only [M_val] at hx hu
+  by_cases h1 : y < v
+  · rw [bnat_true h1, bnat_false (show ¬ (y = v) by omega),
+      bnat_true (show x + M * y < u + M * v by simp only [M_val]; omega)]
+    omega
+  · by_cases h2 : y = v
+    · subst h2
+      rw [bnat_false h1, bnat_true (rfl : y = y),
+        bnat_eq_bnat (show (x < u) ↔ (x + M * y < u + M * y) by
+          simp only [M_val]; omega)]
+      omega
+    · rw [bnat_false h1, bnat_false h2,
+        bnat_false (show ¬ (x + M * y < u + M * v) by
+          simp only [M_val]; omega)]
+      omega
+
+/-- **The branchless comparator decides the signed order** of two canonical
+triples (`cmpLtBody`, in the transparent model `tlt`). -/
+theorem tlt_of_Rep {s1 l1 h1 s2 l2 h2 : Nat} {z1 z2 : Int}
+    (r1 : Rep s1 l1 h1 z1) (r2 : Rep s2 l2 h2 z2) :
+    tlt s1 l1 h1 s2 l2 h2 = bnat (z1 < z2) := by
+  have hmab : bnat (h1 < h2) + bnat (h1 = h2) * bnat (l1 < l2)
+      = bnat (z1.natAbs < z2.natAbs) := by
+    rw [lt128 l1 h1 l2 h2 r1.lo_lt r2.lo_lt, r1.mag, r2.mag]
+  have hmba : bnat (h2 < h1) + bnat (h1 = h2) * bnat (l2 < l1)
+      = bnat (z2.natAbs < z1.natAbs) := by
+    rw [bnat_eq_bnat (show (h1 = h2) ↔ (h2 = h1) from ⟨Eq.symm, Eq.symm⟩),
+      lt128 l2 h2 l1 h1 r2.lo_lt r1.lo_lt, r1.mag, r2.mag]
+  show s1 * (1 - s2) + s1 * s2 * (bnat (h2 < h1) + bnat (h1 = h2) * bnat (l2 < l1))
+      + (1 - s1) * (1 - s2) * (bnat (h1 < h2) + bnat (h1 = h2) * bnat (l1 < l2))
+      = bnat (z1 < z2)
+  rw [hmab, hmba, r1.sign, r2.sign]
+  by_cases hz1 : z1 < 0 <;> by_cases hz2 : z2 < 0
+  · rw [bnat_true hz1, bnat_true hz2,
+      bnat_eq_bnat (show (z2.natAbs < z1.natAbs) ↔ (z1 < z2) by omega)]
+    omega
+  · rw [bnat_true hz1, bnat_false hz2, bnat_true (show z1 < z2 by omega)]
+    omega
+  · rw [bnat_false hz1, bnat_true hz2, bnat_false (show ¬ (z1 < z2) by omega)]
+    omega
+  · rw [bnat_false hz1, bnat_false hz2,
+      bnat_eq_bnat (show (z1.natAbs < z2.natAbs) ↔ (z1 < z2) by omega)]
+    omega
+
+/-- The `selTriple` pair that keeps the smaller of two canonical triples. -/
+def selMin (s1 l1 h1 s2 l2 h2 : Nat) : Nat × Nat × Nat :=
+  if tlt s1 l1 h1 s2 l2 h2 = 1 then (s1, l1, h1) else (s2, l2, h2)
+
+/-- The `selTriple` pair that keeps the larger. -/
+def selMax (s1 l1 h1 s2 l2 h2 : Nat) : Nat × Nat × Nat :=
+  if tlt s1 l1 h1 s2 l2 h2 = 1 then (s2, l2, h2) else (s1, l1, h1)
+
+/-- The canonicalized sign of a partial product. -/
+def psign (sa sb : Nat) (p : Nat × Nat) : Nat :=
+  (sa ^^^ sb) * (1 - bnat (p.1 = 0) * bnat (p.2 = 0))
+
+/-- Selecting the smaller of two canonical triples by `tlt` (`selTriple`)
+yields a canonical triple for the minimum. -/
+theorem Rep_min {s1 l1 h1 s2 l2 h2 : Nat} {z1 z2 : Int}
+    (r1 : Rep s1 l1 h1 z1) (r2 : Rep s2 l2 h2 z2) :
+    Rep (selMin s1 l1 h1 s2 l2 h2).1 (selMin s1 l1 h1 s2 l2 h2).2.1
+        (selMin s1 l1 h1 s2 l2 h2).2.2 (min z1 z2) := by
+  unfold selMin
+  rw [tlt_of_Rep r1 r2]
+  by_cases hz : z1 < z2
+  · rw [bnat_true hz, if_pos (rfl : (1 : Nat) = 1),
+      show min z1 z2 = z1 by omega]
+    exact r1
+  · rw [bnat_false hz, if_neg (by decide : ¬((0 : Nat) = 1)),
+      show min z1 z2 = z2 by omega]
+    exact r2
+
+/-- Selecting the larger. -/
+theorem Rep_max {s1 l1 h1 s2 l2 h2 : Nat} {z1 z2 : Int}
+    (r1 : Rep s1 l1 h1 z1) (r2 : Rep s2 l2 h2 z2) :
+    Rep (selMax s1 l1 h1 s2 l2 h2).1 (selMax s1 l1 h1 s2 l2 h2).2.1
+        (selMax s1 l1 h1 s2 l2 h2).2.2 (max z1 z2) := by
+  unfold selMax
+  rw [tlt_of_Rep r1 r2]
+  by_cases hz : z1 < z2
+  · rw [bnat_true hz, if_pos (rfl : (1 : Nat) = 1),
+      show max z1 z2 = z2 by omega]
+    exact r2
+  · rw [bnat_false hz, if_neg (by decide : ¬((0 : Nat) = 1)),
+      show max z1 z2 = z1 by omega]
+    exact r1
+
+/-- **The canonicalized sign-magnitude product** of two decoded endpoints
+represents their `Int` product: the xor of the sign bits, killed when the
+128-bit magnitude is zero, is the sign of the product. -/
+theorem Rep_mul {x y : Int} {sx sy : Nat} {p : Nat × Nat}
+    (hsx : sx = bnat (x < 0)) (hsy : sy = bnat (y < 0))
+    (hmag : p.1 + M * p.2 = x.natAbs * y.natAbs)
+    (hlo : p.1 < M) (hhi : p.2 < M) :
+    Rep (psign sx sy p) p.1 p.2 (x * y) := by
+  unfold psign
+  generalize hp1 : p.1 = plo at hmag hlo ⊢
+  generalize hp2 : p.2 = phi at hmag hhi ⊢
+  have hmul : plo + M * phi = (x * y).natAbs := by
+    rw [hmag, Int.natAbs_mul]
+  have hM : (0 : Nat) < M := by simp only [M_val]; omega
+  refine ⟨?_, hmul, hlo, hhi⟩
+  by_cases hz : x * y = 0
+  · have h0 : plo = 0 ∧ phi = 0 := by
+      simp only [M_val] at hmul hM ⊢
+      omega
+    rw [bnat_true h0.1, bnat_true h0.2, bnat_false (show ¬ (x * y < 0) by omega)]
+    omega
+  · have hne : ¬ (plo = 0 ∧ phi = 0) := by
+      intro hc
+      simp only [hc.1, hc.2, M_val] at hmul
+      omega
+    have hfac : 1 - bnat (plo = 0) * bnat (phi = 0) = 1 := by
+      by_cases h1 : plo = 0
+      · rw [bnat_true h1, bnat_false (show ¬ (phi = 0) by
+          intro h2; exact hne ⟨h1, h2⟩)]
+      · rw [bnat_false h1]
+        omega
+    rw [hfac, Nat.mul_one, hsx, hsy]
+    have hx0 : x ≠ 0 := by intro h; apply hz; rw [h]; omega
+    have hy0 : y ≠ 0 := by intro h; apply hz; rw [h]; omega
+    have hcase := LeanCompCert.Ports.Section413Cells.mul_neg_cases x y
+    by_cases hxn : x < 0 <;> by_cases hyn : y < 0
+    · rw [bnat_true hxn, bnat_true hyn,
+        bnat_false (show ¬ (x * y < 0) by omega)]
+      decide
+    · rw [bnat_true hxn, bnat_false hyn,
+        bnat_true (show x * y < 0 by omega)]
+      decide
+    · rw [bnat_false hxn, bnat_true hyn,
+        bnat_true (show x * y < 0 by omega)]
+      decide
+    · rw [bnat_false hxn, bnat_false hyn,
+        bnat_false (show ¬ (x * y < 0) by omega)]
+      decide
+
+/-! ## §11 The rounding half: an exact `10¹⁸` division with the rounding
+picked by the sign
+
+`divP18Body` produces the floor and the ceiling of the *magnitude*; the
+model's outward rounding then selects one of them, and negates, according
+to the sign bit — exactly the four `Section413Cells` bridges
+`zfloorDiv_nonneg`/`zfloorDiv_neg`/`zceilDiv_nonneg`/`zceilDiv_neg`. -/
+
+theorem CAP_sq : CAP * CAP = 1329227995784915872903807060280344576 := by decide
+
+open LeanCompCert.Ports.Section413Cells (divP18q divP18ceil divP18q_spec
+  divP18ceil_spec zfloorDiv_nonneg zfloorDiv_neg zceilDiv_nonneg zceilDiv_neg)
+
+/-- The exact divider, evaluated at a capped magnitude. -/
+theorem tdiv18_of_Rep {s lo hi : Nat} {z : Int} (r : Rep s lo hi z)
+    (hb : z.natAbs ≤ CAP * CAP) :
+    tdiv18 lo hi =
+      (z.natAbs / 1000000000000000000,
+       (z.natAbs + 999999999999999999) / 1000000000000000000) := by
+  have hlo : lo < 18446744073709551616 := by
+    have := r.lo_lt; simp only [M_val] at this; exact this
+  have hhi : hi < 18446744073709551616 := by
+    have := r.hi_lt; simp only [M_val] at this; exact this
+  have hmag : lo + 18446744073709551616 * hi = z.natAbs := by
+    have := r.mag; simp only [M_val] at this; exact this
+  rw [CAP_sq] at hb
+  rw [tdiv18_eq lo hi hlo hhi (by omega)]
+  have hq : divP18q lo hi = z.natAbs / 1000000000000000000 := by
+    rw [divP18q_spec lo hi hlo hhi]
+    simp only [LeanCompCert.Ports.Section413Cells.P18,
+      LeanCompCert.Verified.MulWide.B64]
+    rw [hmag]
+  have hc : divP18ceil lo hi =
+      (z.natAbs + 999999999999999999) / 1000000000000000000 := by
+    rw [divP18ceil_spec lo hi hlo hhi]
+    simp only [LeanCompCert.Ports.Section413Cells.P18,
+      LeanCompCert.Verified.MulWide.B64]
+    rw [hmag]
+  rw [hq, hc]
+
+/-- Both quotients of a capped magnitude are small enough to encode. -/
+theorem quot_small {z : Int} (hb : z.natAbs ≤ CAP * CAP) :
+    z.natAbs / 1000000000000000000 < 9223372036854775808 ∧
+    (z.natAbs + 999999999999999999) / 1000000000000000000
+      < 9223372036854775808 := by
+  rw [CAP_sq] at hb
+  omega
+
+/-- The lower endpoint of the rounded cell: outward rounding picks the
+ceiling of the magnitude on the negative branch, the floor otherwise. -/
+def roundLo (s lo hi : Nat) : Nat :=
+  if s = 1 then tsub 0 (tdiv18 lo hi).2 else (tdiv18 lo hi).1
+
+/-- The upper endpoint of the rounded cell. -/
+def roundHi (s lo hi : Nat) : Nat :=
+  if s = 1 then tsub 0 (tdiv18 lo hi).1 else (tdiv18 lo hi).2
+
+/-! A note on tactic discipline in what follows.  `tsub` and `tdiv18` are
+`% 2⁶⁴`-saturated definitions whose bodies the kernel will happily try to
+*evaluate*: any tactic that forces a `whnf` through one of them (a `show`
+across an `ite`, say) sends the kernel into the five-digit long division
+and it reports "deep recursion".  Every `ite` below is therefore taken
+apart by a **syntactic** `rw [if_pos …]` / `rw [if_neg …]`, never by
+reduction, and `tdiv18` is rewritten away by `tdiv18_of_Rep` before
+anything else touches it. -/
+
+/-- The lower endpoint, negative branch. -/
+theorem divLo_neg {s lo hi : Nat} {z : Int} (r : Rep s lo hi z)
+    (hb : z.natAbs ≤ CAP * CAP) (hz : z < 0) :
+    tsub 0 (tdiv18 lo hi).2
+      = encodeZ (LeanCompCert.Ports.Section413Sweep.cfloorDiv z
+          LeanCompCert.Ports.Section413Sweep.SCALE) := by
+  obtain ⟨_, hs2⟩ := quot_small hb
+  rw [tdiv18_of_Rep r hb]
+  unfold LeanCompCert.Ports.Section413Sweep.cfloorDiv
+  rw [zfloorDiv_neg z LeanCompCert.Ports.Section413Sweep.SCALE hz (by decide)]
+  show tsub 0 ((z.natAbs + 999999999999999999) / 1000000000000000000)
+    = encodeZ (-(((z.natAbs + 999999999999999999) / 1000000000000000000
+        : Nat) : Int))
+  rw [tsub_zero_encodeZ_neg _ hs2]
+
+/-- The lower endpoint, nonnegative branch. -/
+theorem divLo_nonneg {s lo hi : Nat} {z : Int} (r : Rep s lo hi z)
+    (hb : z.natAbs ≤ CAP * CAP) (hz : ¬ z < 0) :
+    (tdiv18 lo hi).1
+      = encodeZ (LeanCompCert.Ports.Section413Sweep.cfloorDiv z
+          LeanCompCert.Ports.Section413Sweep.SCALE) := by
+  obtain ⟨hs1, _⟩ := quot_small hb
+  rw [tdiv18_of_Rep r hb]
+  unfold LeanCompCert.Ports.Section413Sweep.cfloorDiv
+  rw [zfloorDiv_nonneg z LeanCompCert.Ports.Section413Sweep.SCALE (by omega)]
+  show (z.natAbs / 1000000000000000000 : Nat)
+    = encodeZ ((z.natAbs / 1000000000000000000 : Nat) : Int)
+  rw [encodeZ_ofNat _ hs1]
+
+/-- **The lower endpoint**: floor division of the signed minimum by `10¹⁸`,
+outward-rounded through the magnitude. -/
+theorem divLo_spec {s lo hi : Nat} {z : Int} (r : Rep s lo hi z)
+    (hb : z.natAbs ≤ CAP * CAP) :
+    roundLo s lo hi
+      = encodeZ (LeanCompCert.Ports.Section413Sweep.cfloorDiv z
+          LeanCompCert.Ports.Section413Sweep.SCALE) := by
+  unfold roundLo
+  rw [r.sign]
+  by_cases hz : z < 0
+  · rw [bnat_true hz, if_pos (rfl : (1 : Nat) = 1)]
+    exact divLo_neg r hb hz
+  · rw [bnat_false hz, if_neg (by decide : ¬((0 : Nat) = 1))]
+    exact divLo_nonneg r hb hz
+
+/-- The upper endpoint, negative branch. -/
+theorem divHi_neg {s lo hi : Nat} {z : Int} (r : Rep s lo hi z)
+    (hb : z.natAbs ≤ CAP * CAP) (hz : z < 0) :
+    tsub 0 (tdiv18 lo hi).1
+      = encodeZ (LeanCompCert.Ports.Section413Sweep.cceilDiv z
+          LeanCompCert.Ports.Section413Sweep.SCALE) := by
+  obtain ⟨hs1, _⟩ := quot_small hb
+  rw [tdiv18_of_Rep r hb]
+  unfold LeanCompCert.Ports.Section413Sweep.cceilDiv
+  rw [zceilDiv_neg z LeanCompCert.Ports.Section413Sweep.SCALE hz]
+  show tsub 0 (z.natAbs / 1000000000000000000)
+    = encodeZ (-((z.natAbs / 1000000000000000000 : Nat) : Int))
+  rw [tsub_zero_encodeZ_neg _ hs1]
+
+/-- The upper endpoint, nonnegative branch. -/
+theorem divHi_nonneg {s lo hi : Nat} {z : Int} (r : Rep s lo hi z)
+    (hb : z.natAbs ≤ CAP * CAP) (hz : ¬ z < 0) :
+    (tdiv18 lo hi).2
+      = encodeZ (LeanCompCert.Ports.Section413Sweep.cceilDiv z
+          LeanCompCert.Ports.Section413Sweep.SCALE) := by
+  obtain ⟨_, hs2⟩ := quot_small hb
+  rw [tdiv18_of_Rep r hb]
+  unfold LeanCompCert.Ports.Section413Sweep.cceilDiv
+  rw [zceilDiv_nonneg z LeanCompCert.Ports.Section413Sweep.SCALE (by omega)
+      (by decide)]
+  show ((z.natAbs + 999999999999999999) / 1000000000000000000 : Nat)
+    = encodeZ (((z.natAbs + 999999999999999999) / 1000000000000000000
+        : Nat) : Int)
+  rw [encodeZ_ofNat _ hs2]
+
+/-- **The upper endpoint**: ceiling division of the signed maximum. -/
+theorem divHi_spec {s lo hi : Nat} {z : Int} (r : Rep s lo hi z)
+    (hb : z.natAbs ≤ CAP * CAP) :
+    roundHi s lo hi
+      = encodeZ (LeanCompCert.Ports.Section413Sweep.cceilDiv z
+          LeanCompCert.Ports.Section413Sweep.SCALE) := by
+  unfold roundHi
+  rw [r.sign]
+  by_cases hz : z < 0
+  · rw [bnat_true hz, if_pos (rfl : (1 : Nat) = 1)]
+    exact divHi_neg r hb hz
+  · rw [bnat_false hz, if_neg (by decide : ¬((0 : Nat) = 1))]
+    exact divHi_nonneg r hb hz
+
+/-! ## §12 The interval product
+
+`cmulBack` is the back half of `cmulBody` — the two comparisons, the two
+selections, the two 4-way reductions and the two divisions — transcribed
+from `tcmul`, which it equals definitionally (`tcmul_eq_back`). -/
+
+/-- The min/max/divide back half of the interval product. -/
+def cmulBack (s1 l1 h1 s2 l2 h2 s3 l3 h3 s4 l4 h4 : Nat) : Nat × Nat :=
+  let n1 := selMin s1 l1 h1 s2 l2 h2
+  let x1 := selMax s1 l1 h1 s2 l2 h2
+  let n2 := selMin s3 l3 h3 s4 l4 h4
+  let x2 := selMax s3 l3 h3 s4 l4 h4
+  let mn := selMin n1.1 n1.2.1 n1.2.2 n2.1 n2.2.1 n2.2.2
+  let mx := selMax x1.1 x1.2.1 x1.2.2 x2.1 x2.2.1 x2.2.2
+  (roundLo mn.1 mn.2.1 mn.2.2, roundHi mx.1 mx.2.1 mx.2.2)
+
+set_option maxHeartbeats 1000000 in
+/-- **`tcmul`'s two output words are exactly `cmulBack`** at the four
+canonicalized partial products.
+
+The eight `tmag`/`hl` results are taken as *abstract* hypotheses rather
+than inlined: substituting them would duplicate `hl`'s body four times and
+its two outputs a dozen times more, and the resulting term is far too
+large for the elaborator to check.  With them abstract, unfolding the
+whole block leaves a term whose atoms are variables. -/
+theorem tcmul_eq_back (gate aLo aHi bLo bHi viol : Nat)
+    {sa1 ma1 sa2 ma2 sb1 mb1 sb2 mb2 : Nat} {p1 p2 p3 p4 : Nat × Nat}
+    (ha1 : tmag aLo = (sa1, ma1)) (ha2 : tmag aHi = (sa2, ma2))
+    (hb1 : tmag bLo = (sb1, mb1)) (hb2 : tmag bHi = (sb2, mb2))
+    (hq1 : Verified.MulWide.hl ma1 mb1 = p1)
+    (hq2 : Verified.MulWide.hl ma1 mb2 = p2)
+    (hq3 : Verified.MulWide.hl ma2 mb1 = p3)
+    (hq4 : Verified.MulWide.hl ma2 mb2 = p4) :
+    ((tcmul gate aLo aHi bLo bHi viol).1,
+     (tcmul gate aLo aHi bLo bHi viol).2.1) =
+      cmulBack (psign sa1 sb1 p1) p1.1 p1.2
+               (psign sa1 sb2 p2) p2.1 p2.2
+               (psign sa2 sb1 p3) p3.1 p3.2
+               (psign sa2 sb2 p4) p4.1 p4.2 := by
+  simp only [tcmul, cmulBack, selMin, selMax, roundLo, roundHi, psign, ha1, ha2, hb1, hb2, hq1, hq2, hq3, hq4]
+
+/-- **The back half computes the outward-rounded interval product** of the
+four partial products. -/
+theorem cmulBack_spec {s1 l1 h1 s2 l2 h2 s3 l3 h3 s4 l4 h4 : Nat}
+    {v1 v2 v3 v4 : Int}
+    (r1 : Rep s1 l1 h1 v1) (r2 : Rep s2 l2 h2 v2)
+    (r3 : Rep s3 l3 h3 v3) (r4 : Rep s4 l4 h4 v4)
+    (b1 : v1.natAbs ≤ CAP * CAP) (b2 : v2.natAbs ≤ CAP * CAP)
+    (b3 : v3.natAbs ≤ CAP * CAP) (b4 : v4.natAbs ≤ CAP * CAP) :
+    cmulBack s1 l1 h1 s2 l2 h2 s3 l3 h3 s4 l4 h4 =
+      (encodeZ (LeanCompCert.Ports.Section413Sweep.cfloorDiv
+          (min (min v1 v2) (min v3 v4))
+          LeanCompCert.Ports.Section413Sweep.SCALE),
+       encodeZ (LeanCompCert.Ports.Section413Sweep.cceilDiv
+          (max (max v1 v2) (max v3 v4))
+          LeanCompCert.Ports.Section413Sweep.SCALE)) := by
+  have rmn := Rep_min (Rep_min r1 r2) (Rep_min r3 r4)
+  have rmx := Rep_max (Rep_max r1 r2) (Rep_max r3 r4)
+  rw [CAP_sq] at b1 b2 b3 b4
+  have bmn : (min (min v1 v2) (min v3 v4)).natAbs ≤ CAP * CAP := by
+    rw [CAP_sq]; omega
+  have bmx : (max (max v1 v2) (max v3 v4)).natAbs ≤ CAP * CAP := by
+    rw [CAP_sq]; omega
+  simp only [cmulBack, divLo_spec rmn bmn, divHi_spec rmx bmx]
+
+/-! ## §13 **The cell transfer**: `tcmul` is `Section413Sweep.cmul` -/
+
+/-- Each of the four partial products of two capped endpoints is a
+canonical triple for the `Int` product. -/
+theorem Rep_of_endpoints {x y : Int} (hx : x.natAbs ≤ CAP) (hy : y.natAbs ≤ CAP) :
+    Rep (psign (bnat (x < 0)) (bnat (y < 0))
+          (Verified.MulWide.hl x.natAbs y.natAbs))
+        (Verified.MulWide.hl x.natAbs y.natAbs).1
+        (Verified.MulWide.hl x.natAbs y.natAbs).2 (x * y) := by
+  have hxb : x.natAbs < LeanCompCert.Verified.MulWide.B64 := by
+    rw [B64_val]; simp only [CAP_val, M_val] at *; omega
+  have hyb : y.natAbs < LeanCompCert.Verified.MulWide.B64 := by
+    rw [B64_val]; simp only [CAP_val, M_val] at *; omega
+  have h1 := (Verified.MulWide.hl_spec x.natAbs y.natAbs hxb hyb).1
+  have h2 := (Verified.MulWide.hl_spec x.natAbs y.natAbs hxb hyb).2
+  have h3 := Verified.MulWide.hl_hi_lt x.natAbs y.natAbs hxb hyb
+  rw [B64_val] at h1 h2 h3
+  exact Rep_mul rfl rfl h1 h2 h3
+
+/-- Two capped endpoints have a product within the squared cap — the
+regime `divP18q_spec` needs. -/
+theorem mul_natAbs_le {x y : Int} (hx : x.natAbs ≤ CAP) (hy : y.natAbs ≤ CAP) :
+    (x * y).natAbs ≤ CAP * CAP := by
+  rw [Int.natAbs_mul]
+  exact Nat.mul_le_mul hx hy
+
+/-- **The interval product transfers.**  On a live gate, with the flag
+still clean after the block, the machine's `cmulBody` computes the encoded
+endpoints of `Section413Sweep.cmul` applied to the decoded input cells.
+
+This is step 2 of the obligation's architecture: everything below the
+model's `cmul` — the four 128-bit products, the branchless 4-way min and
+max, the exact `10¹⁸` divider and its sign-directed outward rounding — is
+now discharged in one lemma. -/
+theorem tcmul_spec {gate aLo aHi bLo bHi viol : Nat} (hg : 0 < gate)
+    (haLo : aLo < M) (haHi : aHi < M) (hbLo : bLo < M) (hbHi : bHi < M)
+    (hclean : (tcmul gate aLo aHi bLo bHi viol).2.2 = 0) :
+    ((tcmul gate aLo aHi bLo bHi viol).1,
+     (tcmul gate aLo aHi bLo bHi viol).2.1) =
+      (encodeZ (LeanCompCert.Ports.Section413Sweep.cmul
+          ⟨decodeZ aLo, decodeZ aHi⟩ ⟨decodeZ bLo, decodeZ bHi⟩).lo,
+       encodeZ (LeanCompCert.Ports.Section413Sweep.cmul
+          ⟨decodeZ aLo, decodeZ aHi⟩ ⟨decodeZ bLo, decodeZ bHi⟩).hi) := by
+  obtain ⟨-, hcap⟩ := tcmul_viol_eq_zero hclean
+  obtain ⟨c1, c2, c3, c4⟩ := hcap hg
+  rw [tmag_mag aLo haLo] at c1
+  rw [tmag_mag aHi haHi] at c2
+  rw [tmag_mag bLo hbLo] at c3
+  rw [tmag_mag bHi hbHi] at c4
+  have ha1 : tmag aLo = (bnat (decodeZ aLo < 0), (decodeZ aLo).natAbs) := by
+    rw [← tmag_sign aLo haLo, ← tmag_mag aLo haLo]
+  have ha2 : tmag aHi = (bnat (decodeZ aHi < 0), (decodeZ aHi).natAbs) := by
+    rw [← tmag_sign aHi haHi, ← tmag_mag aHi haHi]
+  have hb1 : tmag bLo = (bnat (decodeZ bLo < 0), (decodeZ bLo).natAbs) := by
+    rw [← tmag_sign bLo hbLo, ← tmag_mag bLo hbLo]
+  have hb2 : tmag bHi = (bnat (decodeZ bHi < 0), (decodeZ bHi).natAbs) := by
+    rw [← tmag_sign bHi hbHi, ← tmag_mag bHi hbHi]
+  rw [tcmul_eq_back gate aLo aHi bLo bHi viol ha1 ha2 hb1 hb2 rfl rfl rfl rfl,
+    cmulBack_spec (Rep_of_endpoints c1 c3) (Rep_of_endpoints c1 c4)
+      (Rep_of_endpoints c2 c3) (Rep_of_endpoints c2 c4)
+      (mul_natAbs_le c1 c3) (mul_natAbs_le c1 c4)
+      (mul_natAbs_le c2 c3) (mul_natAbs_le c2 c4)]
+  rfl
+
+/-! ## §14 The guard invariant
+
+The predicate the forward induction of the remaining obligation carries.
+It is a *definition*, not a claim; its preservation lemma is stated in the
+`OPEN` section below and is not proved here.
+
+Every persistent cell word and every live accumulator slot is `encodeZ` of
+an `Int` of magnitude at most `CAP`, so no `% 2⁶⁴` in the transparent model
+truncated anything; the μ plane holds only the codes `0/1/2`; and the flag
+itself is a bit. -/
+
+/-- The width part of the invariant on the register file. -/
+def RegsCapped (t : TState) : Prop :=
+  Capped t.wLo ∧ Capped t.wHi ∧ Capped t.wwLo ∧ Capped t.wwHi ∧
+  Capped t.dLo ∧ Capped t.dHi ∧ Capped t.gLo ∧ Capped t.gHi
+
+/-- The width part of the invariant on the two accumulator planes of a
+configuration, together with the μ plane's alphabet. -/
+def ArrCapped (c : Cfg) (t : TState) : Prop :=
+  (∀ d, d ≤ c.cap → Capped (t.arr (d + c.plane1))) ∧
+  (∀ d, d ≤ c.cap → Capped (t.arr (d + c.plane2))) ∧
+  (∀ d, d ≤ c.cap → t.arr d = 0 ∨ t.arr d = 1 ∨ t.arr d = 2)
+
+/-- **The guard invariant.**  Under it every word in flight decodes
+exactly, so the machine's wrapped arithmetic is the reference model's `Int`
+arithmetic. -/
+def Inv (c : Cfg) (t : TState) : Prop :=
+  t.viol ≤ 1 ∧ RegsCapped t ∧ ArrCapped c t
+
+/-- The initial state satisfies the invariant: the zero-filled array is the
+all-zero cell table, and `μ(1) = +1` is a legal μ code. -/
+theorem Inv_tInit (c : Cfg) : Inv c tInit := by
+  have hz : Capped 0 := by
+    unfold Capped decodeZ
+    simp only [cellsH63_val, CAP_val]
+    split <;> omega
+  refine ⟨by decide, ⟨hz, hz, hz, hz, hz, hz, hz, hz⟩, ?_, ?_, ?_⟩
+  · intro d _
+    show Capped (if d + c.plane1 = 1 then 1 else 0)
+    split
+    · unfold Capped decodeZ
+      simp only [cellsH63_val, CAP_val]
+      split <;> omega
+    · exact hz
+  · intro d _
+    show Capped (if d + c.plane2 = 1 then 1 else 0)
+    split
+    · unfold Capped decodeZ
+      simp only [cellsH63_val, CAP_val]
+      split <;> omega
+    · exact hz
+  · intro d _
+    show (if d = 1 then 1 else 0) = 0 ∨ (if d = 1 then 1 else 0) = 1 ∨
+      (if d = 1 then 1 else 0) = 2
+    split <;> simp
+
+/-! ## OPEN: what remains of obligation (2)
+
+Nothing below is proved; each item is stated exactly as it will have to be
+proved, so that the next pass can pick any one of them up in isolation.
+None of them is asserted anywhere in this file, as an axiom or otherwise.
+
+**(O1) The invariant is preserved on the clean branch.**
+
+```text
+theorem Inv_tstep (c : Cfg) (hc : Admissible c) (idx : Nat) (t : TState)
+    (hidx : idx < c.loopCount) (hI : Inv c t)
+    (hclean : (c.tstep idx t).viol = 0) : Inv c (c.tstep idx t)
+```
+
+The route is the one the guards were placed for: `tstep_viol_le` and
+`tcmul_viol_eq_zero`/`tguard_eq_zero` above turn `hclean` into the four
+magnitude bounds of every product and the six accumulator bounds of every
+touch; `capped_iff_guard_clean` turns each of those into `Capped`.
+
+**(O2) The touch block computes `Section413Sweep.touch`.**
+
+```text
+theorem ttouch_spec (c : Cfg) (g d : Nat) (t : TState) (hg : g = 1)
+    (hd : 0 < d) (hdc : d ≤ c.cap) (hI : Inv c t)
+    (hclean : (c.ttouch g d t).viol = 0)
+    (hmu : t.arr d = MertensCDEM.muCode d c.rounds) :
+    ((c.ttouch g d t).arr (d + c.plane1),
+     (c.ttouch g d t).arr (d + c.plane2),
+     (c.ttouch g d t).dLo, (c.ttouch g d t).dHi)
+      = (encodeZ (Section413Sweep.touch c.rounds W (A, D) d).1[d]!.lo, …)
+```
+
+where `A`, `W`, `D` are the decoded accumulator table, weight cell and
+delta cell.  The `cmul A w` and `cmul w w` halves are `tcmul_spec` above;
+what is left is the `csmul mu` case split on the μ code (three cases,
+`+1/−1/0`, the negative one swapping the endpoints — that is
+`Section413Sweep.csmul`'s own case split) and the two `cadd`s, each of
+which is `Section413Cells.encodeZ_add` under `Inv`.  A gated-off touch
+(`g = 0`) is the identity on the decoded state.
+
+**(O3) Phase 1 computes `μ`.**
+
+```text
+theorem phase1_muCode (c : Cfg) (hc : Admissible c) (h : c.tFlag = 0)
+    (n : Nat) (hn : 2 ≤ n) (hnc : n ≤ c.cap) :
+    (tRunUpto c ((n - 1) * c.rounds)).arr n
+      = MertensCDEM.muCode n c.rounds
+```
+
+The registers `res/sq/par` of `tstep` are literally
+`MertensCDEM.trialStep` at the decoded divisor, so this is an induction
+over the `c.rounds` rounds of the candidate-major block relating them to
+`MertensCDEM.trialRun`, then the decode `code = 0/1/2`.  `μ(1) = +1` is
+`tInit`.  `Admissible.cover` is what makes `muCode` correct for `n ≤ cap`.
+
+**(O4) Pass A computes `sigmaPair`.**
+
+```text
+theorem passA_sigma (c : Cfg) (X : Nat) (hX : 1 ≤ X) (hXc : X ≤ c.cap) :
+    (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s)).sigma
+      = Section413Sweep.sigmaPair X
+```
+
+An induction over the `c.s` rounds of pass A; the gate
+`X % r = 0 ∧ r² ≤ X` is the same divisor set as `sigmaPair`'s
+`List.range (Nat.sqrt X)` filter, and the `X / r ≠ r` suppression is the
+same.
+
+**(O5) The weight round computes `weightV2`.**
+
+```text
+theorem weight_spec (c : Cfg) … :
+    (decodeZ (…).wLo, decodeZ (…).wHi)
+      = ((Section413Sweep.weightV2 c.rounds X).lo,
+         (Section413Sweep.weightV2 c.rounds X).hi)
+```
+
+`⌊SCALE/σ⌋` and `⌈SCALE/σ⌉` against the μ code are `cratSMul (muZ X R)
+(sigmaPair X) cone` outward-rounded; the parity gate `X % 2 = 1` is
+`weightV2`'s.  Uses (O3) and (O4).
+
+**(O6) Pass B is one `stepDivisors` block.**
+
+```text
+theorem passB_stepDivisors (c : Cfg) … :
+    (decoded accumulator table, decoded delta) after the 2·s rounds
+      = Section413Sweep.stepDivisors c.rounds X W (A, czero)
+```
+
+The two gated touches per round realize exactly one iteration of
+`stepDivisors`' fold — divisor `r` and partner `X / r`, the partner
+suppressed when equal — so this is (O2) plus an induction over `c.s`.
+
+**(O7) Finalize is `cadd` and `g2Check`.**
+
+```text
+theorem fin_spec (c : Cfg) … (hclean : …) :
+    c.checkLo ≤ X → Section413Sweep.g2Check X G' = true
+```
+
+`g += delta` is `cadd`; the two wide comparisons against the two-limb
+literal `21·10¹⁸` are `g2Check` of the decoded `g` cell — via
+`Verified.MulWide.hl_spec` on `|g.lo| · 10X` and `|g.hi| · 10X`, with the
+sign registers `sLo`/`sHi` selecting which side of the two-sided test the
+comparison discharges.
+
+**(O8) The run.**
+
+```text
+theorem tFlag_zero_sound (c : Cfg) (hc : Admissible c) (h : c.tFlag = 0) :
+    Section413Sweep.g2SweepOK c.rounds c.checkLo c.cap = true
+```
+
+One induction over `List.range c.loopCount` relating `tRunUpto c k` to the
+prefix state of `Section413Sweep.g2Run`, using
+`tRunUpto_viol_zero_of_tFlag` to keep the flag clean at every prefix and
+(O1)–(O7) for the per-block steps; the Boolean is then read off the final
+state.  This is the obligation itself.
+-/
+
 end LeanCompCert.Ports.Section413G2Sound
