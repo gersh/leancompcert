@@ -88,7 +88,9 @@ theorem tdb_facts (n : Nat) (hn : 1 ≤ n) : ∀ D,
     (tdbBlock D n).sq ≤ 1 := by
   intro D
   induction D with
-  | zero => exact ⟨hn, by omega, by omega⟩
+  | zero =>
+      refine ⟨?_, ?_, ?_⟩ <;> simp only [tdbBlock, List.range_zero,
+        List.foldl_nil] <;> omega
   | succ D ih =>
       obtain ⟨hm, hphi, hsq⟩ := ih
       have hstep : tdbBlock (D + 1) n = tdbRound (D + 2) (tdbBlock D n) :=
@@ -98,9 +100,12 @@ theorem tdb_facts (n : Nat) (hn : 1 ≤ n) : ∀ D,
       split
       · rename_i hdvd
         refine ⟨?_, ?_, ?_⟩
-        · have hdm := Nat.div_add_mod (tdbBlock D n).m (D + 2)
+        · -- `(D+2) * (m/(D+2))` is nonlinear, so omega cannot link it to
+          -- `m/(D+2)`; go through the divisibility instead.
+          have hle : D + 2 ≤ (tdbBlock D n).m :=
+            Nat.le_of_dvd (by omega) (Nat.dvd_of_mod_eq_zero hdvd)
           simp only []
-          omega
+          exact Nat.div_pos hle (by omega)
         · simp only []
           have h1 : 1 ≤ D + 2 - 1 := by omega
           calc 1 = 1 * 1 := rfl
@@ -124,20 +129,20 @@ theorem tdbFinal_pos (n : Nat) (hn : 1 ≤ n) (D : Nat) :
 /-- The ceiling of `2⁴⁴/pf` is at most `2⁴⁴` for positive `pf`. -/
 theorem ceil_le (pf : Nat) (hpf : 1 ≤ pf) :
     (2 ^ 44 + pf - 1) / pf ≤ 2 ^ 44 := by
-  by_contra hcon
-  have h1 : 2 ^ 44 + 1 ≤ (2 ^ 44 + pf - 1) / pf := by omega
-  have h2 : (2 ^ 44 + 1) * pf ≤ (2 ^ 44 + pf - 1) / pf * pf :=
-    Nat.mul_le_mul_right _ h1
-  have h3 : (2 ^ 44 + pf - 1) / pf * pf ≤ 2 ^ 44 + pf - 1 :=
-    Nat.div_mul_le_self _ _
-  have h4 : (2 ^ 44 + 1) * pf = 2 ^ 44 * pf + pf := by
-    rw [Nat.add_mul, Nat.one_mul]
-  have h5 : 2 ^ 44 ≤ 2 ^ 44 * pf := Nat.le_mul_of_pos_right _ hpf
+  -- direct: this package has no `by_contra`
+  have hpos : 0 < pf := hpf
+  have hlt : (2 ^ 44 + pf - 1) / pf < 2 ^ 44 + 1 := by
+    refine (Nat.div_lt_iff_lt_mul hpos).mpr ?_
+    have h1 : (2 ^ 44 + 1) * pf = 2 ^ 44 * pf + pf := by
+      rw [Nat.add_mul, Nat.one_mul]
+    have h2 : 2 ^ 44 ≤ 2 ^ 44 * pf := Nat.le_mul_of_pos_right _ hpos
+    omega
   omega
 
 /-- The candidate term is at most `2⁴⁴`. -/
 theorem gfTerm_le (D n : Nat) (hn : 1 ≤ n) : gfTerm D n ≤ 2 ^ 44 := by
-  unfold gfTerm
+  -- `simp only` zeta-reduces the `let`s; `unfold` leaves them opaque to omega
+  simp only [gfTerm]
   obtain ⟨_, _, hsq⟩ := tdb_facts n hn D
   have h1 := ceil_le _ (tdbFinal_pos n hn D)
   have h2 : (tdbBlock D n).sq *
@@ -170,7 +175,7 @@ theorem orFold_le (c : Params) (n acc : Nat) : ∀ m,
     orFold c n acc m ≤ 1 := by
   intro m
   induction m with
-  | zero => exact Nat.le_of_eq rfl
+  | zero => simp [orFold]
   | succ m ih =>
       rw [orFold_succ]
       have h1 := hitAt_le c n m acc
@@ -184,7 +189,7 @@ theorem orFold_extract (c : Params) (n acc : Nat) : ∀ m,
     orFold c n acc m = 1 → ∃ i, i < m ∧ hitAt c n i acc = 1 := by
   intro m
   induction m with
-  | zero => intro h; exact absurd h (by decide)
+  | zero => intro h; simp [orFold] at h
   | succ m ih =>
       intro h
       rw [orFold_succ] at h
@@ -208,6 +213,6 @@ theorem candPass_of_orFold (c : Params) (n acc : Nat)
   obtain ⟨i, hi, hh⟩ := orFold_extract c n acc c.bmax h
   unfold candPass
   rw [List.any_eq_true]
-  exact ⟨i, List.mem_range.mpr hi, by rw [hh]⟩
+  exact ⟨i, List.mem_range.mpr hi, by rw [hh]; decide⟩
 
 end LeanCompCert.Ports.GFoldCheck
