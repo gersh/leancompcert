@@ -1,0 +1,42 @@
+GFoldCheck production artifact — measured run
+=============================================
+
+Config (Params ⟨lo, len, tdiv, bmax, split, m0⟩):
+  ⟨2, 99999, 317, 48, 20000, 17592186044416⟩
+  m0 = 2^44 = gTermFx 1, matching the atom `gFold 99999 2 (gTermFx 1)`.
+  loopCount = len * (tdiv + bmax) = 99999 * 365 = 36 499 635 iterations.
+
+Emit:
+  lake env lean --run bench/GFoldCheckEmit.lean 2 99999 317 48 20000 \
+    17592186044416 gfold.c
+  -> "2 99999 317 48 20000 17592186044416 36499635 ok"
+
+Compile (CompCert C verified compiler, version 3.17):
+  ccomp -O2 gfold.c -o gfold_bin
+  wall 0.100 s (user 0.080 s, sys 0.021 s)
+
+Run:
+  ./gfold_bin
+  exit   = 0            (main returns 0 iff the output register holds 1,
+                         i.e. the good flag is set: every candidate passed
+                         some exponent-pair threshold check with the
+                         accumulator below the cap)
+  wall   = 0.943508952 s
+
+sha256:
+  gfold.c    7ba7e5d5583b8e23da646ff8bcc055698995fca91da4023cef20cf6fe8b62482
+  gfold_bin  9aaed79681ad6e9b2b171b89a515217f306f06b3da61a350b4347ad0ca2fba32
+
+Discrimination controls (the reason exit=0 above is informative):
+  negative: ⟨2, 200, 317, 48, 20000, 999999999999999⟩  -> exit 1  (fails)
+  positive: ⟨2, 200, 317, 48, 20000, 17592186044416⟩   -> exit 0  (passes)
+  Same binary shape, same range, seed the only difference: the program
+  does discriminate, so acceptance is not vacuous.
+
+NOTE: this run is evidence for the pending axiom, not a discharge of it.
+The axiom to be stated is exactly
+
+  placeholder_gFoldCompCertRun_pendingCertificate :
+    (gFoldComputation cfg).Returns 1
+
+and nothing between it and the atom may be assumed.
