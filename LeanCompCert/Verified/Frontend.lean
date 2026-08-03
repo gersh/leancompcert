@@ -398,7 +398,13 @@ declare_syntax_cat frontendExpr
 
 syntax:max "#" num : frontendExpr
 syntax:max num : frontendExpr
-syntax:max "idx" : frontendExpr
+-- ⚠ The loop index token is `@idx`, not `idx`.  Lean's token table is GLOBAL:
+-- registering a bare identifier here would stop `idx` being usable as an
+-- identifier in EVERY module that transitively imports this one.  A consumer
+-- binding `(idx : Nat → Nat)` then fails to parse, far from any mention of
+-- this package.  Every other token in this category is a non-identifier
+-- symbol (`#`, `+`, `==`, …) and is therefore safe; keep it that way.
+syntax:max "@idx" : frontendExpr
 syntax:max "(" frontendExpr ")" : frontendExpr
 syntax:65 frontendExpr:65 " + " frontendExpr:66 : frontendExpr
 syntax:65 frontendExpr:65 " - " frontendExpr:66 : frontendExpr
@@ -418,7 +424,7 @@ syntax "expr!(" frontendExpr ")" : term
 macro_rules
   | `(expr!(# $n)) => `(Expr.reg $n)
   | `(expr!($n:num)) => `(Expr.lit $n)
-  | `(expr!(idx)) => `(Expr.idx)
+  | `(expr!(@idx)) => `(Expr.idx)
   | `(expr!(($a))) => `(expr!($a))
   | `(expr!($a + $b)) => `(Expr.bin Op.add expr!($a) expr!($b))
   | `(expr!($a - $b)) => `(Expr.bin Op.sub expr!($a) expr!($b))
@@ -433,7 +439,7 @@ macro_rules
   | `(expr!($a >= $b)) => `(Expr.bin Op.ge expr!($a) expr!($b))
 
 example :
-    expr!(# 0 + 5 * idx) =
+    expr!(# 0 + 5 * @idx) =
       Expr.bin .add (.reg 0) (.bin .mul (.lit 5) .idx) := rfl
 
 example :
