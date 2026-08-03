@@ -43,8 +43,8 @@ The precedent is not hypothetical.  Downstream, an artifact that computed ψ was
 registered alongside a Lean certificate that checked a fixed-point upper bound
 against a slope: two correct halves, no arrow between them, and a green run that
 bore on nothing.  `ChainProof` is typed so that mistake cannot be *registered*:
-its `sound` field is a function out of `artifact.computation.Returns`, so it is
-about the computation this artifact compiles and no other.
+its `sound` field is a function out of `artifact.body.Returns`, so it is
+about the body this artifact compiles and no other.
 
 ## Fail closed
 
@@ -233,8 +233,8 @@ def listingOfComputation (c : Computation) : String :=
 /-- **A proved Lean chain from this artifact's run to a mathematical
 proposition.**
 
-`sound` is the whole content: a function *out of* `artifact.computation.Returns
-acceptingValue`.  Because the domain mentions `artifact.computation`, a
+`sound` is the whole content: a function *out of* `artifact.body.Returns
+acceptingValue`.  Because the domain mentions `artifact.body`, a
 `ChainProof` cannot be built from a decision about some other program — which
 is exactly the mistake this type exists to make unregistrable.
 
@@ -265,22 +265,25 @@ structure ChainProof (artifact : Artifact) where
   acceptingValue : Int
   /-- The proposition itself. -/
   prop : Prop
-  /-- **The arrow.**  A run of *this artifact's computation* reporting
+  /-- **The arrow.**  A run of *this artifact's body* reporting
   `acceptingValue` proves `prop`. -/
-  sound : artifact.computation.Returns acceptingValue → prop
+  sound : artifact.body.Returns acceptingValue → prop
 
 /-- Build a `ChainProof` from a `Decision` — the equivalence-shaped packaging
 (`Verified.Decision`).  `same` is the clause that pins the decision to this
 artifact; it is `rfl` whenever the registry names the same `Computation` the
 artifact was built from. -/
 def ChainProof.ofDecision {p : Prop} (artifact : Artifact) (d : Decision p)
-    (same : d.computation = artifact.computation)
+    (same : artifact.body.sourceResult = d.computation.sourceResult)
     (proposition provedBy : String) : ChainProof artifact := {
   proposition
   provedBy
   acceptingValue := d.acceptingValue
   prop := p
-  sound := fun h => d.prove (by rw [same]; exact h)
+  sound := fun h => d.prove (by
+    show d.computation.sourceResult = some d.acceptingValue
+    rw [← same]
+    exact h)
 }
 
 /-- Build a `ChainProof` from a `ProgramClaim` — the forward-only packaging
@@ -291,13 +294,16 @@ refinement is proved structurally, for every input, rather than by evaluating
 the loop. -/
 def ChainProof.ofClaim {p : Prop} (artifact : Artifact) (name : String)
     (c : Verified.Algorithm.ProgramClaim p)
-    (same : c.computation name = artifact.computation)
+    (same : artifact.body.sourceResult = (c.computation name).sourceResult)
     (proposition provedBy : String) : ChainProof artifact := {
   proposition
   provedBy
   acceptingValue := ((c.acceptingValue : Nat) : Int)
   prop := p
-  sound := fun h => c.prove name (by rw [same]; exact h)
+  sound := fun h => c.prove name (by
+    show (c.computation name).sourceResult = some ((c.acceptingValue : Nat) : Int)
+    rw [← same]
+    exact h)
 }
 
 /-- **The chain column is not decoration.**
@@ -315,10 +321,12 @@ theorem ChainProof.prop_of_receipt {crypto : ReceiptCrypto} {artifact : Artifact
     (bound :
       receiptBinds crypto artifact kind params nonce c.acceptingValue receipt
         = true)
+    (covered : artifact.coveredByProvedChain = true)
     (admitted : RunAdmission crypto artifact receipt) : c.prop :=
-  c.sound (returns_of_receipt bound admitted)
+  c.sound (returns_of_receipt bound covered admitted)
 
-/-- The same, on the emission route with no unmechanised step in it. -/
+/-- The same, with the coverage condition read off `receiptBindsProved` rather
+than supplied separately — available on both routes; see `ArtifactBody`. -/
 theorem ChainProof.prop_of_receipt_proved {crypto : ReceiptCrypto}
     {artifact : Artifact} {kind : AttestationKind} {params nonce : String}
     {receipt : RunReceipt} (c : ChainProof artifact)
@@ -326,9 +334,9 @@ theorem ChainProof.prop_of_receipt_proved {crypto : ReceiptCrypto}
       receiptBindsProved crypto artifact kind params nonce c.acceptingValue
         receipt = true)
     (admitted : RunAdmission crypto artifact receipt) :
-    artifact.route = EmissionRoute.provedStraightLine ∧ c.prop :=
+    artifact.coveredByProvedChain = true ∧ c.prop :=
   ⟨(receiptBindsProved_sound bound).1,
-    c.sound (returns_of_receipt (receiptBindsProved_sound bound).2 admitted)⟩
+    c.sound (returns_of_receipt_proved bound admitted)⟩
 
 /-! ## What Lean knows about a registered program -/
 

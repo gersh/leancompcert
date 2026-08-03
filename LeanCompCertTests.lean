@@ -328,13 +328,12 @@ consistent halves come to be about different things. -/
 private def ledgerArtifact : Attest.Artifact := LeanCompCertTests.Attest.artifact
 
 private def ledgerEmitted : Except (Array String) String :=
-  Attest.emitFor ledgerArtifact.computation ledgerArtifact.route
-    ledgerArtifact.mainC
+  Attest.emitFor ledgerArtifact.body ledgerArtifact.mainC
 
 /-- A `ChainProof` for the test artifact, accepting `204`. -/
 private def ledgerChain : Attest.ChainProof ledgerArtifact :=
   Attest.ChainProof.ofDecision ledgerArtifact
-    (Verified.Decision.forResult ledgerArtifact.computation 204) rfl
+    (Verified.Decision.forResult LeanCompCertTests.Attest.computation 204) rfl
     "the computation returns 204" "LeanCompCertTests.ledgerChain"
 
 private def ledgerEntry : Attest.ProgramEntry := {
@@ -343,7 +342,7 @@ private def ledgerEntry : Attest.ProgramEntry := {
   emitted := ledgerEmitted
   certifiedValue := some 204
   entryPoint := "l_Attest_squareSum"
-  shape := Attest.ProgramShape.ofComputation ledgerArtifact.computation
+  shape := Attest.ProgramShape.ofComputation LeanCompCertTests.Attest.computation
   leanSide := .chained ledgerArtifact ledgerChain }
 
 private def testProgramLedger : IO Unit := do

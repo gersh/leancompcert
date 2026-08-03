@@ -175,33 +175,27 @@ certificates have one, and the reason is structural rather than an oversight —
 see the `.unbindable` entries below. -/
 
 private def verifiedDecideArtifact : Attest.Artifact := {
-  computation := Testing.VerifiedDecide.computation
-  route := .provedStraightLine
+  body := .straightLine Testing.VerifiedDecide.computation
   mainC := Testing.VerifiedDecide.mainC }
 
 private def mertensArtifact : Attest.Artifact := {
-  computation := Testing.MertensCertificate.computation
-  route := .provedStraightLine
+  body := .straightLine Testing.MertensCertificate.computation
   mainC := Testing.MertensCertificate.mainC }
 
 private def wideMertensArtifact : Attest.Artifact := {
-  computation := Testing.WideMertensCertificate.computation
-  route := .provedStraightLine
+  body := .straightLine Testing.WideMertensCertificate.computation
   mainC := Testing.WideMertensCertificate.mainC }
 
 private def squarefreeMertensArtifact : Attest.Artifact := {
-  computation := Testing.SquarefreeMertensCertificate.computation
-  route := .provedStraightLine
+  body := .straightLine Testing.SquarefreeMertensCertificate.computation
   mainC := Testing.SquarefreeMertensCertificate.mainC }
 
 private def reflectedArtifact : Attest.Artifact := {
-  computation := Testing.ReflectedCertificate.computation
-  route := .provedStraightLine
+  body := .straightLine Testing.ReflectedCertificate.computation
   mainC := Testing.ReflectedCertificate.mainC }
 
 private def fixedPointArtifact : Attest.Artifact := {
-  computation := Testing.FixedPointCertificate.computation
-  route := .provedStraightLine
+  body := .straightLine Testing.FixedPointCertificate.computation
   mainC := Testing.FixedPointCertificate.mainC }
 
 /-- The end-to-end algorithm example, wired into the cross-check.
@@ -227,13 +221,11 @@ private def algorithmMainC : String :=
   Attest.selfCheckMain "l_AlgorithmProof_sumRange" 1
 
 private def algorithmArtifact : Attest.Artifact := {
-  computation := algorithmComputation
-  route := .provedStraightLine
+  body := .straightLine algorithmComputation
   mainC := algorithmMainC }
 
 private def algorithmEmitted : Except (Array String) String :=
-  Attest.emitFor algorithmArtifact.computation algorithmArtifact.route
-    algorithmArtifact.mainC
+  Attest.emitFor algorithmArtifact.body algorithmArtifact.mainC
 
 /-! ### The entries -/
 
@@ -379,8 +371,7 @@ private def registry : List Attest.ProgramEntry := [
     summary := "the fixed-point fold at 10⁷ iterations, emitted as a while \
       loop: a 2 KB artifact for a computation the unrolled form cannot express"
     emitted := Testing.RolledFixedPoint.emittedC
-    routeLabel := Attest.EmissionRoute.rolledLoop
-      Testing.RolledFixedPoint.program "FixedPoint.rolled10M" |>.label
+    routeLabel := Attest.EmissionRoute.rolledLoop.label
     certifiedValue := some (Testing.RolledFixedPoint.expectedBig : Nat)
     entryPoint := "l_FixedPoint_rolled10M"
     shape := Attest.ProgramShape.ofProgram Testing.RolledFixedPoint.program
@@ -404,8 +395,7 @@ private def registry : List Attest.ProgramEntry := [
       N = 274877906947·2⁵² + 1, by Montgomery multiplication in 64-bit \
       registers with no division"
     emitted := Testing.ProthCertificate.emittedC
-    routeLabel := Attest.EmissionRoute.rolledLoop
-      Testing.ProthCertificate.program "ProthCertificate" |>.label
+    routeLabel := Attest.EmissionRoute.rolledLoop.label
     certifiedValue := some 0
     entryPoint := "l_ProthCertificate"
     shape := Attest.ProgramShape.ofProgram Testing.ProthCertificate.program
