@@ -852,7 +852,91 @@ theorem tcmul_spec {gate aLo aHi bLo bHi viol : Nat} (hg : 0 < gate)
       (mul_natAbs_le c2 c3) (mul_natAbs_le c2 c4)]
   rfl
 
-/-! ## §14 The guard invariant
+/-! ## §14 Encoded arithmetic transfers
+
+The wrapped `u64` operations of the transparent model are the reference
+model's `Int` operations on the decoded endpoints.  Unconditionally the
+machine computes `encodeZ` of the right value; the *capped* forms below add
+that no wrap occurred, so `decodeZ` reads it back — that is exactly what
+the runtime guards buy, since two capped endpoints sum to at most
+`2·CAP = 2⁶¹`, comfortably inside the signed range `2⁶³`. -/
+
+theorem encodeZ_zero : encodeZ 0 = 0 := rfl
+
+/-- Machine addition of two encoded endpoints (`encodeZ_add`). -/
+theorem add_transfer (a b : Nat) (ha : a < M) (hb : b < M) :
+    (a + b) % M = encodeZ (decodeZ a + decodeZ b) := by
+  have h := LeanCompCert.Ports.Section413Cells.encodeZ_add (decodeZ a) (decodeZ b)
+  rw [encodeZ_decodeZ_self ha, encodeZ_decodeZ_self hb] at h
+  rw [← h]
+  rfl
+
+/-- Machine doubling, which the touch block writes as `x + x`
+(`encodeZ_double`). -/
+theorem double_transfer (a : Nat) (ha : a < M) :
+    (a + a) % M = encodeZ (2 * decodeZ a) := by
+  have h := LeanCompCert.Ports.Section413Cells.encodeZ_double (decodeZ a)
+  rw [encodeZ_decodeZ_self ha] at h
+  rw [show a + a = 2 * a by omega, ← h]
+  rfl
+
+/-- A gated copy `g · x` with `g` a `0`/`1` gate. -/
+theorem gate_transfer (g a : Nat) (hg : g ≤ 1) (ha : a < M) :
+    (g * a) % M = encodeZ (if g = 1 then decodeZ a else 0) := by
+  rcases (show g = 0 ∨ g = 1 by omega) with rfl | rfl
+  · rw [if_neg (by decide : ¬((0 : Nat) = 1)), encodeZ_zero, Nat.zero_mul]
+    exact Nat.zero_mod M
+  · rw [if_pos rfl, encodeZ_decodeZ_self ha, Nat.one_mul]
+    exact Nat.mod_eq_of_lt ha
+
+/-- **Addition transfers exactly** when both operands are capped: the sum
+is at most `2·CAP` in magnitude, so nothing wrapped. -/
+theorem decodeZ_add {a b : Nat} (ha : a < M) (hb : b < M)
+    (ca : Capped a) (cb : Capped b) :
+    decodeZ ((a + b) % M) = decodeZ a + decodeZ b := by
+  unfold Capped at ca cb
+  rw [add_transfer a b ha hb]
+  refine decodeZ_encodeZ _ ?_ ?_ <;>
+    (simp only [cellsH63_val, CAP_val] at *; omega)
+
+/-- **Doubling transfers exactly** on a capped operand. -/
+theorem decodeZ_double {a : Nat} (ha : a < M) (ca : Capped a) :
+    decodeZ ((a + a) % M) = 2 * decodeZ a := by
+  unfold Capped at ca
+  rw [double_transfer a ha]
+  refine decodeZ_encodeZ _ ?_ ?_ <;>
+    (simp only [cellsH63_val, CAP_val] at *; omega)
+
+/-- **Negation transfers exactly** on a capped operand. -/
+theorem decodeZ_tsub_zero {a : Nat} (ha : a < M) (ca : Capped a) :
+    decodeZ (tsub 0 a) = -decodeZ a := by
+  unfold Capped at ca
+  rw [tsub_eq_encodeZ 0 a (by simp only [M_val]; omega) ha,
+    LeanCompCert.Ports.Section413Cells.decodeZ_zero, Int.zero_sub]
+  refine decodeZ_encodeZ _ ?_ ?_ <;>
+    (simp only [cellsH63_val, CAP_val] at *; omega)
+
+/-- **A gated copy transfers exactly** on a capped operand. -/
+theorem decodeZ_gate {g a : Nat} (hg : g ≤ 1) (ha : a < M) :
+    decodeZ ((g * a) % M) = if g = 1 then decodeZ a else 0 := by
+  rcases (show g = 0 ∨ g = 1 by omega) with rfl | rfl
+  · rw [if_neg (by decide : ¬((0 : Nat) = 1)), Nat.zero_mul, Nat.zero_mod]
+    exact LeanCompCert.Ports.Section413Cells.decodeZ_zero
+  · rw [if_pos rfl, Nat.one_mul, Nat.mod_eq_of_lt ha]
+
+/-- The two outputs of `tcmul` are `u64`s (they are `encodeZ` images). -/
+theorem tcmul_lt {gate aLo aHi bLo bHi viol : Nat} (hg : 0 < gate)
+    (haLo : aLo < M) (haHi : aHi < M) (hbLo : bLo < M) (hbHi : bHi < M)
+    (hclean : (tcmul gate aLo aHi bLo bHi viol).2.2 = 0) :
+    (tcmul gate aLo aHi bLo bHi viol).1 < M ∧
+    (tcmul gate aLo aHi bLo bHi viol).2.1 < M := by
+  have h := tcmul_spec hg haLo haHi hbLo hbHi hclean
+  rw [Prod.mk.injEq] at h
+  refine ⟨?_, ?_⟩
+  · rw [h.1]; exact encodeZ_lt_M _
+  · rw [h.2]; exact encodeZ_lt_M _
+
+/-! ## §15 The guard invariant
 
 The predicate the forward induction of the remaining obligation carries.
 It is a *definition*, not a claim; its preservation lemma is stated in the
