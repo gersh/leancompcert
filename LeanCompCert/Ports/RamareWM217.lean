@@ -2,6 +2,7 @@ import LeanCompCert.Ports.RS62Increments
 import LeanCompCert.Verified.ScalarLift
 import LeanCompCert.Verified.ArrayBridge
 import LeanCompCert.Verified.ArrayScalarBlock
+import LeanCompCert.Verified.BlockDefined
 
 /-!
 # The Helfgott (2.17) weighted-moment sweep as an array program
@@ -73,6 +74,15 @@ Proved here:
 * `wmProgram_wf` — well-formedness, for every configuration; so
   `AProgram.evalCC_compile` applies and the emitted C computes exactly
   `AProgram.denote`;
+* **`wmBody_defined`** — the body is *defined* at every index the loop visits,
+  on any state satisfying the cross-iteration invariant `Inv`.  Every one of
+  the seven partial instructions in the 137 is discharged: the decode's `urem`
+  and `udiv` by the literal `B`, the scan's `urem` by the decoded trial
+  divisor, the seed-table `load`, and the ladder's three divisions by `n`,
+  `2·n` and `n − 1`.  The supporting register specs — `decode_rR`,
+  `decode_rN`, `decode_rD`, `scan_rS`, `select_rIsP`, `select_rP_of_ne`,
+  `load_index_lt` — are the arithmetic half of the encoding obligation below,
+  proved here and reusable there;
 * two kernel smoke checks: at a tiny configuration the 135-instruction body
   denotes exactly the independently written candidate-level reference
   `wmRef`, run both in passing and in violating sizings.
@@ -82,8 +92,11 @@ every admissible `c`.  That is the encoding obligation; it is *stated* below
 as `WMEncoding`, shaped for `ArrayFoldBridge` (the body is one flat loop, the
 array is written only in `init`), and it is what turns a run of this artifact
 into `WM217Rows` through the goldbach tree's
-`checkWeightedMomentTable_eq_true_iff`.  Until it is proved, a campaign entry
-for this artifact must carry `evaluates_atom_predicate: false`.
+`checkWeightedMomentTable_eq_true_iff`.  Definedness (above) is one of its two
+halves; the other two are the *value* of the body — every register, not just
+the divisors — and the re-blocking of the flat `len·B` loop into candidates.
+Until they are proved, a campaign entry for this artifact must carry
+`evaluates_atom_predicate: false`.
 -/
 
 namespace LeanCompCert.Ports.RamareWM217
@@ -95,7 +108,10 @@ open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Ports.RS62
 open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Verified.ArrayFoldBridge
-open LeanCompCert.Verified.InstrBlock (srun)
+open LeanCompCert.Verified.RegFrame
+open LeanCompCert.Verified.BlockDefined
+open LeanCompCert.Verified.InstrBlock
+  (srun sval sdest SDefined SAllDefined NoDivI srun_append SAllDefined_append)
 
 /-! ## Configuration -/
 
@@ -552,58 +568,622 @@ theorem decodeBlock_defined (c : Cfg) (k : Nat) (s : AState) (hBM : c.B < M)
     simp [decodeBlock, InstrBlock.SDefined, InstrBlock.sdest, InstrBlock.sval,
       denoteOperand, denoteOp, hbne]
 
-/-! ### The other two partial stages, and a measured obstruction
+/-! ### The other two partial stages
 
-`decodeBlock_defined` goes through as written: its divisor is a literal, so
-the threaded state never has to be evaluated.  The scan and the ladder do not,
-and the two failures are different and both worth recording.
+The previous pass recorded two obstructions here, and both were the absence of
+a generic primitive rather than anything about this program.
 
 **The scan.**  Its `urem` divisor is `rD`, set by the *decode* four
-instructions earlier, so the goal carries four nested `RegState.set`s and
-`simp` must frame `rD` through them.  That is `InstrBlock.srun_untouched`'s
-job, not `simp`'s; the fix is a framing lemma, not a bigger simp set.
+instructions earlier, so the goal carried four nested `RegState.set`s.  That
+is framing, and `Verified/RegFrame.lean` now does it: `srun_frame` erases a
+block that does not write the register, on a `by decide` over register indices.
 
-**The ladder.**  Unfolding `ladderBlock` inside `simp` trips the kernel's
-recursion guard outright:
+**The ladder.**  Unfolding `ladderBlock` inside `simp` tripped the kernel's
+recursion guard outright — the ladder is the one block whose operands are
+`fpD`-scale literals, and the `% M` around each `denoteOp` put a symbolic
+register next to one of them.  Reordering the operands would fix it and would
+also change the emitted C, invalidating the measured production run, so the
+fix had to be proof-side: `Verified/BlockDefined.lean` advances the obligation
+one stage at a time and turns *only* the divisions into values.  The ladder
+proof below never unfolds the arithmetic of the twelve instructions that are
+not divisions, so `fpD3` and `fpD` appear in no goal at all.
 
-```text
-LeanCompCert/Ports/RamareWM217.lean:566:8: error: (kernel) deep recursion detected
-```
-
-This is the big-numeral class, and it localises it: the ladder is the one
-block whose operands are `fpD`-scale literals (`fpD3 = 8.4·10¹⁴`), and the
-`% M` around each `denoteOp` puts a symbolic register next to one of them.
-Writing `3 * fpD` as the plain numeral `fpD3` (above) was necessary but is
-not sufficient — the remaining cost is in `simp`'s own normalisation of
-`(reg ⊕ literal) % M`, so the fix is to keep the literals *out* of the
-normal form: frame the divisor registers first and never unfold the
-arithmetic of the non-division instructions at all.
-
-Both are mechanical and neither is mathematical, but both are real work, so
-they are recorded here rather than papered over.
+The sub-block names below are a `rfl`-provable regrouping of the very same
+instruction lists — `decodeBlock`, `scanBlock` and `ladderBlock` are
+unchanged, so the emitted C is unchanged.
 -/
 
-/-! ## What remains for `WMEncoding`
+/-! #### The decode, read register by register -/
 
-The three lemmas above are the four named side conditions of the partial
-instructions, each proved where it lives.  Composing them into
-`AllDefined c.tableLen k s (wmBody c)` needs, in addition:
+private def dR (c : Cfg) : Instr := .binop rR .urem .idx (.lit c.B)
+private def dNq (c : Cfg) : Instr := .binop rN .udiv .idx (.lit c.B)
+private def dNa (c : Cfg) : Instr := .binop rN .add (.reg rN) (.lit c.n0)
+private def dD : Instr := .binop rD .add (.reg rR) (.lit 2)
 
-* the **decode spec** — that after `decodeBlock` the registers `rR`, `rN`,
-  `rD` hold `k % B`, `n0 + k / B` and `k % B + 2` — which supplies the
-  hypotheses `2 ≤ rD` of `scanBlock_defined` and `2 ≤ rN`, `2·rN < M` of
-  `ladderBlock_defined` (`ok_idx` already bounds the decode against `M`);
-* **framing**: `rN` is written by the decode and read by the ladder 100
-  instructions later, so the intervening stages must be shown not to write
-  it (`InstrBlock.srun_untouched`);
-* the **seed-table read** `rT2 < tableLen`: `rT2 = (1 − isP)·p`, which is `0`
-  when the candidate is prime and otherwise the scan's divisor, so this is
-  `Inv.scan` transported across the scan and select stages, together with
-  `ok_tableLen`.
+private theorem decode_split_R (c : Cfg) :
+    decodeBlock c = dR c :: [dNq c, dNa c, dD] := rfl
 
-None of these is assumed anywhere in this file: there is no `sorry` and no
-axiom here.
+private theorem decode_split_N (c : Cfg) :
+    decodeBlock c = [dR c, dNq c] ++ dNa c :: [dD] := rfl
+
+private theorem decode_split_D (c : Cfg) :
+    decodeBlock c = [dR c, dNq c, dNa c] ++ dD :: [] := rfl
+
+/-- The round `r = k % B`. -/
+theorem decode_rR (c : Cfg) (k : Nat) (s : RegState) (hk : k < M) (hB : 0 < c.B)
+    (hBM : c.B < M) : srun k s (decodeBlock c) rR = k % c.B := by
+  rw [decode_split_R, srun_read_head k rR (dR c) [dNq c, dNa c, dD] rfl rfl]
+  simp only [dR]
+  exact sval_binop_val (denoteOperand_idx_of_lt k s hk)
+    (denoteOperand_lit_of_lt k s hBM) (denoteOp_urem_of_ne (by omega) hk)
+
+private theorem decode_rR_pre (c : Cfg) (k : Nat) (s : RegState) (hk : k < M)
+    (hB : 0 < c.B) (hBM : c.B < M) :
+    srun k s [dR c, dNq c, dNa c] rR = k % c.B := by
+  rw [show ([dR c, dNq c, dNa c] : List Instr) = dR c :: [dNq c, dNa c] from rfl,
+    srun_read_head k rR (dR c) [dNq c, dNa c] rfl rfl]
+  simp only [dR]
+  exact sval_binop_val (denoteOperand_idx_of_lt k s hk)
+    (denoteOperand_lit_of_lt k s hBM) (denoteOp_urem_of_ne (by omega) hk)
+
+private theorem decode_rN_pre (c : Cfg) (k : Nat) (s : RegState) (hk : k < M)
+    (hB : 0 < c.B) (hBM : c.B < M) :
+    srun k s [dR c, dNq c] rN = k / c.B := by
+  rw [show ([dR c, dNq c] : List Instr) = [dR c] ++ dNq c :: [] from rfl,
+    srun_read_write k rN [dR c] (dNq c) [] rfl rfl]
+  simp only [dNq]
+  exact sval_binop_val (denoteOperand_idx_of_lt _ _ hk)
+    (denoteOperand_lit_of_lt _ _ hBM) (denoteOp_udiv_of_ne (by omega) hk)
+
+/-- The candidate `n = n0 + k / B`. -/
+theorem decode_rN (c : Cfg) (k : Nat) (s : RegState) (hk : k < M) (hB : 0 < c.B)
+    (hBM : c.B < M) (hsum : k / c.B + c.n0 < M) :
+    srun k s (decodeBlock c) rN = k / c.B + c.n0 := by
+  rw [decode_split_N, srun_read_write k rN [dR c, dNq c] (dNa c) [dD] rfl (by decide)]
+  simp only [dNa]
+  exact sval_binop_val (decode_rN_pre c k s hk hB hBM)
+    (denoteOperand_lit_of_lt _ _
+      (Nat.lt_of_le_of_lt (Nat.le_add_left c.n0 (k / c.B)) hsum))
+    (denoteOp_add_of_lt hsum)
+
+/-- The trial divisor `d = r + 2`. -/
+theorem decode_rD (c : Cfg) (k : Nat) (s : RegState) (hk : k < M) (hB : 0 < c.B)
+    (hBM : c.B < M) (hD : k % c.B + 2 < M) :
+    srun k s (decodeBlock c) rD = k % c.B + 2 := by
+  rw [decode_split_D, srun_read_write k rD [dR c, dNq c, dNa c] dD [] rfl rfl]
+  simp only [dD]
+  exact sval_binop_val (decode_rR_pre c k s hk hB hBM)
+    (denoteOperand_lit_of_lt _ _ (by decide)) (denoteOp_add_of_lt hD)
+
+/-! #### The scan -/
+
+private def sG0 : Instr := .binop rG .eq (.reg rS) (.lit 0)
+private def sT1a : Instr := .binop rT1 .mul (.reg rD) (.reg rD)
+private def sT1b : Instr := .binop rT1 .le (.reg rT1) (.reg rN)
+private def sG1 : Instr := .binop rG .mul (.reg rG) (.reg rT1)
+private def scanDiv : Instr := .binop rT2 .urem (.reg rN) (.reg rD)
+private def sT2b : Instr := .binop rT2 .eq (.reg rT2) (.lit 0)
+private def sG2 : Instr := .binop rG .mul (.reg rG) (.reg rT2)
+private def sT1c : Instr := .binop rT1 .sub (.lit 1) (.reg rG)
+private def sT1d : Instr := .binop rT1 .mul (.reg rT1) (.reg rS)
+private def sT2c : Instr := .binop rT2 .mul (.reg rG) (.reg rD)
+private def sS : Instr := .binop rS .add (.reg rT1) (.reg rT2)
+
+private def scanPre : List Instr := [sG0, sT1a, sT1b, sG1]
+
+private def scanPost : List Instr := [sT2b, sG2, sT1c, sT1d, sT2c, sS]
+
+private theorem scanBlock_eq : scanBlock = scanPre ++ scanDiv :: scanPost := rfl
+
+/-- **The trial round is defined as soon as its divisor is nonzero on entry.**
+
+`rD` is written by the decode and read here, four instructions into a block
+that never touches it, so the hypothesis is about the state the *decode*
+leaves — which `decode_rD` computes. -/
+theorem scanBlock_defined (k : Nat) (s : RegState) (hD : s rD ≠ 0) :
+    SAllDefined k s scanBlock := by
+  rw [scanBlock_eq]
+  refine sAllDefined_stage (by decide) ?_ (sAllDefined_of_noDiv k _ _ (by decide))
+  simp only [scanDiv]
+  refine sDefined_urem ?_
+  simp only [denoteOperand_reg]
+  rw [srun_frame k rD scanPre (by decide)]
+  exact hD
+
+/-! #### What the scan leaves in `rS`
+
+The one cross-iteration fact the body needs.  Its gate is a *flag*, and the
+proof case-splits on that flag without evaluating any of the five instructions
+that compute it — `BlockDefined.sval_mul_isBit` and `sval_eq_isBit` say a
+product of comparisons is a bit, whatever the comparisons are about. -/
+
+private def scanP3 : List Instr := [sG0, sT1a, sT1b]
+private def scanQ : List Instr := scanPre ++ [scanDiv, sT2b]
+private def scanR3 : List Instr := scanQ ++ [sG2]
+private def scanR2 : List Instr := scanR3 ++ [sT1c]
+private def scanR1 : List Instr := scanR2 ++ [sT1d]
+private def scanR0 : List Instr := scanR1 ++ [sT2c]
+
+private theorem scanBlock_eq_R0 : scanBlock = scanR0 ++ [sS] := rfl
+
+/-- The scan's gate, at the point the tail consumes it. -/
+private def gate (k : Nat) (s : RegState) : Nat := sval k (srun k s scanQ) sG2
+
+private theorem gate_isBit (k : Nat) (s : RegState) : IsBit (gate k s) := by
+  unfold gate
+  refine sval_mul_isBit ?_ ?_
+  · show IsBit (srun k s scanQ rG)
+    unfold scanQ
+    rw [srun_frame_append k rG scanPre [scanDiv, sT2b] rfl,
+      show scanPre = scanP3 ++ [sG1] from rfl,
+      srun_read_last k rG scanP3 sG1 rfl]
+    refine sval_mul_isBit ?_ ?_
+    · show IsBit (srun k s scanP3 rG)
+      rw [show scanP3 = sG0 :: [sT1a, sT1b] from rfl,
+        srun_read_head k rG sG0 [sT1a, sT1b] rfl rfl]
+      exact sval_eq_isBit _ _ _ _ _
+    · show IsBit (srun k s scanP3 rT1)
+      rw [show scanP3 = [sG0, sT1a] ++ [sT1b] from rfl,
+        srun_read_last k rT1 [sG0, sT1a] sT1b rfl]
+      exact sval_le_isBit _ _ _ _ _
+  · show IsBit (srun k s scanQ rT2)
+    rw [show scanQ = (scanPre ++ [scanDiv]) ++ [sT2b] from rfl,
+      srun_read_last k rT2 (scanPre ++ [scanDiv]) sT2b rfl]
+    exact sval_eq_isBit _ _ _ _ _
+
+/-- **A trial round either keeps the scan accumulator or replaces it by this
+round's divisor.**  Together with `decode_rD` this is the entire cross-iteration
+invariant `Inv.scan`: `rS` is `0` or a trial divisor `≤ B + 1`. -/
+theorem scan_rS (k : Nat) (s : RegState) (hS : s rS < M) (hD : s rD < M) :
+    srun k s scanBlock rS = s rS ∨ srun k s scanBlock rS = s rD := by
+  have hM1 : (1 : Nat) < M := by decide
+  have hgR3 : srun k s scanR3 rG = gate k s := by
+    unfold gate scanR3
+    exact srun_read_last k rG scanQ sG2 rfl s
+  have hgR2 : srun k s scanR2 rG = gate k s := by
+    unfold scanR2
+    rw [srun_frame_append k rG scanR3 [sT1c] rfl]
+    exact hgR3
+  have hgR1 : srun k s scanR1 rG = gate k s := by
+    unfold scanR1
+    rw [srun_frame_append k rG scanR2 [sT1d] rfl]
+    exact hgR2
+  have hS2 : srun k s scanR2 rS = s rS := srun_frame k rS scanR2 rfl s
+  have hD1 : srun k s scanR1 rD = s rD := srun_frame k rD scanR1 rfl s
+  have hT1c : srun k s scanR2 rT1 = (denoteOp .sub 1 (gate k s)).getD 0 := by
+    unfold scanR2
+    rw [srun_read_last k rT1 scanR3 sT1c rfl]
+    unfold sT1c
+    rw [sval_binop, denoteOperand_lit_of_lt _ _ hM1, denoteOperand_reg, hgR3]
+  have hT1R1 : srun k s scanR1 rT1 =
+      (denoteOp .mul (srun k s scanR2 rT1) (s rS)).getD 0 := by
+    unfold scanR1
+    rw [srun_read_last k rT1 scanR2 sT1d rfl]
+    unfold sT1d
+    rw [sval_binop, denoteOperand_reg, denoteOperand_reg, hS2]
+  have hT1R0 : srun k s scanR0 rT1 = srun k s scanR1 rT1 := by
+    unfold scanR0
+    exact srun_frame_append k rT1 scanR1 [sT2c] rfl s
+  have hT2R0 : srun k s scanR0 rT2 = (denoteOp .mul (gate k s) (s rD)).getD 0 := by
+    unfold scanR0
+    rw [srun_read_last k rT2 scanR1 sT2c rfl]
+    unfold sT2c
+    rw [sval_binop, denoteOperand_reg, denoteOperand_reg, hgR1, hD1]
+  have hfinal : srun k s scanBlock rS =
+      (denoteOp .add (srun k s scanR0 rT1) (srun k s scanR0 rT2)).getD 0 := by
+    rw [scanBlock_eq_R0, srun_read_last k rS scanR0 sS rfl]
+    unfold sS
+    rw [sval_binop, denoteOperand_reg, denoteOperand_reg]
+  rcases gate_isBit k s with hg | hg
+  · left
+    have h1 : (denoteOp .sub 1 (0 : Nat)).getD 0 = 1 := by
+      rw [denoteOp_sub_of_le (Nat.zero_le 1) hM1]
+      rfl
+    have h2 : (denoteOp .mul 1 (s rS)).getD 0 = s rS := by
+      rw [denoteOp_mul_of_lt (show 1 * s rS < M by omega)]
+      exact Nat.one_mul _
+    have h3 : (denoteOp .mul 0 (s rD)).getD 0 = 0 := by
+      rw [denoteOp_mul_of_lt (show 0 * s rD < M by rw [Nat.zero_mul]; exact M_pos)]
+      exact Nat.zero_mul _
+    have h4 : (denoteOp .add (s rS) 0).getD 0 = s rS := by
+      rw [denoteOp_add_of_lt (show s rS + 0 < M by omega)]
+      exact Nat.add_zero _
+    rw [hg, h1] at hT1c
+    rw [hg, h3] at hT2R0
+    rw [hfinal, hT1R0, hT1R1, hT1c, h2, hT2R0, h4]
+  · right
+    have h1 : (denoteOp .sub 1 (1 : Nat)).getD 0 = 0 := by
+      rw [denoteOp_sub_of_le (Nat.le_refl 1) hM1]
+      rfl
+    have h2 : (denoteOp .mul 0 (s rS)).getD 0 = 0 := by
+      rw [denoteOp_mul_of_lt (show 0 * s rS < M by rw [Nat.zero_mul]; exact M_pos)]
+      exact Nat.zero_mul _
+    have h3 : (denoteOp .mul 1 (s rD)).getD 0 = s rD := by
+      rw [denoteOp_mul_of_lt (show 1 * s rD < M by omega)]
+      exact Nat.one_mul _
+    have h4 : (denoteOp .add 0 (s rD)).getD 0 = s rD := by
+      rw [denoteOp_add_of_lt (show 0 + s rD < M by omega)]
+      exact Nat.zero_add _
+    rw [hg, h1] at hT1c
+    rw [hg, h3] at hT2R0
+    rw [hfinal, hT1R0, hT1R1, hT1c, h2, hT2R0, h4]
+
+/-! #### The ladder -/
+
+private def ladderA : List Instr :=
+  [ .binop rT1 .mul (.reg rN) (.lit 2)
+  , .binop rT1 .add (.reg rT1) (.lit fpD3)
+  , .binop rT2 .add (.reg rN) (.lit fpD3)
+  , .binop rT2 .sub (.reg rT2) (.lit 1) ]
+
+private def ladderDivA : Instr := .binop rT2 .udiv (.reg rT2) (.reg rN)
+
+private def ladderB0 : List Instr := [ .binop rT1 .sub (.reg rT1) (.reg rT2) ]
+
+private def ladderBset : Instr := .binop rT2 .mul (.reg rN) (.lit 2)
+
+private def ladderDivB : Instr := .binop rT1 .udiv (.reg rT1) (.reg rT2)
+
+private def ladderC0 : List Instr :=
+  [ .binop rT2 .add (.reg rN) (.lit fpD)
+  , .binop rT2 .sub (.reg rT2) (.lit 1)
+  , .binop rT1 .sub (.reg rT2) (.reg rT1) ]
+
+private def ladderCset : Instr := .binop rT2 .sub (.reg rN) (.lit 1)
+
+private def ladderDivC : Instr := .binop rIU .udiv (.reg rT1) (.reg rT2)
+
+private def ladderTail : List Instr :=
+  [ .binop rT1 .mul (.reg rC) (.reg rIU)
+  , .binop rL .add (.reg rL) (.reg rT1) ]
+
+private def ladderC : List Instr :=
+  (ladderC0 ++ [ladderCset]) ++ ladderDivC :: ladderTail
+
+private def ladderBC : List Instr :=
+  (ladderB0 ++ [ladderBset]) ++ ladderDivB :: ladderC
+
+private theorem ladderBlock_eq :
+    ladderBlock = ladderA ++ ladderDivA :: ladderBC := rfl
+
+/-- The second ladder divisor, `2·n`, read off the one instruction that sets
+it.  The three instructions of `ladderB0` are framed away, not evaluated. -/
+private theorem ladder_setB (k : Nat) (u : RegState) (h : u rN * 2 < M) :
+    srun k u (ladderB0 ++ [ladderBset]) rT2 = u rN * 2 := by
+  rw [srun_read_last k rT2 ladderB0 ladderBset rfl]
+  simp only [ladderBset]
+  refine sval_binop_val ?_ (denoteOperand_lit_of_lt _ _ (by decide))
+    (denoteOp_mul_of_lt h)
+  simp only [denoteOperand_reg]
+  exact srun_frame k rN ladderB0 (by decide) u
+
+/-- The third ladder divisor, `n − 1`.  The machine computes it as
+`n + (2⁶⁴ − 1)`; `denoteOp_sub_of_le` is what keeps that literal out of the
+goal. -/
+private theorem ladder_setC (k : Nat) (u : RegState) (h1 : 1 ≤ u rN)
+    (h2 : u rN < M) :
+    srun k u (ladderC0 ++ [ladderCset]) rT2 = u rN - 1 := by
+  rw [srun_read_last k rT2 ladderC0 ladderCset rfl]
+  simp only [ladderCset]
+  refine sval_binop_val ?_ (denoteOperand_lit_of_lt _ _ (by decide))
+    (denoteOp_sub_of_le h1 h2)
+  simp only [denoteOperand_reg]
+  exact srun_frame k rN ladderC0 (by decide) u
+
+private theorem ladderC_defined (k : Nat) (v : RegState) (hN : 2 ≤ v rN)
+    (hM : v rN < M) : SAllDefined k v ladderC := by
+  refine sAllDefined_stage (by decide) ?_ (sAllDefined_of_noDiv k _ _ (by decide))
+  simp only [ladderDivC]
+  refine sDefined_udiv ?_
+  simp only [denoteOperand_reg]
+  rw [ladder_setC k v (by omega) hM]
+  omega
+
+private theorem ladderBC_defined (k : Nat) (u : RegState) (hN : 2 ≤ u rN)
+    (hM : 2 * u rN < M) : SAllDefined k u ladderBC := by
+  refine sAllDefined_stage (by decide) ?_ ?_
+  · simp only [ladderDivB]
+    refine sDefined_udiv ?_
+    simp only [denoteOperand_reg]
+    rw [ladder_setB k u (by omega)]
+    omega
+  · have e : srun k u ((ladderB0 ++ [ladderBset]) ++ [ladderDivB]) rN = u rN :=
+      srun_frame k rN _ (by decide) u
+    exact ladderC_defined k _ (by rw [e]; exact hN) (by rw [e]; omega)
+
+/-- **The ladder is defined for every candidate `≥ 2` whose double is a word.**
+
+Its three divisors are `n`, `2·n` and `n − 1`, and each is read with one
+framing step.  What the proof does not do is the point: it never unfolds the
+arithmetic of the twelve instructions that are not divisions, so the
+`fpD`-scale literals they carry never enter a goal.  Doing that inside `simp`
+is what reported `(kernel) deep recursion detected`. -/
+theorem ladderBlock_defined (k : Nat) (s : RegState) (h2 : 2 ≤ s rN)
+    (hM : 2 * s rN < M) : SAllDefined k s ladderBlock := by
+  rw [ladderBlock_eq]
+  refine sAllDefined_stage (by decide) ?_ ?_
+  · simp only [ladderDivA]
+    refine sDefined_udiv ?_
+    simp only [denoteOperand_reg]
+    rw [srun_frame k rN ladderA (by decide)]
+    omega
+  · have e : srun k s (ladderA ++ [ladderDivA]) rN = s rN :=
+      srun_frame k rN _ (by decide) s
+    exact ladderBC_defined k _ (by rw [e]; exact h2) (by rw [e]; exact hM)
+
+/-! #### The seed-table index
+
+The program's single array access.  Its index register is `(1 − isP)·p`:
+zero when the candidate is prime, and otherwise the divisor the scan
+committed, which `scan_rS` bounds by `B + 1 < tableLen`.  This is the last of
+the named side conditions. -/
+
+private def sel0 (c : Cfg) : Instr := .binop rC .eq (.reg rR) (.lit (c.B - 1))
+private def sel1 : Instr := .binop rIsP .eq (.reg rS) (.lit 0)
+private def sel2 : Instr := .binop rT1 .sub (.lit 1) (.reg rIsP)
+private def sel3 : Instr := .binop rT2 .mul (.reg rT1) (.reg rS)
+private def sel4 : Instr := .binop rT1 .mul (.reg rIsP) (.reg rN)
+private def sel5 : Instr := .binop rP .add (.reg rT1) (.reg rT2)
+
+private theorem selectBlock_eq (c : Cfg) :
+    selectBlock c = [sel0 c, sel1, sel2, sel3, sel4, sel5] := rfl
+
+private def lp0 : Instr := .binop rT1 .sub (.lit 1) (.reg rIsP)
+private def lp1 : Instr := .binop rT2 .mul (.reg rT1) (.reg rP)
+
+private theorem lambdaPre_eq : lambdaPre = [lp0] ++ [lp1] := rfl
+
+/-- The primality flag, read off the one instruction that writes it. -/
+private theorem sel_isP_val (k : Nat) (u : RegState) (c : Cfg) :
+    sval k (srun k u [sel0 c]) sel1 = (if u rS = 0 then 1 else 0) := by
+  unfold sel1
+  rw [sval_binop, denoteOperand_reg, denoteOperand_lit_of_lt _ _ M_pos,
+    srun_frame k rS [sel0 c] rfl, denoteOp_eq_val]
+  rfl
+
+private theorem select_rIsP (k : Nat) (u : RegState) (c : Cfg) :
+    srun k u (selectBlock c) rIsP = (if u rS = 0 then 1 else 0) := by
+  rw [selectBlock_eq,
+    show ([sel0 c, sel1, sel2, sel3, sel4, sel5] : List Instr)
+      = [sel0 c] ++ sel1 :: [sel2, sel3, sel4, sel5] from rfl,
+    srun_read_write k rIsP [sel0 c] sel1 [sel2, sel3, sel4, sel5] rfl rfl]
+  exact sel_isP_val k u c
+
+/-- On a composite candidate the committed factor is the scan's divisor.  (The
+prime case is not needed for definedness — the index is clamped to `0` there.) -/
+private theorem select_rP_of_ne (k : Nat) (u : RegState) (c : Cfg)
+    (hS : u rS < M) (h0 : u rS ≠ 0) :
+    srun k u (selectBlock c) rP = u rS := by
+  have hM1 : (1 : Nat) < M := by decide
+  have hisp2 : srun k u [sel0 c, sel1] rIsP = 0 := by
+    rw [show ([sel0 c, sel1] : List Instr) = [sel0 c] ++ sel1 :: [] from rfl,
+      srun_read_write k rIsP [sel0 c] sel1 [] rfl rfl, sel_isP_val k u c,
+      if_neg h0]
+  have hisp4 : srun k u [sel0 c, sel1, sel2, sel3] rIsP = 0 := by
+    rw [show ([sel0 c, sel1, sel2, sel3] : List Instr)
+        = [sel0 c] ++ sel1 :: [sel2, sel3] from rfl,
+      srun_read_write k rIsP [sel0 c] sel1 [sel2, sel3] rfl rfl, sel_isP_val k u c,
+      if_neg h0]
+  have hsub : (denoteOp .sub 1 (0 : Nat)).getD 0 = 1 := by
+    rw [denoteOp_sub_of_le (Nat.zero_le 1) hM1]
+    rfl
+  have ht1_3 : srun k u [sel0 c, sel1, sel2] rT1 = 1 := by
+    rw [show ([sel0 c, sel1, sel2] : List Instr) = [sel0 c, sel1] ++ [sel2] from rfl,
+      srun_read_last k rT1 [sel0 c, sel1] sel2 rfl]
+    unfold sel2
+    rw [sval_binop, denoteOperand_lit_of_lt _ _ hM1, denoteOperand_reg, hisp2, hsub]
+  have ht2_4 : srun k u [sel0 c, sel1, sel2, sel3] rT2 = u rS := by
+    rw [show ([sel0 c, sel1, sel2, sel3] : List Instr)
+        = [sel0 c, sel1, sel2] ++ [sel3] from rfl,
+      srun_read_last k rT2 [sel0 c, sel1, sel2] sel3 rfl]
+    unfold sel3
+    rw [sval_binop, denoteOperand_reg, denoteOperand_reg, ht1_3,
+      srun_frame k rS [sel0 c, sel1, sel2] rfl,
+      denoteOp_mul_of_lt (show 1 * u rS < M by omega)]
+    exact Nat.one_mul _
+  have ht1_5 : srun k u [sel0 c, sel1, sel2, sel3, sel4] rT1 = 0 := by
+    rw [show ([sel0 c, sel1, sel2, sel3, sel4] : List Instr)
+        = [sel0 c, sel1, sel2, sel3] ++ [sel4] from rfl,
+      srun_read_last k rT1 [sel0 c, sel1, sel2, sel3] sel4 rfl]
+    unfold sel4
+    rw [sval_binop, denoteOperand_reg, denoteOperand_reg, hisp4,
+      denoteOp_mul_of_lt (show 0 * srun k u [sel0 c, sel1, sel2, sel3] rN < M by
+        rw [Nat.zero_mul]; exact M_pos)]
+    exact Nat.zero_mul _
+  have ht2_5 : srun k u [sel0 c, sel1, sel2, sel3, sel4] rT2 = u rS := by
+    rw [show ([sel0 c, sel1, sel2, sel3, sel4] : List Instr)
+        = [sel0 c, sel1, sel2, sel3] ++ [sel4] from rfl,
+      srun_frame_append k rT2 [sel0 c, sel1, sel2, sel3] [sel4] rfl]
+    exact ht2_4
+  rw [selectBlock_eq,
+    show ([sel0 c, sel1, sel2, sel3, sel4, sel5] : List Instr)
+      = [sel0 c, sel1, sel2, sel3, sel4] ++ [sel5] from rfl,
+    srun_read_last k rP [sel0 c, sel1, sel2, sel3, sel4] sel5 rfl]
+  unfold sel5
+  rw [sval_binop, denoteOperand_reg, denoteOperand_reg, ht1_5, ht2_5,
+    denoteOp_add_of_lt (show 0 + u rS < M by omega)]
+  exact Nat.zero_add _
+
+/-- **The seed-table index is in range**, so the one `load` is defined.
+
+`lambdaPre` clamps the index to `0` on a prime candidate; otherwise it is the
+scan's committed divisor, and `Inv.scan` bounds that by `B + 1`. -/
+theorem load_index_lt (c : Cfg) (k : Nat) (u : RegState) (hS : u rS < M)
+    (hinv : u rS = 0 ∨ u rS ≤ c.B + 1) (hlen : c.B + 1 < c.tableLen) :
+    srun k u (selectBlock c ++ powerBlock ++ lambdaPre) rT2 < c.tableLen := by
+  have hM1 : (1 : Nat) < M := by decide
+  have hsub0 : (denoteOp .sub 1 (0 : Nat)).getD 0 = 1 := by
+    rw [denoteOp_sub_of_le (Nat.zero_le 1) hM1]; rfl
+  have hsub1 : (denoteOp .sub 1 (1 : Nat)).getD 0 = 0 := by
+    rw [denoteOp_sub_of_le (Nat.le_refl 1) hM1]; rfl
+  rw [srun_append]
+  have hvIsP : srun k u (selectBlock c ++ powerBlock) rIsP
+      = (if u rS = 0 then 1 else 0) := by
+    rw [srun_frame_append k rIsP (selectBlock c) powerBlock rfl]
+    exact select_rIsP k u c
+  rw [lambdaPre_eq, srun_read_last k rT2 [lp0] lp1 rfl]
+  unfold lp1
+  rw [sval_binop, denoteOperand_reg, denoteOperand_reg,
+    srun_frame k rP [lp0] rfl,
+    srun_read_head k rT1 lp0 [] rfl rfl]
+  unfold lp0
+  rw [sval_binop, denoteOperand_lit_of_lt _ _ hM1, denoteOperand_reg, hvIsP]
+  by_cases h0 : u rS = 0
+  · rw [if_pos h0, hsub1,
+      denoteOp_mul_of_lt (show 0 * srun k u (selectBlock c ++ powerBlock) rP < M by
+        rw [Nat.zero_mul]; exact M_pos)]
+    show 0 * srun k u (selectBlock c ++ powerBlock) rP < c.tableLen
+    rw [Nat.zero_mul]
+    omega
+  · have hvP : srun k u (selectBlock c ++ powerBlock) rP = u rS := by
+      rw [srun_frame_append k rP (selectBlock c) powerBlock rfl]
+      exact select_rP_of_ne k u c hS h0
+    rw [if_neg h0, hsub0, hvP, denoteOp_mul_of_lt (show 1 * u rS < M by omega)]
+    show 1 * u rS < c.tableLen
+    rw [Nat.one_mul]
+    omega
+
+/-! ### Definedness of the whole body
+
+The three side conditions above, composed.  `Inv` is the entry hypothesis,
+`ok_idx` bounds the decode against the word size, the ladder's `2 ≤ n` comes
+from `wmOK`'s `2 ≤ n0` and its `2·n < M` from `n0 + len ≤ 2²⁵`.
 -/
+
+/-- The decode's two divisions are by the literal `B`, so no state is read. -/
+theorem decodeBlock_sdefined (c : Cfg) (k : Nat) (r : RegState) (hB : 0 < c.B)
+    (hBM : c.B < M) : SAllDefined k r (decodeBlock c) := by
+  rw [show decodeBlock c = ([] : List Instr) ++ dR c ::
+      (([] : List Instr) ++ dNq c :: [dNa c, dD]) from rfl]
+  refine sAllDefined_stage rfl ?_ ?_
+  · simp only [dR]
+    refine sDefined_urem ?_
+    rw [denoteOperand_lit_of_lt _ _ hBM]
+    omega
+  · refine sAllDefined_stage rfl ?_ (sAllDefined_of_noDiv k _ _ rfl)
+    simp only [dNq]
+    refine sDefined_udiv ?_
+    rw [denoteOperand_lit_of_lt _ _ hBM]
+    omega
+
+/-- Everything before the seed-table read. -/
+theorem wmPre_sdefined (c : Cfg) (k : Nat) (r : RegState) (hB : 0 < c.B)
+    (hBM : c.B < M) (hk : k < M) (hD : k % c.B + 2 < M) :
+    SAllDefined k r (wmPre c) := by
+  rw [wmPre_eq]
+  refine sAllDefined_append (sAllDefined_append (decodeBlock_sdefined c k r hB hBM) ?_) ?_
+  · refine scanBlock_defined k _ ?_
+    rw [decode_rD c k r hk hB hBM hD]
+    omega
+  · refine sAllDefined_of_noDiv k _ _ ?_
+    simp +decide [wmPreTail, selectBlock, powerBlock, powerRound, lambdaPre,
+      List.all_append, List.all_flatMap, InstrBlock.NoDivI]
+
+private def wmPostHead (c : Cfg) : List Instr :=
+  lambdaPost ++ accBlock ++ capBlock c ++ rowBlock c
+
+private theorem wmPost_eq (c : Cfg) :
+    wmPost c = (wmPostHead c ++ ladderBlock) ++ resetBlock := rfl
+
+/-- Everything after the seed-table read.  Only the ladder is partial, and its
+hypothesis is about the candidate register `rN`, which nothing between the
+decode and the ladder writes. -/
+theorem wmPost_sdefined (c : Cfg) (k : Nat) (w : RegState) (h2 : 2 ≤ w rN)
+    (hM : 2 * w rN < M) : SAllDefined k w (wmPost c) := by
+  have hframe : srun k w (wmPostHead c) rN = w rN :=
+    srun_frame k rN (wmPostHead c) rfl w
+  rw [wmPost_eq]
+  refine sAllDefined_append (sAllDefined_append ?_ ?_) ?_
+  · refine sAllDefined_of_noDiv k _ _ ?_
+    simp +decide [wmPostHead, lambdaPost, accBlock, capBlock, rowBlock,
+      List.all_append, InstrBlock.NoDivI]
+  · exact ladderBlock_defined k _ (by rw [hframe]; exact h2) (by rw [hframe]; exact hM)
+  · exact sAllDefined_of_noDiv k _ _ (by decide)
+
+/-- The post-load stage, stated for an *arbitrary* entry state.  Keeping the
+state a variable is what stops any tactic from forcing `whnf` into the
+137-instruction `srun` that the concrete state is: doing that detonates
+(`maximum recursion depth`) even without a single `simp`, because the run
+carries `fpD`-scale literals. -/
+private theorem wmBody_post_defined (c : Cfg) (k : Nat) (t : AState)
+    (ht : t.regs rN = k / c.B + c.n0) (h2 : 2 ≤ k / c.B + c.n0)
+    (hM : 2 * (k / c.B + c.n0) < M) :
+    AllDefined c.tableLen k (astep k t (.load rT3 rT2)) (lift (wmPost c)) := by
+  refine (allDefined_lift c.tableLen k (wmPost c) _).mpr ?_
+  have hrn : (astep k t (.load rT3 rT2)).regs rN = k / c.B + c.n0 := by
+    show (t.writeReg rT3 (t.arr (t.regs rT2))).regs rN = _
+    rw [AState.writeReg_regs_ne _ _ (show rN ≠ rT3 by decide)]
+    exact ht
+  exact wmPost_sdefined c k _ (by rw [hrn]; exact h2) (by rw [hrn]; exact hM)
+
+/-- **The body is defined at every index the loop visits.**
+
+Every partial instruction of the 137 is discharged: the decode's two divisions
+by the literal `B`, the scan's `urem` by the decoded divisor, the seed-table
+`load`, and the ladder's three divisions.  The only hypotheses are `wmOK`, the
+loop bound, and the cross-iteration invariant `Inv`. -/
+theorem wmBody_defined (c : Cfg) (hok : wmOK c = true) (k : Nat)
+    (hk : k < c.len * c.B) (s : AState) (hs : Inv c s) :
+    AllDefined c.tableLen k s (wmBody c) := by
+  obtain ⟨hkM, hkdiv, hkmod⟩ := ok_idx hok hk
+  have hB : 0 < c.B := ok_B hok
+  have hBM : c.B < M := ok_BM hok
+  have hBlt : c.B + 1 < 2 ^ 20 := ok_B_lt hok
+  have hM20 : (2 : Nat) ^ 20 < M := by decide
+  have hM26 : (2 : Nat) ^ 26 < M := by decide
+  have hDlt : k % c.B + 2 < M := by omega
+  have hlen : c.B + 1 < c.tableLen := ok_tableLen hok
+  have hregs : ∀ j, s.regs j < M := hs.regsLt
+  have hn0 : 2 ≤ c.n0 := ok_n0 hok
+  have hrange : c.n0 + c.len ≤ 2 ^ 25 := ok_range hok
+  -- The decoded candidate's two bounds, proved *before* `hNpre` enters the
+  -- context: with that equation available `omega` substitutes `k / c.B` away
+  -- and then no longer knows it is a `Nat`, so it cannot re-derive them.
+  have h2N : 2 ≤ k / c.B + c.n0 := Nat.le_trans hn0 (Nat.le_add_left c.n0 (k / c.B))
+  have hltN : k / c.B + c.n0 ≤ 2 ^ 25 :=
+    Nat.le_trans (Nat.add_le_add_right (Nat.le_of_lt hkdiv) c.n0) (by omega)
+  have hMN : 2 * (k / c.B + c.n0) < M :=
+    Nat.lt_of_le_of_lt (Nat.mul_le_mul (Nat.le_refl 2) hltN) (by decide)
+  have hNval : srun k s.regs (decodeBlock c) rN = k / c.B + c.n0 :=
+    decode_rN c k s.regs hkM hB hBM (by omega)
+  have hNpre : srun k s.regs (wmPre c) rN = k / c.B + c.n0 := by
+    rw [wmPre_eq, srun_frame_append k rN (decodeBlock c ++ scanBlock) (wmPreTail c) rfl,
+      srun_frame_append k rN (decodeBlock c) scanBlock rfl]
+    exact hNval
+  have hSpre : srun k s.regs (decodeBlock c ++ scanBlock) rS = s.regs rS ∨
+      srun k s.regs (decodeBlock c ++ scanBlock) rS = k % c.B + 2 := by
+    rw [srun_append]
+    have h1 : srun k s.regs (decodeBlock c) rS = s.regs rS :=
+      srun_frame k rS (decodeBlock c) rfl s.regs
+    have h2 : srun k s.regs (decodeBlock c) rD = k % c.B + 2 :=
+      decode_rD c k s.regs hkM hB hBM hDlt
+    rcases scan_rS k (srun k s.regs (decodeBlock c)) (by rw [h1]; exact hregs rS)
+      (by rw [h2]; omega) with h | h
+    · exact Or.inl (by rw [h, h1])
+    · exact Or.inr (by rw [h, h2])
+  have hidx : srun k s.regs (wmPre c) rT2 < c.tableLen := by
+    rw [wmPre_eq, srun_append]
+    simp only [wmPreTail]
+    refine load_index_lt c k _ (srun_regs_lt k _ s.regs hregs rS) ?_ hlen
+    rcases hSpre with h | h
+    · rw [h]
+      rcases hs.scan with h' | h'
+      · exact Or.inl h'
+      · exact Or.inr h'.2
+    · rw [h]
+      exact Or.inr (by omega)
+  have hregsEq : (arun k s (lift (wmPre c))).regs = srun k s.regs (wmPre c) :=
+    arun_lift_regs k (wmPre c) s
+  rw [show wmBody c = lift (wmPre c) ++ (.load rT3 rT2 :: lift (wmPost c)) from rfl,
+    AllDefined_append]
+  refine ⟨(allDefined_lift c.tableLen k (wmPre c) s).mpr
+    (wmPre_sdefined c k s.regs hB hBM hkM hDlt), ?_, ?_⟩
+  · show (arun k s (lift (wmPre c))).regs rT2 < c.tableLen
+    rw [hregsEq]
+    exact hidx
+  · refine wmBody_post_defined c k _ ?_ h2N hMN
+    rw [hregsEq]
+    exact hNpre
 
 /-! ## The candidate-level reference
 
