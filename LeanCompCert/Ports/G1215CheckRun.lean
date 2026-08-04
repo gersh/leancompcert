@@ -187,6 +187,87 @@ theorem advRenorm_band {y : Nat} (hlo : MB ≤ y) (hhi : y < 2 ^ 41) :
   · rw [if_neg hg, show (2:Nat) ^ 0 = 1 from rfl, Nat.div_one]
     omega
 
+/-! ## §6a Generic unfolding, with every literal a VARIABLE
+
+⚠ **Why this section exists.**  `Op.sub`'s denotation is `(a + (M − b)) % M`,
+and the kernel's `Nat.add` recurses on its **second** argument.  A `rfl` that
+has to `whnf` `symbolic + (M − 2³⁹)` therefore unary-unfolds
+`M − 2³⁹ ≈ 1.8·10¹⁹` and reports `deep recursion detected` — or, under a
+heartbeat cap, `(kernel) deterministic timeout`.  `blkC3a`'s `rfl` is fine
+because that block has no `.sub`; **every `.sub`-carrying block needs the
+lemmas below instead**, and so does every block whose value goal would put a
+big literal in second position.
+
+The fix is the house rule: *abstract the literal to a variable*.  Each lemma
+here is `rfl` **at variables**, so no defeq check ever sees a numeral, and
+instantiating an already-proved lemma is free.  Chain them with `rw`; where
+two occurrences of the same shape are present, instantiate explicitly, e.g.
+`evalSub k _ (.reg 13) (.reg 28)`. -/
+
+theorem run_cons (k : Nat) (t : RegState) (a : Assign) (rest : List Assign) :
+    run k t (a :: rest) = run k (t.set a.dest (evalExpr k t a.expr)) rest := rfl
+
+theorem set_at (t : RegState) (i v : Nat) : (t.set i v) i = v := by
+  simp [RegState.set]
+
+theorem set_off (t : RegState) (i v j : Nat) (h : j ≠ i) :
+    (t.set i v) j = t j := by
+  simp [RegState.set, h]
+
+theorem evalReg (k : Nat) (t : RegState) (i : Nat) :
+    evalExpr k t (.reg i) = t i := rfl
+
+theorem evalLit (k : Nat) (t : RegState) (v : Nat) :
+    evalExpr k t (.lit v) = v % M := rfl
+
+theorem evalIdx (k : Nat) (t : RegState) : evalExpr k t .idx = k % M := rfl
+
+theorem evalAdd (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .add l r) = (evalExpr k t l + evalExpr k t r) % M := rfl
+
+theorem evalSub (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .sub l r) =
+      (evalExpr k t l + (M - evalExpr k t r)) % M := rfl
+
+theorem evalMul (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .mul l r) = (evalExpr k t l * evalExpr k t r) % M := rfl
+
+theorem evalShl (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .shl l r) =
+      (evalExpr k t l <<< evalExpr k t r) % M := rfl
+
+theorem evalLshr (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .lshr l r) =
+      (evalExpr k t l >>> evalExpr k t r) % M := rfl
+
+theorem evalXor (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .bxor l r) =
+      (evalExpr k t l ^^^ evalExpr k t r) % M := rfl
+
+theorem evalOr (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .bor l r) =
+      (evalExpr k t l ||| evalExpr k t r) % M := rfl
+
+theorem evalEq (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .eq l r) =
+      (if evalExpr k t l = evalExpr k t r then 1 else 0) := rfl
+
+theorem evalLe (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .le l r) =
+      (if evalExpr k t l ≤ evalExpr k t r then 1 else 0) := rfl
+
+theorem evalLt (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .lt l r) =
+      (if evalExpr k t l < evalExpr k t r then 1 else 0) := rfl
+
+theorem evalGe (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .ge l r) =
+      (if evalExpr k t l ≥ evalExpr k t r then 1 else 0) := rfl
+
+theorem evalGt (k : Nat) (t : RegState) (l r : Expr) :
+    evalExpr k t (.bin .gt l r) =
+      (if evalExpr k t l > evalExpr k t r then 1 else 0) := rfl
+
 /-! ## §7 Stage specifications
 
 Each block's effect, from an abstract incoming state, with every `% M`
@@ -467,30 +548,82 @@ Both tracks have the same six-block shape; only the registers and the
 candidate differ.  The two `sub` instructions are exact under the band
 (`advRenorm_band` and `2^a ≤ n`), so no wrapped difference is ever formed. -/
 
-/-! ### HANDOFF — the six mantissa-block specifications are NOT proved
+/-! ⚠ These six lemmas are the one place in the port where `simp` must not be
+handed the `… % M = …` facts: `simp` rewrites `2 ^ 39` / `2 ^ 40` to their
+numerals *before* those facts can fire, and the rewrite then has nothing to
+match.  Every value goal below is therefore opened by a `rfl`-stated `have`
+in the exact shape `evalExpr`/`denoteOp` produce, and closed by an explicit
+`rw` chain.  Only the frame goals — which contain no arithmetic — go through
+`simp`. -/
 
-`blkC3a`/`blkC3b`/`blkC4` (track `U`) and `blkC8a`/`blkC8b`/`blkC9`
-(track `L`) are the only blocks whose value lemmas this file does not carry.
-Their statements are written out below as comments, with the arithmetic they
-need already proved above (`advX_prod_lt`, `advX_band`, `advRenorm_band`,
-`subExact`, `modId`).  What defeated the last pass was purely `simp`
-normalisation, not mathematics: `simp` rewrites `2 ^ 39` / `2 ^ 40` to their
-numerals before the `… % M = …` facts can fire, so the mod-elimination
-hypotheses have to be stated in numeral form *and* introduced by `rw` rather
-than as `simp` lemmas.  `litN39` / `litN40` above are those numeral forms.
+/-- `2³⁹ + x` is a word whenever `x` is a `39`-bit mantissa. -/
+theorem mbAdd_lt {x : Nat} (hx : x < MB) : MB + x < M := by
+  have h1 : MB + x < 2 ^ 40 := by simp only [MB] at hx ⊢; omega
+  have h2 : (2:Nat) ^ 40 < M := by decide
+  omega
 
-```text
-theorem blkC3a_spec (k) (t) (xU n aU)
+/-- `MB` as a power, for syntactic rewriting.  ⚠ Never let a tactic force
+`whnf` on `x − MB`: `Nat.sub` recurses on its *second* argument, so unfolding
+`2 ^ 39` there is a unary walk of `549755813888` steps and the kernel reports
+`deep recursion detected`.  Rewrite `MB` away first, syntactically. -/
+theorem MB_eq : MB = 2 ^ 39 := rfl
+
+/-- The renormalised advance is a word. -/
+theorem advRenorm_lt {y g : Nat} (h : y / 2 ^ g < 2 ^ 40) : y / 2 ^ g < M := by
+  have h2 : (2:Nat) ^ 40 < M := by decide
+  omega
+
+/-- The mantissa init value is a `39`-bit number: `(n − 2^a)·2^{39−a} < 2³⁹`
+whenever `2^a ≤ n < 2^{a+1}` and `a ≤ 39`. -/
+theorem xI_lt {n a : Nat} (hge : 2 ^ a ≤ n) (hlt : n < 2 ^ (a + 1))
+    (ha : a ≤ 39) : (n - 2 ^ a) * 2 ^ (39 - a) < 2 ^ 39 := by
+  have hnsub : n - 2 ^ a < 2 ^ a := by
+    have h : (2:Nat) ^ (a + 1) = 2 * 2 ^ a := by rw [Nat.pow_succ]; omega
+    omega
+  have h1 : (n - 2 ^ a) * 2 ^ (39 - a) < 2 ^ a * 2 ^ (39 - a) :=
+    Nat.mul_lt_mul_of_lt_of_le hnsub (Nat.le_refl _) (Nat.two_pow_pos _)
+  have h2 : (2:Nat) ^ a * 2 ^ (39 - a) = 2 ^ 39 := by
+    rw [← Nat.pow_add]; congr 1; omega
+  omega
+
+/-- The mantissa init value is a word. -/
+theorem xI_ltM {n a : Nat} (hge : 2 ^ a ≤ n) (hlt : n < 2 ^ (a + 1))
+    (ha : a ≤ 39) : (n - 2 ^ a) * 2 ^ (39 - a) < M := by
+  have h1 := xI_lt hge hlt ha
+  have h2 : (2:Nat) ^ 39 < M := by decide
+  omega
+
+/-- **Stage C3a**: track `U`'s advance `⌊X·n/2^{aU}⌋`. -/
+theorem blkC3a_spec (k : Nat) (t : RegState) (xU n aU : Nat)
     (h7 : t 7 = xU) (h13 : t 13 = n) (h27 : t 27 = aU)
     (hx : xU < MB) (hn : n < 2 ^ 24) :
     (∀ i, i ≠ 31 → run k t blkC3a i = t i) ∧
-    run k t blkC3a 31 = advX n aU xU
+    run k t blkC3a 31 = advX n aU xU := by
+  refine ⟨?_, ?_⟩
+  · intro i e31
+    simp [run, blkC3a, RegState.set, e31]
+  · have hval : run k t blkC3a 31 =
+        ((((2 ^ 39 % M + t 7) % M * t 13) % M) >>> t 27) % M := rfl
+    have e1 : (2 ^ 39 + xU) % M = 2 ^ 39 + xU := modId (mbAdd_lt hx)
+    have e2 : ((2 ^ 39 + xU) * n) % M = (2 ^ 39 + xU) * n :=
+      modId (advX_prod_lt hx hn)
+    rw [hval, h7, h13, h27, lit239, e1, e2, Nat.shiftRight_eq_div_pow]
+    exact modId (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (advX_prod_lt hx hn))
 
-theorem blkC3b_spec (k) (t) (x2) (h31 : t 31 = x2) :
+/-- **Stage C3b**: track `U`'s renormalisation bit. -/
+theorem blkC3b_spec (k : Nat) (t : RegState) (x2 : Nat) (h31 : t 31 = x2) :
     (∀ i, i ≠ 32 → run k t blkC3b i = t i) ∧
-    run k t blkC3b 32 = (if 2 ^ 40 ≤ x2 then 1 else 0)
+    run k t blkC3b 32 = (if 2 ^ 40 ≤ x2 then 1 else 0) := by
+  refine ⟨?_, ?_⟩
+  · intro i e32
+    simp [run, blkC3b, RegState.set, e32]
+  · have hval : run k t blkC3b 32 =
+        (if t 31 ≥ 2 ^ 40 % M then 1 else 0) := rfl
+    rw [hval, h31, lit240]
 
-theorem blkC4_spec (k) (t) (x2 g n aU)
+/-- **Stage C4**: track `U`'s renormalised advance and its round-`tdiv`
+initial value. -/
+theorem blkC4_spec (k : Nat) (t : RegState) (x2 g n aU : Nat)
     (h31 : t 31 = x2) (h32 : t 32 = g) (h13 : t 13 = n)
     (h28 : t 28 = 2 ^ aU) (h27 : t 27 = aU)
     (hg : g = (if 2 ^ 40 ≤ x2 then 1 else 0))
@@ -498,17 +631,119 @@ theorem blkC4_spec (k) (t) (x2 g n aU)
     (hn1 : n < 2 ^ (aU + 1)) (haU : aU ≤ 24) :
     (∀ i, i ≠ 33 → i ≠ 34 → run k t blkC4 i = t i) ∧
     run k t blkC4 33 = x2 / 2 ^ g - MB ∧
-    run k t blkC4 34 = (n - 2 ^ aU) * 2 ^ (39 - aU)
-```
+    run k t blkC4 34 = (n - 2 ^ aU) * 2 ^ (39 - aU) := by
+  subst hg
+  obtain ⟨hbl, hbh⟩ := advRenorm_band hlo hhi
+  have hnM : n < M := by
+    have h1 : (2:Nat) ^ (aU + 1) ≤ 2 ^ 25 := Nat.pow_le_pow_right (by omega) (by omega)
+    have h2 : (2:Nat) ^ 25 < M := by decide
+    omega
+  refine ⟨?_, ?_, ?_⟩
+  · intro i e33 e34
+    simp [run, blkC4, RegState.set, e33, e34]
+  · have hval : run k t blkC4 33 =
+        (((t 31 >>> t 32) % M) + (M - 2 ^ 39 % M)) % M := by
+      show run k t (⟨33, _⟩ :: [(⟨34, _⟩ : Assign)]) 33 = _
+      rw [run_cons, run_untouched _ _ _ (by decide), set_at, evalSub, evalLshr,
+        evalReg, evalReg, evalLit]
+    have hsub : (x2 / 2 ^ (if 2 ^ 40 ≤ x2 then 1 else 0) + (M - 2 ^ 39)) % M =
+        x2 / 2 ^ (if 2 ^ 40 ≤ x2 then 1 else 0) - 2 ^ 39 :=
+      subExact _ (2 ^ 39) hbl (advRenorm_lt hbh)
+    rw [MB_eq, hval, h31, h32, lit239, Nat.shiftRight_eq_div_pow,
+      modId (advRenorm_lt hbh), hsub]
+  · have hval : run k t blkC4 34 =
+        (((t 13 + (M - t 28)) % M) <<< ((39 % M + (M - t 27)) % M)) % M := by
+      show run k t (⟨33, _⟩ :: [(⟨34, _⟩ : Assign)]) 34 = _
+      rw [run_cons, run_cons, run_untouched _ _ _ (by decide), set_at,
+        evalShl, evalSub k _ (.reg 13) (.reg 28),
+        evalSub k _ (.lit 39) (.reg 27), evalReg k _ 13, evalReg k _ 28,
+        evalReg k _ 27, evalLit k _ 39, set_off t 33 _ 13 (by decide),
+        set_off t 33 _ 28 (by decide), set_off t 33 _ 27 (by decide)]
+    have hs1 : (n + (M - 2 ^ aU)) % M = n - 2 ^ aU := subExact n (2 ^ aU) hna hnM
+    have hs2 : (39 + (M - aU)) % M = 39 - aU :=
+      subExact 39 aU (by omega) (by decide)
+    rw [hval, h13, h28, h27, lit39, hs1, hs2, Nat.shiftLeft_eq]
+    exact modId (xI_ltM hna hn1 (by omega))
 
-and the same three for track `L` at registers `36`/`37`/`38`/`39`, candidate
-`n + 1` and exponent `aL`.  After them the round assembly (`gRun_spec`,
-`gBody_defined`, `gStep_spec`, `gProgram_denote`, with the epilogue's two
-final-sum tests threaded through `denote_eq_foldl_mem`'s `fin`) and the
-per-candidate re-blocking of `Ports/G1215CheckSpec.lean` remain; both are
-transcriptions of `Ports/GFoldCheckRun.lean` §11–§13 and
-`Ports/GFoldCheckSpec.lean`, which this port's block structure was chosen to
-mirror. -/
+/-- **Stage C8a**: track `L`'s advance `⌊X·(n+1)/2^{aL}⌋`. -/
+theorem blkC8a_spec (k : Nat) (t : RegState) (xL n aL : Nat)
+    (h9 : t 9 = xL) (h13 : t 13 = n) (h29 : t 29 = aL)
+    (hx : xL < MB) (hn : n + 1 < 2 ^ 24) :
+    (∀ i, i ≠ 36 → run k t blkC8a i = t i) ∧
+    run k t blkC8a 36 = advX (n + 1) aL xL := by
+  have hn1M : n + 1 < M := by
+    have h2 : (2:Nat) ^ 24 < M := two24_lt_M
+    omega
+  refine ⟨?_, ?_⟩
+  · intro i e36
+    simp [run, blkC8a, RegState.set, e36]
+  · have hval : run k t blkC8a 36 =
+        ((((2 ^ 39 % M + t 9) % M * ((t 13 + 1 % M) % M)) % M) >>> t 29) % M :=
+      rfl
+    have e1 : (2 ^ 39 + xL) % M = 2 ^ 39 + xL := modId (mbAdd_lt hx)
+    have e2 : ((2 ^ 39 + xL) * (n + 1)) % M = (2 ^ 39 + xL) * (n + 1) :=
+      modId (advX_prod_lt hx hn)
+    rw [hval, h9, h13, h29, lit239, lit1, modId hn1M, e1, e2,
+      Nat.shiftRight_eq_div_pow]
+    exact modId (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (advX_prod_lt hx hn))
+
+/-- **Stage C8b**: track `L`'s renormalisation bit. -/
+theorem blkC8b_spec (k : Nat) (t : RegState) (x2 : Nat) (h36 : t 36 = x2) :
+    (∀ i, i ≠ 37 → run k t blkC8b i = t i) ∧
+    run k t blkC8b 37 = (if 2 ^ 40 ≤ x2 then 1 else 0) := by
+  refine ⟨?_, ?_⟩
+  · intro i e37
+    simp [run, blkC8b, RegState.set, e37]
+  · have hval : run k t blkC8b 37 =
+        (if t 36 ≥ 2 ^ 40 % M then 1 else 0) := rfl
+    rw [hval, h36, lit240]
+
+/-- **Stage C9**: track `L`'s renormalised advance and its round-`tdiv`
+initial value. -/
+theorem blkC9_spec (k : Nat) (t : RegState) (x2 g n aL : Nat)
+    (h36 : t 36 = x2) (h37 : t 37 = g) (h13 : t 13 = n)
+    (h30 : t 30 = 2 ^ aL) (h29 : t 29 = aL)
+    (hg : g = (if 2 ^ 40 ≤ x2 then 1 else 0))
+    (hlo : MB ≤ x2) (hhi : x2 < 2 ^ 41) (hna : 2 ^ aL ≤ n + 1)
+    (hn1 : n + 1 < 2 ^ (aL + 1)) (haL : aL ≤ 24) :
+    (∀ i, i ≠ 38 → i ≠ 39 → run k t blkC9 i = t i) ∧
+    run k t blkC9 38 = x2 / 2 ^ g - MB ∧
+    run k t blkC9 39 = (n + 1 - 2 ^ aL) * 2 ^ (39 - aL) := by
+  subst hg
+  obtain ⟨hbl, hbh⟩ := advRenorm_band hlo hhi
+  have hnM : n + 1 < M := by
+    have h1 : (2:Nat) ^ (aL + 1) ≤ 2 ^ 25 := Nat.pow_le_pow_right (by omega) (by omega)
+    have h2 : (2:Nat) ^ 25 < M := by decide
+    omega
+  refine ⟨?_, ?_, ?_⟩
+  · intro i e38 e39
+    simp [run, blkC9, RegState.set, e38, e39]
+  · have hval : run k t blkC9 38 =
+        (((t 36 >>> t 37) % M) + (M - 2 ^ 39 % M)) % M := by
+      show run k t (⟨38, _⟩ :: [(⟨39, _⟩ : Assign)]) 38 = _
+      rw [run_cons, run_untouched _ _ _ (by decide), set_at, evalSub, evalLshr,
+        evalReg, evalReg, evalLit]
+    have hsub : (x2 / 2 ^ (if 2 ^ 40 ≤ x2 then 1 else 0) + (M - 2 ^ 39)) % M =
+        x2 / 2 ^ (if 2 ^ 40 ≤ x2 then 1 else 0) - 2 ^ 39 :=
+      subExact _ (2 ^ 39) hbl (advRenorm_lt hbh)
+    rw [MB_eq, hval, h36, h37, lit239, Nat.shiftRight_eq_div_pow,
+      modId (advRenorm_lt hbh), hsub]
+  · have hval : run k t blkC9 39 =
+        (((((t 13 + 1 % M) % M) + (M - t 30)) % M) <<<
+          ((39 % M + (M - t 29)) % M)) % M := by
+      show run k t (⟨38, _⟩ :: [(⟨39, _⟩ : Assign)]) 39 = _
+      rw [run_cons, run_cons, run_untouched _ _ _ (by decide), set_at,
+        evalShl, evalSub k _ (.bin .add (.reg 13) (.lit 1)) (.reg 30),
+        evalSub k _ (.lit 39) (.reg 29), evalAdd k _ (.reg 13) (.lit 1),
+        evalReg k _ 13, evalReg k _ 30, evalReg k _ 29, evalLit k _ 1,
+        evalLit k _ 39, set_off t 38 _ 13 (by decide),
+        set_off t 38 _ 30 (by decide), set_off t 38 _ 29 (by decide)]
+    have hs1 : (n + 1 + (M - 2 ^ aL)) % M = n + 1 - 2 ^ aL :=
+      subExact (n + 1) (2 ^ aL) hna hnM
+    have hs2 : (39 + (M - aL)) % M = 39 - aL :=
+      subExact 39 aL (by omega) (by decide)
+    rw [hval, h13, h30, h29, lit1, lit39, modId hnM, hs1, hs2, Nat.shiftLeft_eq]
+    exact modId (xI_ltM hna hn1 (by omega))
 
 /-- **Stage C5**: track `U`'s mantissa select. -/
 theorem blkC5_spec (k : Nat) (t : RegState) (ep e0 ini adv old : Nat)
