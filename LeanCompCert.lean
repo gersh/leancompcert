@@ -112,6 +112,10 @@ import LeanCompCert.Ports.G1215CheckProgram
 import LeanCompCert.Ports.G1215CheckRows
 import LeanCompCert.Ports.G2WeakHeadEuler
 import LeanCompCert.Ports.LiouvilleEllSweep
+import LeanCompCert.Ports.Section413Sweep
+import LeanCompCert.Ports.Section413Cells
+import LeanCompCert.Ports.Section413G2Sound
+import LeanCompCert.Ports.Section413G2Denote
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 
