@@ -1,0 +1,618 @@
+-- DRAFT, DOES NOT COMPILE AS IS.  Partial proof of
+-- LeanCompCert.Ports.CeDyadicFold.ceRun_spec.
+--
+-- Status: everything down to the end of "§5 the assembly operands" elaborates
+-- in ~7 s, as does the staging + blkDec chunk of §6.  Adding the
+-- blkBump/blkGeom/blkNum/blkMask/blkRst chunk makes the declaration exceed
+-- 2 000 000 heartbeats with "timeout at whnf".  The suspect is the ~26 inline
+-- `(by omega)` arguments to blkGeom_spec and blkNum_spec, each of which runs
+-- over a ~150-hypothesis local context (omega's cost is context size, not goal
+-- difficulty); the fix is to hoist those bounds into top-level lemmas taking
+-- two or three hypotheses, exactly as `geom_facts` already does for the
+-- non-linear part.  The final `sorry` covers §7 (blkB: blkZ, blkUpd, blkAsmA,
+-- blkT1/2/3, blkAcc), the `ceRound_mk` assembly, and the `Inv c (k+1)` advance,
+-- none of which is written yet.
+set_option maxHeartbeats 2000000 in
+theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
+    (hk : k < c.len * c.R) {s : RegState} (hs : Inv c k s) :
+    stA c k s 45 ≠ 0 ∧ stA c k s 47 ≠ 0 ∧ stA c k s 21 ≠ 0 ∧
+      valsOf (ceRun c k s) = ceRound c k (valsOf s) ∧
+        Inv c (k + 1) (ceRun c k s) := by
+  have hMdef : M = 2 ^ 64 := rfl
+  have hM1 : (1 : Nat) < M := by decide
+  have h25M : (2 : Nat) ^ 25 < M := by decide
+  have h50M : (2 : Nat) ^ 50 < M := by decide
+  have h13M : (13 : Nat) * 2 ^ 50 < M := by decide
+  have hR : 0 < c.R := by have := hP.RBig; omega
+  have hRM : c.R < M := by
+    have h1 := hP.RSmall
+    have h2 : (2 : Nat) ^ 31 < M := by decide
+    omega
+  have hkM : k < M := by
+    have h1 := hP.loopSmall
+    have h2 : (2 : Nat) ^ 48 < M := by decide
+    omega
+  ---- §1 index decoding
+  obtain ⟨q, eq'⟩ : ∃ x, x = k / c.R := ⟨_, rfl⟩
+  obtain ⟨rr, err⟩ : ∃ x, x = k % c.R := ⟨_, rfl⟩
+  obtain ⟨n, en⟩ : ∃ x, x = c.lo + q := ⟨_, rfl⟩
+  have hqlt : q < c.len := by rw [eq']; exact (Nat.div_lt_iff_lt_mul hR).mpr hk
+  have hrrlt : rr < c.R := by rw [err]; exact Nat.mod_lt _ hR
+  have hdm : c.R * (k / c.R) + k % c.R = k := Nat.div_add_mod k c.R
+  have hqRc : q * c.R = c.R * q := Nat.mul_comm _ _
+  have hkeq : k = q * c.R + rr := by rw [eq'] at hqRc ⊢; omega
+  have hqRle : q * c.R ≤ k := by omega
+  have hqRM : q * c.R < M := by omega
+  have hqk : q ≤ k := by rw [eq']; exact Nat.div_le_self k c.R
+  have hrrS : rr < 2 ^ 31 := by have := hP.RSmall; omega
+  have hqM : q < M := by omega
+  have hloM : c.lo < M := by have := hP.loLt; omega
+  have hR1M : c.R - 1 < M := by omega
+  have hnlt : n < 2 ^ 25 := by have := hP.topSmall; omega
+  have hnbig : 20000 < n := by have := hP.loBig; omega
+  have hnM : n < M := by omega
+  have hcandk : cand c k = n := by rw [cand, ← eq', ← en]
+  have hrndk : rnd c k = rr := by rw [rnd, ← err]
+  ---- §2 the dyadic bump
+  obtain ⟨first, efirst⟩ : ∃ x, x = if rr = 0 then 1 else 0 := ⟨_, rfl⟩
+  obtain ⟨last, elast⟩ : ∃ x, x = if rr = c.R - 1 then 1 else 0 := ⟨_, rfl⟩
+  obtain ⟨pk2, epk2⟩ : ∃ x, x = s 2 * 2 := ⟨_, rfl⟩
+  obtain ⟨dob, edob⟩ : ∃ x, x = first * (if pk2 ≤ n then 1 else 0) := ⟨_, rfl⟩
+  obtain ⟨pk, epk⟩ : ∃ x, x = if dob = 1 then pk2 else s 2 := ⟨_, rfl⟩
+  obtain ⟨kk, ekk⟩ : ∃ x, x = s 3 + dob := ⟨_, rfl⟩
+  have hfirstLe : first ≤ 1 := by rw [efirst]; split <;> omega
+  have hlastLe : last ≤ 1 := by rw [elast]; split <;> omega
+  have hdobLe : dob ≤ 1 := by
+    rw [edob]
+    rcases (show first = 0 ∨ first = 1 by omega) with h | h <;> rw [h] <;>
+      split <;> omega
+  have hs2pos : 0 < s 2 := by rw [hs.pkPow]; exact Nat.two_pow_pos _
+  have hs2le : s 2 ≤ n := by have h := hs.pkLe; rw [hcandk] at h; exact h
+  have hnle2 : n ≤ 2 * s 2 := by have h := hs.candLe; rw [hcandk] at h; exact h
+  have hdob1 : dob = 1 → first = 1 ∧ pk2 ≤ n := by
+    intro h
+    rw [edob] at h
+    rcases (show first = 0 ∨ first = 1 by omega) with h0 | h0
+    · rw [h0, Nat.zero_mul] at h; exact absurd h (by omega)
+    · refine ⟨h0, ?_⟩
+      by_cases hle : pk2 ≤ n
+      · exact hle
+      · rw [h0, Nat.one_mul, if_neg hle] at h; exact absurd h (by omega)
+  have hdob0 : dob = 0 → n < 2 * s 2 := by
+    intro h0
+    rcases Nat.lt_or_ge n (2 * s 2) with h | h
+    · exact h
+    · have hne : n = 2 * s 2 := by omega
+      have hrr0 : rr = 0 := by
+        have hb := hs.bumpRnd (by rw [hcandk]; exact hne)
+        rw [hrndk] at hb; exact hb
+      have hf1 : first = 1 := by rw [efirst, if_pos hrr0]
+      have hle : pk2 ≤ n := by omega
+      rw [edob, hf1, Nat.one_mul, if_pos hle] at h0
+      exact absurd h0 (by omega)
+  have hpkpos : 0 < pk := by
+    rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
+    · rw [epk, if_neg (by omega)]; exact hs2pos
+    · rw [epk, if_pos h]; omega
+  have hpkle : pk ≤ n := by
+    rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
+    · rw [epk, if_neg (by omega)]; exact hs2le
+    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, if_pos h]; exact hle
+  have hpklt : n < 2 * pk := by
+    rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
+    · rw [epk, if_neg (by omega)]; exact hdob0 h
+    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, if_pos h]; omega
+  have hpkPow : pk = 2 ^ kk := by
+    rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
+    · rw [epk, if_neg (by omega), ekk, h, Nat.add_zero]; exact hs.pkPow
+    · rw [epk, if_pos h, ekk, h, epk2, hs.pkPow, Nat.pow_succ]
+  have hkkLe : kk ≤ 24 := by
+    rcases Nat.lt_or_ge kk 25 with h | h
+    · omega
+    · have hp : (2 : Nat) ^ 25 ≤ 2 ^ kk := Nat.pow_le_pow_right (by decide) h
+      omega
+  have hpkM : pk < M := by omega
+  have hpk2M : pk2 < M := by omega
+  have hkkM : kk + 1 < M := by omega
+  have hkkdM : (s 3 + dob) < M := by rw [← ekk]; omega
+  ---- §3 geometry
+  obtain ⟨hdenApos, hdenBpos, hnumAlt, hnumBlt, hA43, hB43, hdenAle, hdenBle⟩ :=
+    geom_facts c hP.upBit hpkpos hpkle hpklt
+  obtain ⟨g1, g2, g3, g4, g5⟩ := geom_products hpkpos hpkle hpklt
+  have hn2b : n * n < 2 ^ 50 := sq_bound hnlt
+  have hdenAM : denAOf c n pk < M := by omega
+  have hdenBM : denBOf c n pk < M := by omega
+  obtain ⟨C, eC⟩ : ∃ x, x = n * (n - 1) := ⟨_, rfl⟩
+  obtain ⟨d, ed⟩ : ∃ x, x = if rr = 0 then 2 else 2 * rr + 1 := ⟨_, rfl⟩
+  obtain ⟨n2, en2⟩ : ∃ x, x = n * n := ⟨_, rfl⟩
+  obtain ⟨p2, ep2⟩ : ∃ x, x = pk * pk := ⟨_, rfl⟩
+  obtain ⟨np, enp⟩ : ∃ x, x = n * pk := ⟨_, rfl⟩
+  obtain ⟨U, eU⟩ : ∃ x, x = n2 - p2 := ⟨_, rfl⟩
+  obtain ⟨V, eV⟩ : ∃ x, x = 4 * p2 - n2 := ⟨_, rfl⟩
+  obtain ⟨numA, enumA⟩ : ∃ x, x = if c.up = 1 then U else 3 * U := ⟨_, rfl⟩
+  obtain ⟨denA, edenA⟩ :
+    ∃ x, x = if c.up = 1 then 2 * np else n2 + 4 * np + p2 := ⟨_, rfl⟩
+  obtain ⟨numB, enumB⟩ : ∃ x, x = if c.up = 1 then 3 * V else V := ⟨_, rfl⟩
+  obtain ⟨denB, edenB⟩ :
+    ∃ x, x = if c.up = 1 then 4 * p2 + 8 * np + n2 else 4 * np := ⟨_, rfl⟩
+  have eAn : numA = numAOf c n pk := by rw [enumA, eU, en2, ep2]; rfl
+  have eAd : denA = denAOf c n pk := by rw [edenA, en2, ep2, enp]; rfl
+  have eBn : numB = numBOf c n pk := by rw [enumB, eV, en2, ep2]; rfl
+  have eBd : denB = denBOf c n pk := by rw [edenB, en2, ep2, enp]; rfl
+  have hdA : 0 < denA := by rw [eAd]; exact hdenApos
+  have hdB : 0 < denB := by rw [eBd]; exact hdenBpos
+  have hdAM : denA < M := by rw [eAd]; exact hdenAM
+  have hdBM : denB < M := by rw [eBd]; exact hdenBM
+  have hdAle : denA ≤ 13 * (n * n) := by rw [eAd]; exact hdenAle
+  have hdBle : denB ≤ 13 * (n * n) := by rw [eBd]; exact hdenBle
+  have hnAlt : numA < denA := by rw [eAn, eAd]; exact hnumAlt
+  have hnBlt : numB < denB := by rw [eBn, eBd]; exact hnumBlt
+  have hA43' : 4 * numA ≤ 3 * denA := by rw [eAn, eAd]; exact hA43
+  have hB43' : 4 * numB ≤ 3 * denB := by rw [eBn, eBd]; exact hB43
+  have hCpos : 0 < C := by rw [eC]; exact Nat.mul_pos (by omega) (by omega)
+  have hCle : C ≤ n * n := by
+    rw [eC]; exact Nat.mul_le_mul_left n (by omega)
+  have hCM : C < M := by omega
+  have hCbig : 2 ^ 28 < C := by
+    have hb1 : 20001 ≤ n := by omega
+    have hb2 : 20000 ≤ n - 1 := by omega
+    have h1 : 20001 * 20000 ≤ n * (n - 1) := Nat.mul_le_mul hb1 hb2
+    have h2 : (2 : Nat) ^ 28 < 20001 * 20000 := by decide
+    omega
+  have hdpos : 0 < d := by rw [ed]; split <;> omega
+  have hdM : d < M := by rw [ed]; split <;> omega
+  ---- §4 masks and the per-candidate reset
+  obtain ⟨act, eact⟩ : ∃ x, x = if 1 ≤ rr ∧ rr ≤ 8 then 1 else 0 := ⟨_, rfl⟩
+  obtain ⟨isq, eisq⟩ : ∃ x, x = if rr = 9 then 1 else 0 := ⟨_, rfl⟩
+  obtain ⟨isf, eisf⟩ : ∃ x, x = if rr = 10 then 1 else 0 := ⟨_, rfl⟩
+  have hactLe : act ≤ 1 := by rw [eact]; split <;> omega
+  have hisqLe : isq ≤ 1 := by rw [eisq]; split <;> omega
+  have hisfLe : isf ≤ 1 := by rw [eisf]; split <;> omega
+  have hact1 : act = 1 → 1 ≤ rr ∧ rr ≤ 8 := by
+    intro h; rw [eact] at h; split at h; · assumption
+    · exact absurd h (by omega)
+  obtain ⟨qA0, eqA0⟩ : ∃ x, x = if rr = 0 then 0 else s 5 := ⟨_, rfl⟩
+  obtain ⟨rA0, erA0⟩ : ∃ x, x = if rr = 0 then numA else s 6 := ⟨_, rfl⟩
+  obtain ⟨qB0, eqB0⟩ : ∃ x, x = if rr = 0 then 0 else s 7 := ⟨_, rfl⟩
+  obtain ⟨rB0, erB0⟩ : ∃ x, x = if rr = 0 then numB else s 8 := ⟨_, rfl⟩
+  obtain ⟨cf0, ecf0⟩ : ∃ x, x = if rr = 0 then 0 else s 4 := ⟨_, rfl⟩
+  have hpkS2 : rr ≠ 0 → pk = s 2 := by
+    intro h
+    have hf0 : first = 0 := by rw [efirst, if_neg h]
+    have hd0 : dob = 0 := by rw [edob, hf0, Nat.zero_mul]
+    rw [epk, if_neg (by omega)]
+  have hdivA : rr ≠ 0 →
+      (s 5, s 6) = sdRun denA (min (rr - 1) 8) (0, numA) := by
+    intro h
+    have hh := hs.divA (by rw [hrndk]; exact h)
+    rw [hcandk, hrndk, ← hpkS2 h, ← eAn, ← eAd] at hh
+    exact hh
+  have hdivB : rr ≠ 0 →
+      (s 7, s 8) = sdRun denB (min (rr - 1) 8) (0, numB) := by
+    intro h
+    have hh := hs.divB (by rw [hrndk]; exact h)
+    rw [hcandk, hrndk, ← hpkS2 h, ← eBn, ← eBd] at hh
+    exact hh
+  have hrA0lt : rA0 < denA := by
+    by_cases h : rr = 0
+    · rw [erA0, if_pos h]; exact hnAlt
+    · rw [erA0, if_neg h]; exact sdRun_snd_bound hdA hnAlt (hdivA h)
+  have hrB0lt : rB0 < denB := by
+    by_cases h : rr = 0
+    · rw [erB0, if_pos h]; exact hnBlt
+    · rw [erB0, if_neg h]; exact sdRun_snd_bound hdB hnBlt (hdivB h)
+  have hqA0b : 4 * qA0 ≤ 3 * 256 ^ (min (rr - 1) 8) := by
+    by_cases h : rr = 0
+    · rw [eqA0, if_pos h]; omega
+    · rw [eqA0, if_neg h]; exact sdRun_fst_bound hdA hA43' (hdivA h)
+  have hqB0b : 4 * qB0 ≤ 3 * 256 ^ (min (rr - 1) 8) := by
+    by_cases h : rr = 0
+    · rw [eqB0, if_pos h]; omega
+    · rw [eqB0, if_neg h]; exact sdRun_fst_bound hdB hB43' (hdivB h)
+  have hp8 : (256 : Nat) ^ (min (rr - 1) 8) ≤ 2 ^ 64 :=
+    pow256_le8 (Nat.min_le_right _ _)
+  have hqA0M : 4 * qA0 ≤ 3 * 2 ^ 64 := by omega
+  have hqB0M : 4 * qB0 ≤ 3 * 2 ^ 64 := by omega
+  have hqA0act : act = 1 → 4 * qA0 ≤ 3 * 2 ^ 56 := by
+    intro h
+    obtain ⟨h1, h2⟩ := hact1 h
+    have : (256 : Nat) ^ (min (rr - 1) 8) ≤ 2 ^ 56 :=
+      pow256_le7 (by omega)
+    omega
+  have hqB0act : act = 1 → 4 * qB0 ≤ 3 * 2 ^ 56 := by
+    intro h
+    obtain ⟨h1, h2⟩ := hact1 h
+    have : (256 : Nat) ^ (min (rr - 1) 8) ≤ 2 ^ 56 :=
+      pow256_le7 (by omega)
+    omega
+  ---- §5 the assembly operands
+  have hupLe := hP.upBit
+  obtain ⟨FA, eFA⟩ :
+    ∃ x, x = qA0 + c.up * (if rA0 = 0 then 0 else 1) := ⟨_, rfl⟩
+  obtain ⟨FB, eFB⟩ :
+    ∃ x, x = qB0 + (1 - c.up) * (if rB0 = 0 then 0 else 1) := ⟨_, rfl⟩
+  obtain ⟨a1, ea1⟩ : ∃ x, x = (kk + 1) * s 10 := ⟨_, rfl⟩
+  obtain ⟨ge, ege⟩ : ∃ x, x = if a1 ≤ FB then 1 else 0 := ⟨_, rfl⟩
+  obtain ⟨cb, ecb⟩ : ∃ x, x = ge ^^^ c.up := ⟨_, rfl⟩
+  have hmulA : c.up * (if rA0 = 0 then 0 else 1) ≤ 1 := by
+    rcases (show c.up = 0 ∨ c.up = 1 by omega) with h | h <;> rw [h] <;>
+      split <;> omega
+  have hmulB : (1 - c.up) * (if rB0 = 0 then 0 else 1) ≤ 1 := by
+    rcases (show c.up = 0 ∨ c.up = 1 by omega) with h | h <;> rw [h] <;>
+      split <;> omega
+  have hFAM : FA < M := by rw [eFA]; omega
+  have hFBM : FB < M := by rw [eFB]; omega
+  have hgeLe : ge ≤ 1 := by rw [ege]; split <;> omega
+  have hcbLe : cb ≤ 1 := by rw [ecb]; exact bit_bxor hgeLe hupLe
+  have hcbM : cb < M := by omega
+  have hr0b : s 10 < 2 ^ 50 := hs.r0Lt
+  have hq0b : s 9 < 2 ^ 36 := hs.q0Lt
+  have hkk1b : kk + 1 ≤ 25 := by omega
+  have hr0b' : s 10 ≤ 2 ^ 50 := by omega
+  have ha1b : a1 ≤ 25 * 2 ^ 50 := by
+    rw [ea1]; exact Nat.mul_le_mul hkk1b hr0b'
+  have ha1M : a1 < M := by omega
+  have hkkb : kk ≤ 24 := hkkLe
+  have hkr0b : kk * s 10 ≤ 24 * 2 ^ 50 := Nat.mul_le_mul hkkb hr0b'
+  have hkr0M : kk * s 10 < M := by omega
+  have hupC : c.up * (C - 1) ≤ C := by
+    rcases (show c.up = 0 ∨ c.up = 1 by omega) with h | h <;> rw [h] <;> omega
+  have hkrFA : kk * s 10 + FA < M := by omega
+  have hfullA : kk * s 10 + FA + c.up * (C - 1) < M := by omega
+  have hupCM : c.up * (C - 1) < M := by omega
+  obtain ⟨ad, ead⟩ : ∃ x, x = if ge = 1 then FB - a1 else a1 - FB := ⟨_, rfl⟩
+  have hadM : ad < M := by rw [ead]; split <;> omega
+  have hge0 : ge = 0 → FB ≤ a1 := by
+    intro h; rw [ege] at h; split at h
+    · exact absurd h (by omega)
+    · omega
+  have hge1 : ge = 1 → a1 ≤ FB := by
+    intro h; rw [ege] at h; split at h
+    · assumption
+    · exact absurd h (by omega)
+  have hcbC : cb * (C - 1) ≤ C := by
+    rcases (show cb = 0 ∨ cb = 1 by omega) with h | h <;> rw [h] <;> omega
+  have hcbCM : cb * (C - 1) < M := by omega
+  have hadb : ad ≤ 3 * 2 ^ 62 + 1 := by rw [ead]; split <;> omega
+  have hsumB : ad + cb * (C - 1) < M := by omega
+  obtain ⟨uA, euA⟩ : ∃ x, x = if act = 1 then rA0 * 256
+      else if isq = 1 then c.lfx
+      else if isf = 1 then kk * s 10 + FA + c.up * (C - 1) else 0 := ⟨_, rfl⟩
+  obtain ⟨vA, evA⟩ : ∃ x, x = if act = 1 then denA else C := ⟨_, rfl⟩
+  obtain ⟨uB, euB⟩ : ∃ x, x = if act = 1 then rB0 * 256
+      else if isf = 1 then ad + cb * (C - 1) else 0 := ⟨_, rfl⟩
+  obtain ⟨vB, evB⟩ : ∃ x, x = if act = 1 then denB else C := ⟨_, rfl⟩
+  have h256 : (13 : Nat) * 2 ^ 50 * 256 < M := by decide
+  have hrA0b : rA0 ≤ 13 * 2 ^ 50 := by omega
+  have hrB0b : rB0 ≤ 13 * 2 ^ 50 := by omega
+  have h256M : (13 : Nat) * 2 ^ 50 * 256 < M := by decide
+  have hrA256 : rA0 * 256 < M :=
+    Nat.lt_of_le_of_lt (Nat.mul_le_mul_right 256 hrA0b) h256M
+  have hrB256 : rB0 * 256 < M :=
+    Nat.lt_of_le_of_lt (Nat.mul_le_mul_right 256 hrB0b) h256M
+  have hlfxM : c.lfx < M := hP.lfxLt
+  have huAM : uA < M := by
+    rw [euA]; split
+    · exact hrA256
+    · split
+      · exact hlfxM
+      · split
+        · exact hfullA
+        · omega
+  have huBM : uB < M := by
+    rw [euB]; split
+    · exact hrB256
+    · split
+      · exact hsumB
+      · omega
+  have hvAM : vA < M := by rw [evA]; split <;> omega
+  have hvBM : vB < M := by rw [evB]; split <;> omega
+  have hvApos : 0 < vA := by rw [evA]; split <;> omega
+  have hvBpos : 0 < vB := by rw [evB]; split <;> omega
+  obtain ⟨wA, ewA⟩ : ∃ x, x = uA / vA := ⟨_, rfl⟩
+  obtain ⟨zA, ezA⟩ : ∃ x, x = uA % vA := ⟨_, rfl⟩
+  obtain ⟨wB, ewB⟩ : ∃ x, x = uB / vB := ⟨_, rfl⟩
+  obtain ⟨zB, ezB⟩ : ∃ x, x = uB % vB := ⟨_, rfl⟩
+  have hwAM : wA < M := by
+    rw [ewA]; exact Nat.lt_of_le_of_lt (Nat.div_le_self _ _) huAM
+  have hzAM : zA < M := by
+    rw [ezA]; exact Nat.lt_of_lt_of_le (Nat.mod_lt _ hvApos) (by omega)
+  have hwBM : wB < M := by
+    rw [ewB]; exact Nat.lt_of_le_of_lt (Nat.div_le_self _ _) huBM
+  have hzBM : zB < M := by
+    rw [ezB]; exact Nat.lt_of_lt_of_le (Nat.mod_lt _ hvBpos) (by omega)
+  have hwAvA : wA * vA ≤ uA := by rw [ewA]; exact Nat.div_mul_le_self _ _
+  have hwBvB : wB * vB ≤ uB := by rw [ewB]; exact Nat.div_mul_le_self _ _
+  have hzAeq : uA - wA * vA = zA := by
+    have h := Nat.div_add_mod uA vA
+    have hc : vA * (uA / vA) = (uA / vA) * vA := Nat.mul_comm _ _
+    rw [ewA, ezA]; omega
+  have hzBeq : uB - wB * vB = zB := by
+    have h := Nat.div_add_mod uB vB
+    have hc : vB * (uB / vB) = (uB / vB) * vB := Nat.mul_comm _ _
+    rw [ewB, ezB]; omega
+  obtain ⟨dq, edq⟩ : ∃ x, x = n / d := ⟨_, rfl⟩
+  have hdqd : dq * d ≤ n := by rw [edq]; exact Nat.div_mul_le_self _ _
+  have hdqdM : dq * d < M := by omega
+  have hnmod : n - dq * d = n % d := by
+    have h := Nat.div_add_mod n d
+    have hc : d * (n / d) = (n / d) * d := Nat.mul_comm _ _
+    rw [edq]; omega
+  ---- §6 the division-free prefix
+  have FR : ∀ (j : Nat) (u w : RegState) (as : List Assign), w = run k u as →
+      as.all (fun a => a.dest != j) = true → w j = u j :=
+    fun j u w as hw h => frame_of k u w as j hw h
+  obtain ⟨t0, ht0⟩ : ∃ x, x = idxStep c.R k s := ⟨_, rfl⟩
+  obtain ⟨t1, ht1⟩ : ∃ x, x = run k t0 (blkDec c) := ⟨_, rfl⟩
+  obtain ⟨t2, ht2⟩ : ∃ x, x = run k t1 blkBump := ⟨_, rfl⟩
+  obtain ⟨t3, ht3⟩ : ∃ x, x = run k t2 blkGeom := ⟨_, rfl⟩
+  obtain ⟨t4, ht4⟩ : ∃ x, x = run k t3 (blkNum c) := ⟨_, rfl⟩
+  obtain ⟨t5, ht5⟩ : ∃ x, x = run k t4 blkMask := ⟨_, rfl⟩
+  obtain ⟨t6, ht6⟩ : ∃ x, x = run k t5 blkRst := ⟨_, rfl⟩
+  obtain ⟨t7, ht7⟩ : ∃ x, x = run k t6 (blkFAB c) := ⟨_, rfl⟩
+  obtain ⟨t8, ht8⟩ : ∃ x, x = run k t7 blkAbs := ⟨_, rfl⟩
+  obtain ⟨t9, ht9⟩ : ∃ x, x = run k t8 (blkUVa c) := ⟨_, rfl⟩
+  have hstA : stA c k s = run k t9 blkUVb := by
+    rw [ht9, ht8, ht7, ht6, ht5, ht4, ht3, ht2, ht1, ht0]; rfl
+  have h0_13 : t0 13 = q := by
+    rw [ht0]
+    simp [idxStep, RegState.set, denoteOp, (show ¬ c.R = 0 by omega),
+      Nat.mod_eq_of_lt hkM, Nat.mod_eq_of_lt hRM, ← eq', Nat.mod_eq_of_lt hqM]
+  have h0o : ∀ j, ¬ j = 13 → t0 j = s j := by
+    intro j h; rw [ht0]; simp [idxStep, RegState.set, h]
+  -- blkDec
+  obtain ⟨v14, v15, v16, v17⟩ :=
+    blkDec_spec c k t0 q rr h0_13 (Nat.mod_eq_of_lt hkM) (Nat.mod_eq_of_lt hRM)
+      (Nat.mod_eq_of_lt hqRM) (by rw [subM hqRle hkM]; omega)
+      (Nat.mod_eq_of_lt hloM) (by rw [← en]; exact Nat.mod_eq_of_lt hnM)
+      (Nat.mod_eq_of_lt hR1M)
+  rw [← ht1] at v14 v15 v16 v17
+  rw [← en] at v15
+  rw [← efirst] at v16
+  rw [← elast] at v17
+  -- blkBump
+  have z1_2 : t1 2 = s 2 := (FR 2 _ _ _ ht1 (by rfl)).trans (h0o 2 (by decide))
+  have z1_3 : t1 3 = s 3 := (FR 3 _ _ _ ht1 (by rfl)).trans (h0o 3 (by decide))
+  obtain ⟨w18, w19, w2, w3⟩ :=
+    blkBump_spec k t1 (s 2) (s 3) n first dob z1_2 z1_3 v15 v16 hdobLe
+      (by rw [← epk2]; exact edob.symm)
+      (by rw [← epk2]; exact Nat.mod_eq_of_lt hpk2M) (hs.word 2)
+      (Nat.mod_eq_of_lt hkkdM)
+  rw [← ht2] at w18 w19 w2 w3
+  rw [← epk2, ← epk] at w2
+  rw [← ekk] at w3
+  -- blkGeom
+  have z2_14 : t2 14 = rr := (FR 14 _ _ _ ht2 (by rfl)).trans v14
+  have z2_15 : t2 15 = n := (FR 15 _ _ _ ht2 (by rfl)).trans v15
+  have z2_16 : t2 16 = first := (FR 16 _ _ _ ht2 (by rfl)).trans v16
+  obtain ⟨y20, y21, y22, y23, y24, y25, y26⟩ :=
+    blkGeom_spec k t2 n pk rr first w2 z2_14 z2_15 z2_16 hfirstLe (by omega)
+      hnM (by rw [← eC]; exact hCM) (by omega) (by omega) (by omega) (by omega)
+      hpkM (by omega) (by omega) (by omega) (by omega)
+  rw [← ht3] at y20 y21 y22 y23 y24 y25 y26
+  rw [← eC] at y20
+  rw [← en2] at y22
+  rw [← ep2] at y23
+  rw [← enp] at y24
+  rw [← en2, ← ep2, ← eU] at y25
+  rw [← en2, ← ep2, ← eV] at y26
+  have y21' : t3 21 = d := by
+    rw [y21, ed, efirst]
+    by_cases h : rr = 0 <;> simp [h]
+  -- blkNum
+  obtain ⟨x27, x28, x29, x30⟩ :=
+    blkNum_spec c k t3 n2 p2 np U V y22 y23 y24 y25 y26 (by omega) (by omega)
+      (by omega) (by omega) (by omega) (by omega) (by omega) (by omega)
+      (by omega) (by omega) (by omega) (by omega) (by omega) (by omega)
+  rw [← ht4] at x27 x28 x29 x30
+  rw [← enumA] at x27
+  rw [← edenA] at x28
+  rw [← enumB] at x29
+  rw [← edenB] at x30
+  -- blkMask
+  have z4_14 : t4 14 = rr :=
+    ((FR 14 _ _ _ ht4 (by rfl)).trans ((FR 14 _ _ _ ht3 (by rfl)).trans
+      z2_14))
+  obtain ⟨m31, m32, m33⟩ := blkMask_spec k t4 rr z4_14
+  rw [← ht5] at m31 m32 m33
+  rw [← eact] at m31
+  rw [← eisq] at m32
+  rw [← eisf] at m33
+  -- blkRst
+  have z5_4 : t5 4 = s 4 := by
+    rw [FR 4 _ _ _ ht5 (by rfl), FR 4 _ _ _ ht4 (by rfl),
+      FR 4 _ _ _ ht3 (by rfl), FR 4 _ _ _ ht2 (by rfl),
+      FR 4 _ _ _ ht1 (by rfl), h0o 4 (by decide)]
+  have z5_5 : t5 5 = s 5 := by
+    rw [FR 5 _ _ _ ht5 (by rfl), FR 5 _ _ _ ht4 (by rfl),
+      FR 5 _ _ _ ht3 (by rfl), FR 5 _ _ _ ht2 (by rfl),
+      FR 5 _ _ _ ht1 (by rfl), h0o 5 (by decide)]
+  have z5_6 : t5 6 = s 6 := by
+    rw [FR 6 _ _ _ ht5 (by rfl), FR 6 _ _ _ ht4 (by rfl),
+      FR 6 _ _ _ ht3 (by rfl), FR 6 _ _ _ ht2 (by rfl),
+      FR 6 _ _ _ ht1 (by rfl), h0o 6 (by decide)]
+  have z5_7 : t5 7 = s 7 := by
+    rw [FR 7 _ _ _ ht5 (by rfl), FR 7 _ _ _ ht4 (by rfl),
+      FR 7 _ _ _ ht3 (by rfl), FR 7 _ _ _ ht2 (by rfl),
+      FR 7 _ _ _ ht1 (by rfl), h0o 7 (by decide)]
+  have z5_8 : t5 8 = s 8 := by
+    rw [FR 8 _ _ _ ht5 (by rfl), FR 8 _ _ _ ht4 (by rfl),
+      FR 8 _ _ _ ht3 (by rfl), FR 8 _ _ _ ht2 (by rfl),
+      FR 8 _ _ _ ht1 (by rfl), h0o 8 (by decide)]
+  have z5_16 : t5 16 = first := by
+    rw [FR 16 _ _ _ ht5 (by rfl), FR 16 _ _ _ ht4 (by rfl),
+      FR 16 _ _ _ ht3 (by rfl)]
+    exact z2_16
+  have z5_27 : t5 27 = numA :=
+    (FR 27 _ _ _ ht5 (by rfl)).trans x27
+  have z5_29 : t5 29 = numB :=
+    (FR 29 _ _ _ ht5 (by rfl)).trans x29
+  obtain ⟨r34, r35, r36, r37, r38⟩ :=
+    blkRst_spec k t5 first (s 5) (s 6) (s 7) (s 8) (s 4) numA numB z5_4 z5_5
+      z5_6 z5_7 z5_8 z5_16 z5_27 z5_29 hfirstLe (hs.word 5) (hs.word 6)
+      (hs.word 7) (hs.word 8) (hs.word 4) (by omega) (by omega)
+  rw [← ht6] at r34 r35 r36 r37 r38
+  have hif : ∀ (a b : Nat), (if first = 1 then a else b)
+      = if rr = 0 then a else b := by
+    intro a b
+    by_cases h : rr = 0
+    · rw [efirst, if_pos h, if_pos h, if_pos rfl]
+    · rw [efirst, if_neg h, if_neg h, if_neg (by omega : ¬ (0 : Nat) = 1)]
+  rw [hif, ← eqA0] at r34
+  rw [hif, ← erA0] at r35
+  rw [hif, ← eqB0] at r36
+  rw [hif, ← erB0] at r37
+  rw [hif, ← ecf0] at r38
+  -- blkFAB
+  have z6_3 : t6 3 = kk := by
+    rw [FR 3 _ _ _ ht6 (by rfl), FR 3 _ _ _ ht5 (by rfl),
+      FR 3 _ _ _ ht4 (by rfl), FR 3 _ _ _ ht3 (by rfl)]
+    exact w3
+  have z6_10 : t6 10 = s 10 := by
+    rw [FR 10 _ _ _ ht6 (by rfl), FR 10 _ _ _ ht5 (by rfl),
+      FR 10 _ _ _ ht4 (by rfl), FR 10 _ _ _ ht3 (by rfl),
+      FR 10 _ _ _ ht2 (by rfl), FR 10 _ _ _ ht1 (by rfl),
+      h0o 10 (by decide)]
+  obtain ⟨f39, f40, f41, f42, f43⟩ :=
+    blkFAB_spec c k t6 qA0 rA0 qB0 rB0 kk (s 10) FA FB a1 ge cb z6_3 z6_10
+      r34 r35 r36 r37 hupLe eFA.symm hFAM eFB.symm hFBM ea1.symm ha1M hkkM
+      ege.symm ecb.symm hcbM
+  rw [← ht7] at f39 f40 f41 f42 f43
+  -- blkAbs
+  have a66 := blkAbs_spec k t7 FB a1 ge ad f40 f41 f42 hgeLe hge0 hge1 ead.symm
+    hadM hFBM ha1M
+  rw [← ht8] at a66
+  -- blkUVa
+  have z8_3 : t8 3 = kk := by
+    rw [FR 3 _ _ _ ht8 (by rfl), FR 3 _ _ _ ht7 (by rfl)]; exact z6_3
+  have z8_10 : t8 10 = s 10 := by
+    rw [FR 10 _ _ _ ht8 (by rfl), FR 10 _ _ _ ht7 (by rfl)]; exact z6_10
+  have z8_20 : t8 20 = C := by
+    rw [FR 20 _ _ _ ht8 (by rfl), FR 20 _ _ _ ht7 (by rfl),
+      FR 20 _ _ _ ht6 (by rfl), FR 20 _ _ _ ht5 (by rfl),
+      FR 20 _ _ _ ht4 (by rfl)]
+    exact y20
+  have z8_21 : t8 21 = d := by
+    rw [FR 21 _ _ _ ht8 (by rfl), FR 21 _ _ _ ht7 (by rfl),
+      FR 21 _ _ _ ht6 (by rfl), FR 21 _ _ _ ht5 (by rfl),
+      FR 21 _ _ _ ht4 (by rfl)]
+    exact y21'
+  have z8_28 : t8 28 = denA := by
+    rw [FR 28 _ _ _ ht8 (by rfl), FR 28 _ _ _ ht7 (by rfl),
+      FR 28 _ _ _ ht6 (by rfl), FR 28 _ _ _ ht5 (by rfl)]
+    exact x28
+  have z8_30 : t8 30 = denB := by
+    rw [FR 30 _ _ _ ht8 (by rfl), FR 30 _ _ _ ht7 (by rfl),
+      FR 30 _ _ _ ht6 (by rfl), FR 30 _ _ _ ht5 (by rfl)]
+    exact x30
+  have z8_31 : t8 31 = act := by
+    rw [FR 31 _ _ _ ht8 (by rfl), FR 31 _ _ _ ht7 (by rfl),
+      FR 31 _ _ _ ht6 (by rfl)]
+    exact m31
+  have z8_32 : t8 32 = isq := by
+    rw [FR 32 _ _ _ ht8 (by rfl), FR 32 _ _ _ ht7 (by rfl),
+      FR 32 _ _ _ ht6 (by rfl)]
+    exact m32
+  have z8_33 : t8 33 = isf := by
+    rw [FR 33 _ _ _ ht8 (by rfl), FR 33 _ _ _ ht7 (by rfl),
+      FR 33 _ _ _ ht6 (by rfl)]
+    exact m33
+  have z8_34 : t8 34 = qA0 := by
+    rw [FR 34 _ _ _ ht8 (by rfl), FR 34 _ _ _ ht7 (by rfl)]; exact r34
+  have z8_35 : t8 35 = rA0 := by
+    rw [FR 35 _ _ _ ht8 (by rfl), FR 35 _ _ _ ht7 (by rfl)]; exact r35
+  have z8_36 : t8 36 = qB0 := by
+    rw [FR 36 _ _ _ ht8 (by rfl), FR 36 _ _ _ ht7 (by rfl)]; exact r36
+  have z8_37 : t8 37 = rB0 := by
+    rw [FR 37 _ _ _ ht8 (by rfl), FR 37 _ _ _ ht7 (by rfl)]; exact r37
+  have z8_38 : t8 38 = cf0 := by
+    rw [FR 38 _ _ _ ht8 (by rfl), FR 38 _ _ _ ht7 (by rfl)]; exact r38
+  have z8_39 : t8 39 = FA := (FR 39 _ _ _ ht8 (by rfl)).trans f39
+  have z8_43 : t8 43 = cb := (FR 43 _ _ _ ht8 (by rfl)).trans f43
+  have z8_15 : t8 15 = n := by
+    rw [FR 15 _ _ _ ht8 (by rfl), FR 15 _ _ _ ht7 (by rfl),
+      FR 15 _ _ _ ht6 (by rfl), FR 15 _ _ _ ht5 (by rfl),
+      FR 15 _ _ _ ht4 (by rfl), FR 15 _ _ _ ht3 (by rfl)]
+    exact z2_15
+  have z8_17 : t8 17 = last := by
+    rw [FR 17 _ _ _ ht8 (by rfl), FR 17 _ _ _ ht7 (by rfl),
+      FR 17 _ _ _ ht6 (by rfl), FR 17 _ _ _ ht5 (by rfl),
+      FR 17 _ _ _ ht4 (by rfl), FR 17 _ _ _ ht3 (by rfl),
+      FR 17 _ _ _ ht2 (by rfl)]
+    exact v17
+  have z8_2 : t8 2 = pk := by
+    rw [FR 2 _ _ _ ht8 (by rfl), FR 2 _ _ _ ht7 (by rfl),
+      FR 2 _ _ _ ht6 (by rfl), FR 2 _ _ _ ht5 (by rfl),
+      FR 2 _ _ _ ht4 (by rfl), FR 2 _ _ _ ht3 (by rfl)]
+    exact w2
+  obtain ⟨u44, u45⟩ :=
+    blkUVa_spec c k t8 act isq isf rA0 kk (s 10) FA C denA uA z8_3 z8_10 z8_20
+      z8_28 z8_31 z8_32 z8_33 z8_35 z8_39 hactLe hisqLe hisfLe hupLe euA.symm
+      huAM hrA256 hlfxM (by omega) hCM hkr0M hkrFA hfullA hupCM hdAM
+  rw [← ht9] at u44 u45
+  rw [← evA] at u45
+  -- blkUVb
+  have z9_20 : t9 20 = C := (FR 20 _ _ _ ht9 (by rfl)).trans z8_20
+  have z9_30 : t9 30 = denB := (FR 30 _ _ _ ht9 (by rfl)).trans z8_30
+  have z9_31 : t9 31 = act := (FR 31 _ _ _ ht9 (by rfl)).trans z8_31
+  have z9_33 : t9 33 = isf := (FR 33 _ _ _ ht9 (by rfl)).trans z8_33
+  have z9_37 : t9 37 = rB0 := (FR 37 _ _ _ ht9 (by rfl)).trans z8_37
+  have z9_43 : t9 43 = cb := (FR 43 _ _ _ ht9 (by rfl)).trans z8_43
+  have z9_66 : t9 66 = ad := (FR 66 _ _ _ ht9 (by rfl)).trans a66
+  obtain ⟨u46, u47⟩ :=
+    blkUVb_spec k t9 act isf cb rB0 ad C denB uB z9_20 z9_30 z9_31 z9_33 z9_37
+      z9_43 z9_66 hactLe hisfLe hcbLe euB.symm huBM hrB256 (by omega) hCM hadM
+      hcbCM hdBM hsumB
+  rw [← hstA] at u46 u47
+  rw [← evB] at u47
+  -- the values `stA` carries into the second half
+  have FA' : ∀ j, blkUVb.all (fun a => a.dest != j) = true → stA c k s j = t9 j :=
+    fun j h => by rw [hstA]; exact run_frame k blkUVb j t9 h
+  have A44 : stA c k s 44 = uA := (FA' 44 (by rfl)).trans u44
+  have A45 : stA c k s 45 = vA := (FA' 45 (by rfl)).trans u45
+  have A15 : stA c k s 15 = n :=
+    (FA' 15 (by rfl)).trans ((FR 15 _ _ _ ht9 (by rfl)).trans z8_15)
+  have A21 : stA c k s 21 = d :=
+    (FA' 21 (by rfl)).trans ((FR 21 _ _ _ ht9 (by rfl)).trans z8_21)
+  have A38 : stA c k s 38 = cf0 :=
+    (FA' 38 (by rfl)).trans ((FR 38 _ _ _ ht9 (by rfl)).trans z8_38)
+  have A31 : stA c k s 31 = act :=
+    (FA' 31 (by rfl)).trans ((FR 31 _ _ _ ht9 (by rfl)).trans z8_31)
+  have A32 : stA c k s 32 = isq :=
+    (FA' 32 (by rfl)).trans ((FR 32 _ _ _ ht9 (by rfl)).trans z8_32)
+  have A33 : stA c k s 33 = isf :=
+    (FA' 33 (by rfl)).trans ((FR 33 _ _ _ ht9 (by rfl)).trans z8_33)
+  have A34 : stA c k s 34 = qA0 :=
+    (FA' 34 (by rfl)).trans ((FR 34 _ _ _ ht9 (by rfl)).trans z8_34)
+  have A35 : stA c k s 35 = rA0 :=
+    (FA' 35 (by rfl)).trans ((FR 35 _ _ _ ht9 (by rfl)).trans z8_35)
+  have A36 : stA c k s 36 = qB0 :=
+    (FA' 36 (by rfl)).trans ((FR 36 _ _ _ ht9 (by rfl)).trans z8_36)
+  have A37 : stA c k s 37 = rB0 :=
+    (FA' 37 (by rfl)).trans ((FR 37 _ _ _ ht9 (by rfl)).trans z8_37)
+  have A3 : stA c k s 3 = kk :=
+    (FA' 3 (by rfl)).trans ((FR 3 _ _ _ ht9 (by rfl)).trans z8_3)
+  have A17 : stA c k s 17 = last :=
+    (FA' 17 (by rfl)).trans ((FR 17 _ _ _ ht9 (by rfl)).trans z8_17)
+  have A2 : stA c k s 2 = pk :=
+    (FA' 2 (by rfl)).trans ((FR 2 _ _ _ ht9 (by rfl)).trans z8_2)
+  have Ao : ∀ j, ¬ j = 13 → (blkDec c).all (fun a => a.dest != j) = true →
+      blkBump.all (fun a => a.dest != j) = true →
+      blkGeom.all (fun a => a.dest != j) = true →
+      (blkNum c).all (fun a => a.dest != j) = true →
+      blkMask.all (fun a => a.dest != j) = true →
+      blkRst.all (fun a => a.dest != j) = true →
+      (blkFAB c).all (fun a => a.dest != j) = true →
+      blkAbs.all (fun a => a.dest != j) = true →
+      (blkUVa c).all (fun a => a.dest != j) = true →
+      blkUVb.all (fun a => a.dest != j) = true →
+      stA c k s j = s j := by
+    intro j h13 hd hb hg hn hm hr hf ha hua hub
+    rw [hstA, run_frame k blkUVb j t9 hub, FR 2 _ _ _ ht9 hua,
+      FR 2 _ _ _ ht8 ha, FR 2 _ _ _ ht7 hf, FR 2 _ _ _ ht6 hr,
+      FR 2 _ _ _ ht5 hm, FR 2 _ _ _ ht4 hn, FR 2 _ _ _ ht3 hg,
+      FR 2 _ _ _ ht2 hb, FR 2 _ _ _ ht1 hd, h0o j h13]
+  have A46 : stA c k s 46 = uB := u46
+  have A47 : stA c k s 47 = vB := u47
+  sorry
+

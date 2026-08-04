@@ -116,6 +116,9 @@ import LeanCompCert.Ports.Section413Sweep
 import LeanCompCert.Ports.Section413Cells
 import LeanCompCert.Ports.Section413G2Sound
 import LeanCompCert.Ports.Section413G2Denote
+import LeanCompCert.Ports.CeDyadicFold
+import LeanCompCert.Ports.CeDyadicBlock
+import LeanCompCert.Ports.CeDyadicClaim
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 
