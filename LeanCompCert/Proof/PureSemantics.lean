@@ -814,8 +814,39 @@ def evalCCStraight
   | .compare dest op lhs rhs => evalCCComparisonStep env dest op lhs rhs
   | .cast dest value => evalCCCastStep env dest value
 
+/--
+Declaration semantics.
+
+`uint64_t l_3;` leaves the object indeterminate; the model leaves the name
+undefined, so any later read is `none` and the whole evaluation is stuck.  That
+is the conservative direction: a result is only ever produced when it does not
+depend on reading an uninitialised local.  `uint64_t l_3 = e;` stores the
+initialiser **converted to the declared type**, which is what C does and what
+makes the rule faithful for a narrow declared type.
+
+`CEnv` is a flat name environment, so this models declarations that do not
+shadow.  Every emitted translation unit satisfies that: locals are
+`ABI.localName i` for distinct `i`, all in one block.
+-/
+def evalCDecl (env : CEnv) (type : C.CType) (name : String) :
+    Option C.CExpr → Option CEnv
+  | none => some env
+  | some init => do
+      let value ← evalCExpr env init
+      let stored ← normalize type value
+      pure (env.set name stored)
+
+/--
+Statement semantics for the loop-free part of the proved fragment.
+
+Everything outside it — calls, branches, `switch`, `goto`, `return`, and
+**`while`** — is `none`, i.e. the model refuses to say anything.  `while` is
+interpreted by `evalCStmtFuel` below, which carries the iteration budget a
+`while` needs and this function does not have.
+-/
 def evalCStmt (env : CEnv) : C.CStmt → Option CEnv
   | .assign target value => evalCAssign env target value
+  | .decl type name init => evalCDecl env type name init
   | _ => none
 
 /--
@@ -1268,6 +1299,257 @@ theorem evalCSequence_append
       cases hHead : evalCStmt env stmt with
       | none => simp [evalCSequence, hHead]
       | some next => simp [evalCSequence, hHead, ih next]
+
+/-! ### `while`, at the trip counts the emitter actually produces
+
+`Lower` never emits a loop, but `Verified.Reflect.emitRolled` does: a
+10⁷-iteration fold is emitted as one `while` whose body is the fold body
+compiled **once** against a counter register.  Without a rule for `while` the
+whole rolled route sits outside the proved C model, which is precisely the
+route large campaigns must use.
+
+The rule below is **fuelled**, and deliberately so.  A general `while` rule
+would have to be a partial function or an inductive relation; the shape this
+package emits is a counted loop — a `u64` counter register, an increment at the
+end of the body, and a fixed literal trip count — for which a bounded semantics
+is exact.  Fuel exhaustion is `none`, so an under-supplied budget can only make
+the model refuse to answer, never answer wrongly.
+
+**Covered.**  `while (cond) { s₁; …; sₙ }` where
+
+* `cond` is a scalar expression of the `evalCExpr` fragment (variables,
+  literals, unary and binary operators, casts — no memory);
+* every `sᵢ` is loop-free, i.e. interpreted by `evalCStmt`: an assignment to a
+  variable, or a declaration; and
+* the loop leaves the guard false within the supplied fuel.
+
+**Not covered**, and `none` rather than approximated: nested loops, `break`,
+`continue`, `goto` into or out of the body, `return` inside the body, a guard
+that reads memory, and any loop that has not exited when the fuel runs out.
+-/
+
+/-- The body block, concatenated `count` times.  The unrolled form of a
+`count`-iteration loop. -/
+def repeatStmts (body : List C.CStmt) : Nat → List C.CStmt
+  | 0 => []
+  | count + 1 => body ++ repeatStmts body count
+
+theorem repeatStmts_succ (body : List C.CStmt) (count : Nat) :
+    repeatStmts body (count + 1) = body ++ repeatStmts body count := rfl
+
+/--
+Fuelled `while` semantics: evaluate the guard, stop on `0`, otherwise run the
+body once and recurse with one unit less fuel.  Out of fuel is `none` — the
+model declines rather than guesses.
+-/
+def evalCWhile (cond : C.CExpr) (body : List C.CStmt) :
+    Nat → CEnv → Option CEnv
+  | 0, _ => none
+  | fuel + 1, env =>
+      match evalCExpr env cond with
+      | none => none
+      | some guard =>
+          if guard = 0 then some env
+          else (evalCSequence env body).bind (evalCWhile cond body fuel)
+
+/-- Statement semantics with an iteration budget for loops.  Identical to
+`evalCStmt` on every statement that is not a `while`. -/
+def evalCStmtFuel (fuel : Nat) (env : CEnv) : C.CStmt → Option CEnv
+  | .whileLoop cond body => evalCWhile cond body.toList fuel env
+  | stmt => evalCStmt env stmt
+
+def evalCSequenceFuel (fuel : Nat) (env : CEnv) : List C.CStmt → Option CEnv
+  | [] => some env
+  | stmt :: rest => do
+      let env ← evalCStmtFuel fuel env stmt
+      evalCSequenceFuel fuel env rest
+
+/-- Statements the loop-free semantics interprets. -/
+def LoopFree : C.CStmt → Prop
+  | .whileLoop _ _ => False
+  | _ => True
+
+instance (stmt : C.CStmt) : Decidable (LoopFree stmt) := by
+  cases stmt <;> simp only [LoopFree] <;> infer_instance
+
+/-! #### Conservativity
+
+Adding the loop rule moves nothing that was already proved.  `evalCStmtFuel`
+*is* `evalCStmt` on every loop-free statement, whatever the budget, so every
+existing theorem about `evalCSequence` transfers verbatim — and every statement
+`lowerSequence` produces is an assignment, hence loop-free, so no lowered trace
+in this package is affected at all. -/
+
+theorem evalCStmtFuel_of_loopFree (fuel : Nat) (env : CEnv) (stmt : C.CStmt)
+    (h : LoopFree stmt) : evalCStmtFuel fuel env stmt = evalCStmt env stmt := by
+  cases stmt <;> first | rfl | exact absurd h (by simp [LoopFree])
+
+theorem evalCSequenceFuel_of_loopFree (fuel : Nat) :
+    ∀ (statements : List C.CStmt), (∀ stmt ∈ statements, LoopFree stmt) →
+      ∀ env : CEnv,
+        evalCSequenceFuel fuel env statements = evalCSequence env statements := by
+  intro statements
+  induction statements with
+  | nil => intro _ _; rfl
+  | cons stmt rest ih =>
+      intro hFree env
+      show (evalCStmtFuel fuel env stmt).bind
+          (fun env => evalCSequenceFuel fuel env rest) =
+        (evalCStmt env stmt).bind (fun env => evalCSequence env rest)
+      rw [evalCStmtFuel_of_loopFree fuel env stmt (hFree stmt (by simp))]
+      cases evalCStmt env stmt with
+      | none => rfl
+      | some next => exact ih (fun s hs => hFree s (by simp [hs])) next
+
+/-- Every statement the verified lowering emits is an assignment, so no trace
+this package lowers can contain a loop. -/
+private theorem assign_of_bind_ok
+    (result : Except Lower.LowerError C.CExpr)
+    (target : C.CExpr) (stmt : C.CStmt)
+    (h : (result.bind (fun e => pure (C.CStmt.assign target e))) = .ok stmt) :
+    ∃ value, stmt = .assign target value := by
+  cases result with
+  | error e => exact absurd h (by simp [Except.bind])
+  | ok expr =>
+      change Except.ok (C.CStmt.assign target expr) = Except.ok stmt at h
+      injection h with hStmt
+      exact ⟨expr, hStmt.symm⟩
+
+theorem lowerStraight_loopFree (fn : CCIR.Function)
+    (instruction : StraightInstruction) (stmt : C.CStmt)
+    (hLower : lowerStraight fn instruction = .ok stmt) : LoopFree stmt := by
+  have hShape : ∃ target value, stmt = .assign target value := by
+    cases instruction with
+    | assign dest value =>
+        simp only [lowerStraight] at hLower
+        obtain ⟨e, he⟩ := assign_of_bind_ok (Lower.lowerOperand fn value)
+          (Lower.localExpr dest) stmt hLower
+        exact ⟨_, _, he⟩
+    | binary dest op lhs rhs =>
+        simp only [lowerStraight] at hLower
+        obtain ⟨e, he⟩ := assign_of_bind_ok
+          (Lower.lowerBinary fn dest op.ccir lhs rhs)
+          (Lower.localExpr dest) stmt hLower
+        exact ⟨_, _, he⟩
+    | compare dest op lhs rhs =>
+        simp only [lowerStraight] at hLower
+        obtain ⟨e, he⟩ := assign_of_bind_ok
+          (Lower.lowerBinary fn dest op.ccir lhs rhs)
+          (Lower.localExpr dest) stmt hLower
+        exact ⟨_, _, he⟩
+    | cast dest value =>
+        simp only [lowerStraight] at hLower
+        obtain ⟨e, he⟩ := assign_of_bind_ok
+          (Lower.lowerUnary fn dest (.cast dest.type) value)
+          (Lower.localExpr dest) stmt hLower
+        exact ⟨_, _, he⟩
+  obtain ⟨target, value, rfl⟩ := hShape
+  trivial
+
+theorem lowerSequence_loopFree (fn : CCIR.Function) :
+    ∀ (instructions : List StraightInstruction) (statements : List C.CStmt),
+      lowerSequence fn instructions = .ok statements →
+      ∀ stmt ∈ statements, LoopFree stmt := by
+  intro instructions
+  induction instructions with
+  | nil =>
+      intro statements hLower stmt hMem
+      rw [lowerSequence_nil] at hLower
+      injection hLower with hStatements
+      subst statements
+      exact absurd hMem (by simp)
+  | cons instruction rest ih =>
+      intro statements hLower stmt hMem
+      rw [lowerSequence_cons] at hLower
+      cases hHead : lowerStraight fn instruction with
+      | error e =>
+          rw [hHead] at hLower
+          exact absurd hLower (by simp [bind, Except.bind])
+      | ok head =>
+          rw [hHead] at hLower
+          cases hTail : lowerSequence fn rest with
+          | error e =>
+              rw [hTail] at hLower
+              exact absurd hLower (by simp [bind, Except.bind])
+          | ok tail =>
+              rw [hTail] at hLower
+              change Except.ok (head :: tail) = Except.ok statements at hLower
+              injection hLower with hStatements
+              subst statements
+              rcases List.mem_cons.mp hMem with rfl | hTailMem
+              · exact lowerStraight_loopFree fn instruction stmt hHead
+              · exact ih tail hTail stmt hTailMem
+
+/-! #### Unrolling
+
+The generic rule.  Given a measure that counts down the remaining iterations,
+falsifies the guard at zero and keeps it true above zero, a `while` with one
+unit of fuel per remaining iteration (plus one for the exit test) evaluates
+exactly as the body concatenated that many times.  Nothing here knows what the
+guard is; the counter argument is supplied by the caller as `Inv`. -/
+theorem evalCWhile_unroll
+    (cond : C.CExpr) (body : List C.CStmt) (Inv : Nat → CEnv → Prop)
+    (hFalse : ∀ env, Inv 0 env → evalCExpr env cond = some 0)
+    (hTrue : ∀ (remaining : Nat) (env : CEnv), Inv (remaining + 1) env →
+      ∃ guard, evalCExpr env cond = some guard ∧ guard ≠ 0)
+    (hStep : ∀ (remaining : Nat) (env next : CEnv), Inv (remaining + 1) env →
+      evalCSequence env body = some next → Inv remaining next) :
+    ∀ (remaining : Nat) (env : CEnv), Inv remaining env →
+      evalCWhile cond body (remaining + 1) env =
+        evalCSequence env (repeatStmts body remaining) := by
+  intro remaining
+  induction remaining with
+  | zero =>
+      intro env hInv
+      have hUnfold : evalCWhile cond body 1 env = some env := by
+        show (match evalCExpr env cond with
+          | none => none
+          | some guard =>
+              if guard = 0 then some env
+              else (evalCSequence env body).bind (evalCWhile cond body 0)) =
+          some env
+        rw [hFalse env hInv]
+        show (if (0 : Int) = 0 then some env
+          else (evalCSequence env body).bind (evalCWhile cond body 0)) = _
+        exact if_pos rfl
+      rw [hUnfold]
+      rfl
+  | succ remaining ih =>
+      intro env hInv
+      obtain ⟨guard, hGuard, hNe⟩ := hTrue remaining env hInv
+      have hUnfold : evalCWhile cond body (remaining + 1 + 1) env =
+          (evalCSequence env body).bind
+            (evalCWhile cond body (remaining + 1)) := by
+        show (match evalCExpr env cond with
+          | none => none
+          | some guard =>
+              if guard = 0 then some env
+              else (evalCSequence env body).bind
+                (evalCWhile cond body (remaining + 1))) = _
+        rw [hGuard]
+        show (if guard = 0 then some env
+          else (evalCSequence env body).bind
+            (evalCWhile cond body (remaining + 1))) = _
+        exact if_neg hNe
+      rw [hUnfold, repeatStmts_succ, evalCSequence_append]
+      cases hBody : evalCSequence env body with
+      | none => rfl
+      | some next =>
+          show evalCWhile cond body (remaining + 1) next = _
+          exact ih next (hStep remaining env next hInv hBody)
+
+theorem evalCSequenceFuel_append (fuel : Nat) (env : CEnv)
+    (first rest : List C.CStmt) :
+    evalCSequenceFuel fuel env (first ++ rest) =
+      (do
+        let env ← evalCSequenceFuel fuel env first
+        evalCSequenceFuel fuel env rest) := by
+  induction first generalizing env with
+  | nil => rfl
+  | cons stmt tail ih =>
+      cases hHead : evalCStmtFuel fuel env stmt with
+      | none => simp [evalCSequenceFuel, hHead]
+      | some next => simp [evalCSequenceFuel, hHead, ih next]
 
 /--
 A bounded loop, expressed as the concatenation of its unrolled iterations.

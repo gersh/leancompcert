@@ -19,9 +19,34 @@ slot0 D        slot1 err     slot2 prev   slot3 terms   slot4 ⌊√prev⌋
 slot5 ⌊log₂⌋   slot6 2^…     slot7 lnLo   slot8 thr     slot9 violations
 ```
 
-with `R₂*(hi) = (D − 2^(S+24))/2^S` up to the enclosure `err/2^S`.  A nonzero
-`slot9` is a failed clause **or** a failed guard — the stream budget, the
-drain, the gap bound, the `⌊√n⌋` step or the `⌊log₂ n⌋` step.
+with `R₂*(hi) = (D − 2^(S+24))/2^S` up to the enclosure `err/2^S`, and
+
+```
+slot10..18  the nine failure classes; they sum to slot9
+```
+
+## The emitted `main` carries a verdict
+
+It exits `0` **exactly when** the aggregate is `0`, and otherwise names the
+class:
+
+| exit | class | meaning |
+| ---: | --- | --- |
+| `0` | — | accepted |
+| `1` | `INCONSISTENT` | the nine classes do not sum to the aggregate |
+| `2` | `budget_marktable` | the mark cursor had not finished |
+| `3` | `budget_streamcap` | a test point was pushed past `streamCap` |
+| `4` | `budget_drain` | the window turned over with the stream undrained |
+| `5` | `guard_gap` | a test-point gap did not fit `16` bits |
+| `6` | `guard_sqrt` | one `⌊√n⌋` increment did not suffice |
+| `7` | `guard_log2` | one `⌊log₂ n⌋` increment did not suffice |
+| `8` | `clause1_upper` | `R₂* ≤ 1.93·√n·log n` failed at a test point |
+| `9` | `clause2_lower` | `R₂* ≥ −1.93·√n·log n` failed at a test point |
+| `10` | `clause1_tail_at_hi` | clause 1 failed in the epilogue, at `hi` |
+
+The six budget/guard statuses come first: they do not say the family failed,
+they say the run was not a test of it, because terms are missing or the
+arithmetic left the range in which it is exact.
 
 Emission only; no proof obligation is discharged here.
 -/
@@ -33,22 +58,88 @@ open LeanCompCert.Ports.PsiSegSieve (lnFix)
 
 namespace Bench.R2SegEmit
 
-def hostedDriver (name : String) (cells : Nat) : String :=
+/-- One failure class: its label, its offset inside the class block, and the
+exit status the driver returns when it is the first nonzero one.  The list is
+given in **scan order**, so the classes that invalidate a run come before the
+classes that are a result. -/
+abbrev Class := String × Nat × Nat
+
+/-- A hosted driver that prints the result cells and then **decides**.
+
+`base` is the first result cell, `slots` how many of them the chain reads, and
+`classBase` the slot at which the class counters start.  The emitted `main` returns `0` only when every
+class counter is zero, `1` when the classes do not sum to the aggregate (a
+split that has come adrift is a reason to trust neither number), and otherwise
+the status of the first nonzero class in scan order. -/
+def verdictDriver (name : String) (cells base slots classBase : Nat)
+    (classes : List Class) (diags : List (String × Nat)) (sumIsExact : Bool) :
+    String :=
+  let cell (i : Nat) : String := "cells[" ++ toString (base + i) ++ "]"
+  let classLine (x : Class) : String :=
+    "    printf(\"class " ++ x.1 ++ " %llu\\n\", (unsigned long long)" ++
+      cell (classBase + x.2.1) ++ ");\n" ++
+    "    sum += " ++ cell (classBase + x.2.1) ++ ";\n"
+  let diagLine (x : String × Nat) : String :=
+    "    printf(\"diag " ++ x.1 ++ " %llu\\n\", (unsigned long long)" ++
+      cell x.2 ++ ");\n"
+  let verdictLine (x : Class) : String :=
+    "    if (" ++ cell (classBase + x.2.1) ++ " != UINT64_C(0)) {\n" ++
+    "        printf(\"verdict FAIL " ++ x.1 ++ "\\n\");\n" ++
+    "        return " ++ toString x.2.2 ++ ";\n    }\n"
+  let consistency :=
+    if sumIsExact then
+      "    if (sum != r) {\n" ++
+      "        printf(\"verdict INCONSISTENT classes %llu aggregate %llu\\n\",\n" ++
+      "               (unsigned long long)sum, (unsigned long long)r);\n" ++
+      "        return 1;\n    }\n"
+    else
+      -- the aggregate collapses several conditions per row, so the classes
+      -- bound it from above rather than equalling it; what must hold is that
+      -- they vanish together
+      "    if ((sum == UINT64_C(0)) != (r == UINT64_C(0)) || sum < r) {\n" ++
+      "        printf(\"verdict INCONSISTENT classes %llu aggregate %llu\\n\",\n" ++
+      "               (unsigned long long)sum, (unsigned long long)r);\n" ++
+      "        return 1;\n    }\n"
   "\n#include <stdio.h>\n" ++
   "static uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
   "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    uint64_t sum = 0;\n" ++
   "    printf(\"violations %llu\\n\", (unsigned long long)r);\n" ++
-  "    for (int i = 0; i < 10; i++)\n" ++
+  "    for (int i = 0; i < " ++ toString slots ++ "; i++)\n" ++
   "        printf(\"slot%d %llu\\n\", i,\n" ++
-  "               (unsigned long long)cells[" ++ toString cells ++ " - 12 + i]);\n" ++
+  "               (unsigned long long)cells[" ++ toString base ++ " + i]);\n" ++
+  String.join (classes.map classLine) ++
+  String.join (diags.map diagLine) ++
+  consistency ++
+  String.join (classes.map verdictLine) ++
+  "    printf(\"verdict PASS\\n\");\n" ++
   "    return 0;\n}\n"
 
+/-- The freestanding driver.  Acceptance is `r == 0`; a supplied `EXPECTED` is
+an **additional** demand (exit `1` if the artifact did not reproduce it), never
+a substitute for it — reproducing a nonzero count exits `2`. -/
 def exitDriver (name : String) (cells expected : Nat) : String :=
   "\nstatic uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
   "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
-  "    return r == UINT64_C(" ++ toString expected ++ ") ? 0 : 1;\n}\n"
+  "    if (r != UINT64_C(" ++ toString expected ++ ")) return 1;\n" ++
+  "    return r == UINT64_C(0) ? 0 : 2;\n}\n"
+
+
+/-- The nine classes, in scan order: the six that retract the run first, then
+the three that are a result.  Slot offsets are `Ports.R2SegSieve.violRegs`'
+order, which is `[Up, Lo, Tail, Mark, Cap, Drain, Gap, Sqrt, Log2]`. -/
+def classes : List Class :=
+  [ ("budget_marktable", 3, 2)
+  , ("budget_streamcap", 4, 3)
+  , ("budget_drain", 5, 4)
+  , ("guard_gap", 6, 5)
+  , ("guard_sqrt", 7, 6)
+  , ("guard_log2", 8, 7)
+  , ("clause1_upper", 0, 8)
+  , ("clause2_lower", 1, 9)
+  , ("clause1_tail_at_hi", 2, 10) ]
 
 end Bench.R2SegEmit
 
@@ -97,7 +188,8 @@ def main (args : List String) : IO UInt32 := do
       let driver :=
         match rest[1]?.bind String.toNat? with
         | some n => exitDriver name p.arrayLen n
-        | none => hostedDriver name p.arrayLen
+        | none =>
+            verdictDriver name p.arrayLen (p.arrayLen - 19) 10 10 classes [] true
       match p.emitRolled name with
       | .error errs => (for e in errs do IO.eprintln e); return 1
       | .ok src =>

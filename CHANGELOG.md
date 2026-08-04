@@ -2,6 +2,126 @@
 
 ## Unreleased
 
+- **The program ledger: one view of which compiled programs exist, what is in
+  each, and which have actually been run.**  The pieces existed —
+  `NativeCheck` stamped passing runs, `Attest/` bound receipts — and there was
+  no single place to look.  `docs/program-ledger.md` is the guide.
+  - **`LeanCompCert/Attest/Ledger.lean`** — the data model.  `ProgramEntry`
+    carries a name, a summary, the emitted C, the route, the certified value,
+    the entry point, a `ProgramShape` (registers, trip count, per-block
+    instruction counts, CCIR and restricted-C sizes), the parameters the
+    program was instantiated at, the denotation theorem *and whether it is
+    instantiated at these parameters*, a faithful instruction listing, and a
+    `LeanSide`.
+  - **Three states, three columns, never merged.**  `compiled` (`ccomp`
+    accepted this C), `run` (the binary executed and agreed), and
+    `chain proved` (a proved Lean arrow from this program's computation to a
+    mathematical proposition) are independent facts, and this repository has
+    an example of each holding without the others.  `lake exe lean-compcert
+    ledger` prints all three plus `bindable`; `--json` for machines.
+  - **`ChainProof` cannot be claimed falsely.**  Its `sound` field is a
+    function out of `artifact.computation.Returns`, so it is about the
+    computation *this artifact compiles* and no other — the producer-side form
+    of the consumer's `evaluates_atom_predicate`.  `prop_of_receipt` is the
+    theorem the column licenses; `RunAdmission` is still a hypothesis, and the
+    ledger records runs without ever letting one become a theorem.
+  - **`describe NAME`** answers "what does this binary actually compute?"
+    without reading the emitter: shape, parameters, denotation theorem, the
+    SHA-256 and byte size of the exact text `ccomp` was handed, the toolchain
+    that last compiled it, and every instruction in emitter order.
+  - **Staleness is detected and attributed.**  `check-native` now writes a
+    `<name>.run` record on *every* attempt, not only a passing one, so a tree
+    where every artifact was killed is distinguishable from one where nothing
+    was tried.  The stamp's two halves are compared separately: a row says
+    whether the *generated C* moved or the *toolchain* did, and either way
+    reads `STALE`, never `RUN`.  A receipt whose `programHash` is not the
+    digest of the C this build emits reads `STALE`; one that does not parse
+    reads `UNREADABLE`; absence reads `NO RECEIPT`.
+  - **Route labels fixed.**  Seven certificates emitted rolled or array-rolled
+    C and declared the `straight-line` route — the route whose proved chain
+    covers exactly the case they are not.  They are now `rolled-loop` and
+    `array-rolled-loop`, so `receiptBinds`'s route clause refuses a receipt
+    for them rather than comparing it against a scalar program's C.  No
+    emitted byte changed.
+  - **`bindable`, a fourth column.**  Eight of the fifteen registered programs
+    have no `Artifact`, so no receipt for them can ever be checked in the
+    kernel — `attest` will still sign one and `verify-receipt` will still
+    accept it.  The ledger says so instead of leaving a reader to find out.
+  - **`algorithm-sumrange` is registered.**  `Testing/AlgorithmProof.lean` had
+    `Algorithm.Ensures` *and* `ProgramRefinement` and was compiled by nothing.
+    It is now a cross-check unit, and the only registered program whose chain
+    column is `true` on a refinement proved structurally for every input.  Its
+    `main` is built with `Attest.selfCheckMain` from the accepting value.
+  - **One registry.**  `NativeCheck.Cert.ofEntry` derives the cross-check units
+    from the ledger entries, so a program cannot be described by one verb and
+    compiled by another.
+  - **Seven classes of structural defect fail the `ledger` verb with exit 1** —
+    an `Artifact` that does not re-emit the compiled C, a chain consuming a
+    different value than the binary tests, a chain with no certified value, a
+    route label the artifact contradicts, an entry with *no* artifact filed
+    under the `straight-line` default, an unexplained gap, and an entry point
+    absent from the emitted C.  Each is exercised in
+    `LeanCompCertTests.testProgramLedger` on a registration wrong in exactly
+    that one way.
+- **Every emitted `main` now carries a verdict, and the `ψ` clause is tested
+  against `√n` rather than `⌊√n⌋`.**  Eight bench emitters emitted a `main`
+  that printed a result and then `return 0` unconditionally, so a passing run
+  meant only "it ran".  `array_seg_platt` sat on record as `pass` while its own
+  stdout read `violations 3`.
+  - **The acceptance condition is the exit status.**  `Prop1224CellEmit`,
+    `ExpFixEmit`, `Prop1224RowEmit`, `AbelEmit`, `ArraySegEmit`, `PsiSegEmit`,
+    `ArraySegBatch` and `R2SegEmit` now exit `0` **iff** the artifact's own
+    violation register is `0`, and otherwise return a status that names the
+    class.  Where a freestanding driver takes an `EXPECTED` value, that value
+    is now an *additional* demand rather than a substitute for acceptance: a
+    run that reproduces a nonzero violation count exits `2`, because
+    reproducing a failure is not passing.
+  - **Failure classes are counted apart.**  Each port keeps one counter per way
+    it can fail, stored in result cells of its own, with the aggregate
+    unchanged and still the program's output — so `denote` means exactly what
+    it meant.  The drivers check that the classes reconstruct the aggregate and
+    refuse to report a verdict when they do not.  The split matters most where
+    the classes mean *opposite* things: a `ψ` stream-budget overrun drops
+    positive terms, which makes clause 1 easier and clause 2 harder, so in an
+    aggregate it is indistinguishable from — and the opposite of — a genuine
+    lower-bound failure.
+  - **`PsiSegSieve` clause 1 was false at the one point where it is tight.**
+    `max (ψ(x) − x)/√x = 0.7905927544` is **attained**, at the prime
+    `x = 110 102 617`, and `0.79059276` is that number rounded up.  Substituting
+    `⌊√n⌋` for `√n` costs up to `0.791` absolute against a margin of
+    `5.9·10⁻⁵`, so the artifact reported a violation where the clause holds —
+    exactly one integer below `1.11·10⁸`, which no smoke slice could reach.
+    Clause 1 is now `V² ≤ cUp16²·n`, exact in integers, `128`-bit on both sides
+    from `32×32` products.  That is the *same* claim, not a weaker one; the
+    discarded floor form is kept as the reported diagnostic `floorform_only`,
+    which is outside the aggregate because it is not a failure.  `S ≤ 48` is
+    now a hard requirement (`cUp16Fits`), since `cUp16²` must fit a word.
+    Production sizing `lo = 32 383, L = 1 048 576, N = 1 000` (`hi ≈ 1.05·10⁹`)
+    now reports `violations 0`, every class `0`, `floorform_only 1`, exit `0`,
+    in 177.6 s; the residual at `hi = 10⁸` is bit-for-bit the value
+    `bench/results/psi_fold.md` §7 records.
+  - **The floor/ceil-root audit.**  Every clause in this repository that
+    substitutes an integer root into a majorant was measured.  `ψ`'s clause 2
+    (`√2`, min ratio `−0.9241`), `R₂*`'s (`1.93`, max ratio `1.2574` at
+    `n = 59 753`) and CDEM's (`b = 0.0755` from `n = 9 243`, `b = 0.0285` from
+    `n = 437 601`) all have room and no floor-form failures in range.  Hurst's
+    `0.571` does not: over `[33, 3·10⁷]` the `⌊√n⌋` form fails at
+    `n = 33, 114, 199, 200` and the claim holds at all four.  `seg_chain.sh`'s
+    default `LO = 9243` clears them, but a run started at `33` would report
+    four spurious violations.  Recorded, not repaired.
+  - **The generated C changed for all eight**, so their stamps invalidate, and
+    two `check-native` translation units move with them (`cdem-abel`,
+    `mobius-seg`) because their ports gained counters.  The other twelve are
+    byte-identical by SHA-256, as are all eight emitters that already emitted a
+    genuine verdict — `MertensCDEMEmit`, `DeficitProductEmit`,
+    `TrialDivisionEmit`, `RS62Emit`, `TGSieveEmit`, `ArrayMobiusEmit`,
+    `RolledEmit` — checked by emitting the same configuration from both trees.
+  - Gates: `lake build` 257 jobs; `check-native --force` 14/14 agree, 0 cached;
+    `AxiomAudit` 327 prints all within `[propext, Classical.choice,
+    Quot.sound]`; the partition is 35 audited and 5 carriers;
+    `test-compcert.sh` and `verify-trusted.sh` pass.  The whole of
+    `receiptBinds` still closes by `decide +kernel`: 113 s and 26.44 GB.
+
 - **`ArrayBridge`: the array machine gets the refinement combinator
   `docs/algorithm-to-proof.md` §3 promised.**  Three modules now carry an array
   port, and the doc says which is which:
@@ -49,6 +169,59 @@
     trial-division Mertens reference at every `L ∈ [1, 200]`.  It disagrees at
     `L = 0` — the program denotes `1`, the sum is `0` — which is why
     `MobiusOk` requires `0 < L`.
+- **The rolled emission route is now inside the proved C model, and `Artifact`
+  changed shape to make that statable.**
+  - **The API change.**  `EmissionRoute.coveredByProvedChain` was a `Bool` on
+    the route alone and `Artifact` was `⟨computation, route, mainC⟩`.  That is
+    the wrong shape: on the rolled route what the proved chain says is a
+    statement about *the program the route names*, so such a pair could name
+    one program and carry a `Computation` for another and every check would
+    still pass.  It cannot be repaired by comparing them — comparing
+    `Computation`s means comparing their `statements`, which for a
+    10⁷-iteration artifact is astronomically large, exactly what rolled
+    emission exists to avoid.  `Artifact` is now `⟨body, mainC⟩` over a new
+    `ArtifactBody` with `straightLine (computation)` and
+    `rolled (program) (entry)`; the rolled form carries **only the program**
+    and its computation, C, CCIR trace and source meaning are all derived.
+    `coveredByProvedChain` moved to `ArtifactBody` and is now a real decidable
+    side condition (`program.WF && program.loopCount < 2⁶⁴`, both
+    program-sized).  ⚠ **Breaking:** a straight-line artifact literal changes
+    from `{ computation, route := .provedStraightLine, mainC }` to
+    `{ body := .straightLine computation, mainC }`;
+    `RunAdmission.reported` is now about `artifact.body.modelResult`;
+    `returns_of_receipt` takes the coverage condition (`rfl` on the
+    straight-line route) and concludes `artifact.body.Returns`;
+    `decide_of_receipt` and `decide_of_localReceipt` take
+    `receiptBindsProved` and a `sourceResult` equation.
+  - **A fuelled `while` rule.**  `Proof.PureSemantics` gained `evalCDecl`,
+    `evalCWhile`, `evalCStmtFuel`/`evalCSequenceFuel` and the generic
+    unrolling rule `evalCWhile_unroll`.  The covered shape is exactly what
+    `rolledCFunction` emits: a `u64` counter register, a literal trip count,
+    a guard `v_k < UINT64_C(N)`, an assignment-only body ending in the
+    increment, and a budget of `N + 1`.  Nested loops, `break`, `continue`,
+    `goto`, a `return` inside the body, a memory-reading guard and fuel
+    exhaustion are all `none` — a bounded semantics can only decline, never
+    answer wrongly.  Conservativity is `evalCStmtFuel_of_loopFree` together
+    with `lowerSequence_loopFree`: every statement this package's lowering
+    emits is an assignment, so nothing already proved moves.
+  - **The chain.**  `Reflect.evalCWhile_rolled` discharges the guard by
+    transporting the CCIR counter through `EnvRel`; `lowerSequence_rolledTrace`
+    and `lowerSequence_correct` relate the loop's body copies to `rolledTrace`;
+    `rolledTrace_eq_augmented` and a generalised `Program.evalCC_compileCore`
+    finish at `p.counterAugment.denote`.  The result is
+    `Reflect.rolledResult_eq_denote`, lifted to
+    `ArtifactBody.modelResult_eq_sourceResult`, one statement covering both
+    routes.  Acceptance:
+    `LeanCompCertTests.Attest.Rolled.denote_of_admitted_rolled_receipt` — the
+    10⁷-iteration rolled fixed-point certificate accepted by the **strict**
+    `receiptBindsProved`, which before this change refused every rolled
+    artifact by construction.
+  - **The emitted C is byte-identical**: all fourteen `check-native`
+    certificate units have the SHA-256 digests they had before, and
+    `receiptBinds` still closes by `decide +kernel` at the same cost (the join
+    70 s / 16.8 GB, the whole check 119 s / 26.4 GB, against 69 s / 16.8 GB and
+    108 s / 26.4 GB on the commit before).  Axiom-free throughout: every new
+    theorem prints within `[propext, Classical.choice, Quot.sound]`.
 
 - **Run receipts: the join between the proved chain and an attested
   execution.**  `LeanCompCert/Attest/` states what a receipt is, what it means

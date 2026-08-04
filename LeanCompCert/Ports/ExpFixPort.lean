@@ -11,7 +11,7 @@ of exactly `S` units in the last place, and `rpow_bracket` composes that with
 same computation as an `ArrayBridge.AProgram`, so that `AProgram.evalCC_compile`
 applies and the emitted C provably computes what the register machine denotes.
 
-## The round is `7·(P+1) + 14` instructions and carries no division
+## The round is `7·(P+1) + 16` instructions and carries no division
 
 A round is: take the next bit of the exponent, form the radicand, take its
 integer square root, and certify the root.
@@ -22,9 +22,9 @@ integer square root, and certify the root.
 | radicand `Z = x · 2^P · 2^b` | 2 (`shl` by a literal, `shl` by a *register*) |
 | initialise the root loop | 2 (`mov`, `mov`) |
 | `P+1` restoring-square-root iterations | `7·(P+1)` |
-| certify the root: `v² ≤ Z < (v+1)²` | 8 |
+| certify the root: `v² ≤ Z < (v+1)²`, and count the two ways it can fail apart | 10 |
 
-At `P = 30` that is `231` instructions and **no division of any width**, so a
+At `P = 30` that is `233` instructions and **no division of any width**, so a
 round costs the same on every architecture CompCert targets.  `lshr`/`shl` by a
 *register* is what makes the `2^b` factor branch-free; `b` is `0` or `1` by
 construction.
@@ -74,8 +74,9 @@ open LeanCompCert.Verified.ExpFixed
 
 /-! ## Register allocation
 
-`0`–`2` are the state carried across rounds; `3`–`16` are recomputed inside
-every round; `20` is the store address.
+`0`–`2` are the state carried across rounds, and `17`–`18` are the two
+per-class violation counters carried alongside `rViol`; `3`–`16` are recomputed
+inside every round; `20` is the store address.
 -/
 
 def rX : Nat := 0       -- the running mantissa, in `[2^P, 2^(P+1))`
@@ -96,6 +97,25 @@ def rW : Nat := 13
 def rV2 : Nat := 14
 def rC1 : Nat := 15
 def rC2 : Nat := 16
+
+/-! ### The two failure classes, counted apart
+
+`rViol` is the aggregate and stays the program's output, so `denote` means
+exactly what it meant before.  But `ExpFixed.expOK`'s two comparisons fail for
+opposite reasons and a reader who is told only their sum cannot act on it:
+
+* `rVHi` counts `v·v > Z` — the digit recurrence returned a root that is **too
+  large**, so the mantissa is above `⌊√Z⌋` and the bracket's *upper* end is the
+  one that moved;
+* `rVLo` counts `Z ≥ (v+1)·(v+1)` — the root is **too small**, and it is the
+  lower end that moved.
+
+They cannot both fire on one round (`v·v ≤ Z < (v+1)²` is a partition), so the
+two counters are disjoint and sum to `rViol`; the driver checks that they do.
+-/
+
+def rVHi : Nat := 17    -- roots that overshot: `v·v > Z`
+def rVLo : Nat := 18    -- roots that undershot: `Z ≥ (v+1)·(v+1)`
 def rAddr : Nat := 20
 
 def regCount : Nat := 24
@@ -145,6 +165,8 @@ def roundTail : List AInstr :=
   , .scalar (.binop rC2 .le (.reg rV2) (.reg rZ))
   , .scalar (.binop rViol .add (.reg rViol) (.reg rC1))
   , .scalar (.binop rViol .add (.reg rViol) (.reg rC2))
+  , .scalar (.binop rVHi .add (.reg rVHi) (.reg rC1))
+  , .scalar (.binop rVLo .add (.reg rVLo) (.reg rC2))
   ]
 
 /-- One round of `ExpFixed.expIter`, root and certificate included. -/
@@ -169,7 +191,9 @@ structure ExpCfg where
   out : Nat
   deriving Repr
 
-def ExpCfg.arrayLen (_c : ExpCfg) : Nat := 4
+/-- Five cells: mantissa, unconsumed exponent bits, the aggregate violation
+count, and the two per-class counters. -/
+def ExpCfg.arrayLen (_c : ExpCfg) : Nat := 5
 
 def storeResult (slot reg : Nat) : List AInstr :=
   [ .scalar (.mov rAddr (.lit slot)), .store rAddr reg ]
@@ -178,12 +202,16 @@ def ExpCfg.init (c : ExpCfg) : List AInstr :=
   [ .scalar (.mov rX (.lit (2 ^ c.P)))
   , .scalar (.mov rR (.lit c.r))
   , .scalar (.mov rViol (.lit 0))
+  , .scalar (.mov rVHi (.lit 0))
+  , .scalar (.mov rVLo (.lit 0))
   ]
 
 /-- The mantissa in slot `0`, the unconsumed exponent bits in slot `1`, the
-violation count in slot `2`. -/
+aggregate violation count in slot `2`, and the two classes it is made of in
+slots `3` and `4`: roots that overshot, roots that undershot. -/
 def ExpCfg.epilogue (c : ExpCfg) : List AInstr :=
-  storeResult 0 rX ++ storeResult 1 rR ++ storeResult 2 rViol
+  storeResult 0 rX ++ storeResult 1 rR ++ storeResult 2 rViol ++
+  storeResult 3 rVHi ++ storeResult 4 rVLo
 
 def expProgram (c : ExpCfg) : AProgram := {
   regCount := regCount
@@ -209,10 +237,10 @@ theorem rootDigits_length (P : Nat) : (rootDigits P).length = 7 * (P + 1) := by
   simp only [rootDigits, List.length_flatMap]
   rw [h, List.length_reverse, List.length_range]
 
-/-- The body's instruction count, in closed form: `7·(P+1) + 14`. -/
-theorem roundBody_length (P : Nat) : (roundBody P).length = 7 * (P + 1) + 14 := by
+/-- The body's instruction count, in closed form: `7·(P+1) + 16`. -/
+theorem roundBody_length (P : Nat) : (roundBody P).length = 7 * (P + 1) + 16 := by
   simp only [roundBody, List.length_append, rootDigits_length]
-  show 6 + (7 * (P + 1) + 8) = 7 * (P + 1) + 14
+  show 6 + (7 * (P + 1) + 10) = 7 * (P + 1) + 16
   omega
 
 /-! ## The word-size side condition
@@ -264,7 +292,7 @@ theorem expProgram_wf (c : ExpCfg) (hout : c.out < regCount) :
    forall_wf_of_all (epilogue_all c)⟩
 
 /-- **The bridge, instantiated for the fixed-point exponential.**  For any
-array base at which the four cells fit, the compiled CCIR trace — and through
+array base at which the five cells fit, the compiled CCIR trace — and through
 `Verified.MemFragment` the emitted C — leaves the program's denotation in the
 output register. -/
 theorem expProgram_compiled (c : ExpCfg) (hout : c.out < regCount) (base : Int)
@@ -283,7 +311,7 @@ theorem expProgram_compiled (c : ExpCfg) (hout : c.out < regCount) (base : Int)
 the kernel — it is written with `Nat.sqrt`, which is well-founded — so the
 values compared against here are the ones `Verified/ExpFixed.lean`'s `Check`
 block certifies for `expFrac` by `expOK_sound`, and the two blocks together say
-the digit recurrence and `Nat.sqrt` agree.  These check that the `231`
+the digit recurrence and `Nat.sqrt` agree.  These check that the `233`
 instructions implement it — at the exponent `0` where every round is
 the identity, at `1/2` and `1/4` where a single bit fires, and at the
 fractional part of `log₂ 3` where every round fires.  In each case the
@@ -316,8 +344,14 @@ example : (expProgram ⟨30, 24, 9814955, 24, rX⟩).denote = some 1610673474 :=
 
 example : (expProgram ⟨30, 24, 9814955, 24, rViol⟩).denote = some 0 := by decide
 
-/-- The body is `231` instructions at `P = 30`. -/
-example : (roundBody 30).length = 231 := by decide
+/-- The body is `233` instructions at `P = 30`. -/
+example : (roundBody 30).length = 233 := by decide
+
+/-- The two classes partition the aggregate: at every configuration checked
+here the aggregate is `0`, so each class is `0` too. -/
+example : (expProgram ⟨30, 24, 9814955, 24, rVHi⟩).denote = some 0 := by decide
+
+example : (expProgram ⟨30, 24, 9814955, 24, rVLo⟩).denote = some 0 := by decide
 
 end Check
 

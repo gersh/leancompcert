@@ -1,4 +1,4 @@
-import LeanCompCert.Attest.Tool
+import LeanCompCert.Attest.Ledger
 
 /-!
 # Cached native cross-check runner
@@ -83,6 +83,18 @@ structure Cert where
   else.  Deriving both from one value closes that by construction. -/
   certifiedValue : Option Int := none
 
+/-- The cross-check unit a ledger entry names.
+
+One list, not two: a program is registered once, and both the runner and the
+ledger read the same registration.  Keeping them apart is how a ledger comes to
+describe a program the runner does not compile, or the reverse. -/
+def Cert.ofEntry (entry : Attest.ProgramEntry) : Cert := {
+  name := entry.name
+  emitted := entry.emitted
+  routeLabel := entry.routeLabel
+  certifiedValue := entry.certifiedValue
+}
+
 /-- How the compiled object becomes an executable. -/
 inductive LinkMode where
   /-- `ccomp -c` + `as` on the startup stub + `ld`; no libc. -/
@@ -121,7 +133,7 @@ structure Options where
   which is the right answer for a closed certificate. -/
   paramsFile : Option System.FilePath := none
 
-private def parseOptions : List String → Except String Options
+def parseOptions : List String → Except String Options
   | [] => .ok {}
   | "--force" :: rest => do
       let opts ← parseOptions rest
@@ -322,15 +334,62 @@ stub, the headers, or the program, and the stamp is discarded.  That
 makes `--force` a deliberate re-verification rather than a routine
 necessity — though it is still what you want when producing evidence,
 because a stamp records that a run happened, not that you watched it. -/
-private def stampFor (source toolchain : String) : String :=
+def stampFor (source toolchain : String) : String :=
   s!"{hash source} {hash toolchain} pass"
+
+/-- The two halves of a stamp, so a reader can be told *which* one moved.
+
+`check-native` only needs "the stamp differs"; the ledger has to say whether
+the program changed or the compiler did, because those are different pieces of
+news.  Fail-closed: a stamp that does not have this shape is `none` and the row
+reads stale. -/
+def stampParts (stamp : String) : Option (String × String) :=
+  match (stamp.trimAscii.toString.splitOn " ").filter (· != "") with
+  | [source, toolchain, "pass"] => some (source, toolchain)
+  | _ => none
 
 /-- Everything the freestanding path needs that is resolved once, before
 the certificate loop: the assembled startup stub. -/
-private structure LinkSetup where
+structure LinkSetup where
   mode : LinkMode
   /-- Assembled `runtime/start/<arch>.S`; `none` in hosted mode. -/
   startObject : Option System.FilePath := none
+
+/-- **Everything the stamp is keyed on, resolved once.**
+
+`run` and the ledger both go through this, so the key the ledger compares a
+stamp against is the key the runner wrote — by construction, rather than by two
+copies of the same expression staying in step.  A ledger that computed the
+toolchain key its own way would eventually disagree with the runner and would
+then report every row stale, or worse, none of them. -/
+structure Environment where
+  opts : Options
+  /-- `-I` flags, in the order `ccomp` receives them. -/
+  includes : List String
+  setup : LinkSetup
+  /-- `ccomp -version`, verbatim. -/
+  version : String
+  /-- The `compcertIdentity` block: the `ccomp` binary's digest and the full
+  text of its `compcert.ini`. -/
+  compcertId : String
+  /-- The `machineIdentity` line. -/
+  machineId : String
+  /-- Freestanding or hosted, plus stub, assembler and linker identities. -/
+  linkDescription : String
+  /-- Content hash of the caller-supplied header directories. -/
+  headerHash : UInt64
+  /-- The exact text `stampFor` is keyed on. -/
+  toolchain : String
+  /-- Where digests are computed. -/
+  scratch : System.FilePath
+
+/-- Where the run record for `name` lives. -/
+def runRecordPath (opts : Options) (name : String) : System.FilePath :=
+  opts.dir / s!"{name}.run"
+
+/-- Where the receipt for `name` lives, under the default layout. -/
+def defaultReceiptDir (opts : Options) : System.FilePath :=
+  opts.receiptDir.getD (opts.dir / "receipts")
 
 /-- Signal names for the exit statuses a killed artifact can produce.
 `128 + N` is what the shell and Lean's `IO.Process.output` report for a
@@ -458,14 +517,67 @@ private def writeReceipt (ctx : AttestContext) (cert : Cert) (source : String)
       IO.FS.writeFile path (Attest.Tool.renderReceipt receipt)
       return .ok path
 
-private def runOne (opts : Options) (includes : List String)
-    (setup : LinkSetup) (toolchain : String) (attest : Option AttestContext)
+/-- **Record what happened, whatever happened.**
+
+Written on *every* attempt, not only on a passing one, and that is the whole
+point.  The stamp is a cache key: it exists only when the run agreed, so a
+build tree where nothing has a stamp is indistinguishable from one where every
+artifact was killed by the out-of-memory killer.  The record distinguishes
+them, and it names the compiler, the machine and the exact C digest, so a
+reader can tell whether the evidence is about the program in front of them.
+
+Best-effort by design: a digest this cannot compute is written `-`, which the
+ledger reads as "cannot be compared", i.e. stale.  Failing to write a record
+never fails a check that otherwise passed — the record is bookkeeping, and
+bookkeeping that can break a build gets deleted. -/
+private def writeRunRecord (env : Environment) (cert : Cert)
+    (source : Option String) (outcome : Attest.RunOutcome) (exitCode : Nat)
+    (receiptPath : String) : IO Unit := do
+  try
+    let recordedAt ← Attest.Tool.utcNow
+    let digestOf (text : String) : IO String := do
+      match ← Attest.Tool.sha256Hex env.scratch text with
+      | .error _ => pure "-"
+      | .ok digest => pure digest
+    let sourceDigest ←
+      match source with
+      | none => pure "-"
+      | some text => digestOf text
+    let ccompDigest ← digestOf env.compcertId
+    let record : Attest.RunRecord := {
+      schema := Attest.runRecordSchema
+      name := cert.name
+      recordedAt
+      sourceDigest
+      sourceBytes := (source.getD "").utf8ByteSize
+      ccompVersion := firstLine env.version
+      ccompDigest
+      linkDescription := firstLine env.linkDescription
+      machine := firstLine env.machineId
+      exitCode
+      outcome
+      certifiedValue :=
+        match cert.certifiedValue with
+        | some value => toString value
+        | none => "unstated"
+      receiptPath := if receiptPath.isEmpty then "-" else receiptPath }
+    IO.FS.createDirAll env.opts.dir
+    IO.FS.writeFile (runRecordPath env.opts cert.name) record.render
+  catch _ =>
+    pure ()
+
+private def runOne (env : Environment) (attest : Option AttestContext)
     (cert : Cert) : IO Outcome := do
+  let opts := env.opts
+  let includes := env.includes
+  let setup := env.setup
+  let toolchain := env.toolchain
   match cert.emitted with
   | .error errors =>
       IO.eprintln s!"[FAIL] {cert.name}: C emission failed"
       for error in errors do
         IO.eprintln s!"       {error}"
+      writeRunRecord env cert none .emitFailed 0 ""
       return ⟨false, false⟩
   | .ok source =>
       let stamp := stampFor source toolchain
@@ -502,6 +614,8 @@ private def runOne (opts : Options) (includes : List String)
           if compiled.exitCode != 0 then
             IO.eprintln s!"[FAIL] {cert.name}: ccomp rejected the generated C"
             IO.eprintln compiled.stderr
+            writeRunRecord env cert (some source) .compileFailed
+              compiled.exitCode.toNat ""
             return ⟨false, false⟩
           let linked ← IO.Process.output {
             cmd := "ld"
@@ -510,6 +624,8 @@ private def runOne (opts : Options) (includes : List String)
           if linked.exitCode != 0 then
             IO.eprintln s!"[FAIL] {cert.name}: freestanding link failed"
             IO.eprintln linked.stderr
+            writeRunRecord env cert (some source) .linkFailed
+              linked.exitCode.toNat ""
             return ⟨false, false⟩
       | _, _ =>
           let compileArgs := includes.toArray ++ #["-o", exe.toString, cSource.toString]
@@ -517,12 +633,15 @@ private def runOne (opts : Options) (includes : List String)
           if compiled.exitCode != 0 then
             IO.eprintln s!"[FAIL] {cert.name}: ccomp rejected the generated C"
             IO.eprintln compiled.stderr
+            writeRunRecord env cert (some source) .compileFailed
+              compiled.exitCode.toNat ""
             return ⟨false, false⟩
       let run ← IO.Process.output { cmd := exe.toString }
       match classify run.exitCode with
       | .disagrees =>
           IO.eprintln
             s!"[FAIL] {cert.name}: native run DISAGREES with the certified value (exit 1)"
+          writeRunRecord env cert (some source) .disagrees run.exitCode.toNat ""
           return ⟨false, false⟩
       | .abnormal detail =>
           IO.eprintln s!"[FAIL] {cert.name}: ABNORMAL TERMINATION — not a disagreement"
@@ -531,6 +650,7 @@ private def runOne (opts : Options) (includes : List String)
             "       The artifact did not report a value comparison at all; this run"
           IO.eprintln
             "       is evidence of nothing about the certified constant."
+          writeRunRecord env cert (some source) .abnormal run.exitCode.toNat ""
           return ⟨false, false⟩
       | .agrees =>
           match attest, cert.certifiedValue with
@@ -539,14 +659,19 @@ private def runOne (opts : Options) (includes : List String)
               | .error message =>
                   IO.eprintln s!"[FAIL] {cert.name}: the run agreed but no receipt was written"
                   IO.eprintln s!"       {message}"
+                  writeRunRecord env cert (some source) .agrees
+                    run.exitCode.toNat ""
                   return ⟨false, false⟩
               | .ok path =>
                   IO.FS.writeFile stampPath (stamp ++ "\n")
+                  writeRunRecord env cert (some source) .agrees
+                    run.exitCode.toNat path.toString
                   IO.println
                     s!"[run] {cert.name}: compiled with CompCert ({setup.mode.describe}), native check passed; receipt {path}"
                   return ⟨true, false⟩
           | _, _ =>
               IO.FS.writeFile stampPath (stamp ++ "\n")
+              writeRunRecord env cert (some source) .agrees run.exitCode.toNat ""
               IO.println
                 s!"[run] {cert.name}: compiled with CompCert ({setup.mode.describe}), native check passed"
               return ⟨true, false⟩
@@ -639,7 +764,7 @@ private def prepareAttest (opts : Options) (version compcertId machineId
     key
     publicKey
     scratch
-    receiptDir := opts.receiptDir.getD (opts.dir / "receipts")
+    receiptDir := defaultReceiptDir opts
     campaign := opts.campaign.getD "leancompcert-native-check"
     paramsHash
     toolchain := {
@@ -649,16 +774,20 @@ private def prepareAttest (opts : Options) (version compcertId machineId
     machine := firstLine machineId
     nonce := opts.nonce }
 
-def run (certs : List Cert) (args : List String) : IO UInt32 := do
-  let opts ←
-    match parseOptions args with
-    | .error message =>
-        IO.eprintln s!"error: {message}"
-        return 2
-    | .ok opts => pure opts
+/-- **Resolve the environment the stamp is keyed on.**
+
+Pulled out of `run` so the ledger can ask the same question and get, by
+construction, the same answer.  Everything with a side effect happens here
+exactly as it did inline: the cache directory is created, and in freestanding
+mode `runtime/start/<arch>.S` is assembled once.
+
+Fails rather than guessing.  No `ccomp` on `PATH` is an error, not an empty
+toolchain string — a ledger that silently keyed stamps on `""` would report
+every row current on a machine with no compiler. -/
+def resolveEnvironment (opts : Options) : IO (Except String Environment) := do
   let some version ← ccompVersion
-    | IO.eprintln "error: ccomp not found on PATH (CompCert is required for check-native)"
-      return 2
+    | return .error
+        "ccomp not found on PATH (CompCert is required for check-native)"
   IO.FS.createDirAll opts.dir
   -- The emitted certificates include only <stdint.h> and <stddef.h>, so
   -- no `-I` flag is required; `--include` remains available for callers
@@ -673,9 +802,7 @@ def run (certs : List Cert) (args : List String) : IO UInt32 := do
   let mut linkDescription := opts.linkMode.describe
   if opts.linkMode == .freestanding then
     match ← prepareFreestanding opts with
-    | .error message =>
-        IO.eprintln s!"error: {message}"
-        return 2
+    | .error message => return .error message
     | .ok (startObject, stubDescription) =>
         setup := { mode := .freestanding, startObject := some startObject }
         linkDescription := s!"freestanding {stubDescription}"
@@ -685,9 +812,28 @@ def run (certs : List Cert) (args : List String) : IO UInt32 := do
     version ++ "\n" ++ compcertId ++ "\n" ++ machineId ++ "\n"
       ++ String.intercalate " " includes
       ++ s!"\n{headerHash}\n{linkDescription}"
+  return .ok {
+    opts, includes, setup, version, compcertId, machineId, linkDescription,
+    headerHash, toolchain
+    scratch := opts.dir / "digest-scratch" }
+
+def run (certs : List Cert) (args : List String) : IO UInt32 := do
+  let opts ←
+    match parseOptions args with
+    | .error message =>
+        IO.eprintln s!"error: {message}"
+        return 2
+    | .ok opts => pure opts
+  let env ←
+    match ← resolveEnvironment opts with
+    | .error message =>
+        IO.eprintln s!"error: {message}"
+        return 2
+    | .ok env => pure env
   let mut attest : Option AttestContext := none
   if opts.attest then
-    match ← prepareAttest opts version compcertId machineId linkDescription with
+    match ← prepareAttest opts env.version env.compcertId env.machineId
+        env.linkDescription with
     | .error message =>
         IO.eprintln s!"error: {message}"
         return 2
@@ -703,7 +849,7 @@ def run (certs : List Cert) (args : List String) : IO UInt32 := do
   let mut cached := 0
   let mut failed := 0
   for cert in certs do
-    let outcome ← runOne opts includes setup toolchain attest cert
+    let outcome ← runOne env attest cert
     if outcome.passed then
       passed := passed + 1
       if outcome.cached then

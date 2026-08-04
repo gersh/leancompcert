@@ -152,6 +152,13 @@ Then the use-case guide that matches your goal:
   bound to the emitted C by a digest the kernel checks, and one named
   axiom for the one thing no proof establishes.  A locally signed receipt
   is **tamper-evident, not attested**, and the guide says so throughout.
+- **[The program ledger](docs/program-ledger.md)** — one view of every
+  registered program: what is in it, and which of three *independent*
+  states it is in.  `lake exe lean-compcert ledger` prints **compiled**,
+  **run** and **chain proved** as separate columns and never merges them;
+  a program whose C changed since its last run reads **stale**, not run;
+  and `describe NAME` answers "what does this binary actually compute?"
+  without reading the emitter.
 
 Deep-dive tutorials in [docs/](docs/):
 
@@ -770,7 +777,8 @@ after):
 - `Verified.Reflect`: `Program`, `Program.denote`, `Program.compile`,
   `Program.WF`, `Program.toComputation`, `toComputation_returns`,
   `Program.counterAugment`, and the rolled emission
-  (`Verified.Rolled.emitRolled`, `rolledTrace_eq_augmented`);
+  (`Verified.Rolled.emitRolled`, `rolledTrace_eq_augmented`,
+  `rolledResult_eq_denote`);
 - `Verified.Decide`: `Computation`, `Decision`, `verified_decide`;
 - `Verified.Limb`: the limb representation and its value theorems
   (`adc_val`, `sbb_val`, `lt_iff`, `mulLimbs_val`, `divModMSB_val`);
@@ -832,7 +840,9 @@ confirm that test can actually fail, and states plainly what is *not* covered.
 The roadmap's milestones are implemented (see [ROADMAP.md](ROADMAP.md)
 for per-milestone evidence and the precisely-stated boundaries: the
 direct-Clight semantics theorem covers the straight-line temp-only
-fragment; rolled artifacts retain correspondence-level assurance; the
+fragment; rolled artifacts are covered by the package's own restricted-C
+model under a fuelled counted-loop rule, and retain
+correspondence-level assurance against Clight; the
 Lean- and Coq-side results are tied by shared certified constants). A
 complete CompCert-built runtime and strict standalone builds remain
 outside scope. Lean's elaborator and kernel, Coq's kernel, and

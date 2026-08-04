@@ -18,7 +18,9 @@ viol V   mant M   rem Q
 where `V` is the number of failed root certifications (`0` means every root
 passed `ExpFixed.expOK`'s two comparisons, so by `expOK_sound` the run *is*
 `expIter` and `expFix_bracket` applies), `M` is the mantissa and `Q` the
-unconsumed exponent bits.
+unconsumed exponent bits.  Two further lines split `V` into the roots that came
+out **too large** and the roots that came out **too small**, and the exit
+status is `0` only when both are zero — see `hostedDriver`.
 
 Setting `ROUNDS` above `S` is the benchmark mode: the exponent register empties
 and every later round recomputes `2^P`, but the body is branch-free and its
@@ -32,6 +34,18 @@ open LeanCompCert.Ports.ExpFixPort
 
 namespace Bench.ExpFixEmit
 
+/-- The driver prints the mantissa, the unconsumed exponent bits and both
+failure classes, and then **decides**: it exits `0` exactly when every root
+passed both of `ExpFixed.expOK`'s comparisons, which is the condition under
+which `expOK_sound` makes the run `expIter` and `expFix_bracket` applies.
+
+| exit | meaning |
+| ---: | --- |
+| `0` | every root certified |
+| `1` | the two classes do not sum to the aggregate |
+| `2` | `root_over` — some `v·v > Z`: the root came out too large |
+| `3` | `root_under` — some `Z ≥ (v+1)·(v+1)`: too small |
+-/
 def hostedDriver (name : String) (cells : Nat) : String :=
   "\n#include <stdio.h>\n" ++
   "static uint64_t cells[" ++ toString cells ++ "];\n" ++
@@ -41,6 +55,18 @@ def hostedDriver (name : String) (cells : Nat) : String :=
   "           (unsigned long long)r,\n" ++
   "           (unsigned long long)cells[0],\n" ++
   "           (unsigned long long)cells[1]);\n" ++
+  "    printf(\"class root_over %llu\\n\", (unsigned long long)cells[3]);\n" ++
+  "    printf(\"class root_under %llu\\n\", (unsigned long long)cells[4]);\n" ++
+  "    if (cells[3] + cells[4] != r) {\n" ++
+  "        printf(\"verdict INCONSISTENT classes %llu aggregate %llu\\n\",\n" ++
+  "               (unsigned long long)(cells[3] + cells[4]),\n" ++
+  "               (unsigned long long)r);\n" ++
+  "        return 1;\n    }\n" ++
+  "    if (cells[3] != UINT64_C(0)) {\n" ++
+  "        printf(\"verdict FAIL root_over\\n\");\n        return 2;\n    }\n" ++
+  "    if (cells[4] != UINT64_C(0)) {\n" ++
+  "        printf(\"verdict FAIL root_under\\n\");\n        return 3;\n    }\n" ++
+  "    printf(\"verdict PASS\\n\");\n" ++
   "    return 0;\n}\n"
 
 end Bench.ExpFixEmit

@@ -60,6 +60,8 @@ import LeanCompCert.Verified.Algorithm.ArrayBridge
 import LeanCompCert.Ports.ArraySieveCount
 import LeanCompCert.Ports.ArrayMobiusDenotation
 import LeanCompCert.Attest
+import LeanCompCert.Attest.LedgerReport
+import LeanCompCert.Testing.AlgorithmProof
 import LeanCompCertTests.Attest
 
 
@@ -434,6 +436,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Attest.receiptBinds_false_of_route_ne
 #print axioms LeanCompCert.Attest.receiptBinds_false_of_digestName_ne
 #print axioms LeanCompCert.Attest.receiptBindsProved_sound
+#print axioms LeanCompCert.Attest.emitFor_rolled
+#print axioms LeanCompCert.Attest.ArtifactBody.modelResult_eq_sourceResult
+#print axioms LeanCompCert.Attest.ArtifactBody.rolled_Returns_iff_denote
+#print axioms LeanCompCert.Attest.modelResult_of_receipt
 #print axioms LeanCompCert.Attest.returns_of_receipt
 #print axioms LeanCompCert.Attest.returns_of_receipt_proved
 #print axioms LeanCompCert.Attest.decide_of_receipt
@@ -448,3 +454,37 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCertTests.Attest.compiles_in_kernel
 #print axioms LeanCompCertTests.Attest.source_in_kernel
 #print axioms LeanCompCertTests.Attest.binds_programHash
+
+-- The program ledger (`LeanCompCert/Attest/Ledger.lean`).  Also axiom-free, and
+-- for the same reason: it RECORDS runs, it never lets one become a theorem.
+-- `ChainProof.prop_of_receipt` is what makes the ledger's `chain proved` column
+-- more than a label — it is the composition a `.chained` entry licenses, and it
+-- still takes `RunAdmission` as a hypothesis.
+#print axioms LeanCompCert.Attest.ChainProof.prop_of_receipt
+#print axioms LeanCompCert.Attest.ChainProof.prop_of_receipt_proved
+
+-- The one registered program with `Algorithm.Ensures` AND `ProgramRefinement`
+-- above it, and therefore the one whose `chain proved` column is `true` on the
+-- strongest evidence in the package.  `program_denote` is proved structurally
+-- for every input; the loop is never evaluated.
+#print axioms LeanCompCert.Testing.AlgorithmProof.sumRangeMod_eq_foldl
+#print axioms LeanCompCert.Testing.AlgorithmProof.reference_sound
+#print axioms LeanCompCert.Testing.AlgorithmProof.program_denote
+#print axioms LeanCompCert.Testing.AlgorithmProof.example_program_accepts
+#print axioms LeanCompCert.Testing.AlgorithmProof.example_result
+-- The rolled route, now inside the proved C model.  The `while` rule is
+-- fuelled and covers exactly the counted shape `emitRolled` produces; these
+-- are the theorems that say so, and the acceptance that a rolled artifact
+-- passes the STRICT `receiptBindsProved`.
+#print axioms LeanCompCert.Proof.evalCWhile_unroll
+#print axioms LeanCompCert.Proof.evalCStmtFuel_of_loopFree
+#print axioms LeanCompCert.Proof.evalCSequenceFuel_of_loopFree
+#print axioms LeanCompCert.Proof.lowerSequence_loopFree
+#print axioms LeanCompCert.Verified.Reflect.evalCWhile_rolled
+#print axioms LeanCompCert.Verified.Reflect.rolledResult_eq_denote
+#print axioms LeanCompCert.Verified.Reflect.counterAugment_sourceResult
+#print axioms LeanCompCertTests.Attest.Rolled.rolled_covered
+#print axioms LeanCompCertTests.Attest.Rolled.rolled_proved_is_binds
+#print axioms LeanCompCertTests.Attest.Rolled.rolled_model_preserved
+#print axioms LeanCompCertTests.Attest.Rolled.rolled_source_in_kernel
+#print axioms LeanCompCertTests.Attest.Rolled.denote_of_admitted_rolled_receipt

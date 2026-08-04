@@ -164,6 +164,23 @@ def rT : Nat := 195     -- the certified cube root, at scale 2^5
 def rXm : Nat := 196    -- mantissa
 def rAa : Nat := 197    -- log bits so far
 
+/-! ### The four failure classes, counted apart
+
+`rViol` is the aggregate and stays the program's output.  One of the four is
+the mathematics — the per-cell margin — and the other three say the run left
+the range in which its own arithmetic is exact, so on those cells the margin
+was not tested at all. -/
+
+def rVMargin : Nat := 250  -- the margin went negative: the clause failed
+def rVMark : Nat := 251    -- the mark cursor did not reach the end of the table
+def rVLog2 : Nat := 252    -- one `⌊log₂ r⌋` increment did not suffice
+def rVCbrt : Nat := 253    -- the cube root was still advanceable at the last round
+
+/-- The per-class counters in the order they occupy result slots `6 … 9`.
+They sum to `rViol`.  `bench/Prop1224CellEmit.lean` labels them in this
+order. -/
+def violRegs : List Nat := [rVMargin, rVMark, rVLog2, rVCbrt]
+
 def regCount : Nat := 400
 def outputReg : Nat := 190
 
@@ -273,6 +290,7 @@ def CellCfg.markBody (c : CellCfg) : List AInstr :=
   , .scalar (.binop 79 .ne (.reg rPi) (.lit K))
   , .scalar (.binop 80 .mul (.reg 78) (.reg 79))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 80))
+  , .scalar (.binop rVMark .add (.reg rVMark) (.reg 80))
   ]
 
 /-! ## Phase two: `μ²`, `φ`, coprimality, and the running `G_q`
@@ -370,6 +388,7 @@ def CellCfg.logBody (c : CellCfg) : List AInstr :=
   , .scalar (.binop 126 .ge (.reg 122) (.reg rTh))
   , .scalar (.binop 127 .mul (.reg 126) (.reg 121))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 127))
+  , .scalar (.binop rVLog2 .add (.reg rVLog2) (.reg 127))
     -- the normalised mantissa, reset at the cell's first round
   , .scalar (.binop 128 .sub (.lit 62) (.reg rEx))
   , .scalar (.binop 129 .band (.reg 128) (.lit 63))
@@ -418,6 +437,7 @@ def CellCfg.logBody (c : CellCfg) : List AInstr :=
   , .scalar (.binop 203 .le (.reg 202) (.reg 153))          -- still advanceable
   , .scalar (.binop 204 .mul (.reg 203) (.reg 161))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 204))
+  , .scalar (.binop rVCbrt .add (.reg rVCbrt) (.reg 204))
     -- ⌊2^E·log r⌋ from below: one multiply, one shift
   , .scalar (.binop 205 .shl (.reg rEx) (.lit S))
   , .scalar (.binop 206 .add (.reg 205) (.reg rAa))         -- logFix S r
@@ -446,6 +466,7 @@ def CellCfg.logBody (c : CellCfg) : List AInstr :=
   , .scalar (.binop 225 .lt (.reg 212) (.reg 224))          -- margin < 0
   , .scalar (.binop 226 .mul (.reg 225) (.reg 223))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 226))
+  , .scalar (.binop rVMargin .add (.reg rVMargin) (.reg 226))
   , .scalar (.binop rCells .add (.reg rCells) (.reg 223))
     -- the running minimum margin, biased so that it stays a `Nat`
   , .scalar (.binop 227 .add (.lit marginBias) (.reg 212))
@@ -508,9 +529,15 @@ def CellCfg.init (c : CellCfg) (s : CellSeed) : List AInstr :=
 def storeResult (c : CellCfg) (slot reg : Nat) : List AInstr :=
   [ .scalar (.mov 90 (.lit (c.resultBase + slot))), .store 90 reg ]
 
+/-- Store a run of registers into consecutive result cells from `slot`. -/
+def storeResults (c : CellCfg) : Nat → List Nat → List AInstr
+  | _, [] => []
+  | slot, r :: rs => storeResult c slot r ++ storeResults c (slot + 1) rs
+
 def CellCfg.epilogue (c : CellCfg) : List AInstr :=
   storeResult c 0 rG ++ storeResult c 1 rCells ++ storeResult c 2 rMin ++
-  storeResult c 3 rT ++ storeResult c 4 rEx ++ storeResult c 5 rViol
+  storeResult c 3 rT ++ storeResult c 4 rEx ++ storeResult c 5 rViol ++
+  storeResults c 6 violRegs
 
 def cellProgram (c : CellCfg) (s : CellSeed) : AProgram := {
   regCount := regCount
@@ -599,14 +626,24 @@ theorem body_all (c : CellCfg) : c.body.all (ainstrWFB regCount) = true :=
   all_append (all_append (all_append (markBody_all c) (accBody_all c))
     (logBody_all c)) (tailBody_all c)
 
+theorem storeResults_all (c : CellCfg) : ∀ (slot : Nat) (l : List Nat),
+    l.all (fun r => decide (r < regCount)) = true →
+    (storeResults c slot l).all (ainstrWFB regCount) = true
+  | _, [], _ => rfl
+  | slot, a :: t, h => by
+      simp only [List.all_cons, Bool.and_eq_true] at h
+      exact all_append (storeResult_all c slot a (of_decide_eq_true h.1))
+        (storeResults_all c (slot + 1) t h.2)
+
 theorem epilogue_all (c : CellCfg) :
     c.epilogue.all (ainstrWFB regCount) = true :=
-  all_append (all_append (all_append (all_append (all_append
+  all_append (all_append (all_append (all_append (all_append (all_append
     (storeResult_all c 0 rG (by decide)) (storeResult_all c 1 rCells (by decide)))
     (storeResult_all c 2 rMin (by decide)))
     (storeResult_all c 3 rT (by decide)))
     (storeResult_all c 4 rEx (by decide)))
-    (storeResult_all c 5 rViol (by decide))
+    (storeResult_all c 5 rViol (by decide)))
+    (storeResults_all c 6 violRegs (by decide))
 
 /-- **The bridge's side condition.** -/
 theorem cellProgram_wf (c : CellCfg) (s : CellSeed) : (cellProgram c s).WF :=

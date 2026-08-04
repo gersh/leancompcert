@@ -44,6 +44,26 @@ inductive Shape (regCount : Nat) : StraightInstruction → Prop where
   | cast (dest : Nat) :
       Shape regCount (.cast (regLocal dest) (.local ⟨0⟩))
 
+/-- Shapes only ever *bound* a register index, so widening the register file
+keeps every shape a shape.  The rolled emitter needs this: it lowers `p`'s body
+against a context with one extra register (the loop counter). -/
+theorem SrcOp.widen {a b : Nat} (h : a ≤ b) {operand : CCIR.Operand}
+    (hSrc : SrcOp a operand) : SrcOp b operand := by
+  cases hSrc with
+  | reg i hi => exact .reg i (Nat.lt_of_lt_of_le hi h)
+  | lit value => exact .lit value
+
+theorem Shape.widen {a b : Nat} (h : a ≤ b) {si : StraightInstruction}
+    (hShape : Shape a si) : Shape b si := by
+  cases hShape with
+  | scratchInit => exact .scratchInit
+  | assignReg dest src hSrc => exact .assignReg dest src (hSrc.widen h)
+  | binary dest op lhs rhs hLhs hRhs =>
+      exact .binary dest op lhs rhs (hLhs.widen h) (hRhs.widen h)
+  | compare cmp lhs rhs hLhs hRhs =>
+      exact .compare cmp lhs rhs (hLhs.widen h) (hRhs.widen h)
+  | cast dest => exact .cast dest
+
 theorem srcOp_compileOperand {regCount : Nat} (index : Nat)
     (operand : Operand) (hWF : operand.WF regCount) :
     SrcOp regCount (compileOperand index operand) := by
@@ -347,7 +367,7 @@ def srcExpr : CCIR.Operand → C.CExpr
   | .uintLit t v => .uintLit (Lower.lowerType t) v
   | _ => .null .void
 
-private theorem lowerOperand_srcOp (p : Program) (name : String)
+theorem lowerOperand_srcOp (p : Program) (name : String)
     (hWF : p.WF) {operand : CCIR.Operand}
     (hSrc : SrcOp p.regCount operand) :
     Lower.lowerOperand (p.toFn name) operand = .ok (srcExpr operand) := by
@@ -358,7 +378,7 @@ private theorem lowerOperand_srcOp (p : Program) (name : String)
       rfl
   | lit value => rfl
 
-private theorem srcExpr_unsigned {regCount : Nat} {operand : CCIR.Operand}
+theorem srcExpr_unsigned {regCount : Nat} {operand : CCIR.Operand}
     (hSrc : SrcOp regCount operand) :
     (srcExpr operand).type.isSigned = false := by
   cases hSrc <;> rfl
@@ -378,7 +398,7 @@ def compiledStmt : StraightInstruction → C.CStmt
       .assign (Lower.localExpr dest)
         (.cast (Lower.lowerType dest.type) (.var (ABI.localName 0) .u8))
 
-private theorem lowerStraight_shape (p : Program) (name : String)
+theorem lowerStraight_shape (p : Program) (name : String)
     (hWF : p.WF) {si : StraightInstruction}
     (hShape : Shape p.regCount si) :
     lowerStraight (p.toFn name) si = .ok (compiledStmt si) := by
@@ -412,7 +432,7 @@ private theorem lowerStraight_shape (p : Program) (name : String)
           rfl)]
       rfl
 
-private theorem lowerSequence_of_pointwise (fn : CCIR.Function) :
+theorem lowerSequence_of_pointwise (fn : CCIR.Function) :
     ∀ (l : List StraightInstruction),
       (∀ si ∈ l, lowerStraight fn si = .ok (compiledStmt si)) →
       lowerSequence fn l = .ok (l.map compiledStmt) := by
@@ -433,12 +453,20 @@ theorem compile_lowered (p : Program) (name : String) (hWF : p.WF) :
   lowerSequence_of_pointwise (p.toFn name) p.compile
     (fun si hSi => lowerStraight_shape p name hWF (shape_compile p hWF si hSi))
 
-/-- **M1, well-formedness half**: every compiled instruction is in the
-proved fragment's well-formed subset — structurally. -/
-theorem compile_wellFormed (p : Program) (name : String) (hWF : p.WF) :
-    ∀ si ∈ p.compile, si.WellFormed (p.toFn name) := by
-  intro si hSi
-  cases shape_compile p hWF si hSi with
+/-- Any list of compiled shapes lowers, to exactly the mapped statements.  The
+rolled emitter uses this on three short lists — preamble+init, one loop body,
+epilogue — instead of on the whole unrolled trace. -/
+theorem lowerSequence_shapes (p : Program) (name : String) (hWF : p.WF)
+    (l : List StraightInstruction) (hShapes : ∀ si ∈ l, Shape p.regCount si) :
+    lowerSequence (p.toFn name) l = .ok (l.map compiledStmt) :=
+  lowerSequence_of_pointwise (p.toFn name) l
+    (fun si hSi => lowerStraight_shape p name hWF (hShapes si hSi))
+
+/-- Every compiled shape is in the proved fragment's well-formed subset. -/
+theorem shape_wellFormed (p : Program) (name : String) (hWF : p.WF)
+    {si : StraightInstruction} (hShape : Shape p.regCount si) :
+    si.WellFormed (p.toFn name) := by
+  cases hShape with
   | scratchInit => trivial
   | assignReg dest src hSrc => trivial
   | binary dest op lhs rhs hLhs hRhs => exact rfl
@@ -451,6 +479,17 @@ theorem compile_wellFormed (p : Program) (name : String) (hWF : p.WF) :
         rw [lowerOperand_srcOp p name hWF hRhs]
         simp [srcExpr_unsigned hRhs]
   | cast dest => trivial
+
+theorem wellFormed_shapes (p : Program) (name : String) (hWF : p.WF)
+    (l : List StraightInstruction) (hShapes : ∀ si ∈ l, Shape p.regCount si) :
+    ∀ si ∈ l, si.WellFormed (p.toFn name) :=
+  fun si hSi => shape_wellFormed p name hWF (hShapes si hSi)
+
+/-- **M1, well-formedness half**: every compiled instruction is in the
+proved fragment's well-formed subset — structurally. -/
+theorem compile_wellFormed (p : Program) (name : String) (hWF : p.WF) :
+    ∀ si ∈ p.compile, si.WellFormed (p.toFn name) :=
+  wellFormed_shapes p name hWF p.compile (shape_compile p hWF)
 
 /--
 **M1 — scale-free packaging**: a `Computation` from any well-formed
