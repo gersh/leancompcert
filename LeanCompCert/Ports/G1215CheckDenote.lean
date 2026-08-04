@@ -1432,6 +1432,269 @@ private theorem padeFacts (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
   exact ⟨hu, hyge, hylt, hdlo, hdhi, hpq, hpl, huL, hdLlo, hdLhi, hnL, hpu,
     hvL, hvU⟩
 
+set_option maxHeartbeats 2000000 in
+/-- **Stage 5**: the two accumulators, the two mantissae, the two exponents,
+and the two Padé operand pairs.  Twenty-one block specifications and forty
+frames in one declaration, so the default heartbeat budget is not enough. -/
+theorem st5_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    st5 c k s 0 = s 0 ∧ st5 c k s 1 = m1Of c k s ∧
+    st5 c k s 2 = phi1Of c k s ∧ st5 c k s 3 = sq1Of c k s ∧
+    st5 c k s 6 = pass0Of c k s ∧
+    st5 c k s 12 = qOf c k ∧ st5 c k s 13 = nOf c k ∧
+    st5 c k s 16 = (if qOf c k = c.R - 1 then 1 else 0) ∧
+    st5 c k s 17 = (if qOf c k = c.tdiv then 1 else 0) ∧
+    st5 c k s 18 = (if c.tdiv ≤ qOf c k then 1 else 0) ∧
+    st5 c k s 4 = accU1Of c k s ∧ st5 c k s 5 = accL1Of c k s ∧
+    st5 c k s 7 = xU1Of c k s ∧ st5 c k s 8 = kU1Of c k s ∧
+    st5 c k s 9 = xL1Of c k s ∧ st5 c k s 10 = kL1Of c k s ∧
+    st5 c k s 43 = pNumUOf c k s ∧ st5 c k s 44 = pDenUOf c k s ∧
+    st5 c k s 47 = uLOf c k s ∧ st5 c k s 48 = pNumLOf c k s ∧
+    st5 c k s 49 = pDenLOf c k s := by
+  obtain ⟨hn1, hn24, hn24', hnbnd, hnM, hn1M⟩ := candFacts hc hk
+  obtain ⟨haU24, haUlo, haUhi, haL24, haLlo, haLhi⟩ := logFacts hc hk
+  obtain ⟨hm1p, hm1M, hphi1p, hphi1M, hsq1, hprod1, hphiFp, hphiFbnd,
+    hphiFM', htq, htU, htL⟩ := peelFacts hc hk hs
+  obtain ⟨hx2Ulo, hx2Uhi, hxUA, hxUI, hxU1, hkU1⟩ := mantFactsU hc hk hs
+  obtain ⟨hx2Llo, hx2Lhi, hxLA, hxLI, hxL1, hkL1⟩ := mantFactsL hc hk hs
+  obtain ⟨hkUNM, hkLNM⟩ := kNFacts hc hk hs
+  obtain ⟨hu, hyge, hylt, hdUlo, hdUhi, hpq, hpl, huL, hdLlo, hdLhi, hnL,
+    hpu, hvLb, hvUb⟩ := padeFacts hc hk hs
+  obtain ⟨w0, w4, w5, w7, w8, w9, w10, w12, w13, w16, w17, w18, w6, w1, w2,
+    w3, w22, w27, w28, w29, w30⟩ := st3_vals hc hk hs
+  obtain ⟨w23, wfr⟩ := st4_vals hc hk hs
+  -- widths, hoisted out of the forty-hypothesis context below
+  have htqM : tqOf c k s + 1 < M :=
+    Nat.lt_of_le_of_lt (Nat.add_le_add_right htq 1) (by decide)
+  have htUM : tUOf c k s < M := Nat.lt_of_le_of_lt htU (by decide)
+  have htLM : tLOf c k s < M := Nat.lt_of_le_of_lt htL (by decide)
+  have haUM : aUN c k < M := Nat.lt_of_le_of_lt haU24 (by decide)
+  have haLM : aLN c k < M := Nat.lt_of_le_of_lt haL24 (by decide)
+  have hxUIM : xUIOf c k < M := Nat.lt_trans hxUI mbLtM
+  have hxUAM : xUAOf c k s < M := Nat.lt_trans hxUA mbLtM
+  have hxLIM : xLIOf c k < M := Nat.lt_trans hxLI mbLtM
+  have hxLAM : xLAOf c k s < M := Nat.lt_trans hxLA mbLtM
+  -- the incoming state
+  have z0 : st4 c k s 0 = s 0 := by rw [wfr 0 (by decide)]; exact w0
+  have z1 : st4 c k s 1 = m1Of c k s := by rw [wfr 1 (by decide)]; exact w1
+  have z2 : st4 c k s 2 = phi1Of c k s := by rw [wfr 2 (by decide)]; exact w2
+  have z3 : st4 c k s 3 = sq1Of c k s := by rw [wfr 3 (by decide)]; exact w3
+  have z4 : st4 c k s 4 = s 4 := by rw [wfr 4 (by decide)]; exact w4
+  have z5 : st4 c k s 5 = s 5 := by rw [wfr 5 (by decide)]; exact w5
+  have z6 : st4 c k s 6 = pass0Of c k s := by rw [wfr 6 (by decide)]; exact w6
+  have z7 : st4 c k s 7 = s 7 := by rw [wfr 7 (by decide)]; exact w7
+  have z8 : st4 c k s 8 = s 8 := by rw [wfr 8 (by decide)]; exact w8
+  have z9 : st4 c k s 9 = s 9 := by rw [wfr 9 (by decide)]; exact w9
+  have z10 : st4 c k s 10 = s 10 := by rw [wfr 10 (by decide)]; exact w10
+  have z12 : st4 c k s 12 = qOf c k := by rw [wfr 12 (by decide)]; exact w12
+  have z13 : st4 c k s 13 = nOf c k := by rw [wfr 13 (by decide)]; exact w13
+  have z16 : st4 c k s 16 = (if qOf c k = c.R - 1 then 1 else 0) := by
+    rw [wfr 16 (by decide)]; exact w16
+  have z17 : st4 c k s 17 = (if qOf c k = c.tdiv then 1 else 0) := by
+    rw [wfr 17 (by decide)]; exact w17
+  have z18 : st4 c k s 18 = (if c.tdiv ≤ qOf c k then 1 else 0) := by
+    rw [wfr 18 (by decide)]; exact w18
+  have z22 : st4 c k s 22 = phiFOf c k s := by rw [wfr 22 (by decide)]; exact w22
+  have z27 : st4 c k s 27 = aUN c k := by rw [wfr 27 (by decide)]; exact w27
+  have z28 : st4 c k s 28 = 2 ^ aUN c k := by rw [wfr 28 (by decide)]; exact w28
+  have z29 : st4 c k s 29 = aLN c k := by rw [wfr 29 (by decide)]; exact w29
+  have z30 : st4 c k s 30 = 2 ^ aLN c k := by rw [wfr 30 (by decide)]; exact w30
+  -- the two frames of the chain, specialised
+  have P : ∀ m j, (∀ a ∈ blkC.take m, a.dest ≠ j) →
+      cAt c k m s j = st4 c k s j := fun m j h => cPre c k m s j h
+  have Q : ∀ m n j, (∀ a ∈ blkC.drop m, a.dest ≠ j) →
+      (∀ a ∈ blkC.drop n, a.dest ≠ j) → cAt c k m s j = cAt c k n s j :=
+    fun m n j hm hn => (cSuf c k m s j hm).symm.trans (cSuf c k n s j hn)
+  -- C1a: the exactness bit
+  obtain ⟨-, V24⟩ := blkC1a_spec k (cAt c k 0 s) (phiFOf c k s)
+    (by rw [cAt_zero]; exact z22) (by rw [cAt_zero]; exact w23) hphiFp
+  have A24 : cAt c k 1 s 24 = (if 2 ^ 44 % phiFOf c k s = 0 then 1 else 0) :=
+    V24
+  -- C1b: the two masked terms
+  obtain ⟨-, V25, V26⟩ := blkC1b_spec k (cAt c k 1 s) (sq1Of c k s)
+    (tqOf c k s) (2 ^ 44 % phiFOf c k s)
+    (by rw [P 1 3 (by decide)]; exact z3)
+    (by rw [P 1 23 (by decide)]; exact w23)
+    A24 hsq1 htqM
+  have A25 : cAt c k 3 s 25 = tUOf c k s := V25
+  have A26 : cAt c k 3 s 26 = tLOf c k s := V26
+  -- C2: the two accumulator steps
+  obtain ⟨-, V4, V5⟩ := blkC2_spec k (cAt c k 3 s) (s 4) (s 5)
+    (if qOf c k = c.tdiv then 1 else 0) (tUOf c k s) (tLOf c k s)
+    (by rw [P 3 4 (by decide)]; exact z4)
+    (by rw [P 3 5 (by decide)]; exact z5)
+    (by rw [P 3 17 (by decide)]; exact z17)
+    A25 A26 (bitLe _) htUM htLM
+  have A4 : cAt c k 5 s 4 = accU1Of c k s := by
+    have h : cAt c k 5 s 4 =
+        (s 4 + if (if qOf c k = c.tdiv then (1:Nat) else 0) = 1
+          then tUOf c k s else 0) % M := V4
+    rw [h, bitIf]
+    rfl
+  have A5 : cAt c k 5 s 5 = accL1Of c k s := by
+    have h : cAt c k 5 s 5 =
+        (s 5 + if (if qOf c k = c.tdiv then (1:Nat) else 0) = 1
+          then tLOf c k s else 0) % M := V5
+    rw [h, bitIf]
+    rfl
+  -- C3a/C3b: track `U`'s advance and renormalisation bit
+  obtain ⟨-, V31⟩ := blkC3a_spec k (cAt c k 5 s) (s 7) (nOf c k) (aUN c k)
+    (by rw [P 5 7 (by decide)]; exact z7)
+    (by rw [P 5 13 (by decide)]; exact z13)
+    (by rw [P 5 27 (by decide)]; exact z27)
+    hs.xULt hn24
+  have A31 : cAt c k 6 s 31 = x2UOf c k s := V31
+  obtain ⟨-, V32⟩ := blkC3b_spec k (cAt c k 6 s) (x2UOf c k s) A31
+  have A32 : cAt c k 7 s 32 = gUOf c k s := V32
+  -- C4/C5: track `U`'s mantissa
+  obtain ⟨-, V33, V34⟩ := blkC4_spec k (cAt c k 7 s) (x2UOf c k s)
+    (gUOf c k s) (nOf c k) (aUN c k)
+    (by rw [Q 7 6 31 (by decide) (by decide)]; exact A31) A32
+    (by rw [P 7 13 (by decide)]; exact z13)
+    (by rw [P 7 28 (by decide)]; exact z28)
+    (by rw [P 7 27 (by decide)]; exact z27)
+    rfl hx2Ulo hx2Uhi haUlo haUhi haU24
+  have A33 : cAt c k 9 s 33 = xUAOf c k s := V33
+  have A34 : cAt c k 9 s 34 = xUIOf c k := V34
+  obtain ⟨-, V7⟩ := blkC5_spec k (cAt c k 9 s)
+    (if c.tdiv ≤ qOf c k then 1 else 0) (if qOf c k = c.tdiv then 1 else 0)
+    (xUIOf c k) (xUAOf c k s) (s 7)
+    (by rw [P 9 18 (by decide)]; exact z18)
+    (by rw [P 9 17 (by decide)]; exact z17)
+    A34 A33
+    (by rw [P 9 7 (by decide)]; exact z7)
+    (bitLe _) (bitLe _) hxUIM hxUAM (hs.word 7)
+  have A7 : cAt c k 10 s 7 = xU1Of c k s := by
+    have h : cAt c k 10 s 7 =
+        (if (if c.tdiv ≤ qOf c k then (1:Nat) else 0) = 0 then s 7
+         else if (if qOf c k = c.tdiv then (1:Nat) else 0) = 1
+           then xUIOf c k else xUAOf c k s) := V7
+    rw [h, mux3', posFlip]
+    rfl
+  -- C6/C7: track `U`'s exponent
+  obtain ⟨-, V35⟩ := blkC6_spec k (cAt c k 10 s) (s 8) (aUN c k) (gUOf c k s)
+    (by rw [P 10 8 (by decide)]; exact z8)
+    (by rw [P 10 27 (by decide)]; exact z27)
+    (by rw [Q 10 7 32 (by decide) (by decide)]; exact A32)
+    hkUNM
+  have A35 : cAt c k 11 s 35 = kUNOf c k s := V35
+  obtain ⟨-, V8⟩ := blkC7_spec k (cAt c k 11 s)
+    (if c.tdiv ≤ qOf c k then 1 else 0) (if qOf c k = c.tdiv then 1 else 0)
+    (aUN c k) (kUNOf c k s) (s 8)
+    (by rw [P 11 18 (by decide)]; exact z18)
+    (by rw [P 11 17 (by decide)]; exact z17)
+    (by rw [P 11 27 (by decide)]; exact z27)
+    A35
+    (by rw [P 11 8 (by decide)]; exact z8)
+    (bitLe _) (bitLe _) haUM hkUNM (hs.word 8)
+  have A8 : cAt c k 12 s 8 = kU1Of c k s := by
+    have h : cAt c k 12 s 8 =
+        (if (if c.tdiv ≤ qOf c k then (1:Nat) else 0) = 0 then s 8
+         else if (if qOf c k = c.tdiv then (1:Nat) else 0) = 1 then aUN c k
+         else if kUNOf c k s ≤ KCAP then kUNOf c k s else KCAP) := V8
+    rw [h, mux3', posFlip]
+    rfl
+  -- C8a/C8b: track `L`'s advance and renormalisation bit
+  obtain ⟨-, V36⟩ := blkC8a_spec' k (cAt c k 12 s) (s 9) (nOf c k) (aLN c k)
+    (by rw [P 12 9 (by decide)]; exact z9)
+    (by rw [P 12 13 (by decide)]; exact z13)
+    (by rw [P 12 29 (by decide)]; exact z29)
+    hs.xLLt hn24'
+  have A36 : cAt c k 13 s 36 = x2LOf c k s := V36
+  obtain ⟨-, V37⟩ := blkC8b_spec k (cAt c k 13 s) (x2LOf c k s) A36
+  have A37 : cAt c k 14 s 37 = gLOf c k s := V37
+  -- C9/C10: track `L`'s mantissa
+  obtain ⟨-, V38, V39⟩ := blkC9_spec k (cAt c k 14 s) (x2LOf c k s)
+    (gLOf c k s) (nOf c k) (aLN c k)
+    (by rw [Q 14 13 36 (by decide) (by decide)]; exact A36) A37
+    (by rw [P 14 13 (by decide)]; exact z13)
+    (by rw [P 14 30 (by decide)]; exact z30)
+    (by rw [P 14 29 (by decide)]; exact z29)
+    rfl hx2Llo hx2Lhi haLlo haLhi haL24
+  have A38 : cAt c k 16 s 38 = xLAOf c k s := V38
+  have A39 : cAt c k 16 s 39 = xLIOf c k := V39
+  obtain ⟨-, V9⟩ := blkC10_spec k (cAt c k 16 s)
+    (if c.tdiv ≤ qOf c k then 1 else 0) (if qOf c k = c.tdiv then 1 else 0)
+    (xLIOf c k) (xLAOf c k s) (s 9)
+    (by rw [P 16 18 (by decide)]; exact z18)
+    (by rw [P 16 17 (by decide)]; exact z17)
+    A39 A38
+    (by rw [P 16 9 (by decide)]; exact z9)
+    (bitLe _) (bitLe _) hxLIM hxLAM (hs.word 9)
+  have A9 : cAt c k 17 s 9 = xL1Of c k s := by
+    have h : cAt c k 17 s 9 =
+        (if (if c.tdiv ≤ qOf c k then (1:Nat) else 0) = 0 then s 9
+         else if (if qOf c k = c.tdiv then (1:Nat) else 0) = 1
+           then xLIOf c k else xLAOf c k s) := V9
+    rw [h, mux3', posFlip]
+    rfl
+  -- C11/C12: track `L`'s exponent
+  obtain ⟨-, V40⟩ := blkC11_spec k (cAt c k 17 s) (s 10) (aLN c k) (gLOf c k s)
+    (by rw [P 17 10 (by decide)]; exact z10)
+    (by rw [P 17 29 (by decide)]; exact z29)
+    (by rw [Q 17 14 37 (by decide) (by decide)]; exact A37)
+    hkLNM
+  have A40 : cAt c k 18 s 40 = kLNOf c k s := V40
+  obtain ⟨-, V10⟩ := blkC12_spec k (cAt c k 18 s)
+    (if c.tdiv ≤ qOf c k then 1 else 0) (if qOf c k = c.tdiv then 1 else 0)
+    (aLN c k) (kLNOf c k s) (s 10)
+    (by rw [P 18 18 (by decide)]; exact z18)
+    (by rw [P 18 17 (by decide)]; exact z17)
+    (by rw [P 18 29 (by decide)]; exact z29)
+    A40
+    (by rw [P 18 10 (by decide)]; exact z10)
+    (bitLe _) (bitLe _) haLM hkLNM (hs.word 10)
+  have A10 : cAt c k 19 s 10 = kL1Of c k s := by
+    have h : cAt c k 19 s 10 =
+        (if (if c.tdiv ≤ qOf c k then (1:Nat) else 0) = 0 then s 10
+         else if (if qOf c k = c.tdiv then (1:Nat) else 0) = 1 then aLN c k
+         else if kLNOf c k s ≤ KCAP then kLNOf c k s else KCAP) := V10
+    rw [h, mux3', posFlip]
+    rfl
+  -- C13: the Padé-lower operands
+  obtain ⟨-, V41⟩ := blkC13a_spec k (cAt c k 19 s) (xU1Of c k s)
+    (by rw [Q 19 10 7 (by decide) (by decide)]; exact A7) hxU1
+  have A41 : cAt c k 20 s 41 = uUOf c k s := V41
+  obtain ⟨-, V42⟩ := blkC13b_spec k (cAt c k 20 s) (uUOf c k s) A41 hu
+  have A42 : cAt c k 21 s 42 = yUOf c k s := V42
+  obtain ⟨-, V43, V44⟩ := blkC13c_spec k (cAt c k 21 s) (uUOf c k s)
+    (yUOf c k s) (by rw [Q 21 20 41 (by decide) (by decide)]; exact A41) A42
+    rfl hu
+  have A43 : cAt c k 23 s 43 = pNumUOf c k s := V43
+  have A44 : cAt c k 23 s 44 = pDenUOf c k s := V44
+  -- C14: the Padé-upper operands
+  obtain ⟨-, V47⟩ := blkC14a_spec k (cAt c k 23 s) (xL1Of c k s)
+    (by rw [Q 23 17 9 (by decide) (by decide)]; exact A9) hxL1
+  have A47 : cAt c k 24 s 47 = uLOf c k s := V47
+  obtain ⟨-, V49⟩ := blkC14b_spec k (cAt c k 24 s) (uLOf c k s) A47 huL
+  have A49 : cAt c k 25 s 49 = pDenLOf c k s := V49
+  obtain ⟨-, V48⟩ := blkC14c_spec k (cAt c k 25 s) (uLOf c k s)
+    (pDenLOf c k s) (by rw [Q 25 24 47 (by decide) (by decide)]; exact A47)
+    A49 rfl huL
+  have A48 : cAt c k 26 s 48 = pNumLOf c k s := V48
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    ?_, ?_, ?_, ?_⟩
+  · rw [cSuf c k 0 s 0 (by decide), cAt_zero]; exact z0
+  · rw [cSuf c k 0 s 1 (by decide), cAt_zero]; exact z1
+  · rw [cSuf c k 0 s 2 (by decide), cAt_zero]; exact z2
+  · rw [cSuf c k 0 s 3 (by decide), cAt_zero]; exact z3
+  · rw [cSuf c k 0 s 6 (by decide), cAt_zero]; exact z6
+  · rw [cSuf c k 0 s 12 (by decide), cAt_zero]; exact z12
+  · rw [cSuf c k 0 s 13 (by decide), cAt_zero]; exact z13
+  · rw [cSuf c k 0 s 16 (by decide), cAt_zero]; exact z16
+  · rw [cSuf c k 0 s 17 (by decide), cAt_zero]; exact z17
+  · rw [cSuf c k 0 s 18 (by decide), cAt_zero]; exact z18
+  · rw [cSuf c k 5 s 4 (by decide)]; exact A4
+  · rw [cSuf c k 5 s 5 (by decide)]; exact A5
+  · rw [cSuf c k 10 s 7 (by decide)]; exact A7
+  · rw [cSuf c k 12 s 8 (by decide)]; exact A8
+  · rw [cSuf c k 17 s 9 (by decide)]; exact A9
+  · rw [cSuf c k 19 s 10 (by decide)]; exact A10
+  · rw [cSuf c k 23 s 43 (by decide)]; exact A43
+  · rw [cSuf c k 23 s 44 (by decide)]; exact A44
+  · rw [cSuf c k 24 s 47 (by decide)]; exact A47
+  · rw [← cAt_all]; exact A48
+  · rw [cSuf c k 25 s 49 (by decide)]; exact A49
+
 end Staged
 
 end LeanCompCert.Ports.G1215Check
