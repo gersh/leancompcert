@@ -1,0 +1,51 @@
+G1215Check — the two-sided Helfgott (12.15) running check
+=========================================================
+
+Emitter   bench/G1215CheckEmit.lean
+Program   LeanCompCert.Ports.G1215Check.gProgram
+            ⟨lo := 1, len := 10000000, tdiv := 3160, bmax := 16,
+             esplit := 100000, finU := 306995582468466,
+             finL := 306995576389220⟩
+Function  l_G1215Check1x10000000x3160x16
+Loop      len * (tdiv + bmax) = 10000000 * 3176 = 31 760 000 000 iterations
+
+PRODUCTION RUN (2026-08-03)
+  emit     lake env lean --run bench/G1215CheckEmit.lean \
+             1 10000000 3160 16 100000 306995582468466 306995576389220 g1215_prod.c
+  compile  ccomp -O2 g1215_prod.c -o g1215_prod_bin      (CompCert 3.17)
+  run      ./g1215_prod_bin
+  exit     0
+  wall     12:28.73  (748.73 s)
+  max RSS  696 kB
+  c sha256      c83e5661505a9b327b4f997311b80c9f92835b1a30afaff893827c69b49d299d
+                (REPRODUCIBLE: re-emitting at this branch's HEAD gives it byte
+                 for byte)
+  binary sha256 3cb2d736e1f8b0135230d2babe88a4076cb7ff802978b00bdcf6f1cfa867fabd
+                (NOT reproducible: two identical `ccomp -O2` runs on the same C
+                 produce different binaries; this digest names one build)
+
+DISCRIMINATION CONTROLS (all at len = 2000, tdiv = 3160, bmax = 16,
+esplit = 100000, with the exact prefix sums the oracle reports)
+
+  positive  finU = 157100250043893, finL = 157100250042699  -> exit 0
+  negative  finU = 157100250043892  (one too small)         -> exit 1
+  negative  finL = 157100250042700  (one too large)         -> exit 1
+
+  and, with the two final-sum tests made inert (finU = 2^56-1, finL = 0), so
+  that only the per-candidate two-sided analytic check can fail:
+
+  positive  lo = 1  -> exit 0
+  negative  lo = 2  (drops the n = 1 term, 2^44)  -> exit 1
+
+  The last pair is the one that shows the analytic check is binding: 2^44 is
+  1.8e13, four orders of magnitude above the tightest margin (9.8e9 at
+  n = 380), so the lower per-n check catches it at once.
+
+WHAT THIS RUN IS AND IS NOT EVIDENCE FOR
+
+  It is evidence that the emitted program accepts.  It is NOT a discharge of
+  the consumer's atom: `Ports/G1215CheckRun.lean` does not yet prove
+  `gProgram_denote`, so there is no proved arrow from acceptance to
+  `AnalyticNT.LargeSieve.gFold1215 (10^7) 1 0 0 = true`, and NO axiom about
+  this computation has been stated anywhere.  See the HANDOFF sections of
+  `Ports/G1215CheckRun.lean` and `Ports/G1215CheckSpec.lean`.

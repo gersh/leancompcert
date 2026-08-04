@@ -103,6 +103,9 @@ import LeanCompCert.Ports.RamareWM217
 import LeanCompCert.Ports.GFoldCheck
 import LeanCompCert.Ports.GFoldCheckRun
 import LeanCompCert.Ports.GFoldCheckSpec
+import LeanCompCert.Ports.G1215Check
+import LeanCompCert.Ports.G1215CheckRun
+import LeanCompCert.Ports.G1215CheckSpec
 import LeanCompCert.Ports.G2WeakHeadEuler
 import LeanCompCert.Ports.LiouvilleEllSweep
 import LeanCompCert.Attest
