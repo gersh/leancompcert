@@ -100,12 +100,16 @@ import LeanCompCert.Verified.RegFrame
 import LeanCompCert.Verified.BlockDefined
 import LeanCompCert.Verified.ArrayComputation
 import LeanCompCert.Ports.RamareWM217
+import LeanCompCert.Ports.RamareMStar140M
 import LeanCompCert.Ports.GFoldCheck
 import LeanCompCert.Ports.GFoldCheckRun
 import LeanCompCert.Ports.GFoldCheckSpec
 import LeanCompCert.Ports.G1215Check
 import LeanCompCert.Ports.G1215CheckRun
 import LeanCompCert.Ports.G1215CheckSpec
+import LeanCompCert.Ports.G1215CheckDenote
+import LeanCompCert.Ports.G1215CheckProgram
+import LeanCompCert.Ports.G1215CheckRows
 import LeanCompCert.Ports.G2WeakHeadEuler
 import LeanCompCert.Ports.LiouvilleEllSweep
 import LeanCompCert.Ports.CeDyadicFold
