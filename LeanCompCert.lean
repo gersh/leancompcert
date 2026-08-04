@@ -106,6 +106,9 @@ import LeanCompCert.Ports.GFoldCheckSpec
 import LeanCompCert.Ports.G1215Check
 import LeanCompCert.Ports.G1215CheckRun
 import LeanCompCert.Ports.G1215CheckSpec
+import LeanCompCert.Ports.G1215CheckDenote
+import LeanCompCert.Ports.G1215CheckProgram
+import LeanCompCert.Ports.G1215CheckRows
 import LeanCompCert.Ports.G2WeakHeadEuler
 import LeanCompCert.Ports.LiouvilleEllSweep
 import LeanCompCert.Attest
