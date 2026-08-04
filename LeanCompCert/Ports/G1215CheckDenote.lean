@@ -755,6 +755,35 @@ theorem cSuf (c : Params) (k m : Nat) (s : RegState) (j : Nat)
     rw [← run_append, List.take_append_drop]
   rw [hsplit, run_untouched _ _ _ h]
 
+/-! ### The `F` chain -/
+
+/-- After the upper bound, the exponent index and `e(n)`. -/
+def stF1 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (st8 c k s) (blkF1a c)
+
+/-- After the allowed-exponent bit, the cap gate and the mantissa guard. -/
+def stF2 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (stF1 c k s) blkF1b
+
+/-- After the two threshold comparisons. -/
+def stF3 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (stF2 c k s) blkF2
+
+/-- After the hit. -/
+def stF4 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (stF3 c k s) blkF3a
+
+/-- After the pass accumulation. -/
+def stF5 (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (stF4 c k s) blkF3b
+
+theorem gRun_F3c (c : Params) (k : Nat) (s : RegState) :
+    gRun c k s = run k (stF5 c k s) blkF3c := by
+  show run k (run k (run k (run k (run k (st8 c k s) (blkF1a c)) blkF1b)
+    blkF2) blkF3a) (blkF3b ++ blkF3c) = _
+  rw [run_append]
+  rfl
+
 /-! ### The Padé operands, named -/
 
 /-- Track `U`'s truncated mantissa's fractional part. -/
@@ -1694,6 +1723,543 @@ theorem st5_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
   · rw [cSuf c k 24 s 47 (by decide)]; exact A47
   · rw [← cAt_all]; exact A48
   · rw [cSuf c k 25 s 49 (by decide)]; exact A49
+
+/-- The value a `udiv` instruction leaves in its destination, when the divisor
+is nonzero and the quotient is a word. -/
+private theorem divStep_val (dest a b : Nat) (t : RegState) (x y : Nat)
+    (ha : t a = x) (hb : t b = y) (hy : y ≠ 0) (hlt : x / y < M) :
+    divStep dest .udiv a b t dest = x / y := by
+  have hgoal : divStep dest .udiv a b t dest
+      = (denoteOp .udiv (t a) (t b)).getD 0 := by
+    simp [divStep, RegState.set]
+  rw [hgoal, ha, hb]
+  simp only [denoteOp, if_neg hy, Option.getD_some]
+  exact Nat.mod_eq_of_lt hlt
+
+set_option maxHeartbeats 800000 in
+/-- **Stages 6 to 8**: the two Padé divisions and the lower candidate. -/
+theorem st8_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    st8 c k s 0 = s 0 ∧ st8 c k s 1 = m1Of c k s ∧
+    st8 c k s 2 = phi1Of c k s ∧ st8 c k s 3 = sq1Of c k s ∧
+    st8 c k s 4 = accU1Of c k s ∧ st8 c k s 5 = accL1Of c k s ∧
+    st8 c k s 6 = pass0Of c k s ∧ st8 c k s 7 = xU1Of c k s ∧
+    st8 c k s 8 = kU1Of c k s ∧ st8 c k s 9 = xL1Of c k s ∧
+    st8 c k s 10 = kL1Of c k s ∧ st8 c k s 12 = qOf c k ∧
+    st8 c k s 13 = nOf c k ∧
+    st8 c k s 16 = (if qOf c k = c.R - 1 then 1 else 0) ∧
+    st8 c k s 18 = (if c.tdiv ≤ qOf c k then 1 else 0) ∧
+    st8 c k s 49 = pDenLOf c k s ∧
+    st8 c k s 50 = padeUpOf (xL1Of c k s) ∧ st8 c k s 51 = vLOf c k s := by
+  obtain ⟨hu, hyge, hylt, hdUlo, hdUhi, hpq, hpl, huL, hdLlo, hdLhi, hnL,
+    hpu, hvLb, hvUb⟩ := padeFacts hc hk hs
+  obtain ⟨-, -, -, -, -, hkU1⟩ := mantFactsU hc hk hs
+  obtain ⟨y0, y1, y2, y3, y6, y12, y13, y16, y17, y18, y4, y5, y7, y8, y9,
+    y10, y43, y44, y47, y48, y49⟩ := st5_vals hc hk hs
+  have hdUne : pDenUOf c k s ≠ 0 := by
+    have h : (0:Nat) < 2 ^ 33 := by decide
+    omega
+  have hdLne : pDenLOf c k s ≠ 0 := by
+    have h : (0:Nat) < 393216 := by decide
+    omega
+  -- stage 6
+  have V45 : st6 c k s 45 = pQUOf c k s :=
+    divStep_val 45 43 44 (st5 c k s) _ _ y43 y44 hdUne
+      (Nat.lt_trans hpq (by decide))
+  have f6 : ∀ j, j ≠ 45 → st6 c k s j = st5 c k s j := fun j hj =>
+    divStep_ne _ _ _ _ _ _ hj
+  -- stage 7
+  obtain ⟨-, V46⟩ := blkD1_spec k (st6 c k s) (pQUOf c k s) V45 hpq
+  have D46 : run k (st6 c k s) blkD1 46 = padeLoOf (xU1Of c k s) := by
+    rw [V46, padeLo_eq]
+  obtain ⟨-, V51⟩ := blkD2_spec k (run k (st6 c k s) blkD1) (kU1Of c k s)
+    (padeLoOf (xU1Of c k s))
+    (by rw [run_untouched _ _ _ (by decide), f6 8 (by decide)]; exact y8)
+    D46 hkU1 hpl
+  have f7 : ∀ j, j ≠ 46 → j ≠ 51 → st7 c k s j = st6 c k s j := by
+    intro j h46 h51
+    show run k (run k (st6 c k s) blkD1) blkD2 j = _
+    rw [run_untouched _ _ _ (by
+        intro a ha
+        simp only [blkD2, List.mem_cons, List.not_mem_nil, or_false] at ha
+        subst ha
+        simp only []
+        omega),
+      run_untouched _ _ _ (by
+        intro a ha
+        simp only [blkD1, List.mem_cons, List.not_mem_nil, or_false] at ha
+        subst ha
+        simp only []
+        omega)]
+  have V51' : st7 c k s 51 = vLOf c k s := V51
+  -- stage 8
+  have V50 : st8 c k s 50 = padeUpOf (xL1Of c k s) := by
+    rw [padeUp_eq]
+    refine divStep_val 50 48 49 (st7 c k s) _ _ ?_ ?_ hdLne ?_
+    · rw [f7 48 (by decide) (by decide), f6 48 (by decide)]; exact y48
+    · rw [f7 49 (by decide) (by decide), f6 49 (by decide)]; exact y49
+    · have h1 : pNumLOf c k s / pDenLOf c k s ≤ pNumLOf c k s :=
+        Nat.div_le_self _ _
+      have h2 : (2:Nat) ^ 52 + 2 ^ 20 < M := by decide
+      omega
+  have f8 : ∀ j, j ≠ 50 → st8 c k s j = st7 c k s j := fun j hj =>
+    divStep_ne _ _ _ _ _ _ hj
+  have F : ∀ j, j ≠ 50 → j ≠ 46 → j ≠ 51 → j ≠ 45 →
+      st8 c k s j = st5 c k s j := by
+    intro j h50 h46 h51 h45
+    rw [f8 j h50, f7 j h46 h51, f6 j h45]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    ?_⟩
+  · rw [F 0 (by decide) (by decide) (by decide) (by decide)]; exact y0
+  · rw [F 1 (by decide) (by decide) (by decide) (by decide)]; exact y1
+  · rw [F 2 (by decide) (by decide) (by decide) (by decide)]; exact y2
+  · rw [F 3 (by decide) (by decide) (by decide) (by decide)]; exact y3
+  · rw [F 4 (by decide) (by decide) (by decide) (by decide)]; exact y4
+  · rw [F 5 (by decide) (by decide) (by decide) (by decide)]; exact y5
+  · rw [F 6 (by decide) (by decide) (by decide) (by decide)]; exact y6
+  · rw [F 7 (by decide) (by decide) (by decide) (by decide)]; exact y7
+  · rw [F 8 (by decide) (by decide) (by decide) (by decide)]; exact y8
+  · rw [F 9 (by decide) (by decide) (by decide) (by decide)]; exact y9
+  · rw [F 10 (by decide) (by decide) (by decide) (by decide)]; exact y10
+  · rw [F 12 (by decide) (by decide) (by decide) (by decide)]; exact y12
+  · rw [F 13 (by decide) (by decide) (by decide) (by decide)]; exact y13
+  · rw [F 16 (by decide) (by decide) (by decide) (by decide)]; exact y16
+  · rw [F 18 (by decide) (by decide) (by decide) (by decide)]; exact y18
+  · rw [F 49 (by decide) (by decide) (by decide) (by decide)]; exact y49
+  · exact V50
+  · rw [f8 51 (by decide)]; exact V51'
+
+/-! ### §8 ter The word chase
+
+Every stage keeps every register inside a word: the blocks through
+`Straight.run_lt` (their `WF` carries `NoDiv`, so every written value is a
+`% M`), the divisions through `divStep_lt`. -/
+
+private theorem denoteOp_udiv_lt (a b : Nat) :
+    (denoteOp .udiv a b).getD 0 < M := by
+  by_cases h : b = 0
+  · simp only [denoteOp, if_pos h, Option.getD_none]
+    exact M_pos
+  · simp only [denoteOp, if_neg h, Option.getD_some]
+    exact Nat.mod_lt _ M_pos
+
+private theorem denoteOp_urem_lt (a b : Nat) :
+    (denoteOp .urem a b).getD 0 < M := by
+  by_cases h : b = 0
+  · simp only [denoteOp, if_pos h, Option.getD_none]
+    exact M_pos
+  · simp only [denoteOp, if_neg h, Option.getD_some]
+    exact Nat.mod_lt _ M_pos
+
+private theorem divStep_lt (dest a b : Nat) (t : RegState)
+    (ht : ∀ i, t i < M) : ∀ i, divStep dest .udiv a b t i < M := by
+  intro i
+  by_cases h : i = dest
+  · subst h
+    have hv : divStep i .udiv a b t i
+        = (denoteOp .udiv (t a) (t b)).getD 0 := by
+      simp [divStep, RegState.set]
+    rw [hv]
+    exact denoteOp_udiv_lt _ _
+  · rw [divStep_ne _ _ _ _ _ _ h]
+    exact ht i
+
+private theorem litDivStep_lt (dest v b : Nat) (t : RegState)
+    (ht : ∀ i, t i < M) : ∀ i, litDivStep dest v b t i < M := by
+  intro i
+  by_cases h : i = dest
+  · subst h
+    have hv : litDivStep i v b t i
+        = (denoteOp .udiv (v % M) (t b)).getD 0 := by
+      simp [litDivStep, RegState.set]
+    rw [hv]
+    exact denoteOp_udiv_lt _ _
+  · rw [litDivStep_ne _ _ _ _ _ h]
+    exact ht i
+
+private theorem idxDivStep_lt (R j : Nat) (t : RegState) (ht : ∀ i, t i < M) :
+    ∀ i, idxDivStep R j t i < M := by
+  intro i
+  by_cases h12 : i = 12
+  · subst h12
+    have hv : idxDivStep R j t 12
+        = (denoteOp .urem (j % M) (R % M)).getD 0 := by
+      simp [idxDivStep, RegState.set]
+    rw [hv]
+    exact denoteOp_urem_lt _ _
+  · by_cases h11 : i = 11
+    · subst h11
+      have hv : idxDivStep R j t 11
+          = (denoteOp .udiv (j % M) (R % M)).getD 0 := by
+        simp [idxDivStep, RegState.set]
+      rw [hv]
+      exact denoteOp_udiv_lt _ _
+    · have hv : idxDivStep R j t i = t i := by
+        simp [idxDivStep, RegState.set, h11, h12]
+      rw [hv]
+      exact ht i
+
+private theorem st1_word (hword : ∀ i, s i < M) : ∀ i, st1 c k s i < M := by
+  intro i
+  have hA : st1 c k s = run k (idxDivStep c.R k s) (blkA c) := rfl
+  rw [hA]
+  exact run_lt k cursor (blkA c) (blkA_wf c) _ (idxDivStep_lt _ _ _ hword) i
+
+private theorem st2_word (hword : ∀ i, s i < M) : ∀ i, st2 c k s i < M :=
+  divStep_lt 20 19 14 _ (divStep_lt 19 1 14 _ (st1_word hword))
+
+private theorem st3_word (hword : ∀ i, s i < M) : ∀ i, st3 c k s i < M := by
+  intro i
+  have hB : st3 c k s = run k (st2 c k s) blkB := rfl
+  rw [hB]
+  exact run_lt k cursor blkB blkB_wf _ (st2_word hword) i
+
+private theorem st4_word (hword : ∀ i, s i < M) : ∀ i, st4 c k s i < M :=
+  litDivStep_lt 23 (2 ^ 44) 22 _ (st3_word hword)
+
+private theorem st5_word (hword : ∀ i, s i < M) : ∀ i, st5 c k s i < M := by
+  intro i
+  have hC : st5 c k s = run k (st4 c k s) blkC := rfl
+  rw [hC]
+  exact run_lt k cursor blkC blkC_wf _ (st4_word hword) i
+
+private theorem st6_word (hword : ∀ i, s i < M) : ∀ i, st6 c k s i < M :=
+  divStep_lt 45 43 44 _ (st5_word hword)
+
+private theorem st7_word (hword : ∀ i, s i < M) : ∀ i, st7 c k s i < M := by
+  intro i
+  have hD : run k (st6 c k s) blkD = st7 c k s := by
+    show run k (st6 c k s) (blkD1 ++ blkD2) = _
+    rw [run_append]
+    rfl
+  rw [← hD]
+  exact run_lt k cursor blkD blkD_wf _ (st6_word hword) i
+
+private theorem st8_word (hword : ∀ i, s i < M) : ∀ i, st8 c k s i < M :=
+  divStep_lt 50 48 49 _ (st7_word hword)
+
+/-- **Every register of the round is a word.** -/
+theorem gRun_word (hword : ∀ i, s i < M) : ∀ i, gRun c k s i < M := by
+  intro i
+  have hF : run k (st8 c k s) (blkF c) = gRun c k s := rfl
+  rw [← hF]
+  exact run_lt k cursor (blkF c) (blkF_wf c) _ (st8_word hword) i
+
+/-! ### The hit is a bit -/
+
+private theorem hitLe (cc : Params) (n b accU accL xU kU xL kL : Nat) :
+    hitOf cc n b accU accL xU kU xL kL ≤ 1 := by
+  simp only [hitOf]
+  exact mulBit_le _ _ _ (mulBit_le _ _ _ (bitLe _) (bitLe _))
+    (mulBit_le _ _ _ (bitLe _)
+      (mulBit_le _ _ _ (bit_or_le _ _ (bitLe _) (bitLe _))
+        (bit_or_le _ _ (bitLe _) (mulBit_le _ _ _ (bitLe _) (bitLe _)))))
+
+set_option maxHeartbeats 2000000 in
+/-- **The round**: the body's effect on the carried registers is exactly
+`gRound`, and the invariant is preserved. -/
+theorem gRun_spec (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    valsOf (gRun c k s) = gRound c k (valsOf s) ∧ Inv c (gRun c k s) := by
+  obtain ⟨z0, z1, z2, z3, z4, z5, z6, z7, z8, z9, z10, z12, z13, z16, z18,
+    z49, z50, z51⟩ := st8_vals hc hk hs
+  obtain ⟨hn1, hn24, hn24', hnbnd, hnM, hn1M⟩ := candFacts hc hk
+  obtain ⟨hm1p, hm1M, hphi1p, hphi1M, hsq1, hprod1, hphiFp, hphiFbnd,
+    hphiFM', htq, htU, htL⟩ := peelFacts hc hk hs
+  obtain ⟨-, -, -, -, hxU1, hkU1⟩ := mantFactsU hc hk hs
+  obtain ⟨-, -, -, -, hxL1, hkL1⟩ := mantFactsL hc hk hs
+  obtain ⟨hu, hyge, hylt, hdUlo, hdUhi, hpq, hpl, huL, hdLlo, hdLhi, hnL,
+    hpu, hvLb, hvUb⟩ := padeFacts hc hk hs
+  obtain ⟨-, -, -, -, -, -, hpass0⟩ := resetFacts hc hk hs
+  have hesM : c.esplit % M = c.esplit := Nat.mod_eq_of_lt (by
+    have h1 := hc.esplitLt
+    have h2 : (2:Nat) ^ 24 < M := two24_lt_M
+    omega)
+  have haccUM : accU1Of c k s < M := Nat.mod_lt _ M_pos
+  have haccLM : accL1Of c k s < M := Nat.mod_lt _ M_pos
+  have hpass1le : pass1Of c k s ≤ 1 := by
+    unfold pass1Of
+    split
+    · exact hpass0
+    · exact bit_or_le _ _ hpass0 (hitLe _ _ _ _ _ _ _ _ _)
+  have hgoodle : goodOf c k s ≤ 1 := by
+    unfold goodOf
+    split
+    · exact mulBit_le _ _ _ hs.goodLe hpass1le
+    · exact hs.goodLe
+  -- the `F` chain's frames, one per sub-block
+  obtain ⟨fF0, W52, W59⟩ := blkF1a_spec c k (st8 c k s) (kL1Of c k s)
+    (padeUpOf (xL1Of c k s)) (nOf c k) z10 z50 z13 hkL1 hpu hesM
+  have fF : ∀ j, j ≠ 52 → j ≠ 59 → j ≠ 60 → stF1 c k s j = st8 c k s j := fF0
+  have F52 : stF1 c k s 52 = vUOf c k s := W52
+  have F59 : stF1 c k s 59 = eOf c (nOf c k) := W59
+  have H2 : ∀ j, (∀ a ∈ blkF1b, a.dest ≠ j) → stF2 c k s j = stF1 c k s j :=
+    fun j h => run_untouched _ _ _ h _
+  have H3 : ∀ j, (∀ a ∈ blkF2, a.dest ≠ j) → stF3 c k s j = stF2 c k s j :=
+    fun j h => run_untouched _ _ _ h _
+  have H4 : ∀ j, (∀ a ∈ blkF3a, a.dest ≠ j) → stF4 c k s j = stF3 c k s j :=
+    fun j h => run_untouched _ _ _ h _
+  have H5 : ∀ j, (∀ a ∈ blkF3b, a.dest ≠ j) → stF5 c k s j = stF4 c k s j :=
+    fun j h => run_untouched _ _ _ h _
+  have H6 : ∀ j, (∀ a ∈ blkF3c, a.dest ≠ j) → gRun c k s j = stF5 c k s j := by
+    intro j h
+    rw [gRun_F3c]
+    exact run_untouched _ _ _ h _
+  -- stage F1b
+  obtain ⟨-, X53', X54', X55'⟩ := blkF1b_spec k (stF1 c k s) (stF1 c k s 60)
+    (eOf c (nOf c k)) (accU1Of c k s) (accL1Of c k s) (xL1Of c k s)
+    rfl F59
+    (by rw [fF 4 (by decide) (by decide) (by decide)]; exact z4)
+    (by rw [fF 5 (by decide) (by decide) (by decide)]; exact z5)
+    (by rw [fF 9 (by decide) (by decide) (by decide)]; exact z9)
+  have X53 : stF2 c k s 53 =
+      (if stF1 c k s 60 = eOf c (nOf c k) then 1 else 0) := X53'
+  have X54 : stF2 c k s 54 =
+      (if accU1Of c k s ≤ ACAP then 1 else 0) *
+        (if accL1Of c k s ≤ ACAP then 1 else 0) := X54'
+  have X55 : stF2 c k s 55 = (if xL1Of c k s ≤ MGUARD then 1 else 0) := X55'
+  have hcapLe : (if accU1Of c k s ≤ ACAP then (1:Nat) else 0) *
+      (if accL1Of c k s ≤ ACAP then 1 else 0) ≤ 1 :=
+    mulBit_le _ _ _ (bitLe _) (bitLe _)
+  -- stage F3's inputs, at `stF3`
+  have Y53 : stF3 c k s 53 =
+      (if stF1 c k s 60 = eOf c (nOf c k) then 1 else 0) := by
+    rw [H3 53 (by decide)]; exact X53
+  have Y54 : stF3 c k s 54 =
+      (if accU1Of c k s ≤ ACAP then 1 else 0) *
+        (if accL1Of c k s ≤ ACAP then 1 else 0) := by
+    rw [H3 54 (by decide)]; exact X54
+  have Y18 : stF3 c k s 18 = (if c.tdiv ≤ qOf c k then 1 else 0) := by
+    rw [H3 18 (by decide), H2 18 (by decide),
+      fF 18 (by decide) (by decide) (by decide)]
+    exact z18
+  have Y16 : stF3 c k s 16 = (if qOf c k = c.R - 1 then 1 else 0) := by
+    rw [H3 16 (by decide), H2 16 (by decide),
+      fF 16 (by decide) (by decide) (by decide)]
+    exact z16
+  have Y6 : stF3 c k s 6 = pass0Of c k s := by
+    rw [H3 6 (by decide), H2 6 (by decide),
+      fF 6 (by decide) (by decide) (by decide)]
+    exact z6
+  have Y0 : stF3 c k s 0 = s 0 := by
+    rw [H3 0 (by decide), H2 0 (by decide),
+      fF 0 (by decide) (by decide) (by decide)]
+    exact z0
+  -- the frames of the whole `F` chain
+  have G : ∀ j, (j ≠ 0 ∧ j ≠ 6 ∧ j ≠ 52 ∧ j ≠ 53 ∧ j ≠ 54 ∧ j ≠ 55 ∧
+      j ≠ 56 ∧ j ≠ 57 ∧ j ≠ 58 ∧ j ≠ 59 ∧ j ≠ 60) →
+      gRun c k s j = st8 c k s j := by
+    intro j h
+    have d3c : ∀ a ∈ blkF3c, a.dest ≠ j := by
+      intro a ha
+      simp only [blkF3c, List.mem_cons, List.not_mem_nil, or_false] at ha
+      subst ha; simp only []; omega
+    have d3b : ∀ a ∈ blkF3b, a.dest ≠ j := by
+      intro a ha
+      simp only [blkF3b, List.mem_cons, List.not_mem_nil, or_false] at ha
+      subst ha; simp only []; omega
+    have d3a : ∀ a ∈ blkF3a, a.dest ≠ j := by
+      intro a ha
+      simp only [blkF3a, List.mem_cons, List.not_mem_nil, or_false] at ha
+      subst ha; simp only []; omega
+    have d2 : ∀ a ∈ blkF2, a.dest ≠ j := by
+      intro a ha
+      simp only [blkF2, List.mem_cons, List.not_mem_nil, or_false] at ha
+      rcases ha with rfl | rfl <;> simp only [] <;> omega
+    have d1b : ∀ a ∈ blkF1b, a.dest ≠ j := by
+      intro a ha
+      simp only [blkF1b, List.mem_cons, List.not_mem_nil, or_false] at ha
+      rcases ha with rfl | rfl | rfl <;> simp only [] <;> omega
+    rw [H6 j d3c, H5 j d3b, H4 j d3a, H3 j d2, H2 j d1b,
+      fF j (by omega) (by omega) (by omega)]
+  -- the two written registers, in both branches
+  have step3 : ∀ hitv : Nat, stF4 c k s 58 = hitv → hitv ≤ 1 →
+      gRun c k s 6 = (if c.tdiv ≤ qOf c k then pass0Of c k s ||| hitv
+        else pass0Of c k s) ∧
+      gRun c k s 0 = (if qOf c k = c.R - 1 then
+        s 0 * (if c.tdiv ≤ qOf c k then pass0Of c k s ||| hitv
+          else pass0Of c k s) else s 0) := by
+    intro hitv Z58 hhitle
+    obtain ⟨-, P6⟩ := blkF3b_spec k (stF4 c k s)
+      (if c.tdiv ≤ qOf c k then 1 else 0) (pass0Of c k s) hitv
+      (by rw [H4 18 (by decide)]; exact Y18)
+      (by rw [H4 6 (by decide)]; exact Y6)
+      Z58 (bitLe _) hpass0 hhitle
+    have P6' : stF5 c k s 6 =
+        (if c.tdiv ≤ qOf c k then pass0Of c k s ||| hitv
+          else pass0Of c k s) := by
+      rw [show stF5 c k s 6 = (if (if c.tdiv ≤ qOf c k then (1:Nat) else 0)
+        = 1 then pass0Of c k s ||| hitv else pass0Of c k s) from P6, bitIf]
+    have hp1 : (if c.tdiv ≤ qOf c k then pass0Of c k s ||| hitv
+        else pass0Of c k s) ≤ 1 := by
+      split
+      · exact bit_or_le _ _ hpass0 hhitle
+      · exact hpass0
+    obtain ⟨-, P0⟩ := blkF3c_spec k (stF5 c k s)
+      (if qOf c k = c.R - 1 then 1 else 0) (s 0)
+      (if c.tdiv ≤ qOf c k then pass0Of c k s ||| hitv else pass0Of c k s)
+      (by rw [H5 16 (by decide), H4 16 (by decide)]; exact Y16)
+      (by rw [H5 0 (by decide), H4 0 (by decide)]; exact Y0)
+      P6' (bitLe _) hs.goodLe hp1
+    refine ⟨?_, ?_⟩
+    · rw [H6 6 (by decide)]; exact P6'
+    · rw [gRun_F3c, P0, bitIf]
+  have hEq : gRun c k s 0 = goodOf c k s ∧ gRun c k s 6 = pass1Of c k s := by
+    by_cases hq : c.tdiv ≤ qOf c k
+    · -- exponent rounds: the two comparisons are exact
+      have hb16 : qOf c k - c.tdiv + 1 ≤ 16 := by
+        have h1 : qOf c k < c.R := Nat.mod_lt _ hc.RPos
+        have h2 := hc.bmaxEq
+        unfold Params.R at h1
+        omega
+      have W60 : stF1 c k s 60 = qOf c k - c.tdiv + 1 :=
+        blkF1a_spec60 c k (st8 c k s) (qOf c k) z12 hq
+          (by
+            have h1 : qOf c k < c.R := Nat.mod_lt _ hc.RPos
+            have h2 := hc.RLtM
+            omega)
+          hc.tdivLtM
+      obtain ⟨-, Y56', Y57'⟩ := blkF2_spec k (stF2 c k s) (nOf c k)
+        (accU1Of c k s) (accL1Of c k s) (qOf c k - c.tdiv + 1) (vLOf c k s)
+        (vUOf c k s) (if xL1Of c k s ≤ MGUARD then 1 else 0)
+        (by rw [H2 13 (by decide), fF 13 (by decide) (by decide) (by decide)]
+            exact z13)
+        (by rw [H2 4 (by decide), fF 4 (by decide) (by decide) (by decide)]
+            exact z4)
+        (by rw [H2 5 (by decide), fF 5 (by decide) (by decide) (by decide)]
+            exact z5)
+        (by rw [H2 60 (by decide)]; exact W60)
+        (by rw [H2 51 (by decide), fF 51 (by decide) (by decide) (by decide)]
+            exact z51)
+        (by rw [H2 52 (by decide)]; exact F52)
+        X55 hb16 hvLb hvUb (bitLe _)
+      have Y56 : stF3 c k s 56 =
+          ((if nOf c k < 120 then 1 else 0) |||
+            (if accU1Of c k s * (qOf c k - c.tdiv + 1) % M
+                ≤ vLOf c k s * 2 ^ 12 + CU * (qOf c k - c.tdiv + 1)
+              then 1 else 0)) := Y56'
+      have Y57 : stF3 c k s 57 =
+          ((if nOf c k < 182 then 1 else 0) |||
+            (if xL1Of c k s ≤ MGUARD then 1 else 0) *
+              (if vUOf c k s * 2 ^ 12 + CD * (qOf c k - c.tdiv + 1)
+                  ≤ accL1Of c k s * (qOf c k - c.tdiv + 1) % M
+                then 1 else 0)) := Y57'
+      obtain ⟨-, Z58'⟩ := blkF3a_spec k (stF3 c k s)
+        ((if accU1Of c k s ≤ ACAP then 1 else 0) *
+          (if accL1Of c k s ≤ ACAP then 1 else 0))
+        (if qOf c k - c.tdiv + 1 = eOf c (nOf c k) then 1 else 0)
+        ((if nOf c k < 120 then 1 else 0) |||
+          (if accU1Of c k s * (qOf c k - c.tdiv + 1) % M
+              ≤ vLOf c k s * 2 ^ 12 + CU * (qOf c k - c.tdiv + 1)
+            then 1 else 0))
+        ((if nOf c k < 182 then 1 else 0) |||
+          (if xL1Of c k s ≤ MGUARD then 1 else 0) *
+            (if vUOf c k s * 2 ^ 12 + CD * (qOf c k - c.tdiv + 1)
+                ≤ accL1Of c k s * (qOf c k - c.tdiv + 1) % M
+              then 1 else 0))
+        Y54 (by rw [Y53, W60]) Y56 Y57 hcapLe (bitLe _)
+        (bit_or_le _ _ (bitLe _) (bitLe _))
+        (bit_or_le _ _ (bitLe _) (mulBit_le _ _ _ (bitLe _) (bitLe _)))
+      have Z58 : stF4 c k s 58 =
+          hitOf c (nOf c k) (qOf c k - c.tdiv + 1) (accU1Of c k s)
+            (accL1Of c k s) (xU1Of c k s) (kU1Of c k s) (xL1Of c k s)
+            (kL1Of c k s) := Z58'
+      obtain ⟨E6, E0⟩ := step3 _ Z58 (hitLe _ _ _ _ _ _ _ _ _)
+      refine ⟨?_, ?_⟩
+      · rw [E0]
+        unfold goodOf pass1Of
+        rw [posFlip]
+      · rw [E6]
+        unfold pass1Of
+        rw [posFlip]
+    · -- trial rounds: the comparison registers are only known to be bits
+      obtain ⟨-, hb56', hb57'⟩ := blkF2_bits k (stF2 c k s)
+        (by rw [X55]; exact bitLe _)
+      have hb56 : stF3 c k s 56 ≤ 1 := hb56'
+      have hb57 : stF3 c k s 57 ≤ 1 := hb57'
+      obtain ⟨-, Z58⟩ := blkF3a_spec k (stF3 c k s)
+        ((if accU1Of c k s ≤ ACAP then 1 else 0) *
+          (if accL1Of c k s ≤ ACAP then 1 else 0))
+        (if stF1 c k s 60 = eOf c (nOf c k) then 1 else 0)
+        (stF3 c k s 56) (stF3 c k s 57) Y54 Y53 rfl rfl hcapLe (bitLe _)
+        hb56 hb57
+      have hhitle : (if accU1Of c k s ≤ ACAP then (1:Nat) else 0) *
+          (if accL1Of c k s ≤ ACAP then 1 else 0) *
+          ((if stF1 c k s 60 = eOf c (nOf c k) then (1:Nat) else 0) *
+            (stF3 c k s 56 * stF3 c k s 57)) ≤ 1 :=
+        mulBit_le _ _ _ hcapLe
+          (mulBit_le _ _ _ (bitLe _) (mulBit_le _ _ _ hb56 hb57))
+      obtain ⟨E6, E0⟩ := step3 _ Z58 hhitle
+      refine ⟨?_, ?_⟩
+      · rw [E0, if_neg hq]
+        unfold goodOf pass1Of
+        rw [if_pos (show qOf c k < c.tdiv by omega)]
+      · rw [E6, if_neg hq]
+        unfold pass1Of
+        rw [if_pos (show qOf c k < c.tdiv by omega)]
+  obtain ⟨e0, e6⟩ := hEq
+  have e1 : gRun c k s 1 = m1Of c k s := by rw [G 1 (by decide)]; exact z1
+  have e2 : gRun c k s 2 = phi1Of c k s := by rw [G 2 (by decide)]; exact z2
+  have e3 : gRun c k s 3 = sq1Of c k s := by rw [G 3 (by decide)]; exact z3
+  have e4 : gRun c k s 4 = accU1Of c k s := by rw [G 4 (by decide)]; exact z4
+  have e5 : gRun c k s 5 = accL1Of c k s := by rw [G 5 (by decide)]; exact z5
+  have e7 : gRun c k s 7 = xU1Of c k s := by rw [G 7 (by decide)]; exact z7
+  have e8 : gRun c k s 8 = kU1Of c k s := by rw [G 8 (by decide)]; exact z8
+  have e9 : gRun c k s 9 = xL1Of c k s := by rw [G 9 (by decide)]; exact z9
+  have e10 : gRun c k s 10 = kL1Of c k s := by rw [G 10 (by decide)]; exact z10
+  refine ⟨?_, ?_⟩
+  · rw [gRound_eq]
+    show (⟨gRun c k s 0, gRun c k s 1, gRun c k s 2, gRun c k s 3,
+      gRun c k s 4, gRun c k s 5, gRun c k s 6, gRun c k s 7, gRun c k s 8,
+      gRun c k s 9, gRun c k s 10⟩ : Vals) = _
+    rw [e0, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10]
+  · exact
+      { word := gRun_word hs.word
+        mPos := by rw [e1]; exact hm1p
+        phiPos := by rw [e2]; exact hphi1p
+        prod := by rw [e1, e2]; exact hprod1
+        sqLe := by rw [e3]; exact hsq1
+        passLe := by rw [e6]; exact hpass1le
+        goodLe := by rw [e0]; exact hgoodle
+        xULt := by rw [e7]; exact hxU1
+        kULe := by rw [e8]; exact hkU1
+        xLLt := by rw [e9]; exact hxL1
+        kLLe := by rw [e10]; exact hkL1 }
+
+/-! ## §9 The divisions are defined
+
+`gBody` has five interior `udiv`s: the two peel divisions by register `14`,
+the term division by register `22`, the Padé-lower division by register `44`
+and the Padé-upper division by register `49`.  The two index divisions divide
+by the literal `c.R`, which `Sane.RPos` handles on the caller's side. -/
+
+theorem gRun_divs (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    st1 c k s 14 ≠ 0 ∧ st3 c k s 22 ≠ 0 ∧ st5 c k s 44 ≠ 0 ∧
+    st7 c k s 49 ≠ 0 := by
+  obtain ⟨-, -, -, -, -, -, -, -, -, v14, -, -, -, -, -, -, -, -, -, -, -⟩ :=
+    st1_vals hc hk hs
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, w22, -, -, -, -⟩ :=
+    st3_vals hc hk hs
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, -, y44, -, -, y49⟩ :=
+    st5_vals hc hk hs
+  obtain ⟨-, -, -, -, -, -, hphiFp, -, -, -, -, -⟩ := peelFacts hc hk hs
+  obtain ⟨-, -, -, hdUlo, -, -, -, -, hdLlo, -, -, -, -, -⟩ :=
+    padeFacts hc hk hs
+  have f6 : ∀ j, j ≠ 45 → st6 c k s j = st5 c k s j := fun j hj =>
+    divStep_ne _ _ _ _ _ _ hj
+  have f7 : st7 c k s 49 = st6 c k s 49 := by
+    show run k (run k (st6 c k s) blkD1) blkD2 49 = _
+    rw [run_untouched _ _ _ (by decide), run_untouched _ _ _ (by decide)]
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [v14]
+    unfold dOf
+    omega
+  · rw [w22]
+    exact Nat.ne_of_gt hphiFp
+  · rw [y44]
+    have h : (0:Nat) < 2 ^ 33 := by decide
+    omega
+  · rw [f7, f6 49 (by decide), y49]
+    have h : (0:Nat) < 393216 := by decide
+    omega
 
 end Staged
 
