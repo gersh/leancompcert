@@ -56,6 +56,7 @@ import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Verified.ExpFixed
 import LeanCompCert.Ports.ExpFixPort
 import LeanCompCert.Verified.ArrayFoldBridge
+import LeanCompCert.Ports.RamareMStar140MDenote
 import LeanCompCert.Verified.Algorithm.ArrayBridge
 import LeanCompCert.Ports.ArraySieveCount
 import LeanCompCert.Ports.ArrayMobiusDenotation
@@ -418,6 +419,13 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.Prop1224Row.epilogue_all
 #print axioms LeanCompCert.Ports.Prop1224Row.rowProgram_wf
 #print axioms LeanCompCert.Ports.Prop1224Row.rowProgram_compiled
+
+-- The Ramaré m-star array machine.  These are the two top-level simulation
+-- statements used by the external-run certificate: one exposes the exact
+-- candidate-level reference value, and the other packages that equality as
+-- an `AProgramRefinement`.  Neither evaluates the production fold.
+#print axioms LeanCompCert.Ports.RamareMStar140M.msProgram_denote
+#print axioms LeanCompCert.Ports.RamareMStar140M.msEncoding
 
 -- The run-receipt standard (`LeanCompCert/Attest/`).  It is in the axiom-free
 -- library on purpose: `RunAdmission` is a HYPOTHESIS here, discharged only by

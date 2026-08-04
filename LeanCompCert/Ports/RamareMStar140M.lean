@@ -666,7 +666,7 @@ def MMul (a b : Nat) : Nat := (a * b) % M
 def bitOf (p : Prop) [Decidable p] : Nat := if p then 1 else 0
 
 /-- The observable machine state at candidate granularity. -/
-structure St where
+@[ext] structure St where
   /-- Violation counter. -/
   bad : Nat
   /-- `2⁶² + L`. -/
