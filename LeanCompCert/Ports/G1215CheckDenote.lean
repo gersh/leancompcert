@@ -264,7 +264,8 @@ private theorem loNum_facts {u : Nat} (hu : u < 2 ^ 16) :
       3 * (u * u + u * 2 ^ 17) % M = 3 * (u * u + u * 2 ^ 17) ∧
       3 * (u * u + u * 2 ^ 17) * 2 ^ 28 % M
         = 3 * (u * u + u * 2 ^ 17) * 2 ^ 28 ∧
-      3 * (u * u + u * 2 ^ 17) * 2 ^ 28 < M := by
+      3 * (u * u + u * 2 ^ 17) * 2 ^ 28 < M ∧
+      3 * (u * u + u * 2 ^ 17) * 2 ^ 28 ≤ 3 * 2 ^ 34 * 2 ^ 28 := by
   have h1 : u * u < 2 ^ 32 :=
     Nat.lt_of_lt_of_le (Nat.mul_lt_mul_of_lt_of_lt hu hu) (by decide)
   have h2 : u * 2 ^ 17 < 2 ^ 33 :=
@@ -281,7 +282,7 @@ private theorem loNum_facts {u : Nat} (hu : u < 2 ^ 16) :
   exact ⟨modId (Nat.lt_trans h1 (by decide)),
     modId (Nat.lt_trans h2 (by decide)),
     modId (Nat.lt_trans h3 (by decide)),
-    modId (Nat.lt_of_le_of_lt h4 (by decide)), modId h6, h6⟩
+    modId (Nat.lt_of_le_of_lt h4 (by decide)), modId h6, h6, h5⟩
 
 /-- The Padé-lower denominator's band and truncations. -/
 private theorem loDen_facts {y : Nat} (hyge : 2 ^ 16 ≤ y)
@@ -716,6 +717,88 @@ theorem blkEp_spec (c : Params) (k : Nat) (t : RegState) (good accU accL : Nat)
   rw [hval, h0, h4, h5, hU, hL, modId (show (if accU ≤ c.finU then (1:Nat)
     else 0) * (if c.finL ≤ accL then 1 else 0) < M by omega)]
   exact modId (by omega)
+
+/-! ## §7 ter The `C` chain, by prefix length
+
+`blkC` is twenty-one sub-blocks and twenty-six assignments, and `st5` is the
+corresponding twenty-one-fold `run`.  Naming the intermediate states by the
+*number of assignments already run* — `cAt c k m s` — collapses the whole
+frame apparatus into two lemmas: one that frames back to `st4` and one that
+frames forward to `st5`, each with a single `decide` over a concrete
+`List.take` / `List.drop`.  Every intermediate value this port reads is of a
+register `blkC` writes exactly once, so the forward frame also serves as the
+mid-chain frame. -/
+
+/-- The state after the first `m` assignments of `blkC`. -/
+def cAt (c : Params) (k m : Nat) (s : RegState) : RegState :=
+  run k (st4 c k s) (blkC.take m)
+
+theorem cAt_zero (c : Params) (k : Nat) (s : RegState) :
+    cAt c k 0 s = st4 c k s := rfl
+
+theorem cAt_all (c : Params) (k : Nat) (s : RegState) :
+    cAt c k 26 s = st5 c k s := rfl
+
+/-- Backward frame: a register none of the first `m` assignments writes still
+holds its `st4` value. -/
+theorem cPre (c : Params) (k m : Nat) (s : RegState) (j : Nat)
+    (h : ∀ a ∈ blkC.take m, a.dest ≠ j) : cAt c k m s j = st4 c k s j :=
+  run_untouched _ _ _ h _
+
+/-- Forward frame: a register none of the remaining assignments writes already
+holds its `st5` value. -/
+theorem cSuf (c : Params) (k m : Nat) (s : RegState) (j : Nat)
+    (h : ∀ a ∈ blkC.drop m, a.dest ≠ j) : st5 c k s j = cAt c k m s j := by
+  have hsplit : st5 c k s = run k (cAt c k m s) (blkC.drop m) := by
+    show run k (st4 c k s) blkC = _
+    unfold cAt
+    rw [← run_append, List.take_append_drop]
+  rw [hsplit, run_untouched _ _ _ h]
+
+/-! ### The Padé operands, named -/
+
+/-- Track `U`'s truncated mantissa's fractional part. -/
+def uUOf (c : Params) (k : Nat) (s : RegState) : Nat := xU1Of c k s / 2 ^ 23
+
+/-- Track `U`'s `17`-bit mantissa. -/
+def yUOf (c : Params) (k : Nat) (s : RegState) : Nat := 2 ^ 16 + uUOf c k s
+
+/-- The Padé-lower numerator, already shifted. -/
+def pNumUOf (c : Params) (k : Nat) (s : RegState) : Nat :=
+  3 * (uUOf c k s * uUOf c k s + uUOf c k s * 2 ^ 17) * 2 ^ 28
+
+/-- The Padé-lower denominator. -/
+def pDenUOf (c : Params) (k : Nat) (s : RegState) : Nat :=
+  2 ^ 32 + (yUOf c k s * yUOf c k s + yUOf c k s * 2 ^ 18)
+
+/-- The Padé-lower quotient, before the final rescaling. -/
+def pQUOf (c : Params) (k : Nat) (s : RegState) : Nat :=
+  pNumUOf c k s / pDenUOf c k s
+
+/-- Track `L`'s up-rounded truncated mantissa. -/
+def uLOf (c : Params) (k : Nat) (s : RegState) : Nat := xL1Of c k s / 2 ^ 23 + 2
+
+/-- The Padé-upper denominator. -/
+def pDenLOf (c : Params) (k : Nat) (s : RegState) : Nat :=
+  393216 + 4 * uLOf c k s
+
+/-- The Padé-upper dividend, ceiling included. -/
+def pNumLOf (c : Params) (k : Nat) (s : RegState) : Nat :=
+  uLOf c k s * (393216 + uLOf c k s) * 2 ^ 16 + (pDenLOf c k s - 1)
+
+/-- The lower log bound. -/
+def vLOf (c : Params) (k : Nat) (s : RegState) : Nat :=
+  CL * kU1Of c k s + padeLoOf (xU1Of c k s)
+
+/-- The upper log bound. -/
+def vUOf (c : Params) (k : Nat) (s : RegState) : Nat :=
+  CU2 * kL1Of c k s + padeUpOf (xL1Of c k s)
+
+theorem padeLo_eq (c : Params) (k : Nat) (s : RegState) :
+    padeLoOf (xU1Of c k s) = pQUOf c k s * 2 ^ 4 := rfl
+
+theorem padeUp_eq (c : Params) (k : Nat) (s : RegState) :
+    padeUpOf (xL1Of c k s) = pNumLOf c k s / pDenLOf c k s := rfl
 
 /-! ## §8 bis The staged values, under the invariant -/
 
@@ -1169,6 +1252,185 @@ theorem st4_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
   · intro j hj
     show litDivStep 23 (2 ^ 44) 22 (st3 c k s) j = st3 c k s j
     rw [litDivStep_ne _ _ _ _ _ hj]
+
+/-! ### The two mantissa tracks stay in band -/
+
+private theorem mbLtM : MB < M := by decide
+
+/-- The mantissa advance's width budget at a candidate that may sit exactly
+on `2²⁴`. -/
+private theorem advX_le_lt {n a x : Nat} (hx : x < MB) (hn : n ≤ 2 ^ 24) :
+    advX n a x < M := by
+  unfold advX
+  exact Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (advX_prod_le hx hn)
+
+/-- **Track `U` stays in band, and the `KCAP` clamp is inert.** -/
+private theorem mantFactsU (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    MB ≤ x2UOf c k s ∧ x2UOf c k s < 2 ^ 41 ∧
+      xUAOf c k s < MB ∧ xUIOf c k < MB ∧ xU1Of c k s < MB ∧
+      kU1Of c k s ≤ KCAP := by
+  obtain ⟨ha24, hpa, hpa', -, -, -⟩ := logFacts hc hk
+  have hband : MB ≤ x2UOf c k s ∧ x2UOf c k s < 2 ^ 41 :=
+    advX_band hs.xULt hpa hpa'
+  obtain ⟨hr1, hr2⟩ := advRenorm_band hband.1 hband.2
+  have hMB : MB = 2 ^ 39 := rfl
+  have hA : xUAOf c k s < MB := by
+    unfold xUAOf gUOf
+    simp only [hMB] at hr1 hr2 ⊢
+    omega
+  have hI : xUIOf c k < MB := by
+    unfold xUIOf
+    simp only [hMB]
+    exact xI_lt hpa hpa' (by omega)
+  refine ⟨hband.1, hband.2, hA, hI, ?_, ?_⟩
+  · unfold xU1Of
+    split
+    · exact hs.xULt
+    · split
+      · exact hI
+      · exact hA
+  · unfold kU1Of
+    split
+    · exact hs.kULe
+    · split
+      · simp only [KCAP]; omega
+      · split
+        · assumption
+        · exact Nat.le_refl _
+
+/-- **Track `L` stays in band, and the `KCAP` clamp is inert.** -/
+private theorem mantFactsL (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    MB ≤ x2LOf c k s ∧ x2LOf c k s < 2 ^ 41 ∧
+      xLAOf c k s < MB ∧ xLIOf c k < MB ∧ xL1Of c k s < MB ∧
+      kL1Of c k s ≤ KCAP := by
+  obtain ⟨-, -, -, ha24, hpa, hpa'⟩ := logFacts hc hk
+  have hband : MB ≤ x2LOf c k s ∧ x2LOf c k s < 2 ^ 41 :=
+    advX_band hs.xLLt hpa hpa'
+  obtain ⟨hr1, hr2⟩ := advRenorm_band hband.1 hband.2
+  have hMB : MB = 2 ^ 39 := rfl
+  have hA : xLAOf c k s < MB := by
+    unfold xLAOf gLOf
+    simp only [hMB] at hr1 hr2 ⊢
+    omega
+  have hI : xLIOf c k < MB := by
+    unfold xLIOf
+    simp only [hMB]
+    exact xI_lt hpa hpa' (by omega)
+  refine ⟨hband.1, hband.2, hA, hI, ?_, ?_⟩
+  · unfold xL1Of
+    split
+    · exact hs.xLLt
+    · split
+      · exact hI
+      · exact hA
+  · unfold kL1Of
+    split
+    · exact hs.kLLe
+    · split
+      · simp only [KCAP]; omega
+      · split
+        · assumption
+        · exact Nat.le_refl _
+
+/-- The unclamped exponents stay inside a word. -/
+private theorem kNFacts (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    kUNOf c k s < M ∧ kLNOf c k s < M := by
+  obtain ⟨haU, -, -, haL, -, -⟩ := logFacts hc hk
+  have hU := hs.kULe
+  have hL := hs.kLLe
+  have hgU := bitLe (2 ^ 40 ≤ x2UOf c k s)
+  have hgL := bitLe (2 ^ 40 ≤ x2LOf c k s)
+  have hcap : KCAP = 1024 := rfl
+  have hM : (1050:Nat) < M := by decide
+  constructor
+  · unfold kUNOf gUOf
+    simp only [hcap] at hU
+    omega
+  · unfold kLNOf gLOf
+    simp only [hcap] at hL
+    omega
+
+/-- Every width the two Padé divisions and the two comparisons need. -/
+private theorem padeFacts (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
+    uUOf c k s < 2 ^ 16 ∧ 2 ^ 16 ≤ yUOf c k s ∧ yUOf c k s < 2 ^ 17 ∧
+      2 ^ 33 ≤ pDenUOf c k s ∧ pDenUOf c k s < 2 ^ 37 ∧
+      pQUOf c k s < 2 ^ 32 ∧ padeLoOf (xU1Of c k s) < 2 ^ 36 ∧
+      uLOf c k s ≤ 2 ^ 16 + 1 ∧ 393216 ≤ pDenLOf c k s ∧
+      pDenLOf c k s < 2 ^ 20 ∧ pNumLOf c k s ≤ 2 ^ 52 + 2 ^ 20 ∧
+      padeUpOf (xL1Of c k s) < 2 ^ 36 ∧
+      vLOf c k s < 2 ^ 43 ∧ vUOf c k s < 2 ^ 43 := by
+  obtain ⟨-, -, -, -, hxU, hkU⟩ := mantFactsU hc hk hs
+  obtain ⟨-, -, -, -, hxL, hkL⟩ := mantFactsL hc hk hs
+  have hu : uUOf c k s < 2 ^ 16 := u16_lt hxU
+  have hyge : 2 ^ 16 ≤ yUOf c k s := Nat.le_add_right _ _
+  have hylt : yUOf c k s < 2 ^ 17 := by
+    unfold yUOf
+    have h : (2:Nat) ^ 16 + 2 ^ 16 = 2 ^ 17 := by decide
+    omega
+  obtain ⟨-, -, -, -, hdlo, hdhi⟩ := loDen_facts hyge hylt
+  obtain ⟨-, -, -, -, -, -, hnle⟩ := loNum_facts hu
+  have hpq : pQUOf c k s < 2 ^ 32 := by
+    unfold pQUOf
+    have h1 : pNumUOf c k s / pDenUOf c k s ≤ pNumUOf c k s / 2 ^ 33 :=
+      Nat.div_le_div_left hdlo (by decide)
+    have h2 : pNumUOf c k s / 2 ^ 33 ≤ (3 * 2 ^ 34 * 2 ^ 28) / 2 ^ 33 :=
+      Nat.div_le_div_right hnle
+    have h3 : (3 * 2 ^ 34 * 2 ^ 28) / 2 ^ 33 = 3 * 2 ^ 29 := by decide
+    have h4 : (3:Nat) * 2 ^ 29 < 2 ^ 32 := by decide
+    omega
+  have hpl : padeLoOf (xU1Of c k s) < 2 ^ 36 := by
+    rw [padeLo_eq]
+    have h1 : pQUOf c k s * 2 ^ 4 < 2 ^ 32 * 2 ^ 4 :=
+      Nat.mul_lt_mul_of_lt_of_le hpq (Nat.le_refl _) (by decide)
+    have h2 : (2:Nat) ^ 32 * 2 ^ 4 ≤ 2 ^ 36 := by decide
+    omega
+  have huL : uLOf c k s ≤ 2 ^ 16 + 1 := by
+    unfold uLOf
+    have h := u16_lt hxL
+    omega
+  have hdLlo : 393216 ≤ pDenLOf c k s := Nat.le_add_right _ _
+  have hdLhi : pDenLOf c k s < 2 ^ 20 := by
+    unfold pDenLOf
+    have h1 : 4 * uLOf c k s ≤ 4 * (2 ^ 16 + 1) := Nat.mul_le_mul_left _ huL
+    have h2 : (393216:Nat) + 4 * (2 ^ 16 + 1) < 2 ^ 20 := by decide
+    omega
+  have hsum : 393216 + uLOf c k s < 2 ^ 19 := by
+    have h : (393216:Nat) + (2 ^ 16 + 1) < 2 ^ 19 := by decide
+    omega
+  have hprod : uLOf c k s * (393216 + uLOf c k s) < 2 ^ 36 :=
+    Nat.lt_of_lt_of_le
+      (Nat.mul_lt_mul_of_lt_of_lt (show uLOf c k s < 2 ^ 17 by
+        have h : (2:Nat) ^ 16 + 1 < 2 ^ 17 := by decide
+        omega) hsum) (by decide)
+  have hshift : uLOf c k s * (393216 + uLOf c k s) * 2 ^ 16 < 2 ^ 52 :=
+    Nat.lt_of_lt_of_le
+      (Nat.mul_lt_mul_of_lt_of_le hprod (Nat.le_refl _) (by decide)) (by decide)
+  have hnL : pNumLOf c k s ≤ 2 ^ 52 + 2 ^ 20 := by
+    unfold pNumLOf
+    exact Nat.add_le_add (Nat.le_of_lt hshift)
+      (Nat.le_of_lt (Nat.lt_of_le_of_lt (Nat.sub_le _ 1) hdLhi))
+  have hpu : padeUpOf (xL1Of c k s) < 2 ^ 36 := by
+    rw [padeUp_eq]
+    have h1 : pNumLOf c k s / pDenLOf c k s ≤ pNumLOf c k s / 2 ^ 18 :=
+      Nat.div_le_div_left (by
+        have h : (2:Nat) ^ 18 ≤ 393216 := by decide
+        omega) (by decide)
+    have h2 : pNumLOf c k s / 2 ^ 18 ≤ (2 ^ 52 + 2 ^ 20) / 2 ^ 18 :=
+      Nat.div_le_div_right hnL
+    have h3 : ((2:Nat) ^ 52 + 2 ^ 20) / 2 ^ 18 < 2 ^ 36 := by decide
+    omega
+  have hvL : vLOf c k s < 2 ^ 43 := by
+    unfold vLOf
+    have h1 : CL * kU1Of c k s ≤ CL * KCAP := Nat.mul_le_mul_left _ hkU
+    have h2 : CL * KCAP + 2 ^ 36 < 2 ^ 43 := by decide
+    omega
+  have hvU : vUOf c k s < 2 ^ 43 := by
+    unfold vUOf
+    have h1 : CU2 * kL1Of c k s ≤ CU2 * KCAP := Nat.mul_le_mul_left _ hkL
+    have h2 : CU2 * KCAP + 2 ^ 36 < 2 ^ 43 := by decide
+    omega
+  exact ⟨hu, hyge, hylt, hdlo, hdhi, hpq, hpl, huL, hdLlo, hdLhi, hnL, hpu,
+    hvL, hvU⟩
 
 end Staged
 
