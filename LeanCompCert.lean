@@ -113,6 +113,7 @@ import LeanCompCert.Ports.G1215CheckRows
 import LeanCompCert.Ports.G2WeakHeadEuler
 import LeanCompCert.Ports.LiouvilleEllSweep
 import LeanCompCert.Ports.CeDyadicFold
+import LeanCompCert.Ports.CeDyadicBlock
 import LeanCompCert.Ports.CeDyadicClaim
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
