@@ -125,6 +125,7 @@ import LeanCompCert.Ports.Section413G2Denote
 import LeanCompCert.Ports.CeDyadicFold
 import LeanCompCert.Ports.CeDyadicBlock
 import LeanCompCert.Ports.CeDyadicClaim
+import LeanCompCert.Ports.CeDyadicSpec
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 
