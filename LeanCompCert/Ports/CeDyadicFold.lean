@@ -1471,4 +1471,608 @@ theorem blkAcc_spec (k : Nat) (t : RegState) (acc ok ct : Nat)
       simp [run, blkAcc, evalExpr, denoteOp, RegState.set, h0, h1, h63, eok,
         ege, hw]
 
+/-! ## §9 The geometry of one candidate
+
+The four fixed-point operands are determined by `n` and by the dyadic `pk`.
+Every size fact the round needs follows from `0 < pk ≤ n < 2·pk` and three
+products, which is why this lemma exists: it turns the only non-linear step of
+the development into three `Nat.mul_le_mul` applications, after which `omega`
+finishes.
+-/
+
+/-- The numerator of the first fixed-point division. -/
+def numAOf (c : Params) (n pk : Nat) : Nat :=
+  if c.up = 1 then n * n - pk * pk else 3 * (n * n - pk * pk)
+
+/-- The denominator of the first fixed-point division. -/
+def denAOf (c : Params) (n pk : Nat) : Nat :=
+  if c.up = 1 then 2 * (n * pk) else n * n + 4 * (n * pk) + pk * pk
+
+/-- The numerator of the second fixed-point division. -/
+def numBOf (c : Params) (n pk : Nat) : Nat :=
+  if c.up = 1 then 3 * (4 * (pk * pk) - n * n) else 4 * (pk * pk) - n * n
+
+/-- The denominator of the second fixed-point division. -/
+def denBOf (c : Params) (n pk : Nat) : Nat :=
+  if c.up = 1 then 4 * (pk * pk) + 8 * (n * pk) + n * n else 4 * (n * pk)
+
+/-- The three products the geometry needs, and nothing else. -/
+theorem geom_products {n pk : Nat} (hpk : 0 < pk) (h1 : pk ≤ n)
+    (h2 : n < 2 * pk) :
+    pk * pk ≤ n * pk ∧ n * pk ≤ n * n ∧ n * n < 2 * (n * pk) ∧
+      n * pk < 2 * (pk * pk) ∧ 0 < pk * pk := by
+  refine ⟨Nat.mul_le_mul_right pk h1, Nat.mul_le_mul_left n h1, ?_, ?_,
+    Nat.mul_pos hpk hpk⟩
+  · have : n * n < 2 * pk * n := (Nat.mul_lt_mul_right (by omega : 0 < n)).mpr h2
+    have e : 2 * pk * n = 2 * (n * pk) := by
+      rw [Nat.mul_assoc, Nat.mul_comm pk n]
+    omega
+  · have : n * pk < 2 * pk * pk := (Nat.mul_lt_mul_right hpk).mpr h2
+    have e : 2 * pk * pk = 2 * (pk * pk) := Nat.mul_assoc _ _ _
+    omega
+
+/-- **Every size fact the round needs about the four operands.** -/
+theorem geom_facts (c : Params) {n pk : Nat} (hup : c.up ≤ 1) (hpk : 0 < pk)
+    (h1 : pk ≤ n) (h2 : n < 2 * pk) :
+    0 < denAOf c n pk ∧ 0 < denBOf c n pk ∧
+    numAOf c n pk < denAOf c n pk ∧ numBOf c n pk < denBOf c n pk ∧
+    4 * numAOf c n pk ≤ 3 * denAOf c n pk ∧
+    4 * numBOf c n pk ≤ 3 * denBOf c n pk ∧
+    denAOf c n pk ≤ 13 * (n * n) ∧ denBOf c n pk ≤ 13 * (n * n) := by
+  obtain ⟨p1, p2, p3, p4, p5⟩ := geom_products hpk h1 h2
+  by_cases hu : c.up = 1 <;>
+    simp only [numAOf, denAOf, numBOf, denBOf, hu, if_true, if_false] <;>
+    refine ⟨by omega, by omega, by omega, by omega, by omega, by omega,
+      by omega, by omega⟩
+
+/-! ### What the carried division state is worth -/
+
+/-- The quotient after `i` steps, bounded by the `3/4` ratio of the operands. -/
+theorem sdRun_fst_bound {D N i q r : Nat} (hD : 0 < D) (h43 : 4 * N ≤ 3 * D)
+    (h : (q, r) = sdRun D i (0, N)) : 4 * q ≤ 3 * 256 ^ i := by
+  have hrepr := sdRun_repr D i 0 N
+  rw [← h] at hrepr
+  have hq : q * D + r = N * 256 ^ i := by simpa using hrepr
+  have hle : 4 * (q * D) ≤ 4 * (N * 256 ^ i) := by omega
+  have e1 : 4 * (N * 256 ^ i) = (4 * N) * 256 ^ i := by
+    rw [Nat.mul_assoc]
+  have e2 : (3 * D) * 256 ^ i = (3 * 256 ^ i) * D := by
+    rw [Nat.mul_assoc, Nat.mul_comm D (256 ^ i), ← Nat.mul_assoc]
+  have h2 : (4 * N) * 256 ^ i ≤ (3 * D) * 256 ^ i :=
+    Nat.mul_le_mul_right _ h43
+  have h3 : (4 * q) * D ≤ (3 * 256 ^ i) * D := by
+    have : 4 * (q * D) = (4 * q) * D := by rw [Nat.mul_assoc]
+    omega
+  exact Nat.le_of_mul_le_mul_right h3 hD
+
+/-- The remainder after any number of steps is a genuine remainder. -/
+theorem sdRun_snd_bound {D N i q r : Nat} (hD : 0 < D) (hN : N < D)
+    (h : (q, r) = sdRun D i (0, N)) : r < D := by
+  have := sdRun_snd_lt D hD i 0 N hN
+  rw [← h] at this
+  simpa using this
+
+/-! ## §10 The state invariant -/
+
+/--
+The state invariant, **at entry to round `k`**.
+
+`pkLe`/`candLe`/`bumpRnd` are the dyadic part: `pk` may lag the candidate by at
+most a factor of two, and it is allowed to be exactly half only at the first
+round of a block, which is the only round at which the doubling can fire.
+`divA`/`divB` pin the carried division state to `sdRun` exactly, which is what
+makes both the word-safety bounds and the block theorem available.
+-/
+structure Inv (c : Params) (k : Nat) (s : RegState) : Prop where
+  /-- Every register holds a word. -/
+  word : ∀ i, s i < M
+  /-- The no-wrap flag is a bit. -/
+  okLe : s 1 ≤ 1
+  /-- The composite-witness flag is a bit. -/
+  cfLe : s 4 ≤ 1
+  /-- `pk = 2^kk`. -/
+  pkPow : s 2 = 2 ^ s 3
+  /-- The exponent is small. -/
+  kkLe : s 3 ≤ 24
+  /-- `pk ≤ n`. -/
+  pkLe : s 2 ≤ cand c k
+  /-- `n ≤ 2·pk`. -/
+  candLe : cand c k ≤ 2 * s 2
+  /-- `n = 2·pk` only at a block's first round. -/
+  bumpRnd : cand c k = 2 * s 2 → rnd c k = 0
+  /-- The fixed-point `log 2` quotient is small. -/
+  q0Lt : s 9 < 2 ^ 36
+  /-- The fixed-point `log 2` remainder is small. -/
+  r0Lt : s 10 < 2 ^ 50
+  /-- The first finalisation quotient is small. -/
+  fALt : s 11 < 2 ^ 36
+  /-- The second finalisation quotient is small. -/
+  fBLt : s 12 < 2 ^ 36
+  /-- The first carried division is exactly `sdRun`. -/
+  divA : rnd c k ≠ 0 →
+    (s 5, s 6) = sdRun (denAOf c (cand c k) (s 2)) (min (rnd c k - 1) 8)
+      (0, numAOf c (cand c k) (s 2))
+  /-- The second carried division is exactly `sdRun`. -/
+  divB : rnd c k ≠ 0 →
+    (s 7, s 8) = sdRun (denBOf c (cand c k) (s 2)) (min (rnd c k - 1) 8)
+      (0, numBOf c (cand c k) (s 2))
+
+/-! ### Frames -/
+
+/-- A register no assignment of the block writes keeps its value.  The side
+condition only inspects the `dest` fields, which are literals, so `decide`
+discharges it at every concrete block. -/
+theorem run_frame (k : Nat) (as : List Assign) (j : Nat) (t : RegState)
+    (h : as.all (fun a => a.dest != j) = true) : run k t as j = t j := by
+  refine run_untouched k as j ?_ t
+  intro a ha
+  have := List.all_eq_true.mp h a ha
+  simpa using this
+
+/-! ## §11 Staged evaluation of the body -/
+
+/-- After index decoding and the whole division-free prefix. -/
+def stA (c : Params) (k : Nat) (s : RegState) : RegState :=
+  run k (idxStep c.R k s) (blkA c)
+
+/-- After the three data divisions. -/
+def stW (c : Params) (k : Nat) (s : RegState) : RegState :=
+  divStep 50 15 21 (divStep 49 46 47 (divStep 48 44 45 (stA c k s)))
+
+theorem ceRun_eq (c : Params) (k : Nat) (s : RegState) :
+    ceRun c k s = run k (stW c k s) (blkB c) := rfl
+
+/-! ## §12 One round, under the invariant
+
+`ceRun_spec` is the load-bearing statement: at an index the loop actually
+visits, and in a state satisfying the invariant, all three data divisors are
+nonzero, the thirteen carried registers move by exactly `ceRound`, and the
+invariant advances to the next index.
+-/
+
+theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
+    (hk : k < c.len * c.R) {s : RegState} (hs : Inv c k s) :
+    stA c k s 45 ≠ 0 ∧ stA c k s 47 ≠ 0 ∧ stA c k s 21 ≠ 0 ∧
+      valsOf (ceRun c k s) = ceRound c k (valsOf s) ∧
+        Inv c (k + 1) (ceRun c k s) := by
+  sorry
+
+/-! ## §13 The body is defined, and agrees with `ceRun` below the cursor -/
+
+private theorem regSet_ne (u : RegState) (i v j : Nat) (h : j ≠ i) :
+    (u.set i v) j = u j := by simp [RegState.set, h]
+
+private theorem divStep_ne (dest a b j : Nat) (t : RegState) (h : j ≠ dest) :
+    divStep dest a b t j = t j := by simp [divStep, RegState.set, h]
+
+private theorem divStep_congr (dest a b : Nat) (ha : a < cursor)
+    (hb : b < cursor) {u t : RegState} (hag : AgreeBelow cursor u t) :
+    AgreeBelow cursor (divStep dest a b u) (divStep dest a b t) := by
+  intro j hj
+  by_cases hjd : j = dest
+  · subst hjd
+    simp [divStep, RegState.set, hag a ha, hag b hb]
+  · rw [divStep_ne _ _ _ _ _ hjd, divStep_ne _ _ _ _ _ hjd]
+    exact hag j hj
+
+private theorem udivStep_denote (k dest a b : Nat) (u : RegState)
+    (hne : u b ≠ 0) :
+    denoteInstrs k u [Instr.binop dest Op.udiv (.reg a) (.reg b)] =
+      some (divStep dest a b u) := by
+  simp [denoteInstrs, denoteInstr, denoteOperand, denoteOp, divStep, hne]
+
+private theorem blockStep_agree (k : Nat) (as : List Assign)
+    (hWF : ∀ a ∈ as, a.WF cursor) (u t : RegState)
+    (hag : AgreeBelow cursor u t) :
+    ∃ u', denoteInstrs k u (block cursor as) = some u' ∧
+      AgreeBelow cursor u' (run k t as) := by
+  obtain ⟨u', h1, h2⟩ := block_correct k cursor as hWF u
+  exact ⟨u', h1,
+    fun r hr => (h2 r hr).trans (run_congr k cursor as hWF u t hag r hr)⟩
+
+private theorem obindSome {α β : Type _} (a : α) (f : α → Option β) :
+    (some a).bind f = f a := rfl
+
+theorem ceBody_defined (c : Params) (k : Nat) (s : RegState) (hR : c.R % M ≠ 0)
+    (h45 : stA c k s 45 ≠ 0) (h47 : stA c k s 47 ≠ 0) (h21 : stA c k s 21 ≠ 0) :
+    ∃ s', denoteInstrs k s (ceBody c) = some s' ∧
+      AgreeBelow cursor s' (ceRun c k s) := by
+  have step1 : denoteInstrs k s [Instr.binop 13 .udiv .idx (.lit c.R)] =
+      some (idxStep c.R k s) := by
+    simp [denoteInstrs, denoteInstr, denoteOperand, denoteOp, idxStep, hR]
+  obtain ⟨u1, hu1, ha1⟩ := blockStep_agree k (blkA c) (blkA_wf c)
+    (idxStep c.R k s) (idxStep c.R k s)
+    (AgreeBelow.refl cursor (idxStep c.R k s))
+  have ha1' : AgreeBelow cursor u1 (stA c k s) := ha1
+  have hne1 : u1 45 ≠ 0 := by rw [ha1' 45 (by decide)]; exact h45
+  have ha2 : AgreeBelow cursor (divStep 48 44 45 u1)
+      (divStep 48 44 45 (stA c k s)) :=
+    divStep_congr 48 44 45 (by decide) (by decide) ha1'
+  have hne2 : (divStep 48 44 45 u1) 47 ≠ 0 := by
+    rw [divStep_ne _ _ _ _ _ (by decide)]
+    rw [ha1' 47 (by decide)]; exact h47
+  have ha3 : AgreeBelow cursor (divStep 49 46 47 (divStep 48 44 45 u1))
+      (divStep 49 46 47 (divStep 48 44 45 (stA c k s))) :=
+    divStep_congr 49 46 47 (by decide) (by decide) ha2
+  have hne3 : (divStep 49 46 47 (divStep 48 44 45 u1)) 21 ≠ 0 := by
+    rw [divStep_ne _ _ _ _ _ (by decide), divStep_ne _ _ _ _ _ (by decide)]
+    rw [ha1' 21 (by decide)]; exact h21
+  have ha4 : AgreeBelow cursor
+      (divStep 50 15 21 (divStep 49 46 47 (divStep 48 44 45 u1)))
+      (stW c k s) :=
+    divStep_congr 50 15 21 (by decide) (by decide) ha3
+  obtain ⟨u5, hu5, ha5⟩ := blockStep_agree k (blkB c) (blkB_wf c)
+    (divStep 50 15 21 (divStep 49 46 47 (divStep 48 44 45 u1))) (stW c k s) ha4
+  refine ⟨u5, ?_, ha5⟩
+  rw [ceBody, denoteInstrs_append, step1, obindSome,
+    denoteInstrs_append, hu1, obindSome,
+    denoteInstrs_append, udivStep_denote k 48 44 45 u1 hne1, obindSome,
+    denoteInstrs_append,
+    udivStep_denote k 49 46 47 (divStep 48 44 45 u1) hne2, obindSome,
+    denoteInstrs_append,
+    udivStep_denote k 50 15 21 (divStep 49 46 47 (divStep 48 44 45 u1)) hne3,
+    obindSome, hu5]
+
+/-! ## §14 The step function the fold bridge wants -/
+
+/-- What the emitted body actually leaves in every register. -/
+def ceStep (c : Params) (k : Nat) (s : RegState) : RegState :=
+  (denoteInstrs k s (ceBody c)).getD s
+
+private theorem denoteOperand_ltM (k : Nat) (u : RegState) (hu : ∀ i, u i < M)
+    (o : Operand) : denoteOperand k u o < M := by
+  cases o with
+  | reg i => exact hu i
+  | lit v => exact Nat.mod_lt _ M_pos
+  | «idx» => exact Nat.mod_lt _ M_pos
+
+theorem denoteInstrs_lt (k : Nat) :
+    ∀ (is : List Instr) (u u' : RegState), denoteInstrs k u is = some u' →
+      (∀ i, u i < M) → ∀ i, u' i < M := by
+  intro is
+  induction is with
+  | nil =>
+      intro u u' h hu i
+      cases h
+      exact hu i
+  | cons x rest ih =>
+      intro u u' h hu
+      have hcons : denoteInstrs k u (x :: rest) =
+          (denoteInstr k u x).bind fun s' => denoteInstrs k s' rest := rfl
+      rw [hcons] at h
+      cases hx : denoteInstr k u x with
+      | none => rw [hx] at h; exact absurd h (by simp)
+      | some u1 =>
+          rw [hx, obindSome] at h
+          refine ih u1 u' h ?_
+          cases x with
+          | mov dest src =>
+              have hu1 : u1 = u.set dest (denoteOperand k u src) := by
+                have : some (u.set dest (denoteOperand k u src)) = some u1 := hx
+                exact (Option.some.inj this).symm
+              subst hu1
+              intro i
+              by_cases hd : i = dest
+              · subst hd
+                simpa [RegState.set] using denoteOperand_ltM k u hu src
+              · rw [regSet_ne _ _ _ _ hd]; exact hu i
+          | binop dest op l r =>
+              have hb : denoteInstr k u (Instr.binop dest op l r) =
+                  (denoteOp op (denoteOperand k u l)
+                    (denoteOperand k u r)).bind
+                      fun res => some (u.set dest res) := rfl
+              rw [hb] at hx
+              cases hop : denoteOp op (denoteOperand k u l)
+                  (denoteOperand k u r) with
+              | none => rw [hop] at hx; exact absurd hx (by simp)
+              | some res =>
+                  rw [hop, obindSome] at hx
+                  have hu1 : u1 = u.set dest res := (Option.some.inj hx).symm
+                  subst hu1
+                  intro i
+                  by_cases hd : i = dest
+                  · subst hd
+                    simpa [RegState.set] using denoteOp_lt op _ _ res hop
+                  · rw [regSet_ne _ _ _ _ hd]; exact hu i
+
+/-- The machine step, at a visited index and under the invariant. -/
+theorem ceStep_spec (c : Params) (hP : c.Sane) (k : Nat)
+    (hk : k < c.len * c.R) (s : RegState) (hs : Inv c k s) :
+    denoteInstrs k s (ceBody c) = some (ceStep c k s) ∧
+      valsOf (ceStep c k s) = ceRound c k (valsOf s) ∧
+      Inv c (k + 1) (ceStep c k s) := by
+  have hRM : c.R % M ≠ 0 := by
+    have h1 : c.R < M := Nat.lt_trans hP.RSmall (by decide)
+    have h2 := hP.RBig
+    rw [Nat.mod_eq_of_lt h1]; omega
+  obtain ⟨h45, h47, h21, hv, hI⟩ := ceRun_spec c hP hk hs
+  obtain ⟨u, hu, hag⟩ := ceBody_defined c k s hRM h45 h47 h21
+  have hstep : ceStep c k s = u := by simp [ceStep, hu]
+  refine ⟨by rw [hstep]; exact hu, ?_, ?_⟩
+  · rw [hstep, ← hv]
+    show (⟨u 0, u 1, u 2, u 3, u 4, u 5, u 6, u 7, u 8, u 9, u 10, u 11,
+      u 12⟩ : Vals) = _
+    rw [hag 0 (by decide), hag 1 (by decide), hag 2 (by decide),
+      hag 3 (by decide), hag 4 (by decide), hag 5 (by decide),
+      hag 6 (by decide), hag 7 (by decide), hag 8 (by decide),
+      hag 9 (by decide), hag 10 (by decide), hag 11 (by decide),
+      hag 12 (by decide)]
+    rfl
+  · rw [hstep]
+    exact
+      { word := denoteInstrs_lt k (ceBody c) s u hu hs.word
+        okLe := by rw [hag 1 (by decide)]; exact hI.okLe
+        cfLe := by rw [hag 4 (by decide)]; exact hI.cfLe
+        pkPow := by rw [hag 2 (by decide), hag 3 (by decide)]; exact hI.pkPow
+        kkLe := by rw [hag 3 (by decide)]; exact hI.kkLe
+        pkLe := by rw [hag 2 (by decide)]; exact hI.pkLe
+        candLe := by rw [hag 2 (by decide)]; exact hI.candLe
+        bumpRnd := by rw [hag 2 (by decide)]; exact hI.bumpRnd
+        q0Lt := by rw [hag 9 (by decide)]; exact hI.q0Lt
+        r0Lt := by rw [hag 10 (by decide)]; exact hI.r0Lt
+        fALt := by rw [hag 11 (by decide)]; exact hI.fALt
+        fBLt := by rw [hag 12 (by decide)]; exact hI.fBLt
+        divA := by
+          rw [hag 5 (by decide), hag 6 (by decide), hag 2 (by decide)]
+          exact hI.divA
+        divB := by
+          rw [hag 7 (by decide), hag 8 (by decide), hag 2 (by decide)]
+          exact hI.divB }
+
+/-! ## §15 The index-restricted fold bridge, with an advancing invariant
+
+`RS62LadderEncoding.Program.denote_eq_foldl_mem` carries a predicate on states
+alone.  This body's invariant has to mention the loop index — the dyadic
+exponent lags the candidate, and only the index says by how much — so the
+bridge is re-proved here with `P : Nat → RegState → Prop`.  It is the same
+simulation argument, and it is reusable by any port whose invariant advances.
+-/
+
+theorem foldlM_body_eq_foldl_index (body : List Instr)
+    (P : Nat → RegState → Prop) (step : Nat → RegState → RegState) (bound : Nat)
+    (hStep : ∀ i s, i < bound → P i s →
+      denoteInstrs i s body = some (step i s))
+    (hClosed : ∀ i s, i < bound → P i s → P (i + 1) (step i s)) :
+    ∀ (m a : Nat), a + m ≤ bound → ∀ s : RegState, P a s →
+      (List.range' a m).foldlM (fun s i => denoteInstrs i s body) s =
+        some ((List.range' a m).foldl (fun s i => step i s) s) := by
+  intro m
+  induction m with
+  | zero => intro a _ s _; rfl
+  | succ m ih =>
+      intro a hb s hP
+      have hlt : a < bound := by omega
+      show (denoteInstrs a s body).bind
+        (fun s => (List.range' (a + 1) m).foldlM
+          (fun s i => denoteInstrs i s body) s) = _
+      rw [hStep a s hlt hP]
+      exact ih (a + 1) (by omega) (step a s) (hClosed a s hlt hP)
+
+theorem foldl_index_closed (P : Nat → RegState → Prop)
+    (step : Nat → RegState → RegState) (bound : Nat)
+    (hClosed : ∀ i s, i < bound → P i s → P (i + 1) (step i s)) :
+    ∀ (m a : Nat), a + m ≤ bound → ∀ s : RegState, P a s →
+      P (a + m) ((List.range' a m).foldl (fun s i => step i s) s) := by
+  intro m
+  induction m with
+  | zero => intro a _ s hP; simpa using hP
+  | succ m ih =>
+      intro a hb s hP
+      have hlt : a < bound := by omega
+      have := ih (a + 1) (by omega) (step a s) (hClosed a s hlt hP)
+      have he : a + 1 + m = a + (m + 1) := by omega
+      rw [he] at this
+      exact this
+
+/-- **The range-loop bridge, with an index-dependent invariant.** -/
+theorem Program.denote_eq_foldl_index (p : Program) (P : Nat → RegState → Prop)
+    (step : Nat → RegState → RegState) (fin : RegState → RegState)
+    (s₀ : RegState)
+    (hInit : denoteInstrs 0 initialState p.init = some s₀)
+    (hP₀ : P 0 s₀)
+    (hStep : ∀ i s, i < p.loopCount → P i s →
+      denoteInstrs i s p.body = some (step i s))
+    (hClosed : ∀ i s, i < p.loopCount → P i s → P (i + 1) (step i s))
+    (hEpilogue : ∀ s, denoteInstrs 0 s p.epilogue = some (fin s)) :
+    p.denote =
+      some (fin ((List.range p.loopCount).foldl
+        (fun s index => step index s) s₀) p.output) := by
+  have hrange : List.range p.loopCount = List.range' 0 p.loopCount :=
+    List.range_eq_range'
+  show (denoteInstrs 0 initialState p.init).bind _ = _
+  rw [hInit]
+  show ((List.range p.loopCount).foldlM
+    (fun s index => denoteInstrs index s p.body) s₀).bind _ = _
+  rw [hrange]
+  rw [foldlM_body_eq_foldl_index p.body P step p.loopCount hStep hClosed
+    p.loopCount 0 (by omega) s₀ hP₀]
+  show ((denoteInstrs 0 _ p.epilogue).bind _) = _
+  rw [hEpilogue _]
+  rfl
+
+/-! ## §16 Initialisation, epilogue, and the whole program -/
+
+/-- `lo < 2²⁵`. -/
+theorem Params.Sane.loLt {c : Params} (hP : c.Sane) : c.lo < 2 ^ 25 := by
+  have := hP.topSmall; have := hP.lenPos; omega
+
+/-- `k₀ ≤ 24`, because `2^k₀ ≤ lo < 2²⁵`. -/
+theorem Params.Sane.k0Le {c : Params} (hP : c.Sane) : c.k0 ≤ 24 := by
+  rcases Nat.lt_or_ge c.k0 25 with h | h
+  · omega
+  · have hp : (2 : Nat) ^ 25 ≤ 2 ^ c.k0 := Nat.pow_le_pow_right (by decide) h
+    have h1 := hP.k0lo
+    have h2 := hP.loLt
+    omega
+
+/-- The carried registers after `ceInit`. -/
+def initVals (c : Params) : Vals :=
+  ⟨0, 1, 2 ^ c.k0, c.k0, 0, 0, 0, 0, 0, 0, 0, 0, 0⟩
+
+/-- The register file after `ceInit`. -/
+def ceInitState (c : Params) : RegState :=
+  ((initialState.set 1 (1 % M)).set 2 (2 ^ c.k0 % M)).set 3 (c.k0 % M)
+
+theorem ceInit_denote (c : Params) :
+    denoteInstrs 0 initialState (ceInit c) = some (ceInitState c) := rfl
+
+theorem ceInitState_vals (c : Params) (hP : c.Sane) :
+    ceInitState c 0 = 0 ∧ ceInitState c 1 = 1 ∧
+    ceInitState c 2 = 2 ^ c.k0 ∧ ceInitState c 3 = c.k0 ∧
+    (∀ j, 4 ≤ j → ceInitState c j = 0) := by
+  have hpk : (2 : Nat) ^ c.k0 < M := by
+    have := hP.k0lo; have := hP.loLt
+    have : (2 : Nat) ^ 25 < M := by decide
+    omega
+  have hk0 : c.k0 < M := by
+    have h1 := hP.k0Le
+    have h2 : (25 : Nat) < M := by decide
+    omega
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · simp [ceInitState, RegState.set, initialState]
+  · simp [ceInitState, RegState.set, initialState, l1]
+  · simp [ceInitState, RegState.set, initialState, Nat.mod_eq_of_lt hpk]
+  · simp [ceInitState, RegState.set, initialState, Nat.mod_eq_of_lt hk0]
+  · intro j hj
+    have h1 : j ≠ 1 := by omega
+    have h2 : j ≠ 2 := by omega
+    have h3 : j ≠ 3 := by omega
+    simp [ceInitState, RegState.set, initialState, h1, h2, h3]
+
+theorem valsOf_ceInitState (c : Params) (hP : c.Sane) :
+    valsOf (ceInitState c) = initVals c := by
+  obtain ⟨e0, e1, e2, e3, e4⟩ := ceInitState_vals c hP
+  simp [valsOf, initVals, e0, e1, e2, e3, e4 4 (by omega), e4 5 (by omega),
+    e4 6 (by omega), e4 7 (by omega), e4 8 (by omega), e4 9 (by omega),
+    e4 10 (by omega), e4 11 (by omega), e4 12 (by omega)]
+
+theorem ceInitState_inv (c : Params) (hP : c.Sane) : Inv c 0 (ceInitState c) := by
+  obtain ⟨e0, e1, e2, e3, e4⟩ := ceInitState_vals c hP
+  have hR : 0 < c.R := by have := hP.RBig; omega
+  have hcand : cand c 0 = c.lo := by simp [cand, Nat.zero_div]
+  have hrnd : rnd c 0 = 0 := by simp [rnd]
+  have hk0hi := hP.k0hi
+  have hpow : (2 : Nat) ^ (c.k0 + 1) = 2 * 2 ^ c.k0 := by
+    rw [Nat.pow_succ, Nat.mul_comm]
+  exact
+    { word := by
+        intro i
+        simp only [ceInitState, RegState.set, initialState]
+        split
+        · exact Nat.mod_lt _ M_pos
+        · split
+          · exact Nat.mod_lt _ M_pos
+          · split
+            · exact Nat.mod_lt _ M_pos
+            · exact M_pos
+      okLe := by rw [e1]; omega
+      cfLe := by rw [e4 4 (by omega)]; omega
+      pkPow := by rw [e2, e3]
+      kkLe := by rw [e3]; exact hP.k0Le
+      pkLe := by rw [e2, hcand]; exact hP.k0lo
+      candLe := by rw [e2, hcand]; omega
+      bumpRnd := by intro _; exact hrnd
+      q0Lt := by rw [e4 9 (by omega)]; exact Nat.two_pow_pos 36
+      r0Lt := by rw [e4 10 (by omega)]; exact Nat.two_pow_pos 50
+      fALt := by rw [e4 11 (by omega)]; exact Nat.two_pow_pos 36
+      fBLt := by rw [e4 12 (by omega)]; exact Nat.two_pow_pos 36
+      divA := by rw [hrnd]; intro h; exact absurd rfl h
+      divB := by rw [hrnd]; intro h; exact absurd rfl h }
+
+/-- The accepting bit: on the certified side of `bound`, in the direction the
+instance's rounding demands. -/
+def acceptBit (c : Params) (a : Nat) : Nat :=
+  if c.up = 1 then (if a ≤ c.bound then 1 else 0)
+  else (if c.bound ≤ a then 1 else 0)
+
+/-- The epilogue's effect. -/
+def ceFin (c : Params) (u : RegState) : RegState :=
+  (u.set 64 (acceptBit c (u 0))).set 65 ((u 1 * acceptBit c (u 0)) % M)
+
+theorem ceEpilogue_denote (c : Params) (hb : c.bound < M) (u : RegState) :
+    denoteInstrs 0 u (ceEpilogue c) = some (ceFin c u) := by
+  have eb : c.bound % M = c.bound := Nat.mod_eq_of_lt hb
+  by_cases hu : c.up = 1 <;>
+    simp [ceEpilogue, ceFin, acceptBit, denoteInstrs, denoteInstr,
+      denoteOperand, denoteOp, hu, eb, RegState.set]
+
+theorem ceFin_out (c : Params) (u : RegState) :
+    ceFin c u 65 = (u 1 * acceptBit c (u 0)) % M := rfl
+
+/-- Every prefix of the loop carries the invariant, and reads off as the
+corresponding prefix of the `ceRound` fold. -/
+theorem ceFold_spec (c : Params) (hP : c.Sane) :
+    ∀ N, N ≤ c.len * c.R →
+      valsOf ((List.range N).foldl (fun w i => ceStep c i w) (ceInitState c)) =
+          (List.range N).foldl (fun v i => ceRound c i v) (initVals c) ∧
+        Inv c N ((List.range N).foldl (fun w i => ceStep c i w)
+          (ceInitState c)) := by
+  intro N
+  induction N with
+  | zero =>
+      intro _
+      exact ⟨by simpa using valsOf_ceInitState c hP, ceInitState_inv c hP⟩
+  | succ N ih =>
+      intro hN
+      obtain ⟨ihv, ihI⟩ := ih (by omega)
+      rw [List.range_succ, List.foldl_append, List.foldl_append,
+        List.foldl_cons, List.foldl_nil, List.foldl_cons, List.foldl_nil]
+      obtain ⟨_, hv, hI⟩ := ceStep_spec c hP N (by omega) _ ihI
+      exact ⟨by rw [hv, ihv], hI⟩
+
+/-- **The program denotes the flat fold.** -/
+theorem ceProgram_denote (c : Params) (hP : c.Sane) :
+    (ceProgram c).denote =
+      some (if ((List.range (c.len * c.R)).foldl
+                  (fun v k => ceRound c k v) (initVals c)).ok = 1 ∧
+              (if c.up = 1
+                then ((List.range (c.len * c.R)).foldl
+                        (fun v k => ceRound c k v) (initVals c)).acc ≤ c.bound
+                else c.bound ≤ ((List.range (c.len * c.R)).foldl
+                        (fun v k => ceRound c k v) (initVals c)).acc)
+            then 1 else 0) := by
+  have hb : c.bound < M := hP.boundLt
+  have hI0 := ceInitState_inv c hP
+  have hden := Program.denote_eq_foldl_index (ceProgram c) (Inv c) (ceStep c)
+    (ceFin c) (ceInitState c) (ceInit_denote c) hI0
+    (fun index u hidx hu => (ceStep_spec c hP index hidx u hu).1)
+    (fun index u hidx hu => (ceStep_spec c hP index hidx u hu).2.2)
+    (fun u => ceEpilogue_denote c hb u)
+  obtain ⟨hFv, hFI⟩ := ceFold_spec c hP (c.len * c.R) (Nat.le_refl _)
+  have hacc : ((List.range (c.len * c.R)).foldl
+        (fun w i => ceStep c i w) (ceInitState c)) 0 =
+      ((List.range (c.len * c.R)).foldl
+        (fun v i => ceRound c i v) (initVals c)).acc :=
+    congrArg Vals.acc hFv
+  have hok : ((List.range (c.len * c.R)).foldl
+        (fun w i => ceStep c i w) (ceInitState c)) 1 =
+      ((List.range (c.len * c.R)).foldl
+        (fun v i => ceRound c i v) (initVals c)).ok :=
+    congrArg Vals.ok hFv
+  have hokLe := hFI.okLe
+  rw [hok] at hokLe
+  rw [hden]
+  show some (ceFin c ((List.range (c.len * c.R)).foldl
+    (fun w i => ceStep c i w) (ceInitState c)) 65) = _
+  rw [ceFin_out, hacc, hok]
+  rcases (show ((List.range (c.len * c.R)).foldl
+      (fun v i => ceRound c i v) (initVals c)).ok = 0 ∨
+    ((List.range (c.len * c.R)).foldl
+      (fun v i => ceRound c i v) (initVals c)).ok = 1 by omega) with h | h <;>
+    by_cases hu : c.up = 1 <;>
+      simp [h, hu, acceptBit, l0, l1] <;> split <;> simp [l0, l1]
+
+/-! ## §17 Re-blocking
+
+The flat fold over `[0, len·R)` is `len` blocks of `R` rounds — the form the
+per-candidate argument needs.  A re-association of the same applications in the
+same order; no hypothesis, and no fold evaluated.
+-/
+
+theorem ceFold_blocked (c : Params) :
+    (List.range (c.len * c.R)).foldl (fun v k => ceRound c k v) (initVals c) =
+      (List.range c.len).foldl
+        (BlockedFold.block c.R (fun v k => ceRound c k v)) (initVals c) :=
+  BlockedFold.foldl_range_mul c.len c.R (fun v k => ceRound c k v) (initVals c)
+
 end LeanCompCert.Ports.CeDyadicFold
