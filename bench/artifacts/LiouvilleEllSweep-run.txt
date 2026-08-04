@@ -1,0 +1,57 @@
+LiouvilleEllSweep production artifact — measured run
+====================================================
+
+Atom served: MathExtras.LiouvilleSweep.ellSweep_cert
+  (Ramaré, Acta Arith. 165 (2014), Lemma 2.4(3), finite head [8918, 4·10⁶))
+
+Config (Cfg ⟨lo, len, ex, dsm, dbg, rounds, nlo, nhi, e0, lb0⟩):
+  ⟨1, 3999999, 21, 157, 2000, 5140, 8918, 4000000, 9442, 9603098⟩
+  rounds = ex·dsm + (dbg − dsm) = 21·157 + 1843 = 5140
+  loopCount = len · rounds = 3 999 999 · 5140 = 20 559 994 860
+
+Emit:
+  lake env lean --run bench/LiouvilleEllSweepEmit.lean \
+    1 3999999 21 157 2000 8918 4000000 9442 9603098 liou_full.c
+  -> "1 3999999 5140 ok loopCount=20559994860"
+  276 lines of C.
+
+Compile (CompCert C verified compiler, version 3.17):
+  ccomp -O2 -o liou_full liou_full.c
+
+Run:
+  ./liou_full
+  exit                 = 0     (main returns 0 iff the output register is 0;
+                                exit 0 IS the artifact's own verdict)
+  wall (elapsed)       = 5:53.34
+  user                 = 353.32 s
+  system               = 0.00 s
+  maximum resident set = 872 kB
+
+Digests:
+  sha256(liou_full.c)  = 466e339f840a4392fb2570c5adb05bb408c86224d323d3bad03f55f1a9a4aa7e
+  sha256(liou_full)    = e2275d1129ef3e9c7025ada284663f19c99d1730030bc51250c5abc7744cff1a
+
+Smoke slice (same generated-code shape, len = 20000, loopCount 102 800 000):
+  ccomp -O2, exit 0 in 1.76 s.
+
+WHAT THIS RUN DOES AND DOES NOT ESTABLISH
+-----------------------------------------
+It is evidence that the emitted C returns 0.  It discharges no Lean obligation
+on its own, and as of this commit the Lean chain from the program's denotation
+to `ellSweep_cert` is NOT complete — see the campaign registry entry
+`liouville_ell_sweep_4e6`, which records `evaluates_atom_predicate: false` and
+lists exactly what is proved and what is left.  No axiom is stated and the atom
+is untouched.
+
+INDEPENDENT CROSS-CHECK (bench/ref_liouville.c, gcc -O2, full range)
+--------------------------------------------------------------------
+  bad                      = 0
+  parity mismatches        = 0 over ALL 3 999 999 candidates, against an
+                             independent smallest-prime-factor sieve
+  |ellLval 10^6|           = 916977218216  (the value the Lean certificate
+                             records in its own docstring)
+  final band ladder (E,Lb) = (4000000, 16256727), matching the last row of
+                             `ellBands`
+  max ⌈A/2²⁰⌉              = 11603188      (clamp 2²⁵ = 33554432)
+  max ladder value         = 16256727      (clamp 2²⁵)
+  worst LHS/RHS            = 0.999663216 at n = 8918
