@@ -16,9 +16,9 @@ neither creates nor admits one.  Everything below is an ordinary Lean theorem
 about `Program.denote`; nothing here asserts that any physical execution
 happened, and nothing here adds an axiom.
 
-⚠ `CeDyadicFold.ceRun_spec` is still open (`sorry`), so `ceProgram_denote` and
-therefore `ceClaim.sound` are **not** yet proved from the base trio.  Nothing
-below states an axiom to paper over that.
+`CeDyadicFold.ceRun_spec` is proved, so `ceProgram_denote` and therefore
+`ceClaim.sound` depend on nothing but the base trio.  Nothing below states an
+axiom, and there is no `sorry` anywhere in this family.
 -/
 
 namespace LeanCompCert.Ports.CeDyadicClaim
