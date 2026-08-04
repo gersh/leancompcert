@@ -98,6 +98,7 @@ import LeanCompCert.Ports.RS62MertensFirst
 import LeanCompCert.Ports.PsiFixedCheck
 import LeanCompCert.Verified.RegFrame
 import LeanCompCert.Verified.BlockDefined
+import LeanCompCert.Verified.ArrayComputation
 import LeanCompCert.Ports.RamareWM217
 import LeanCompCert.Ports.GFoldCheck
 import LeanCompCert.Ports.GFoldCheckRun
