@@ -101,6 +101,12 @@ import LeanCompCert.Verified.BlockDefined
 import LeanCompCert.Verified.ArrayComputation
 import LeanCompCert.Ports.RamareWM217
 import LeanCompCert.Ports.RamareMStar140M
+import LeanCompCert.Ports.RamareMStar140MCore
+import LeanCompCert.Ports.RamareMStar140MPre
+import LeanCompCert.Ports.RamareMStar140MPost1
+import LeanCompCert.Ports.RamareMStar140MPost2
+import LeanCompCert.Ports.RamareMStar140MRound
+import LeanCompCert.Ports.RamareMStar140MDenote
 import LeanCompCert.Ports.GFoldCheck
 import LeanCompCert.Ports.GFoldCheckRun
 import LeanCompCert.Ports.GFoldCheckSpec
