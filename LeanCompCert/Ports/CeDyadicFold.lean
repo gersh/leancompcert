@@ -486,8 +486,8 @@ def blkUV (c : Params) : List Assign := blkUVa c ++ blkUVb
 
 /-- The division-free stretch before the three data `udiv`s. -/
 def blkA (c : Params) : List Assign :=
-  blkDec c ++ blkBump ++ blkGeom ++ blkNum c ++ blkMask ++ blkRst ++
-    blkFAB c ++ blkAbs ++ blkUV c
+  blkDec c ++ (blkBump ++ (blkGeom ++ (blkNum c ++ (blkMask ++ (blkRst ++
+    (blkFAB c ++ (blkAbs ++ (blkUVa c ++ blkUVb))))))))
 
 /-- The remainders, and the trial-division verdict. -/
 def blkZ : List Assign :=
@@ -538,13 +538,6 @@ def blkT3 : List Assign :=
   [ ⟨63, .bin .mul
       (.bin .mul (.reg 17) (.bin .eq (.reg 4) (.lit 0))) (.reg 62)⟩ ]
 
-/-- The rounded assembly, masked so that only the last round of a block
-contributes. -/
-def blkAsmB (c : Params) : List Assign := blkT1 ++ blkT2 c ++ blkT3
-
-/-- The assembly. -/
-def blkAsm (c : Params) : List Assign := blkAsmA c ++ blkAsmB c
-
 /-- Masked accumulation, with the unsigned-wrap check. -/
 def blkAcc : List Assign :=
   [ ⟨1, .bin .mul (.reg 1) (.bin .ge (.bin .add (.reg 0) (.reg 63)) (.reg 0))⟩
@@ -552,7 +545,7 @@ def blkAcc : List Assign :=
 
 /-- The division-free stretch after the three data `udiv`s. -/
 def blkB (c : Params) : List Assign :=
-  blkZ ++ blkUpd ++ blkAsm c ++ blkAcc
+  blkZ ++ (blkUpd ++ (blkAsmA c ++ (blkT1 ++ (blkT2 c ++ (blkT3 ++ blkAcc)))))
 
 /-- The loop body: four `udiv`s and two straight-line blocks.  The `++`s are
 parenthesised to the right so that `denoteInstrs_append` peels one stage at a
@@ -815,24 +808,33 @@ theorem blkAbs_room : ∀ a ∈ blkAbs, cursor + depth a.expr ≤ regCount := by
   subst ha
   simp [depth, sel, cursor, regCount]
 
-theorem blkUV_wf (c : Params) : ∀ a ∈ blkUV c, a.WF cursor := by
+theorem blkUVa_wf (c : Params) : ∀ a ∈ blkUVa c, a.WF cursor := by
   intro a ha
-  simp only [blkUV, blkUVa, blkUVb, List.mem_append, List.mem_cons,
-    List.not_mem_nil, or_false] at ha
-  rcases ha with (rfl|rfl)|(rfl|rfl) <;>
+  simp only [blkUVa, List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl <;>
     exact ⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩
 
-theorem blkUV_room (c : Params) :
-    ∀ a ∈ blkUV c, cursor + depth a.expr ≤ regCount := by
+theorem blkUVa_room (c : Params) :
+    ∀ a ∈ blkUVa c, cursor + depth a.expr ≤ regCount := by
   intro a ha
-  simp only [blkUV, blkUVa, blkUVb, List.mem_append, List.mem_cons,
-    List.not_mem_nil, or_false] at ha
-  rcases ha with (rfl|rfl)|(rfl|rfl) <;> simp [depth, sel, cursor, regCount]
+  simp only [blkUVa, List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl <;> simp [depth, sel, cursor, regCount]
+
+theorem blkUVb_wf : ∀ a ∈ blkUVb, a.WF cursor := by
+  intro a ha
+  simp only [blkUVb, List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl <;>
+    exact ⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩
+
+theorem blkUVb_room : ∀ a ∈ blkUVb, cursor + depth a.expr ≤ regCount := by
+  intro a ha
+  simp only [blkUVb, List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl <;> simp [depth, sel, cursor, regCount]
 
 theorem blkA_wf (c : Params) : ∀ a ∈ blkA c, a.WF cursor := by
   intro a ha
   simp only [blkA, List.mem_append] at ha
-  rcases ha with (((((((h | h) | h) | h) | h) | h) | h) | h) | h
+  rcases ha with h | h | h | h | h | h | h | h | h | h
   · exact blkDec_wf c a h
   · exact blkBump_wf a h
   · exact blkGeom_wf a h
@@ -841,13 +843,14 @@ theorem blkA_wf (c : Params) : ∀ a ∈ blkA c, a.WF cursor := by
   · exact blkRst_wf a h
   · exact blkFAB_wf c a h
   · exact blkAbs_wf a h
-  · exact blkUV_wf c a h
+  · exact blkUVa_wf c a h
+  · exact blkUVb_wf a h
 
 theorem blkA_room (c : Params) :
     ∀ a ∈ blkA c, cursor + depth a.expr ≤ regCount := by
   intro a ha
   simp only [blkA, List.mem_append] at ha
-  rcases ha with (((((((h | h) | h) | h) | h) | h) | h) | h) | h
+  rcases ha with h | h | h | h | h | h | h | h | h | h
   · exact blkDec_room c a h
   · exact blkBump_room a h
   · exact blkGeom_room a h
@@ -856,7 +859,8 @@ theorem blkA_room (c : Params) :
   · exact blkRst_room a h
   · exact blkFAB_room c a h
   · exact blkAbs_room a h
-  · exact blkUV_room c a h
+  · exact blkUVa_room c a h
+  · exact blkUVb_room a h
 
 theorem blkZ_wf : ∀ a ∈ blkZ, a.WF cursor := by
   intro a ha
@@ -934,38 +938,6 @@ theorem blkT3_room : ∀ a ∈ blkT3, cursor + depth a.expr ≤ regCount := by
   subst ha
   simp [depth, cursor, regCount]
 
-theorem blkAsmB_wf (c : Params) : ∀ a ∈ blkAsmB c, a.WF cursor := by
-  intro a ha
-  simp only [blkAsmB, List.mem_append] at ha
-  rcases ha with (h | h) | h
-  · exact blkT1_wf a h
-  · exact blkT2_wf c a h
-  · exact blkT3_wf a h
-
-theorem blkAsmB_room (c : Params) :
-    ∀ a ∈ blkAsmB c, cursor + depth a.expr ≤ regCount := by
-  intro a ha
-  simp only [blkAsmB, List.mem_append] at ha
-  rcases ha with (h | h) | h
-  · exact blkT1_room a h
-  · exact blkT2_room c a h
-  · exact blkT3_room a h
-
-theorem blkAsm_wf (c : Params) : ∀ a ∈ blkAsm c, a.WF cursor := by
-  intro a ha
-  simp only [blkAsm, List.mem_append] at ha
-  rcases ha with h | h
-  · exact blkAsmA_wf c a h
-  · exact blkAsmB_wf c a h
-
-theorem blkAsm_room (c : Params) :
-    ∀ a ∈ blkAsm c, cursor + depth a.expr ≤ regCount := by
-  intro a ha
-  simp only [blkAsm, List.mem_append] at ha
-  rcases ha with h | h
-  · exact blkAsmA_room c a h
-  · exact blkAsmB_room c a h
-
 theorem blkAcc_wf : ∀ a ∈ blkAcc, a.WF cursor := by
   intro a ha
   simp only [blkAcc, List.mem_cons, List.not_mem_nil, or_false] at ha
@@ -980,20 +952,26 @@ theorem blkAcc_room : ∀ a ∈ blkAcc, cursor + depth a.expr ≤ regCount := by
 theorem blkB_wf (c : Params) : ∀ a ∈ blkB c, a.WF cursor := by
   intro a ha
   simp only [blkB, List.mem_append] at ha
-  rcases ha with ((h | h) | h) | h
+  rcases ha with h | h | h | h | h | h | h
   · exact blkZ_wf a h
   · exact blkUpd_wf a h
-  · exact blkAsm_wf c a h
+  · exact blkAsmA_wf c a h
+  · exact blkT1_wf a h
+  · exact blkT2_wf c a h
+  · exact blkT3_wf a h
   · exact blkAcc_wf a h
 
 theorem blkB_room (c : Params) :
     ∀ a ∈ blkB c, cursor + depth a.expr ≤ regCount := by
   intro a ha
   simp only [blkB, List.mem_append] at ha
-  rcases ha with ((h | h) | h) | h
+  rcases ha with h | h | h | h | h | h | h
   · exact blkZ_room a h
   · exact blkUpd_room a h
-  · exact blkAsm_room c a h
+  · exact blkAsmA_room c a h
+  · exact blkT1_room a h
+  · exact blkT2_room c a h
+  · exact blkT3_room a h
   · exact blkAcc_room a h
 
 theorem ceBody_wf (c : Params) : ∀ i ∈ ceBody c, i.WF regCount := by
@@ -1629,6 +1607,120 @@ visits, and in a state satisfying the invariant, all three data divisors are
 nonzero, the thirteen carried registers move by exactly `ceRound`, and the
 invariant advances to the next index.
 -/
+
+/-- `n < 2²⁵` bounds `n²`. -/
+private theorem sq_bound {n : Nat} (h : n < 2 ^ 25) : n * n < 2 ^ 50 := by
+  have h1 : n * n ≤ (2 ^ 25 - 1) * (2 ^ 25 - 1) :=
+    Nat.mul_le_mul (by omega) (by omega)
+  have h2 : (2 ^ 25 - 1) * (2 ^ 25 - 1) < 2 ^ 50 := by decide
+  omega
+
+/-- The next index decodes to the same candidate, one round later. -/
+private theorem idx_next_lt {R q rr : Nat} (hR : 0 < R) (h : rr + 1 < R) :
+    (q * R + rr + 1) / R = q ∧ (q * R + rr + 1) % R = rr + 1 := by
+  have he : q * R + rr + 1 = (rr + 1) + R * q := by
+    rw [Nat.mul_comm q R]; omega
+  rw [he, Nat.add_mul_div_left _ _ hR, Nat.div_eq_of_lt h, Nat.zero_add,
+    Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt h]
+  exact ⟨rfl, rfl⟩
+
+/-- The next index opens the next block. -/
+private theorem idx_next_eq {R q rr : Nat} (hR : 0 < R) (h : rr + 1 = R) :
+    (q * R + rr + 1) / R = q + 1 ∧ (q * R + rr + 1) % R = 0 := by
+  have he : q * R + rr + 1 = 0 + R * (q + 1) := by
+    have hm : R * (q + 1) = R * q + R := Nat.mul_succ R q
+    have hc : R * q = q * R := Nat.mul_comm _ _
+    omega
+  rw [he, Nat.add_mul_div_left _ _ hR, Nat.add_mul_mod_self_left]
+  simp
+
+/-- `256 ^ i ≤ 2 ^ (8·i)`, in the two shapes the word bounds need. -/
+private theorem pow256_le8 {i : Nat} (h : i ≤ 8) : (256 : Nat) ^ i ≤ 2 ^ 64 := by
+  have h1 : (256 : Nat) ^ i ≤ 256 ^ 8 := Nat.pow_le_pow_right (by decide) h
+  have h2 : (256 : Nat) ^ 8 = 2 ^ 64 := by decide
+  omega
+
+private theorem pow256_le7 {i : Nat} (h : i ≤ 7) : (256 : Nat) ^ i ≤ 2 ^ 56 := by
+  have h1 : (256 : Nat) ^ i ≤ 256 ^ 7 := Nat.pow_le_pow_right (by decide) h
+  have h2 : (256 : Nat) ^ 7 = 2 ^ 56 := by decide
+  omega
+
+/-- A register no later block writes keeps its value. -/
+private theorem frame_of (k : Nat) (u w : RegState) (as : List Assign) (j : Nat)
+    (hw : w = run k u as) (h : as.all (fun a => a.dest != j) = true) :
+    w j = u j := by
+  rw [hw]; exact run_frame k as j u h
+
+/-- `ceRound` with every binder named, so that its thirteen output fields are
+directly comparable with the registers the body leaves. -/
+theorem ceRound_mk (c : Params) (idx : Nat) (v : Vals)
+    (q rr n first last pk2 dob pk kk C d n2 p2 np U V numA denA numB denB
+      act isq isf qA0 rA0 qB0 rB0 cf0 FA FB a1 ge cb uA vA uB vB wA zA wB zB
+      cf qA rA qB rB q0 r0 fA fB FB2 a1b ge2 tA base tB tv ct : Nat)
+    (e1 : q = idx / c.R) (e2 : rr = idx % c.R) (e3 : n = c.lo + q)
+    (e4 : first = if rr = 0 then 1 else 0)
+    (e5 : last = if rr = c.R - 1 then 1 else 0)
+    (e6 : pk2 = v.pk * 2)
+    (e7 : dob = first * (if pk2 ≤ n then 1 else 0))
+    (e8 : pk = if dob = 1 then pk2 else v.pk)
+    (e9 : kk = v.kk + dob)
+    (e10 : C = n * (n - 1))
+    (e11 : d = if rr = 0 then 2 else 2 * rr + 1)
+    (e12 : n2 = n * n) (e13 : p2 = pk * pk) (e14 : np = n * pk)
+    (e15 : U = n2 - p2) (e16 : V = 4 * p2 - n2)
+    (e17 : numA = if c.up = 1 then U else 3 * U)
+    (e18 : denA = if c.up = 1 then 2 * np else n2 + 4 * np + p2)
+    (e19 : numB = if c.up = 1 then 3 * V else V)
+    (e20 : denB = if c.up = 1 then 4 * p2 + 8 * np + n2 else 4 * np)
+    (e21 : act = if 1 ≤ rr ∧ rr ≤ 8 then 1 else 0)
+    (e22 : isq = if rr = 9 then 1 else 0)
+    (e23 : isf = if rr = 10 then 1 else 0)
+    (e24 : qA0 = if rr = 0 then 0 else v.qA)
+    (e25 : rA0 = if rr = 0 then numA else v.rA)
+    (e26 : qB0 = if rr = 0 then 0 else v.qB)
+    (e27 : rB0 = if rr = 0 then numB else v.rB)
+    (e28 : cf0 = if rr = 0 then 0 else v.cf)
+    (e29 : FA = qA0 + c.up * (if rA0 = 0 then 0 else 1))
+    (e30 : FB = qB0 + (1 - c.up) * (if rB0 = 0 then 0 else 1))
+    (e31 : a1 = (kk + 1) * v.r0)
+    (e32 : ge = if a1 ≤ FB then 1 else 0)
+    (e33 : cb = ge ^^^ c.up)
+    (e34 : uA = if act = 1 then rA0 * 256
+                else if isq = 1 then c.lfx
+                else if isf = 1 then kk * v.r0 + FA + c.up * (C - 1) else 0)
+    (e35 : vA = if act = 1 then denA else C)
+    (e36 : uB = if act = 1 then rB0 * 256
+                else if isf = 1 then (if ge = 1 then FB - a1 else a1 - FB)
+                                      + cb * (C - 1) else 0)
+    (e37 : vB = if act = 1 then denB else C)
+    (e38 : wA = uA / vA) (e39 : zA = uA % vA)
+    (e40 : wB = uB / vB) (e41 : zB = uB % vB)
+    (e42 : cf = cf0 ||| (if n % d = 0 then 1 else 0))
+    (e43 : qA = if act = 1 then qA0 * 256 + wA else qA0)
+    (e44 : rA = if act = 1 then zA else rA0)
+    (e45 : qB = if act = 1 then qB0 * 256 + wB else qB0)
+    (e46 : rB = if act = 1 then zB else rB0)
+    (e47 : q0 = if isq = 1 then wA else v.q0)
+    (e48 : r0 = if isq = 1 then zA else v.r0)
+    (e49 : fA = if isf = 1 then wA else v.fA)
+    (e50 : fB = if isf = 1 then wB else v.fB)
+    (e51 : FB2 = qB + (1 - c.up) * (if rB = 0 then 0 else 1))
+    (e52 : a1b = (kk + 1) * r0)
+    (e53 : ge2 = if a1b ≤ FB2 then 1 else 0)
+    (e54 : tA = kk * q0 + fA)
+    (e55 : base = (kk + 1) * q0)
+    (e56 : tB = if ge2 = 1 then (if fB ≤ base then base - fB else tA)
+                else base + fB)
+    (e57 : tv = if c.up = 1 then min tA tB else max tA tB)
+    (e58 : ct = last * (if cf = 0 then 1 else 0) * tv) :
+    ceRound c idx v =
+      { acc := (v.acc + ct) % M, ok := if v.acc + ct < M then v.ok else 0,
+        pk := pk, kk := kk, cf := cf, qA := qA, rA := rA, qB := qB, rB := rB,
+        q0 := q0, r0 := r0, fA := fA, fB := fB } := by
+  subst e1 e2 e3 e4 e5 e6 e7 e8 e9 e10 e11 e12 e13 e14 e15 e16 e17 e18 e19 e20
+    e21 e22 e23 e24 e25 e26 e27 e28 e29 e30 e31 e32 e33 e34 e35 e36 e37 e38 e39
+    e40 e41 e42 e43 e44 e45 e46 e47 e48 e49 e50 e51 e52 e53 e54 e55 e56 e57 e58
+  rfl
 
 theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
     (hk : k < c.len * c.R) {s : RegState} (hs : Inv c k s) :
