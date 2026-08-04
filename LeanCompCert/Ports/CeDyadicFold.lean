@@ -1608,10 +1608,23 @@ nonzero, the thirteen carried registers move by exactly `ceRound`, and the
 invariant advances to the next index.
 -/
 
+/-- `lo < 2²⁵`. -/
+theorem Params.Sane.loLt {c : Params} (hP : c.Sane) : c.lo < 2 ^ 25 := by
+  have := hP.topSmall; have := hP.lenPos; omega
+
+/-- `k₀ ≤ 24`, because `2^k₀ ≤ lo < 2²⁵`. -/
+theorem Params.Sane.k0Le {c : Params} (hP : c.Sane) : c.k0 ≤ 24 := by
+  rcases Nat.lt_or_ge c.k0 25 with h | h
+  · omega
+  · have hp : (2 : Nat) ^ 25 ≤ 2 ^ c.k0 := Nat.pow_le_pow_right (by decide) h
+    have h1 := hP.k0lo
+    have h2 := hP.loLt
+    omega
+
 /-- `n < 2²⁵` bounds `n²`. -/
 private theorem sq_bound {n : Nat} (h : n < 2 ^ 25) : n * n < 2 ^ 50 := by
-  have h1 : n * n ≤ (2 ^ 25 - 1) * (2 ^ 25 - 1) :=
-    Nat.mul_le_mul (by omega) (by omega)
+  have hb : n ≤ 2 ^ 25 - 1 := by omega
+  have h1 : n * n ≤ (2 ^ 25 - 1) * (2 ^ 25 - 1) := Nat.mul_le_mul hb hb
   have h2 : (2 ^ 25 - 1) * (2 ^ 25 - 1) < 2 ^ 50 := by decide
   omega
 
@@ -1983,19 +1996,6 @@ theorem Program.denote_eq_foldl_index (p : Program) (P : Nat → RegState → Pr
   rfl
 
 /-! ## §16 Initialisation, epilogue, and the whole program -/
-
-/-- `lo < 2²⁵`. -/
-theorem Params.Sane.loLt {c : Params} (hP : c.Sane) : c.lo < 2 ^ 25 := by
-  have := hP.topSmall; have := hP.lenPos; omega
-
-/-- `k₀ ≤ 24`, because `2^k₀ ≤ lo < 2²⁵`. -/
-theorem Params.Sane.k0Le {c : Params} (hP : c.Sane) : c.k0 ≤ 24 := by
-  rcases Nat.lt_or_ge c.k0 25 with h | h
-  · omega
-  · have hp : (2 : Nat) ^ 25 ≤ 2 ^ c.k0 := Nat.pow_le_pow_right (by decide) h
-    have h1 := hP.k0lo
-    have h2 := hP.loLt
-    omega
 
 /-- The carried registers after `ceInit`. -/
 def initVals (c : Params) : Vals :=
