@@ -20,9 +20,9 @@
    - [run] threads the memory through unchanged: the fragment never
      writes memory, matching the exec_stmt instances it produces
      (initial memory = final memory), and all traces are E0.
-   - The statement-level theorem [run_sound] is generic in the
+   - The statement-level theorems [run_sound] and [run_fuel_sound] are generic in the
      [function_entry] family (our statements contain no calls).  The
-     function-level corollary [run_funcall2] is stated against
+     function-level corollaries [run_funcall2] and [run_fuel_funcall2] are stated against
      [function_entry2] (Clight2: parameters as temporaries), which is
      the right entry semantics for functions with fn_params = fn_vars
      = nil and everything in temps. *)
@@ -149,6 +149,81 @@ Proof.
   destruct out; try discriminate.
   destruct o; inversion H; subst; eauto.
 Qed.
+
+(* ------------------------------------------------------------------ *)
+(* Fuelled control-flow runner.
+
+   [run] above deliberately has the smallest possible statement language: it
+   is the fast evaluator used by the original straight-line direct-emission
+   gate.  Production certificates are normally emitted in the rolled form,
+   however, and [Clight.Swhile] elaborates to [Sloop]/[Sifthenelse]/[Sbreak].
+
+   [run_fuel] is the generic control-flow layer.  It keeps the same guarded
+   expression evaluator, threads memory (unchanged for this numeric fragment),
+   and supports exactly the structured control flow needed by a rolled scalar
+   certificate.  Fuel is a proof/checking resource, not source semantics: each
+   recursive descent and each loop iteration consumes one unit.  A successful
+   result is therefore a finite execution certificate that the theorem below
+   carries into CompCert's actual big-step semantics. *)
+
+Fixpoint run_fuel (fuel: nat) (ce: composite_env) (m: mem)
+    (s: statement) (le: temp_env)
+    : option (temp_env * (mem * outcome)) :=
+  match fuel with
+  | O => None
+  | S fuel' =>
+      match s with
+      | Sskip => Some (le, (m, Out_normal))
+      | Sset id a =>
+          match eval_e ce m le a with
+          | Some v => Some (PTree.set id v le, (m, Out_normal))
+          | None => None
+          end
+      | Ssequence s1 s2 =>
+          match run_fuel fuel' ce m s1 le with
+          | Some (le1, (m1, Out_normal)) => run_fuel fuel' ce m1 s2 le1
+          | res => res
+          end
+      | Sifthenelse a s1 s2 =>
+          match eval_e ce m le a with
+          | Some v =>
+              match bool_val v (typeof a) m with
+              | Some b => run_fuel fuel' ce m (if b then s1 else s2) le
+              | None => None
+              end
+          | None => None
+          end
+      | Sloop s1 s2 =>
+          match run_fuel fuel' ce m s1 le with
+          | Some (le1, (m1, Out_break)) =>
+              Some (le1, (m1, Out_normal))
+          | Some (le1, (m1, Out_return ret)) =>
+              Some (le1, (m1, Out_return ret))
+          | Some (le1, (m1, Out_normal))
+          | Some (le1, (m1, Out_continue)) =>
+              match run_fuel fuel' ce m1 s2 le1 with
+              | Some (le2, (m2, Out_break)) =>
+                  Some (le2, (m2, Out_normal))
+              | Some (le2, (m2, Out_return ret)) =>
+                  Some (le2, (m2, Out_return ret))
+              | Some (le2, (m2, Out_normal)) =>
+                  run_fuel fuel' ce m2 (Sloop s1 s2) le2
+              | Some (_, (_, Out_continue)) => None
+              | None => None
+              end
+          | None => None
+          end
+      | Sbreak => Some (le, (m, Out_break))
+      | Scontinue => Some (le, (m, Out_continue))
+      | Sreturn None => Some (le, (m, Out_return None))
+      | Sreturn (Some a) =>
+          match eval_e ce m le a with
+          | Some v => Some (le, (m, Out_return (Some (v, typeof a))))
+          | None => None
+          end
+      | _ => None
+      end
+  end.
 
 (* ------------------------------------------------------------------ *)
 (* Soundness of eval_e against Clight.eval_expr *)
@@ -345,6 +420,120 @@ Proof.
     + inversion H; subst. apply exec_Sreturn_none.
 Qed.
 
+(** A successful [run_fuel] computation is a CompCert big-step execution.
+
+    This is the once-and-for-all control-flow theorem used for rolled scalar
+    certificates.  It is deliberately stated over the actual Clight statement
+    supplied by the caller: after a directly emitted function has elaborated,
+    no printer or parser model occurs in the conclusion. *)
+Theorem run_fuel_sound:
+  forall fuel fe ge en m s le le' m' out,
+  run_fuel fuel (genv_cenv ge) m s le = Some (le', (m', out)) ->
+  ClightBigstep.exec_stmt fe ge en le m s E0 le' m' out.
+Proof.
+  induction fuel as [|fuel IH]; intros fe ge en m s le le' m' out H.
+  - discriminate.
+  - destruct s; simpl in H; try discriminate.
+    + (* Sskip *)
+      inversion H; subst. apply exec_Sskip.
+    + (* Sset *)
+      destruct (eval_e (genv_cenv ge) m le e) as [v|] eqn:E;
+        try discriminate.
+      inversion H; subst. apply exec_Sset. now apply eval_e_sound.
+    + (* Ssequence *)
+      destruct (run_fuel fuel (genv_cenv ge) m s1 le)
+        as [[le1 [m1 out1]]|] eqn:R1; try discriminate.
+      destruct out1.
+      * inversion H; subst. eapply exec_Sseq_2.
+        -- eapply IH; eauto.
+        -- discriminate.
+      * inversion H; subst. eapply exec_Sseq_2.
+        -- eapply IH; eauto.
+        -- discriminate.
+      * change E0 with (E0 ** E0).
+        eapply exec_Sseq_1.
+        -- eapply IH; eauto.
+        -- eapply IH; eauto.
+      * inversion H; subst. eapply exec_Sseq_2.
+        -- eapply IH; eauto.
+        -- discriminate.
+    + (* Sifthenelse *)
+      destruct (eval_e (genv_cenv ge) m le e) as [v|] eqn:E;
+        try discriminate.
+      destruct (bool_val v (typeof e) m) as [b|] eqn:B;
+        try discriminate.
+      eapply exec_Sifthenelse with (v1 := v) (b := b).
+      * now apply eval_e_sound.
+      * exact B.
+      * eapply IH; eauto.
+    + (* Sloop *)
+      destruct (run_fuel fuel (genv_cenv ge) m s1 le)
+        as [[le1 [m1 out1]]|] eqn:R1; try discriminate.
+      destruct out1.
+      * (* body breaks *)
+        inversion H; subst. eapply exec_Sloop_stop1.
+        -- eapply IH; eauto.
+        -- constructor.
+      * (* body continues *)
+        destruct (run_fuel fuel (genv_cenv ge) m1 s2 le1)
+          as [[le2 [m2 out2]]|] eqn:R2; try discriminate.
+        destruct out2.
+        -- inversion H; subst. change E0 with (E0 ** E0).
+           eapply exec_Sloop_stop2.
+           ++ eapply IH; eauto.
+           ++ constructor.
+           ++ eapply IH; eauto.
+           ++ constructor.
+        -- discriminate.
+        -- change E0 with (E0 ** E0 ** E0). eapply exec_Sloop_loop.
+           ++ eapply IH; eauto.
+           ++ constructor.
+           ++ eapply IH; eauto.
+           ++ eapply IH; eauto.
+        -- inversion H; subst. change E0 with (E0 ** E0).
+           eapply exec_Sloop_stop2.
+           ++ eapply IH; eauto.
+           ++ constructor.
+           ++ eapply IH; eauto.
+           ++ constructor.
+      * (* body is normal *)
+        destruct (run_fuel fuel (genv_cenv ge) m1 s2 le1)
+          as [[le2 [m2 out2]]|] eqn:R2; try discriminate.
+        destruct out2.
+        -- inversion H; subst. change E0 with (E0 ** E0).
+           eapply exec_Sloop_stop2.
+           ++ eapply IH; eauto.
+           ++ constructor.
+           ++ eapply IH; eauto.
+           ++ constructor.
+        -- discriminate.
+        -- change E0 with (E0 ** E0 ** E0). eapply exec_Sloop_loop.
+           ++ eapply IH; eauto.
+           ++ constructor.
+           ++ eapply IH; eauto.
+           ++ eapply IH; eauto.
+        -- inversion H; subst. change E0 with (E0 ** E0).
+           eapply exec_Sloop_stop2.
+           ++ eapply IH; eauto.
+           ++ constructor.
+           ++ eapply IH; eauto.
+           ++ constructor.
+      * (* body returns *)
+        inversion H; subst. eapply exec_Sloop_stop1.
+        -- eapply IH; eauto.
+        -- constructor.
+    + (* Sbreak *)
+      inversion H; subst. apply exec_Sbreak.
+    + (* Scontinue *)
+      inversion H; subst. apply exec_Scontinue.
+    + (* Sreturn *)
+      destruct o as [a|].
+      * destruct (eval_e (genv_cenv ge) m le a) as [v|] eqn:E;
+          try discriminate.
+        inversion H; subst. apply exec_Sreturn_some. now apply eval_e_sound.
+      * inversion H; subst. apply exec_Sreturn_none.
+Qed.
+
 (* ------------------------------------------------------------------ *)
 (* Function-level corollary, against the Clight2 entry semantics
    (function_entry2: parameters as temporaries).  For a function with
@@ -375,6 +564,39 @@ Proof.
     + rewrite P; reflexivity.
   - (* body *)
     eapply run_sound; eauto.
+  - (* outcome_result_value: fn_return <> Tvoid /\ return-type cast *)
+    simpl; auto.
+  - (* free_list of an empty env *)
+    reflexivity.
+Qed.
+
+(** Function-level form of [run_fuel_sound].  This is the generic theorem a
+    rolled scalar certificate instantiates: the certificate supplies its
+    concrete Clight [function], a fuel bound, and a kernel-reduced equality
+    for [run_fuel].  The conclusion is CompCert's actual function-call
+    semantics for that same function. *)
+Corollary run_fuel_funcall2:
+  forall fuel ge f m le' m' v ty vres,
+  fn_params f = nil ->
+  fn_vars f = nil ->
+  fn_return f <> Tvoid ->
+  run_fuel fuel (genv_cenv ge) m (fn_body f)
+    (create_undef_temps (fn_temps f))
+    = Some (le', (m', Out_return (Some (v, ty)))) ->
+  sem_cast v ty (fn_return f) m' = Some vres ->
+  ClightBigstep.eval_funcall function_entry2 ge m (Internal f) nil E0 m' vres.
+Proof.
+  intros fuel ge f m le' m' v ty vres P V R RUN CAST.
+  eapply eval_funcall_internal with (e := empty_env) (m1 := m) (m2 := m').
+  - (* function_entry2 *)
+    constructor.
+    + rewrite V; constructor.
+    + rewrite P; constructor.
+    + rewrite P; red; simpl; tauto.
+    + rewrite V; constructor.
+    + rewrite P; reflexivity.
+  - (* body *)
+    eapply run_fuel_sound; eauto.
   - (* outcome_result_value: fn_return <> Tvoid /\ return-type cast *)
     simpl; auto.
   - (* free_list of an empty env *)

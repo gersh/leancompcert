@@ -241,6 +241,40 @@ private def validateInstruction
           errors := addError errors .instructionType
             s!"store address has non-pointer type {type}" fn (some block.id) (some index)
       | none => pure ()
+  | .loadIndex dest base offset =>
+      match operandType? locals base with
+      | some (.ptr element) =>
+          if element != dest.type then
+            errors := addError errors .instructionType
+              s!"indexed load destination {dest.type} differs from pointer element {element}"
+              fn (some block.id) (some index)
+      | some type =>
+          errors := addError errors .instructionType
+            s!"indexed load base has non-pointer type {type}" fn (some block.id) (some index)
+      | none => pure ()
+      match operandType? locals offset with
+      | some type =>
+          if !type.isInteger then
+            errors := addError errors .instructionType
+              s!"indexed load offset has non-integer type {type}"
+              fn (some block.id) (some index)
+      | none => pure ()
+  | .storeIndex base offset value =>
+      match operandType? locals base with
+      | some (.ptr element) =>
+          errors := sameType errors fn block index (operandType? locals value)
+            element "indexed stored value"
+      | some type =>
+          errors := addError errors .instructionType
+            s!"indexed store base has non-pointer type {type}" fn (some block.id) (some index)
+      | none => pure ()
+      match operandType? locals offset with
+      | some type =>
+          if !type.isInteger then
+            errors := addError errors .instructionType
+              s!"indexed store offset has non-integer type {type}"
+              fn (some block.id) (some index)
+      | none => pure ()
   | .call dest _ _ result | .runtimeCall dest _ _ result =>
       match dest with
       | some decl =>

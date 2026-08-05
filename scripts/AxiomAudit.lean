@@ -20,6 +20,7 @@ import LeanCompCert.Verified.Frontend
 import LeanCompCert.Verified.ArrayState
 import LeanCompCert.Verified.MemFragment
 import LeanCompCert.Verified.ArrayBridge
+import LeanCompCert.Verified.ArrayRolled
 import LeanCompCert.Verified.Packed
 import LeanCompCert.Verified.PackedTransfer
 import LeanCompCert.Verified.ListFold
@@ -163,13 +164,16 @@ fails elaboration, so an entry cannot silently audit nothing.
 -- M6: the array bridge (AProgram -> CCIR -> generated C)
 #print axioms LeanCompCert.Verified.ArrayState.evalMCCSequence_straight
 #print axioms LeanCompCert.Verified.ArrayState.evalCCStraight_frame
-#print axioms LeanCompCert.Verified.ArrayState.addressStraights_correct
+#print axioms LeanCompCert.Verified.ArrayState.cellAddr_inj
 #print axioms LeanCompCert.Verified.ArrayState.compileAInstr_correct
 #print axioms LeanCompCert.Verified.ArrayState.compileAInstrs_correct
 #print axioms LeanCompCert.Verified.ArrayState.foldBodyA_correct
 #print axioms LeanCompCert.Verified.ArrayState.apreamble_correct
 #print axioms LeanCompCert.Verified.ArrayState.AProgram.evalCC_compile
 #print axioms LeanCompCert.Verified.ArrayState.AProgram.evalC_compile
+#print axioms LeanCompCert.Verified.ArrayState.evalMCCSequence_var_eq_lit
+#print axioms LeanCompCert.Verified.ArrayState.rolledTraceM_eq_literalSegM
+#print axioms LeanCompCert.Verified.ArrayState.rolledTraceM_eq_foldTraceM
 -- M6 load: the segmented Mobius sieve in the array fragment
 #print axioms LeanCompCert.Ports.ArrayMobius.mobiusProgram_wf
 #print axioms LeanCompCert.Ports.ArrayMobius.mobiusProgram_compiled

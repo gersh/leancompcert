@@ -9,6 +9,7 @@ import LeanCompCert.Testing.FixedPointCertificate
 import LeanCompCert.Testing.RolledFixedPoint
 import LeanCompCert.Testing.PackedCoverageCertificate
 import LeanCompCert.Testing.AlgorithmProof
+import LeanCompCert.Testing.ArrayMobiusCertificate
 import LeanCompCert.Verified.ClightEmit
 import LeanCompCert.Attest.LedgerReport
 import LeanCompCertTests.Docs
@@ -80,6 +81,40 @@ private def testCValidator : IO Unit := do
   let errors := C.validateFunction .portable signed
   check (errors.any (fun error => error.rule == .signedOverflow))
     "C validator accepted potentially overflowing signed arithmetic"
+
+private def indexedFunction (baseType : CCIR.CCType) : CCIR.Function := {
+  name := ⟨"Indexed.test"⟩
+  params := #[{ id := ⟨0⟩, type := baseType }, { id := ⟨1⟩, type := .u64 }]
+  result := .u64
+  entry := ⟨0⟩
+  blocks := #[{
+    id := ⟨0⟩
+    instructions := #[
+      .loadIndex { id := ⟨2⟩, type := .u64 } (.local ⟨0⟩) (.local ⟨1⟩),
+      .storeIndex (.local ⟨0⟩) (.local ⟨1⟩) (.local ⟨2⟩)
+    ]
+    terminator := .return (some (.local ⟨2⟩))
+  }]
+}
+
+private def testIndexedMemory : IO Unit := do
+  let good : CCIR.Program := { functions := #[indexedFunction (.ptr .u64)] }
+  check (CCIR.validateProgram good).isEmpty
+    "CCIR validator rejected typed indexed load/store"
+  let bad : CCIR.Program := { functions := #[indexedFunction .u64] }
+  check ((CCIR.validateProgram bad).any
+      (fun error => error.rule == .instructionType))
+    "CCIR validator accepted an integer as an indexed-memory base"
+  match Testing.ArrayMobiusCertificate.emittedC with
+  | .error errors =>
+      throw (IO.userError s!"pointer-native array emission failed: {repr errors}")
+  | .ok source =>
+      check (source.contains "uint64_t *")
+        "array function lacks a pointer-typed base"
+      check (source.contains "[v_")
+        "array function lacks indexed pointer accesses"
+      check (!source.contains "uintptr_t")
+        "array function still integerizes its base pointer"
 
 private def testPolicies : IO Unit := do
   let active := ABI.Manifest.current "hash-a"
@@ -459,6 +494,7 @@ def main : IO Unit := do
   testInterpreter
   testCEmission
   testCValidator
+  testIndexedMemory
   testPolicies
   testVerifiedDecide
   testMertensCertificate

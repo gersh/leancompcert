@@ -33,13 +33,14 @@ program is a different type (`AProgram`) with a different denotation
   p.denote = some n  →  (compiled trace).output = some n
 ```
 
-and not the converse, because `u64` address arithmetic makes the cell map
-non-injective over the whole register range (see `Verified/ArrayBridge.lean`).
-So `AProgramClaim` below deliberately has no `Computation.Returns` iff.  What
-it has instead is `trace_value_unique`: a *proved* denotation plus an observed
-run value forces the two to agree.  A run therefore **reads off** an array
-program's denotation; it never establishes one.  That asymmetry is real and is
-recorded here rather than papered over.
+and not the converse.  Typed indexed operations removed the former
+integerized-pointer aliasing issue, but the compiler bridge only needs and
+proves the forward compiler-correctness direction.  So `AProgramClaim` below
+deliberately has no `Computation.Returns` iff.  What it has instead is
+`trace_value_unique`: a *proved* denotation plus an observed run value forces
+the two to agree.  A run therefore **reads off** an array program's denotation;
+it never establishes one.  That asymmetry is recorded here rather than
+papered over.
 
 ## The two obligations, unchanged
 

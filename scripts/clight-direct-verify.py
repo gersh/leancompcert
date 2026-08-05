@@ -10,8 +10,10 @@ Ecast), an expected u64 return value, and a work directory.  It:
   2. compiles (with caching) the once-and-for-all development
      ClightFragmentSem.v (computable evaluator `run` + Qed-proved
      soundness against CompCert's ClightBigstep semantics),
-  3. compiles (with caching) DirectFP.v,
-  4. generates DirectFPCheck.v, which vm_computes the body under `run`
+  3. compiles rolled-loop and pointer-memory regressions that instantiate
+     the generic statement/function theorems for actual Clight functions,
+  4. compiles (with caching) DirectFP.v,
+  5. generates DirectFPCheck.v, which vm_computes the body under `run`
      and derives, via the soundness theorems:
        - fp_bigstep : forall fe ge e m, exec_stmt ... E0 ... m
                         (Out_return (Some (Vlong (Int64.repr N), tulong)))
@@ -126,16 +128,20 @@ def compile_v(coqc: str, flags, workdir: Path, vfile: str, label: str) -> bool:
     return True
 
 
-def cached_copy_and_compile(src: Path, dst: Path, coqc, flags, workdir, label) -> bool:
+def cached_copy_and_compile(src: Path, dst: Path, coqc, flags, workdir, label,
+                            dependencies=()) -> bool:
     """Copy src to dst if content differs; compile unless a .vo built from the
-    same content with the same coqc and flags exists (stamp-keyed, so switching
-    --coqc/--compcert never reuses a stale .vo)."""
+    same content, dependencies, coqc, and flags exists (stamp-keyed, so
+    switching --coqc/--compcert or changing a theorem dependency never reuses
+    a stale .vo)."""
     vo = dst.with_suffix(".vo")
     stamp = dst.with_suffix(".stamp")
     content = src.read_bytes()
-    key = hashlib.sha256(
-        b"\0".join([content, coqc.encode()] + [f.encode() for f in flags])
-    ).hexdigest()
+    dependency_content = [Path(dep).read_bytes() for dep in dependencies]
+    key = hashlib.sha256(b"\0".join(
+        [content] + dependency_content + [coqc.encode()] +
+        [f.encode() for f in flags]
+    )).hexdigest()
     if not dst.exists() or dst.read_bytes() != content:
         shutil.copyfile(src, dst)
     if vo.exists() and stamp.exists() and stamp.read_text().strip() == key:
@@ -170,19 +176,43 @@ def run_pipeline(direct_v: Path, expected: int, workdir: Path, func,
     print(f"expected:    {expected} (u64)")
     print(f"workdir:     {workdir}")
 
-    frag_src = Path(__file__).resolve().parent / "coq" / "ClightFragmentSem.v"
+    coq_src = Path(__file__).resolve().parent / "coq"
+    frag_src = coq_src / "ClightFragmentSem.v"
+    frag_test_src = coq_src / "ClightFragmentSemTest.v"
+    mem_src = coq_src / "ClightMemorySem.v"
+    mem_test_src = coq_src / "ClightMemorySemTest.v"
     if not frag_src.exists():
         sys.exit(f"error: {frag_src} not found")
+    if not frag_test_src.exists():
+        sys.exit(f"error: {frag_test_src} not found")
+    if not mem_src.exists():
+        sys.exit(f"error: {mem_src} not found")
+    if not mem_test_src.exists():
+        sys.exit(f"error: {mem_test_src} not found")
 
     # 1. once-and-for-all development (cached)
     if not cached_copy_and_compile(frag_src, workdir / "ClightFragmentSem.v",
                                    coqc, flags, workdir, "ClightFragmentSem"):
         return False
-    # 2. the certificate, under a fixed valid module name (cached)
+    # 2. generic rolled-loop theorem regression (cached)
+    if not cached_copy_and_compile(
+            frag_test_src, workdir / "ClightFragmentSemTest.v",
+            coqc, flags, workdir, "ClightFragmentSemTest (rolled loop)",
+            dependencies=(frag_src,)):
+        return False
+    if not cached_copy_and_compile(mem_src, workdir / "ClightMemorySem.v",
+                                   coqc, flags, workdir, "ClightMemorySem"):
+        return False
+    if not cached_copy_and_compile(
+            mem_test_src, workdir / "ClightMemorySemTest.v",
+            coqc, flags, workdir, "ClightMemorySemTest (pointer load/store)",
+            dependencies=(mem_src,)):
+        return False
+    # 3. the certificate, under a fixed valid module name (cached)
     if not cached_copy_and_compile(direct_v, workdir / "DirectFP.v",
                                    coqc, flags, workdir, "DirectFP"):
         return False
-    # 3. generated per-certificate check
+    # 4. generated per-certificate check
     check = workdir / f"{check_name}.v"
     check.write_text(CHECK_TEMPLATE.format(func=func, expected=expected))
     return compile_v(coqc, flags, workdir, check.name,

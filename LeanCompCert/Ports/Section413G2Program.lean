@@ -278,6 +278,85 @@ def divP18Body (lo hi q qc : Nat) : List AInstr :=
   , .scalar (.binop qc .sub (.lit 1) (.reg 174))
   , .scalar (.binop qc .add (.reg qc) (.reg q)) ]
 
+/-- Canonicalize one unsigned two-limb product's sign: zero has sign `0`;
+a nonzero product has the xor of the operand signs.  Scratch: 123--125. -/
+def canonSignBody (sa sb lo hi dst : Nat) : List AInstr :=
+  [ .scalar (.binop dst .bxor (.reg sa) (.reg sb))
+  , .scalar (.binop 123 .eq (.reg lo) (.lit 0))
+  , .scalar (.binop 124 .eq (.reg hi) (.lit 0))
+  , .scalar (.binop 125 .mul (.reg 123) (.reg 124))
+  , .scalar (.binop 125 .sub (.lit 1) (.reg 125))
+  , .scalar (.binop dst .mul (.reg dst) (.reg 125)) ]
+
+/-- Canonical signs for the four endpoint products in `cmulBody`. -/
+def cmulSignsBody : List AInstr :=
+  canonSignBody 100 102 111 112 119 ++
+  canonSignBody 100 103 113 114 120 ++
+  canonSignBody 101 102 115 116 121 ++
+  canonSignBody 101 103 117 118 122
+
+/-- Encode a lower endpoint after division: negative uses `-ceil`, while
+nonnegative uses `floor`.  Scratch: 108--109. -/
+def cmulLowerBody (sign q qc dst : Nat) : List AInstr :=
+  [ .scalar (.binop 108 .sub (.lit 0) (.reg qc))
+  , .scalar (.binop 109 .sub (.lit 1) (.reg sign))
+  , .scalar (.binop dst .mul (.reg 109) (.reg q))
+  , .scalar (.binop 108 .mul (.reg sign) (.reg 108))
+  , .scalar (.binop dst .add (.reg dst) (.reg 108)) ]
+
+/-- Encode an upper endpoint after division: negative uses `-floor`, while
+nonnegative uses `ceil`.  Scratch: 108--109. -/
+def cmulUpperBody (sign q qc dst : Nat) : List AInstr :=
+  [ .scalar (.binop 108 .sub (.lit 0) (.reg q))
+  , .scalar (.binop 109 .sub (.lit 1) (.reg sign))
+  , .scalar (.binop dst .mul (.reg 109) (.reg qc))
+  , .scalar (.binop 108 .mul (.reg sign) (.reg 108))
+  , .scalar (.binop dst .add (.reg dst) (.reg 108)) ]
+
+/-- Decode and guard the four input endpoints of `cmulBody`. -/
+def cmulDecompBody (gate aLo aHi bLo bHi : Nat) : List AInstr :=
+  smDecomp gate aLo 100 104 ++ smDecomp gate aHi 101 105 ++
+  smDecomp gate bLo 102 106 ++ smDecomp gate bHi 103 107
+
+/-- The four unsigned two-limb endpoint products of `cmulBody`. -/
+def cmulProductsBody : List AInstr :=
+  mulWideBody 104 106 111 112 154 155 156 157 158 159 160 161 ++
+  mulWideBody 104 107 113 114 154 155 156 157 158 159 160 161 ++
+  mulWideBody 105 106 115 116 154 155 156 157 158 159 160 161 ++
+  mulWideBody 105 107 117 118 154 155 156 157 158 159 160 161
+
+/-- Compare endpoint products 1/2 and 3/4. -/
+def cmulPairFlagsBody : List AInstr :=
+  cmpLtBody 119 111 112 120 113 114 132 ++
+  cmpLtBody 121 115 116 122 117 118 133
+
+/-- Select the pairwise minima and maxima. -/
+def cmulPairSelectsBody : List AInstr :=
+  selTriple 132 119 111 112 120 113 114 134 135 136 ++
+  selTriple 132 120 113 114 119 111 112 137 138 153 ++
+  selTriple 133 121 115 116 122 117 118 162 163 164 ++
+  selTriple 133 122 117 118 121 115 116 165 166 167
+
+/-- Compare the two pairwise minima and the two pairwise maxima. -/
+def cmulExtremaFlagsBody : List AInstr :=
+  cmpLtBody 134 135 136 162 163 164 176 ++
+  cmpLtBody 137 138 153 165 166 167 177
+
+/-- Select the global minimum and maximum. -/
+def cmulExtremaSelectsBody : List AInstr :=
+  selTriple 176 134 135 136 162 163 164 134 135 136 ++
+  selTriple 177 165 166 167 137 138 153 137 138 153
+
+/-- Branchless four-way signed minimum and maximum for `cmulBody`. -/
+def cmulOrderBody : List AInstr :=
+  cmulPairFlagsBody ++ cmulPairSelectsBody ++
+  cmulExtremaFlagsBody ++ cmulExtremaSelectsBody
+
+/-- Divide the selected extrema and encode the outward-rounded endpoints. -/
+def cmulFinishBody (cLo cHi : Nat) : List AInstr :=
+  divP18Body 135 136 178 179 ++ cmulLowerBody 134 178 179 cLo ++
+  divP18Body 138 153 178 179 ++ cmulUpperBody 137 178 179 cHi
+
 /-- The outward-rounded interval product `cmul` on encoded cells:
 `(cLo, cHi) := cmul (aLo, aHi) (bLo, bHi)`, with the four input magnitudes
 guarded against `CAP` (gated by `gate`).  Sign-magnitude decomposition,
@@ -285,58 +364,8 @@ four `MulWide.hl` products, canonicalized signs, branchless 4-way min and
 max, then one exact `10¹⁸` division each with the rounding chosen by the
 result sign.  Scratch: 100–179 (see the register map). -/
 def cmulBody (gate aLo aHi bLo bHi cLo cHi : Nat) : List AInstr :=
-  smDecomp gate aLo 100 104 ++ smDecomp gate aHi 101 105 ++
-  smDecomp gate bLo 102 106 ++ smDecomp gate bHi 103 107 ++
-  mulWideBody 104 106 111 112 154 155 156 157 158 159 160 161 ++
-  mulWideBody 104 107 113 114 154 155 156 157 158 159 160 161 ++
-  mulWideBody 105 106 115 116 154 155 156 157 158 159 160 161 ++
-  mulWideBody 105 107 117 118 154 155 156 157 158 159 160 161 ++
-  [ .scalar (.binop 119 .bxor (.reg 100) (.reg 102))
-  , .scalar (.binop 123 .eq (.reg 111) (.lit 0))
-  , .scalar (.binop 124 .eq (.reg 112) (.lit 0))
-  , .scalar (.binop 125 .mul (.reg 123) (.reg 124))
-  , .scalar (.binop 125 .sub (.lit 1) (.reg 125))
-  , .scalar (.binop 119 .mul (.reg 119) (.reg 125))     -- sign p1, canonical
-  , .scalar (.binop 120 .bxor (.reg 100) (.reg 103))
-  , .scalar (.binop 123 .eq (.reg 113) (.lit 0))
-  , .scalar (.binop 124 .eq (.reg 114) (.lit 0))
-  , .scalar (.binop 125 .mul (.reg 123) (.reg 124))
-  , .scalar (.binop 125 .sub (.lit 1) (.reg 125))
-  , .scalar (.binop 120 .mul (.reg 120) (.reg 125))     -- sign p2
-  , .scalar (.binop 121 .bxor (.reg 101) (.reg 102))
-  , .scalar (.binop 123 .eq (.reg 115) (.lit 0))
-  , .scalar (.binop 124 .eq (.reg 116) (.lit 0))
-  , .scalar (.binop 125 .mul (.reg 123) (.reg 124))
-  , .scalar (.binop 125 .sub (.lit 1) (.reg 125))
-  , .scalar (.binop 121 .mul (.reg 121) (.reg 125))     -- sign p3
-  , .scalar (.binop 122 .bxor (.reg 101) (.reg 103))
-  , .scalar (.binop 123 .eq (.reg 117) (.lit 0))
-  , .scalar (.binop 124 .eq (.reg 118) (.lit 0))
-  , .scalar (.binop 125 .mul (.reg 123) (.reg 124))
-  , .scalar (.binop 125 .sub (.lit 1) (.reg 125))
-  , .scalar (.binop 122 .mul (.reg 122) (.reg 125)) ]   -- sign p4
-  ++ cmpLtBody 119 111 112 120 113 114 132              -- p1 < p2
-  ++ cmpLtBody 121 115 116 122 117 118 133              -- p3 < p4
-  ++ selTriple 132 119 111 112 120 113 114 134 135 136  -- min12
-  ++ selTriple 132 120 113 114 119 111 112 137 138 153  -- max12
-  ++ selTriple 133 121 115 116 122 117 118 162 163 164  -- min34
-  ++ selTriple 133 122 117 118 121 115 116 165 166 167  -- max34
-  ++ cmpLtBody 134 135 136 162 163 164 176              -- min12 < min34
-  ++ cmpLtBody 137 138 153 165 166 167 177              -- max12 < max34
-  ++ selTriple 176 134 135 136 162 163 164 134 135 136  -- MIN
-  ++ selTriple 177 165 166 167 137 138 153 137 138 153  -- MAX
-  ++ divP18Body 135 136 178 179
-  ++ [ .scalar (.binop 108 .sub (.lit 0) (.reg 179))    -- enc(−⌈min/SCALE⌉)
-     , .scalar (.binop 109 .sub (.lit 1) (.reg 134))
-     , .scalar (.binop cLo .mul (.reg 109) (.reg 178))
-     , .scalar (.binop 108 .mul (.reg 134) (.reg 108))
-     , .scalar (.binop cLo .add (.reg cLo) (.reg 108)) ]
-  ++ divP18Body 138 153 178 179
-  ++ [ .scalar (.binop 108 .sub (.lit 0) (.reg 178))    -- enc(−⌊max/SCALE⌋)
-     , .scalar (.binop 109 .sub (.lit 1) (.reg 137))
-     , .scalar (.binop cHi .mul (.reg 109) (.reg 179))
-     , .scalar (.binop 108 .mul (.reg 137) (.reg 108))
-     , .scalar (.binop cHi .add (.reg cHi) (.reg 108)) ]
+  cmulDecompBody gate aLo aHi bLo bHi ++ cmulProductsBody ++
+  cmulSignsBody ++ cmulOrderBody ++ cmulFinishBody cLo cHi
 
 /-! ## §5 The six body stages -/
 
@@ -371,10 +400,8 @@ def Cfg.selBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 38 .eq (.reg 37) (.lit 0))
   , .scalar (.binop 38 .add (.reg 38) (.reg 37)) ]            -- pass B r, or-1
 
-/-- Phase 1: one trial-division round (`MertensCDEM.trialStep` at the
-decoded divisor), with the state reset at each candidate's first round and
-the μ code written at its last. -/
-def trialBody : List AInstr :=
+/-- Scalar prefix of one phase-1 trial-division round. -/
+def trialScalarBody : List AInstr :=
   muxBody 2 26 24 2 40
   ++ [ .scalar (.binop 41 .sub (.lit 1) (.reg 26))
      , .scalar (.binop 3 .mul (.reg 3) (.reg 41))
@@ -395,8 +422,12 @@ def trialBody : List AInstr :=
      , .scalar (.binop 51 .add (.reg 49) (.lit 1))
      , .scalar (.binop 51 .mul (.reg 51) (.reg 50))           -- the μ code
      , .scalar (.binop 52 .mul (.reg 27) (.reg 24))
-     , .scalar (.binop 53 .mul (.reg 27) (.reg 51))
-     , .store 52 53 ]
+     , .scalar (.binop 53 .mul (.reg 27) (.reg 51)) ]
+
+/-- Phase 1: one trial-division round (`MertensCDEM.trialStep` at the
+decoded divisor), with the state reset at each candidate's first round and
+the μ code written at its last. -/
+def trialBody : List AInstr := trialScalarBody ++ [.store 52 53]
 
 /-- Pass A: `σ(X)` over the divisor pairs, reset at each candidate's first
 round. -/
@@ -418,11 +449,14 @@ def passABody : List AInstr :=
      , .scalar (.binop 66 .mul (.reg 66) (.reg 62))
      , .scalar (.binop 5 .add (.reg 5) (.reg 66)) ]
 
-/-- The weight round: `w`, then `ww = cmul w w`. -/
-def Cfg.weightBody (_c : Cfg) : List AInstr :=
-  [ .scalar (.binop 71 .mul (.reg 33) (.reg 31))
-  , .load 72 71                                               -- μ code of X
-  , .scalar (.binop 73 .eq (.reg 72) (.lit 1))
+/-- Address of the Möbius-code load in the weight round. -/
+def weightAddrBody : List AInstr :=
+  [ .scalar (.binop 71 .mul (.reg 33) (.reg 31)) ]
+
+/-- Scalar arithmetic that forms the two weight endpoints after loading the
+Möbius code into register `72`. -/
+def weightCalcBody : List AInstr :=
+  [ .scalar (.binop 73 .eq (.reg 72) (.lit 1))
   , .scalar (.binop 74 .eq (.reg 72) (.lit 2))
   , .scalar (.binop 75 .urem (.reg 31) (.lit 2))
   , .scalar (.binop 76 .eq (.reg 75) (.lit 1))
@@ -444,28 +478,51 @@ def Cfg.weightBody (_c : Cfg) : List AInstr :=
   , .scalar (.binop 88 .mul (.reg 74) (.reg 83))
   , .scalar (.binop 89 .add (.reg 87) (.reg 88))
   , .scalar (.binop 89 .mul (.reg 89) (.reg 77)) ]            -- w.hi
-  ++ muxBody 6 33 86 6 90
+
+/-- Select the live weight, square it, and select the live square. -/
+def weightFinishBody : List AInstr :=
+  muxBody 6 33 86 6 90
   ++ muxBody 7 33 89 7 90
   ++ cmulBody 33 6 7 6 7 98 99
   ++ muxBody 8 33 98 8 90
   ++ muxBody 9 33 99 9 90
 
-/-- One divisor-slot touch, gated: read `acc[d]`, delta-term, push `w`. -/
-def Cfg.touchBody (c : Cfg) (g dSlot : Nat) : List AInstr :=
+/-- The weight round: `w`, then `ww = cmul w w`. -/
+def Cfg.weightBody (_c : Cfg) : List AInstr :=
+  weightAddrBody ++ [.load 72 71] ++ weightCalcBody ++ weightFinishBody
+
+/-- Address calculation and the two accumulator-plane loads of one touch. -/
+def Cfg.touchLoadBody (c : Cfg) (g dSlot : Nat) : List AInstr :=
   [ .scalar (.binop 194 .mul (.reg g) (.reg dSlot))
   , .scalar (.binop 191 .add (.reg 194) (.lit c.plane1))
   , .scalar (.binop 192 .add (.reg 194) (.lit c.plane2))
   , .load 180 191                                             -- A.lo
   , .load 181 192 ]                                           -- A.hi
-  ++ cmulBody g 180 181 6 7 182 183                           -- P = cmul A w
+
+/-- Scalar product/guard prefix after the accumulator endpoints are loaded. -/
+def Cfg.touchProductBody (_c : Cfg) (g : Nat) : List AInstr :=
+  cmulBody g 180 181 6 7 182 183                              -- P = cmul A w
   ++ guardBody g 182 195 ++ guardBody g 183 195
-  ++ [ .scalar (.binop 184 .add (.reg 182) (.reg 182))
+
+/-- Scalar part of `T = 2P + w²` and its two width guards. -/
+def Cfg.touchTermScalarBody (_c : Cfg) (g : Nat) : List AInstr :=
+  [ .scalar (.binop 184 .add (.reg 182) (.reg 182))
      , .scalar (.binop 184 .add (.reg 184) (.reg 8))          -- T.lo = 2P.lo + ww.lo
      , .scalar (.binop 185 .add (.reg 183) (.reg 183))
      , .scalar (.binop 185 .add (.reg 185) (.reg 9)) ]        -- T.hi
   ++ guardBody g 184 195 ++ guardBody g 185 195
-  ++ [ .load 186 194                                          -- μ code of the slot
-     , .scalar (.binop 187 .eq (.reg 186) (.lit 1))
+
+/-- Load the touched slot's Möbius code. -/
+def Cfg.touchMuLoadBody (_c : Cfg) : List AInstr :=
+  [ .load 186 194 ]                                           -- μ code of the slot
+
+/-- Form `T = 2P + w²`, guard it, and load the slot's Möbius code. -/
+def Cfg.touchTermBody (c : Cfg) (g : Nat) : List AInstr :=
+  c.touchTermScalarBody g ++ c.touchMuLoadBody
+
+/-- Scalar arithmetic for the signed `μ·T` contribution. -/
+def Cfg.touchDeltaCalcBody (_c : Cfg) : List AInstr :=
+  [ .scalar (.binop 187 .eq (.reg 186) (.lit 1))
      , .scalar (.binop 188 .eq (.reg 186) (.lit 2))
      , .scalar (.binop 196 .sub (.lit 0) (.reg 185))
      , .scalar (.binop 197 .sub (.lit 0) (.reg 184))
@@ -477,16 +534,27 @@ def Cfg.touchBody (c : Cfg) (g dSlot : Nat) : List AInstr :=
      , .scalar (.binop 190 .add (.reg 190) (.reg 199))        -- dT.hi
      , .scalar (.binop 10 .add (.reg 10) (.reg 189))
      , .scalar (.binop 11 .add (.reg 11) (.reg 190)) ]
-  ++ guardBody g 10 195 ++ guardBody g 11 195
-  ++ [ .scalar (.binop 196 .mul (.reg g) (.reg 6))
+
+/-- Add the signed `μ·T` contribution into the delta accumulator. -/
+def Cfg.touchDeltaBody (c : Cfg) (g : Nat) : List AInstr :=
+  c.touchDeltaCalcBody ++ guardBody g 10 195 ++ guardBody g 11 195
+
+/-- Push the gated weight into both accumulator-plane cells. -/
+def Cfg.touchStoreBody (_c : Cfg) (g : Nat) : List AInstr :=
+  [ .scalar (.binop 196 .mul (.reg g) (.reg 6))
      , .scalar (.binop 197 .add (.reg 180) (.reg 196))
      , .store 191 197                                         -- acc.lo += w.lo
      , .scalar (.binop 198 .mul (.reg g) (.reg 7))
      , .scalar (.binop 199 .add (.reg 181) (.reg 198))
      , .store 192 199 ]                                       -- acc.hi += w.hi
 
-/-- Pass B: the two touches of the divisor pair `(r, X/r)`. -/
-def Cfg.passBBody (c : Cfg) : List AInstr :=
+/-- One divisor-slot touch, gated: read `acc[d]`, delta-term, push `w`. -/
+def Cfg.touchBody (c : Cfg) (g dSlot : Nat) : List AInstr :=
+  c.touchLoadBody g dSlot ++ c.touchProductBody g ++ c.touchTermBody g ++
+    c.touchDeltaBody g ++ c.touchStoreBody g
+
+/-- Compute the two gates and partner divisor used by pass B. -/
+def passBGateBody : List AInstr :=
   [ .scalar (.binop 210 .urem (.reg 31) (.reg 38))
   , .scalar (.binop 211 .eq (.reg 210) (.lit 0))
   , .scalar (.binop 212 .mul (.reg 38) (.reg 38))
@@ -497,11 +565,13 @@ def Cfg.passBBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 216 .eq (.reg 215) (.reg 38))
   , .scalar (.binop 217 .sub (.lit 1) (.reg 216))
   , .scalar (.binop 218 .mul (.reg 214) (.reg 217)) ]         -- gate 2
-  ++ c.touchBody 214 38
-  ++ c.touchBody 218 215
 
-/-- Finalize: `g += delta`, reset `delta`, and the `g₂` endpoint test. -/
-def Cfg.finBody (c : Cfg) : List AInstr :=
+/-- Pass B: the two touches of the divisor pair `(r, X/r)`. -/
+def Cfg.passBBody (c : Cfg) : List AInstr :=
+  passBGateBody ++ c.touchBody 214 38 ++ c.touchBody 218 215
+
+/-- Finalize the current candidate's delta into `g`, then reset delta. -/
+def finAccumBody : List AInstr :=
   [ .scalar (.binop 220 .mul (.reg 35) (.reg 10))
   , .scalar (.binop 12 .add (.reg 12) (.reg 220))
   , .scalar (.binop 221 .mul (.reg 35) (.reg 11))
@@ -509,28 +579,45 @@ def Cfg.finBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 222 .sub (.lit 1) (.reg 35))
   , .scalar (.binop 10 .mul (.reg 10) (.reg 222))
   , .scalar (.binop 11 .mul (.reg 11) (.reg 222)) ]
-  ++ guardBody 35 12 223 ++ guardBody 35 13 223
-  ++ [ .scalar (.binop 224 .ge (.reg 31) (.lit c.checkLo))
+
+/-- Guard both newly accumulated `g` endpoints. -/
+def finGuardBody : List AInstr := guardBody 35 12 223 ++ guardBody 35 13 223
+
+/-- Lower-check setup through the encoded absolute-value input. -/
+def Cfg.finLowPreBody (c : Cfg) : List AInstr :=
+  [ .scalar (.binop 224 .ge (.reg 31) (.lit c.checkLo))
      , .scalar (.binop 225 .mul (.reg 35) (.reg 224))         -- checking
      , .scalar (.binop 226 .mul (.reg 31) (.lit 10))          -- 10·X
      , .scalar (.binop 227 .ge (.reg 12) (.lit H63))          -- g.lo < 0 ?
      , .scalar (.binop 228 .sub (.lit 0) (.reg 12)) ]
-  ++ muxBody 229 227 228 12 230                               -- |g.lo|
-  ++ mulWideBody 229 226 231 232 233 234 235 236 237 238 239 240
-  ++ [ .scalar (.binop 241 .gt (.reg 232) (.lit 1))
+
+/-- Lower-check comparison and violation update after the wide product. -/
+def finLowPostBody : List AInstr :=
+  [ .scalar (.binop 241 .gt (.reg 232) (.lit 1))
      , .scalar (.binop 242 .eq (.reg 232) (.lit 1))
      , .scalar (.binop 243 .gt (.reg 231) (.lit KLO))
      , .scalar (.binop 244 .mul (.reg 242) (.reg 243))
      , .scalar (.binop 245 .add (.reg 241) (.reg 244))        -- > 21·SCALE
      , .scalar (.binop 246 .mul (.reg 227) (.reg 245))
      , .scalar (.binop 246 .mul (.reg 246) (.reg 225))
-     , .scalar (.binop rViol .bor (.reg rViol) (.reg 246))    -- lower check
-     , .scalar (.binop 247 .ge (.reg 13) (.lit H63))
+     , .scalar (.binop rViol .bor (.reg rViol) (.reg 246)) ]  -- lower check
+
+/-- Lower-endpoint sign and `21/10` magnitude check. -/
+def Cfg.finLowBody (c : Cfg) : List AInstr :=
+  c.finLowPreBody
+  ++ muxBody 229 227 228 12 230                               -- |g.lo|
+  ++ mulWideBody 229 226 231 232 233 234 235 236 237 238 239 240
+  ++ finLowPostBody
+
+/-- Upper-check setup through the encoded absolute-value input. -/
+def finHighPreBody : List AInstr :=
+  [ .scalar (.binop 247 .ge (.reg 13) (.lit H63))
      , .scalar (.binop 248 .sub (.lit 1) (.reg 247))          -- g.hi ≥ 0
      , .scalar (.binop 249 .sub (.lit 0) (.reg 13)) ]
-  ++ muxBody 250 247 249 13 251                               -- |g.hi|
-  ++ mulWideBody 250 226 252 253 233 234 235 236 237 238 239 240
-  ++ [ .scalar (.binop 241 .gt (.reg 253) (.lit 1))
+
+/-- Upper-check comparison and violation update after the wide product. -/
+def finHighPostBody : List AInstr :=
+  [ .scalar (.binop 241 .gt (.reg 253) (.lit 1))
      , .scalar (.binop 242 .eq (.reg 253) (.lit 1))
      , .scalar (.binop 243 .gt (.reg 252) (.lit KLO))
      , .scalar (.binop 244 .mul (.reg 242) (.reg 243))
@@ -538,6 +625,17 @@ def Cfg.finBody (c : Cfg) : List AInstr :=
      , .scalar (.binop 246 .mul (.reg 248) (.reg 245))
      , .scalar (.binop 246 .mul (.reg 246) (.reg 225))
      , .scalar (.binop rViol .bor (.reg rViol) (.reg 246)) ]  -- upper check
+
+/-- Upper-endpoint sign and `21/10` magnitude check. -/
+def finHighBody : List AInstr :=
+  finHighPreBody
+  ++ muxBody 250 247 249 13 251                               -- |g.hi|
+  ++ mulWideBody 250 226 252 253 233 234 235 236 237 238 239 240
+  ++ finHighPostBody
+
+/-- Finalize: `g += delta`, reset `delta`, and the `g₂` endpoint test. -/
+def Cfg.finBody (c : Cfg) : List AInstr :=
+  finAccumBody ++ finGuardBody ++ c.finLowBody ++ finHighBody
 
 /-! ## §6 The program -/
 
@@ -706,6 +804,39 @@ def tdiv18 (lo hi : Nat) : Nat × Nat :=
     , (yLo >>> 22) &&& 4194303
     , yLo &&& 4194303 ]
 
+/-- Canonical signed product tuple from two sign bits and a wide magnitude. -/
+def tproduct (sa sb : Nat) (p : Nat × Nat) : Nat × Nat × Nat :=
+  ((sa ^^^ sb) * (1 - bnat (p.1 = 0) * bnat (p.2 = 0)), p.1, p.2)
+
+/-- Branchless minimum/maximum ordering for four canonical signed two-limb
+values.  Factoring this transparent helper avoids duplicating the full
+four-product expression at every projection in `tcmul`. -/
+def torder (p1 p2 p3 p4 : Nat × Nat × Nat) :
+    (Nat × Nat × Nat) × (Nat × Nat × Nat) :=
+  let t12 := tlt p1.1 p1.2.1 p1.2.2 p2.1 p2.2.1 p2.2.2
+  let t34 := tlt p3.1 p3.2.1 p3.2.2 p4.1 p4.2.1 p4.2.2
+  let mn12 := if t12 = 1 then p1 else p2
+  let mx12 := if t12 = 1 then p2 else p1
+  let mn34 := if t34 = 1 then p3 else p4
+  let mx34 := if t34 = 1 then p4 else p3
+  let tn := tlt mn12.1 mn12.2.1 mn12.2.2 mn34.1 mn34.2.1 mn34.2.2
+  let tx := tlt mx12.1 mx12.2.1 mx12.2.2 mx34.1 mx34.2.1 mx34.2.2
+  (if tn = 1 then mn12 else mn34, if tx = 1 then mx34 else mx12)
+
+def troundLo (mn : Nat × Nat × Nat) : Nat :=
+  if mn.1 = 1 then tsub 0 (tdiv18 mn.2.1 mn.2.2).2
+  else (tdiv18 mn.2.1 mn.2.2).1
+
+def troundHi (mx : Nat × Nat × Nat) : Nat :=
+  if mx.1 = 1 then tsub 0 (tdiv18 mx.2.1 mx.2.2).1
+  else (tdiv18 mx.2.1 mx.2.2).2
+
+def torderedLo (p1 p2 p3 p4 : Nat × Nat × Nat) : Nat :=
+  troundLo (torder p1 p2 p3 p4).1
+
+def torderedHi (p1 p2 p3 p4 : Nat × Nat × Nat) : Nat :=
+  troundHi (torder p1 p2 p3 p4).2
+
 /-- The interval product (`cmulBody`): `(cLo, cHi, viol')`. -/
 def tcmul (gate aLo aHi bLo bHi viol : Nat) : Nat × Nat × Nat :=
   let (saL, maL) := tmag aLo
@@ -720,65 +851,104 @@ def tcmul (gate aLo aHi bLo bHi viol : Nat) : Nat × Nat × Nat :=
   let p2 := Verified.MulWide.hl maL mbH
   let p3 := Verified.MulWide.hl maH mbL
   let p4 := Verified.MulWide.hl maH mbH
-  let s1 := (saL ^^^ sbL) * (1 - bnat (p1.1 = 0) * bnat (p1.2 = 0))
-  let s2 := (saL ^^^ sbH) * (1 - bnat (p2.1 = 0) * bnat (p2.2 = 0))
-  let s3 := (saH ^^^ sbL) * (1 - bnat (p3.1 = 0) * bnat (p3.2 = 0))
-  let s4 := (saH ^^^ sbH) * (1 - bnat (p4.1 = 0) * bnat (p4.2 = 0))
-  let t12 := tlt s1 p1.1 p1.2 s2 p2.1 p2.2
-  let t34 := tlt s3 p3.1 p3.2 s4 p4.1 p4.2
-  let mn12 := if t12 = 1 then (s1, p1.1, p1.2) else (s2, p2.1, p2.2)
-  let mx12 := if t12 = 1 then (s2, p2.1, p2.2) else (s1, p1.1, p1.2)
-  let mn34 := if t34 = 1 then (s3, p3.1, p3.2) else (s4, p4.1, p4.2)
-  let mx34 := if t34 = 1 then (s4, p4.1, p4.2) else (s3, p3.1, p3.2)
-  let tn := tlt mn12.1 mn12.2.1 mn12.2.2 mn34.1 mn34.2.1 mn34.2.2
-  let tx := tlt mx12.1 mx12.2.1 mx12.2.2 mx34.1 mx34.2.1 mx34.2.2
-  let mn := if tn = 1 then mn12 else mn34
-  let mx := if tx = 1 then mx34 else mx12
-  let qn := tdiv18 mn.2.1 mn.2.2
-  let cLo := if mn.1 = 1 then tsub 0 qn.2 else qn.1
-  let qx := tdiv18 mx.2.1 mx.2.2
-  let cHi := if mx.1 = 1 then tsub 0 qx.1 else qx.2
+  let cLo := torderedLo (tproduct saL sbL p1) (tproduct saL sbH p2)
+    (tproduct saH sbL p3) (tproduct saH sbH p4)
+  let cHi := torderedHi (tproduct saL sbL p1) (tproduct saL sbH p2)
+    (tproduct saH sbL p3) (tproduct saH sbH p4)
   (cLo, cHi, viol)
+
+/-- Base and plane addresses used by a gated divisor-slot touch. -/
+def Cfg.touchBase (_c : Cfg) (g dSlot : Nat) : Nat := g * dSlot % M
+
+def Cfg.touchA1 (c : Cfg) (g dSlot : Nat) : Nat :=
+  (c.touchBase g dSlot + c.plane1) % M
+
+def Cfg.touchA2 (c : Cfg) (g dSlot : Nat) : Nat :=
+  (c.touchBase g dSlot + c.plane2) % M
+
+/-- Transparent flag update for the two interval-product endpoint guards. -/
+def ttouchProductViol (g pLo pHi viol : Nat) : Nat :=
+  tguard g pHi (tguard g pLo viol)
+
+/-- Transparent scalar model of the `2P + w²` stage and its guards. -/
+def ttouchTerm (g pLo pHi wwLo wwHi viol : Nat) : Nat × Nat × Nat :=
+  let tLo := ((pLo + pLo) % M + wwLo) % M
+  let tHi := ((pHi + pHi) % M + wwHi) % M
+  let viol := tguard g tLo viol
+  let viol := tguard g tHi viol
+  (tLo, tHi, viol)
+
+/-- Transparent scalar model of the signed Möbius contribution stage. -/
+def ttouchDelta (g mc tLo tHi dLo dHi viol : Nat) : Nat × Nat × Nat :=
+  let muP := bnat (mc = 1)
+  let muM := bnat (mc = 2)
+  let dLo := (dLo + (muP * tLo % M + muM * (tsub 0 tHi) % M) % M) % M
+  let dHi := (dHi + (muP * tHi % M + muM * (tsub 0 tLo) % M) % M) % M
+  let viol := tguard g dLo viol
+  let viol := tguard g dHi viol
+  (dLo, dHi, viol)
+
+/-- Transparent scalar model of the two accumulator-plane stores. -/
+def ttouchStore (g aLo aHi wLo wHi : Nat) : Nat × Nat :=
+  ((aLo + g * wLo % M) % M, (aHi + g * wHi % M) % M)
 
 /-- One gated divisor-slot touch (`touchBody`). -/
 def Cfg.ttouch (c : Cfg) (g dSlot : Nat) (t : TState) : TState :=
-  let base := g * dSlot % M
-  let a1 := (base + c.plane1) % M
-  let a2 := (base + c.plane2) % M
+  let base := c.touchBase g dSlot
+  let a1 := c.touchA1 g dSlot
+  let a2 := c.touchA2 g dSlot
   let aLo := t.arr a1
   let aHi := t.arr a2
   let r := tcmul g aLo aHi t.wLo t.wHi t.viol
-  let viol := tguard g r.1 r.2.2
-  let viol := tguard g r.2.1 viol
-  let tLo := ((r.1 + r.1) % M + t.wwLo) % M
-  let tHi := ((r.2.1 + r.2.1) % M + t.wwHi) % M
-  let viol := tguard g tLo viol
-  let viol := tguard g tHi viol
+  let pViol := ttouchProductViol g r.1 r.2.1 r.2.2
+  let term := ttouchTerm g r.1 r.2.1 t.wwLo t.wwHi pViol
+  let tLo := term.1
+  let tHi := term.2.1
   let mc := t.arr base
-  let muP := bnat (mc = 1)
-  let muM := bnat (mc = 2)
-  let dLo := (t.dLo + (muP * tLo % M + muM * (tsub 0 tHi) % M) % M) % M
-  let dHi := (t.dHi + (muP * tHi % M + muM * (tsub 0 tLo) % M) % M) % M
-  let viol := tguard g dLo viol
-  let viol := tguard g dHi viol
-  let nLo := (aLo + g * t.wLo % M) % M
-  let nHi := (aHi + g * t.wHi % M) % M
+  let delta := ttouchDelta g mc tLo tHi t.dLo t.dHi term.2.2
+  let stored := ttouchStore g aLo aHi t.wLo t.wHi
+  let nLo := stored.1
+  let nHi := stored.2
   let arr' := fun i => if i = a2 then nHi else if i = a1 then nLo else t.arr i
-  { t with viol := viol, dLo := dLo, dHi := dHi, arr := arr' }
+  { t with viol := delta.2.2, dLo := delta.1, dHi := delta.2.1, arr := arr' }
 
-/-- **One full iteration of the loop**, in plain arithmetic. -/
-def Cfg.tstep (c : Cfg) (idx : Nat) (t : TState) : TState :=
-  -- selectors and decode
+/-- Transparent result of `selBody`, including the intermediate quotient and
+shifted pass-B divisor retained in machine registers. -/
+structure TSel where
+  inP1 : Nat
+  inP2 : Nat
+  q1 : Nat
+  r1 : Nat
+  n1 : Nat
+  d1 : Nat
+  isD0 : Nat
+  isDL : Nat
+  b2 : Nat
+  x0 : Nat
+  pX : Nat
+  X : Nat
+  inA : Nat
+  isW : Nat
+  inB : Nat
+  isF : Nat
+  rA : Nat
+  rBr : Nat
+  rB : Nat
+
+/-- The transparent selector/index-decode stage. -/
+def Cfg.tsel (c : Cfg) (idx : Nat) : TSel :=
   let inP1 := bnat (idx < c.phase1)
   let inP2 := 1 - inP1
+  let q1 := idx / c.rounds
   let r1 := idx % c.rounds
-  let n1 := (idx / c.rounds + 2) % M
+  let n1 := (q1 + 2) % M
   let d1 := (r1 + 2) % M
   let isD0 := bnat (r1 = 0) * inP1
   let isDL := bnat (r1 = c.rounds - 1) * inP1
   let b2 := tsub idx c.phase1
+  let x0 := b2 / c.p
   let pX := b2 % c.p
-  let X := (b2 / c.p + 1) % M
+  let X := (x0 + 1) % M
   let inA := bnat (pX < c.s) * inP2
   let isW := bnat (pX = c.s) * inP2
   let inB := bnat (c.s + 1 ≤ pX) * bnat (pX ≤ 2 * c.s) * inP2
@@ -786,68 +956,128 @@ def Cfg.tstep (c : Cfg) (idx : Nat) (t : TState) : TState :=
   let rA := (pX + 1) % M
   let rBr := tsub pX c.s
   let rB := (bnat (rBr = 0) + rBr) % M
-  -- phase 1: trial division
-  let res := if isD0 = 1 then n1 else t.res
-  let sq := t.sq * (1 - isD0)
-  let par := t.par * (1 - isD0)
-  let hit := bnat (res % d1 = 0) * inP1
-  let res := if hit = 1 then res / d1 else res
-  let hit2 := bnat (res % d1 = 0) * hit
+  ⟨inP1, inP2, q1, r1, n1, d1, isD0, isDL, b2, x0, pX, X,
+    inA, isW, inB, isF, rA, rBr, rB⟩
+
+/-- Transparent phase-1 trial-division stage. -/
+def ttrial (z : TSel) (t : TState) : TState :=
+  let res := if z.isD0 = 1 then z.n1 else t.res
+  let sq := t.sq * (1 - z.isD0)
+  let par := t.par * (1 - z.isD0)
+  let hit := bnat (res % z.d1 = 0) * z.inP1
+  let res := if hit = 1 then res / z.d1 else res
+  let hit2 := bnat (res % z.d1 = 0) * hit
   let sq := sq ||| hit2
   let par := par ^^^ hit
   let om := par ^^^ bnat (res ≠ 1)
   let code := ((om + 1) % M) * (1 - sq) % M
-  let wrAddr := isDL * n1 % M
-  let arr := fun i => if i = wrAddr then isDL * code % M else t.arr i
-  -- pass A: sigma
-  let isX0 := bnat (pX = 0) * inP2
+  let wrAddr := z.isDL * z.n1 % M
+  let arr := fun i => if i = wrAddr then z.isDL * code % M else t.arr i
+  { t with res := res, sq := sq, par := par, arr := arr }
+
+/-- Transparent phase-2 divisor-pair accumulation for `passABody`. -/
+def tpassA (z : TSel) (t : TState) : TState :=
+  let isX0 := bnat (z.pX = 0) * z.inP2
   let sigma := if isX0 = 1 then 0 else t.sigma
-  let hitA := bnat (X % rA = 0) * bnat (rA * rA % M ≤ X) * inA
-  let qA := X / rA
-  let addA := ((rA + (1 - bnat (qA = rA)) * qA % M) % M) * hitA % M
-  let sigma := (sigma + addA) % M
-  -- weight
-  let muX := arr (isW * X % M)
+  let hitA := bnat (z.X % z.rA = 0) * bnat (z.rA * z.rA % M ≤ z.X) * z.inA
+  let qA := z.X / z.rA
+  let addA := ((z.rA + (1 - bnat (qA = z.rA)) * qA % M) % M) * hitA % M
+  { t with sigma := (sigma + addA) % M }
+
+/-- Transparent phase-2 weight stage (`weightBody`): form the interval
+weight `μ(X)/σ(X)` at the live weight round and square it. -/
+def tweight (z : TSel) (t : TState) : TState :=
+  let muX := t.arr (z.isW * z.X % M)
   let isP := bnat (muX = 1)
   let isM := bnat (muX = 2)
-  let live := (isP + isM) * bnat (X % 2 = 1) * isW
-  let sig1 := (sigma + bnat (sigma = 0)) % M
+  let live := (isP + isM) * bnat (z.X % 2 = 1) * z.isW
+  let sig1 := (t.sigma + bnat (t.sigma = 0)) % M
   let magF := SCALE / sig1
   let magC := ((sig1 + (SCALE - 1)) % M) / sig1
-  let wLo := if isW = 1 then (isP * magF + isM * tsub 0 magC) % M * live % M
+  let wLo := if z.isW = 1 then
+      (isP * magF + isM * tsub 0 magC) % M * live % M
     else t.wLo
-  let wHi := if isW = 1 then (isP * magC + isM * tsub 0 magF) % M * live % M
+  let wHi := if z.isW = 1 then
+      (isP * magC + isM * tsub 0 magF) % M * live % M
     else t.wHi
-  let ww := tcmul isW wLo wHi wLo wHi t.viol
-  let wwLo := if isW = 1 then ww.1 else t.wwLo
-  let wwHi := if isW = 1 then ww.2.1 else t.wwHi
-  let t1 : TState := ⟨ww.2.2, res, sq, par, sigma, wLo, wHi,
-    wwLo, wwHi, t.dLo, t.dHi, t.gLo, t.gHi, arr⟩
+  let ww := tcmul z.isW wLo wHi wLo wHi t.viol
+  let wwLo := if z.isW = 1 then ww.1 else t.wwLo
+  let wwHi := if z.isW = 1 then ww.2.1 else t.wwHi
+  ⟨ww.2.2, t.res, t.sq, t.par, t.sigma, wLo, wHi, wwLo, wwHi,
+    t.dLo, t.dHi, t.gLo, t.gHi, t.arr⟩
+
+/-- Transparent phase-2 divisor-pair touch stage (`passBBody`). -/
+def Cfg.tpassB (c : Cfg) (z : TSel) (t : TState) : TState :=
+  let g1 := bnat (z.X % z.rB = 0) * bnat (z.rB * z.rB % M ≤ z.X) * z.inB
+  let q2 := z.X / z.rB
+  let g2 := g1 * (1 - bnat (q2 = z.rB))
+  c.ttouch g2 q2 (c.ttouch g1 z.rB t)
+
+/-- Finalized lower accumulator endpoint. -/
+def tfinGLo (z : TSel) (t : TState) : Nat :=
+  (t.gLo + z.isF * t.dLo % M) % M
+
+/-- Finalized upper accumulator endpoint. -/
+def tfinGHi (z : TSel) (t : TState) : Nat :=
+  (t.gHi + z.isF * t.dHi % M) % M
+
+/-- Reset lower delta. -/
+def tfinDLo (z : TSel) (t : TState) : Nat :=
+  t.dLo * (1 - z.isF) % M
+
+/-- Reset upper delta. -/
+def tfinDHi (z : TSel) (t : TState) : Nat :=
+  t.dHi * (1 - z.isF) % M
+
+/-- Shared finalization check gate. -/
+def Cfg.tfinChk (c : Cfg) (z : TSel) : Nat :=
+  z.isF * bnat (c.checkLo ≤ z.X)
+
+/-- The strict `21/10` comparison on a sign-magnitude endpoint. -/
+def tfinBadCore (w tenX : Nat) : Nat :=
+  let p := Verified.MulWide.hl w tenX
+  bnat (1 < p.2) + bnat (p.2 = 1) * bnat (KLO < p.1)
+
+/-- Lower-endpoint violation bit. -/
+def Cfg.tfinBadLo (c : Cfg) (z : TSel) (t : TState) : Nat :=
+  let g := tfinGLo z t
+  let sign := bnat (H63 ≤ g)
+  let mag := if sign = 1 then tsub 0 g else g
+  sign * tfinBadCore mag (z.X * 10 % M) * c.tfinChk z
+
+/-- Upper-endpoint violation bit. -/
+def Cfg.tfinBadHi (c : Cfg) (z : TSel) (t : TState) : Nat :=
+  let g := tfinGHi z t
+  let sign := bnat (H63 ≤ g)
+  let mag := if sign = 1 then tsub 0 g else g
+  (1 - sign) * tfinBadCore mag (z.X * 10 % M) * c.tfinChk z
+
+/-- Finalization violation flag, factored for modular denotation proofs. -/
+def Cfg.tfinViol (c : Cfg) (z : TSel) (t : TState) : Nat :=
+  tguard z.isF (tfinGHi z t)
+      (tguard z.isF (tfinGLo z t) t.viol) |||
+    c.tfinBadLo z t ||| c.tfinBadHi z t
+
+/-- Transparent finalization transition (`finBody`). -/
+def Cfg.tfin (c : Cfg) (z : TSel) (t : TState) : TState :=
+  ⟨c.tfinViol z t, t.res, t.sq, t.par, t.sigma,
+    t.wLo, t.wHi, t.wwLo, t.wwHi, tfinDLo z t, tfinDHi z t,
+    tfinGLo z t, tfinGHi z t, t.arr⟩
+
+/-- **One full iteration of the loop**, in plain arithmetic. -/
+def Cfg.tstep (c : Cfg) (idx : Nat) (t : TState) : TState :=
+  -- selectors and decode
+  let z := c.tsel idx
+  -- phase 1: trial division
+  let u := ttrial z t
+  -- pass A: sigma
+  let v := tpassA z u
+  -- weight
+  let t1 := tweight z v
   -- pass B: the divisor pair
-  let g1 := bnat (X % rB = 0) * bnat (rB * rB % M ≤ X) * inB
-  let q2 := X / rB
-  let g2 := g1 * (1 - bnat (q2 = rB))
-  let t2 := c.ttouch g1 rB t1
-  let t3 := c.ttouch g2 q2 t2
+  let t3 := c.tpassB z t1
   -- finalize
-  let gLo := (t3.gLo + isF * t3.dLo % M) % M
-  let gHi := (t3.gHi + isF * t3.dHi % M) % M
-  let dLo := t3.dLo * (1 - isF) % M
-  let dHi := t3.dHi * (1 - isF) % M
-  let viol := tguard isF gLo t3.viol
-  let viol := tguard isF gHi viol
-  let chk := isF * bnat (c.checkLo ≤ X)
-  let tenX := X * 10 % M
-  let sLo := bnat (H63 ≤ gLo)
-  let mLo := if sLo = 1 then tsub 0 gLo else gLo
-  let pl := Verified.MulWide.hl mLo tenX
-  let bad1 := sLo * ((bnat (1 < pl.2) + bnat (pl.2 = 1) * bnat (KLO < pl.1))) * chk
-  let sHi := bnat (H63 ≤ gHi)
-  let mHi := if sHi = 1 then tsub 0 gHi else gHi
-  let ph := Verified.MulWide.hl mHi tenX
-  let bad2 := (1 - sHi) * ((bnat (1 < ph.2) + bnat (ph.2 = 1) * bnat (KLO < ph.1))) * chk
-  ⟨viol ||| bad1 ||| bad2, res, sq, par, sigma, wLo, wHi,
-    wwLo, wwHi, dLo, dHi, gLo, gHi, t3.arr⟩
+  c.tfin z t3
 
 /-- The state the init block reaches: zero registers, `μ(1) = +1` seeded. -/
 def tInit : TState :=

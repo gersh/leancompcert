@@ -425,7 +425,8 @@ restricted generated-C computation model
 ```
 
 The next boundary — this restricted C model versus **CompCert's own
-Clight semantics** — is closed for the certificate fragment by the M6
+Clight semantics** — is closed for the straight-line certificate fragment by
+the M6
 bridge (see [use case 2](docs/use-case-2-verified-artifact.md) and
 [Tutorial 4](docs/tutorial-4-trust-chain.md)): `clightgen -normalize`
 translation validation of every certificate unit, a structural
@@ -433,7 +434,24 @@ correspondence checker plus the same correspondence re-checked inside
 Coq's kernel at `Qed`, and — for straight-line certificates — direct
 Clight emission with a Coq-kernel theorem that CompCert's bigstep
 semantics (`ClightBigstep.eval_funcall`) computes the certified value
-for every global environment and memory. The Coq-side gates need a
+for every global environment and memory.  Generic Coq soundness theorems now
+also cover fuelled rolled control flow and pointer-backed loads/stores
+(`scripts/coq/ClightMemorySem.v`) against CompCert's real memory model.
+Production arrays use pointer-typed indexed CCIR operations and lower to
+`base[index]`. `Verified.ArrayRolled` proves that their counter-driven rolled
+trace has the same CCIR-with-memory semantics as the literal-index trace used
+by the Lean denotation proof. The Coq memory development proves the flat-array/
+CompCert-block load/store relation, including preservation across stores, and
+`scripts/clight-array-verify.py` specializes the generic theorem to the
+complete `clightgen` AST of the production Möbius array function. The remaining
+artifact-specific development now includes a sparse flat-array evaluator, a
+proved simulation of every supported flat execution into actual CompCert
+memory, and a theorem deriving its zero-array relation from CompCert's real
+`Init_space` global initialization.  A fast kernel computation also obtains
+`99952` for the specialized production step.  What remains is the refinement
+lemma identifying that specialized step with one iteration of the exact
+Clight body; until then the exact-AST function theorem remains conditional on
+a successful flat execution. The Coq-side gates need a
 CompCert Coq development (or `clightgen`) installed; a compiler-only
 `ccomp` installation still gets the Lean-side proof and the Python
 structural checker, and the acceptance suite skips the Coq gates
@@ -839,10 +857,16 @@ confirm that test can actually fail, and states plainly what is *not* covered.
 
 The roadmap's milestones are implemented (see [ROADMAP.md](ROADMAP.md)
 for per-milestone evidence and the precisely-stated boundaries: the
-direct-Clight semantics theorem covers the straight-line temp-only
-fragment; rolled artifacts are covered by the package's own restricted-C
-model under a fuelled counted-loop rule, and retain
-correspondence-level assurance against Clight; the
+production direct-Clight semantics check covers the straight-line temp-only
+fragment. Its generic Coq theorem also handles rolled loops and CompCert
+pointer loads/stores; the production array AST is checked as an exact instance,
+the Lean rolled/literal traces are proved equivalent, and the flat-array/
+CompCert-block load/store invariant is proved. The remaining array seam is a
+per-artifact refinement from the fast production-step computation to the
+exact Clight loop body (plus the Lean theorem that this 100000-case denotation
+is `99952`), so the final numeric array artifact does not yet have the same
+unconditional `eval_funcall` theorem as a straight-line
+certificate. The
 Lean- and Coq-side results are tied by shared certified constants). A
 complete CompCert-built runtime and strict standalone builds remain
 outside scope. Lean's elaborator and kernel, Coq's kernel, and

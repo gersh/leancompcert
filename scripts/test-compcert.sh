@@ -130,6 +130,11 @@ if command -v clightgen >/dev/null 2>&1; then
     python3 scripts/clight-direct-verify.py "$direct_v" 40234404 \
       "$output/direct-verify" --self-test
     echo "direct Clight emission: CompCert bigstep semantics Qed at 40234404"
+    array_c="$native_check_dir/mobius-array.c"
+    clightgen -normalize "$array_c"
+    python3 scripts/clight-array-verify.py "${array_c%.c}.v" \
+      f_l_ArrayMobius_rolled100k "$output/array-direct-verify"
+    echo "production array Clight AST: rolled/memory endpoint Qed"
   else
     echo "CompCert Coq development not found; skipping kernel correspondence" >&2
   fi

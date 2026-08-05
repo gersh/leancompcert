@@ -40,7 +40,7 @@ def symbolName : String := "CDEMAbel.scan40"
 def mainC : String :=
   "\nstatic uint64_t cells[" ++ toString program.arrayLen ++ "];\n" ++
   "int main(void)\n{\n" ++
-  "    return l_CDEMAbel_scan40((uint64_t)(uintptr_t)cells)" ++
+  "    return l_CDEMAbel_scan40(cells)" ++
   " == UINT64_C(" ++ toString expected ++ ") ? 0 : 1;\n}\n"
 
 def emittedC : Except (Array String) String := do

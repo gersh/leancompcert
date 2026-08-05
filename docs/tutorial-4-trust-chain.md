@@ -50,24 +50,39 @@ covers C-to-assembly. Around it, the acceptance suite runs four gates:
    Coq*: the event extraction is a Coq `Fixpoint` over CompCert's actual
    AST, and equality is discharged by `vm` conversion at `Qed`.
 4. **Direct emission + semantics** (`Verified.ClightEmit`,
-   `scripts/coq/ClightFragmentSem.v`, `scripts/clight-direct-verify.py`)
+   `scripts/coq/ClightFragmentSem.v`, `scripts/coq/ClightMemorySem.v`,
+   `scripts/clight-direct-verify.py`)
    — the Clight AST is generated *directly* from the proven statement
    lists (no C printer, no clightgen parser in this path), and Coq's
    kernel proves, via a fragment evaluator shown sound against
    `ClightBigstep.exec_stmt`, that **CompCert's own bigstep semantics
    computes the certified value** — for every global environment and
    every memory (`eval_funcall function_entry2 ge m (Internal f) nil E0
-   m (Vlong value)`).
+   m (Vlong value)`).  The once-and-for-all Coq endpoint also has proved
+   fuelled-loop and CompCert-memory variants: a successful check of a rolled
+   body, or of a pointer-parameter body with full-width dereference loads and
+   stores, implies `exec_stmt` and `eval_funcall` for that same Clight AST.
+   The regressions instantiate both variants with concrete Clight functions.
 
 ## What remains trusted, stated plainly
 
 - Lean's kernel and Coq's kernel (the two proof checkers).
 - CompCert's stated assumptions: assembler, linker, hardware.
 - On the classic C path: the C pretty-printer (mitigated by gates 2–3);
-  on the direct path this drops out, but the direct path currently
-  covers the straight-line temp-only fragment (E0 traces, unchanged
-  memory) — exactly what the shipped certificates are; rolled/looped
-  artifacts keep gates 1–3.
+  on the direct path this drops out.  The production direct emitter and
+  per-certificate check currently cover the straight-line temp-only fragment
+  (E0 traces, unchanged memory). The generic Coq theorem also covers rolled
+  control flow and CompCert memory loads/stores. For production arrays,
+  `Verified.ArrayRolled` proves the counter-driven trace equal to the literal
+  trace used by the denotation proof; the Coq development proves the flat-array/
+  CompCert-block load/store invariant; and `scripts/clight-array-verify.py`
+  binds the complete production `clightgen` AST to the generic theorem. What
+  The sparse Coq evaluator now simulates into real CompCert memory, and the
+  actual `Init_space` global is proved to establish its zero-array relation.
+  A fast specialized checker kernel-computes `99952`. What remains is the
+  refinement lemma equating that specialized step with one exact Clight loop
+  iteration. Until it is supplied, the final numeric array result does not
+  have an unconditional CompCert `eval_funcall` theorem.
 - The tie between the Lean-side and Coq-side results is the shared
   certified constant, not a single cross-prover proof.
 - The native binary's exit status is **never** a theorem. That is a

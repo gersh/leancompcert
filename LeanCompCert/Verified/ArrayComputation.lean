@@ -17,9 +17,9 @@ in the **defined-denotation direction only**,
   p.denote = some n  →  (compiled trace).output = some (n : Int)
 ```
 
-because `u64` address arithmetic makes the cell map non-injective over the
-whole register range, so an out-of-range index can alias an in-range cell and
-the compiled trace can succeed where the denotation fails.
+because that is the compiler-correctness direction consumed by certificates.
+The typed indexed lowering no longer has the former integerized-pointer
+aliasing issue, but this module does not add or assume a converse theorem.
 
 This module supplies the array analogue of `Computation` **with that
 asymmetry preserved**:

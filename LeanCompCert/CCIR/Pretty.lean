@@ -39,6 +39,10 @@ def Instruction.pretty : Instruction → String
       s!"{dest.id} : {dest.type} = load {address.pretty}"
   | .store address value =>
       s!"store {address.pretty}, {value.pretty}"
+  | .loadIndex dest base index =>
+      s!"{dest.id} : {dest.type} = load_index {base.pretty}, {index.pretty}"
+  | .storeIndex base index value =>
+      s!"store_index {base.pretty}, {index.pretty}, {value.pretty}"
   | .call dest callee args result =>
       let lhs := dest.map (fun result => s!"{result.id} : {result.type} = ") |>.getD ""
       s!"{lhs}call @{callee.name}({renderArgs args}) : {result}"

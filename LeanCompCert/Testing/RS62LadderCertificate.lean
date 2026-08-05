@@ -72,7 +72,7 @@ def symbolNameSU : String := "RS62.ladderSU65k"
 private def mainC (symbol : String) (expected : Nat) : String :=
   "\nstatic uint64_t cells[1];\n" ++
   "int main(void)\n{\n" ++
-  "    return " ++ symbol ++ "((uint64_t)(uintptr_t)cells)" ++
+  "    return " ++ symbol ++ "(cells)" ++
   " == UINT64_C(" ++ toString expected ++ ") ? 0 : 1;\n}\n"
 
 def emittedCSL : Except (Array String) String := do

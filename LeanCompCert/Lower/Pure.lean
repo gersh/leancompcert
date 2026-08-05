@@ -245,6 +245,16 @@ def lowerInstruction
         let address ← lowerOperand fn address
         let value ← lowerOperand fn value
         pure { statements := #[.assign (.deref value.type address) value] }
+    | .loadIndex dest base indexOperand =>
+        let base ← lowerOperand fn base
+        let indexExpr ← lowerOperand fn indexOperand
+        pure { statements := #[.assign (localExpr dest)
+          (.index (lowerType dest.type) base indexExpr)] }
+    | .storeIndex base indexOperand value =>
+        let base ← lowerOperand fn base
+        let indexExpr ← lowerOperand fn indexOperand
+        let value ← lowerOperand fn value
+        pure { statements := #[.assign (.index value.type base indexExpr) value] }
     | .call dest callee args result =>
         let mut loweredArgs := #[]
         for arg in args do

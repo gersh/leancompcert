@@ -55,6 +55,11 @@ inductive Instruction where
   | binary (dest : LocalDecl) (op : BinaryOp) (lhs rhs : Operand)
   | load (dest : LocalDecl) (address : Operand)
   | store (address value : Operand)
+  /-- Load one element from a typed pointer base.  Unlike `.load`, the address
+  is kept as `(base, index)` so lowering never needs to integerize a pointer. -/
+  | loadIndex (dest : LocalDecl) (base index : Operand)
+  /-- Store one element through a typed pointer base. -/
+  | storeIndex (base index value : Operand)
   | call
       (dest : Option LocalDecl)
       (callee : GlobalId)
@@ -75,15 +80,16 @@ inductive Instruction where
 
 def Instruction.destination? : Instruction → Option LocalDecl
   | .assign dest _ | .unary dest _ _ | .binary dest _ _ _
-  | .load dest _ | .allocCtor dest _ _ | .getTag dest _
+  | .load dest _ | .loadIndex dest _ _ | .allocCtor dest _ _ | .getTag dest _
   | .project dest _ _ => some dest
   | .call dest _ _ _ | .runtimeCall dest _ _ _ => dest
-  | .store _ _ | .setField _ _ _ | .retain _ | .release _ => none
+  | .store _ _ | .storeIndex _ _ _ | .setField _ _ _ | .retain _ | .release _ => none
 
 def Instruction.operands : Instruction → Array Operand
   | .assign _ value | .unary _ _ value | .load _ value
   | .retain value | .release value | .getTag _ value => #[value]
-  | .binary _ _ lhs rhs | .store lhs rhs => #[lhs, rhs]
+  | .binary _ _ lhs rhs | .store lhs rhs | .loadIndex _ lhs rhs => #[lhs, rhs]
+  | .storeIndex base index value => #[base, index, value]
   | .call _ _ args _ | .runtimeCall _ _ args _ => args
   | .allocCtor _ _ _ => #[]
   | .setField object _ value => #[object, value]

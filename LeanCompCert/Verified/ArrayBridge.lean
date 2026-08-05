@@ -15,29 +15,22 @@ This file is that join.
 
 ## The memory layout
 
-The array is one `uint64_t[]` whose base address arrives as a **function
-parameter** (`baseDecl`, a `u64`).  Cell `n` lives at byte address
-`8·n + base`, computed per access by
+The array is one `uint64_t[]` whose base address arrives as a pointer-typed
+**function parameter** (`baseDecl`, a `ptr u64`).  Each access stays typed as
+the pair `(base, index)` throughout CCIR and lowers directly to
 
 ```
-  addr = idx * 8            -- u64
-  addr = addr + base        -- u64
-  cell = (uint64_t *) addr  -- the address materialization
+  base[idx]
 ```
 
-and then read or written by the CCIR `.load`/`.store` of `MemFragment`, which
-is where the proved lowering takes over.  The materialization is an ordinary
-`StraightInstruction.cast` at a pointer type; it is value-preserving because
-`Proof.bitWidth`/`Proof.ccBitWidth` model pointers as 64-bit machine words.
-No new CCIR construct, no new C statement shape and no relaxation of either
-validator is needed: the emitted C is `(*_local_k) = _local_j;` with
-`_local_k` declared `uint64_t *`, which both `CCIR.validateProgram` and
-`C.validateTranslationUnit` already accept under the `portable` profile.
+using CCIR `.loadIndex`/`.storeIndex`.  The flat proof memory still names the
+same cell by the mathematical byte key `8·idx + base`, but no generated C
+expression converts the pointer to an integer.  This distinction is what
+makes the lowering defined in CompCert's Clight semantics.
 
 Local numbering extends `Reflect`'s: `⟨0⟩` is the `u8` comparison scratch,
-`⟨i+1⟩` is register `i`, and the three array locals sit above the registers —
-`⟨regCount+1⟩` the byte address, `⟨regCount+2⟩` the cell pointer,
-`⟨regCount+3⟩` the base parameter.  So every scalar instruction compiles
+`⟨i+1⟩` is register `i`, and `⟨regCount+1⟩` is the base parameter.  So
+every scalar instruction compiles
 through `Reflect.compileInstr` **verbatim** and every scalar simulation lemma
 of `Reflect` is reused as-is.
 
@@ -52,27 +45,13 @@ in the output register.  It is stated in the **defined-denotation** direction,
   p.denote = some n → (compiled trace).output = some (n : Int)
 ```
 
-rather than as an equality of `Option`s.  The reason is precise and worth
-recording.  `denoteAInstr` fails on an out-of-range index; the compiled trace
-fails there too, because the address `8·i + base` is unmapped.  But the
-address is computed in `u64` arithmetic, so `i ↦ (8·i + base) mod 2⁶⁴` is
-*not* injective over the whole register range: an out-of-range `i = n + 2⁶¹`
-aliases the in-range cell `n`, and there the compiled trace succeeds while the
-denotation fails.  Restoring the exact biconditional needs one of
-
-* a **`ptr + integer → ptr` CCIR binary form with unnormalized (abstract)
-  address arithmetic** — that is what makes the address map injective, and it
-  is currently forbidden both by `CCIR.validateInstruction` (binary
-  destinations must be integer-typed) and by
-  `C.ValidationRule.pointerArithmetic` ("generated pointer arithmetic is
-  outside Profile 1"); or
-* an explicit out-of-range trap in the emitted code, costing roughly seven
-  extra operations per array access.
-
-Both are fragment-extension decisions, so neither is taken here.  The
-defined-denotation direction is the one certificates consume anyway: the
-denotation is what the kernel evaluates, and the theorem says the artifact
-computes it.
+rather than as an equality of `Option`s.  This is the compiler-correctness
+direction consumed by certificates: the denotation is what the kernel
+evaluates, and the theorem says the artifact computes it.  Typed indexed
+operations retain an unbounded mathematical address in this proof model, so
+they avoid the modulo-aliasing problem of the former integerized-pointer
+lowering.  An exact success/failure biconditional is not needed below and is
+not claimed.
 -/
 
 namespace LeanCompCert.Verified.ArrayState
@@ -87,58 +66,39 @@ open LeanCompCert.Verified.MemFragment
 /-- Bytes per array cell: the array is a `uint64_t[]`. -/
 abbrev cellBytes : Nat := 8
 
-/-- The `u64` local holding the byte address under construction. -/
-def addrDecl (regCount : Nat) : CCIR.LocalDecl :=
-  { id := ⟨regCount + 1⟩, type := .u64 }
-
-/-- The `uint64_t *` local holding the materialized cell pointer. -/
-def ptrDecl (regCount : Nat) : CCIR.LocalDecl :=
-  { id := ⟨regCount + 2⟩, type := .ptr .u64 }
-
-/-- The `u64` function parameter holding the array base address. -/
+/-- The `uint64_t *` function parameter holding the array base. -/
 def baseDecl (regCount : Nat) : CCIR.LocalDecl :=
-  { id := ⟨regCount + 3⟩, type := .u64 }
+  { id := ⟨regCount + 1⟩, type := .ptr .u64 }
 
 /-- Byte address of cell `n`, in the order the compiled code builds it.
 The literal `8` is `cellBytes`, spelled out so that `omega` sees it. -/
-def cellAddr (base : Int) (n : Nat) : Int := (n : Int) * 8 + base
+def cellAddr (base : Int) (n : Nat) : Int := indexedAddr base (n : Int)
 
 theorem cellAddr_inj {base : Int} {m n : Nat} (h : cellAddr base m = cellAddr base n) :
     m = n := by
-  unfold cellAddr at h
+  unfold cellAddr indexedAddr at h
   omega
 
 /-! ## Compilation -/
-
-/-- Address computation for cell `regs idxReg`: scale, offset, materialize. -/
-def addressStraights (regCount idxReg : Nat) : List StraightInstruction :=
-  [ .binary (addrDecl regCount) .mul
-      (.local ⟨idxReg + 1⟩) (.uintLit .u64 cellBytes)
-  , .binary (addrDecl regCount) .add
-      (.local (addrDecl regCount).id) (.local (baseDecl regCount).id)
-  , .cast (ptrDecl regCount) (.local (addrDecl regCount).id) ]
 
 /-- One array-machine instruction, compiled into the memory-extended proved
 fragment.  Scalar instructions go through `Reflect.compileInstr` unchanged. -/
 def compileAInstr (regCount index : Nat) : AInstr → List MInstr
   | .scalar i => (compileInstr index i).map MInstr.straight
   | .load dest idxReg =>
-      (addressStraights regCount idxReg).map MInstr.straight ++
-        [ .load (regLocal dest) (.local (ptrDecl regCount).id) ]
+      [ .loadIndex (regLocal dest) (.local (baseDecl regCount).id)
+          (.local ⟨idxReg + 1⟩) ]
   | .store idxReg srcReg =>
-      (addressStraights regCount idxReg).map MInstr.straight ++
-        [ .store (.local (ptrDecl regCount).id) (.local ⟨srcReg + 1⟩) ]
+      [ .storeIndex (.local (baseDecl regCount).id) (.local ⟨idxReg + 1⟩)
+          (.local ⟨srcReg + 1⟩) ]
 
 def compileAInstrs (regCount index : Nat) (l : List AInstr) : List MInstr :=
   l.flatMap (compileAInstr regCount index)
 
-/-- `Reflect.preamble` plus declarations for the two array scratch locals, so
-that every local a compiled array program mentions has a typed destination
-even when the program contains no array access. -/
+/-- The scalar register preamble.  Indexed memory operations need no scratch
+locals because the base remains pointer-typed. -/
 def apreambleStraights (regCount : Nat) : List StraightInstruction :=
-  preamble regCount ++
-    [ .assign (addrDecl regCount) (.uintLit .u64 0)
-    , .cast (ptrDecl regCount) (.local (addrDecl regCount).id) ]
+  preamble regCount
 
 def apreamble (regCount : Nat) : List MInstr :=
   (apreambleStraights regCount).map MInstr.straight
@@ -184,7 +144,7 @@ def initialMem (arrayLen : Nat) (base : Int) : Mem :=
 
 theorem initialMem_cell (arrayLen : Nat) (base : Int) {n : Nat} (h : n < arrayLen) :
     initialMem arrayLen base (cellAddr base n) = some 0 := by
-  unfold initialMem cellAddr
+  unfold initialMem cellAddr indexedAddr
   rw [if_pos]
   refine ⟨by omega, by omega, by omega⟩
 
@@ -495,133 +455,6 @@ theorem stateInv_set_reg {regCount : Nat} {s : RegState} {env : CCEnv}
     · simp only [RegState.set, if_neg hEq]
       exact hInv.2 i hi
 
-/-! ## The address block -/
-
-private theorem two_pow_64 : ((M : Nat) : Int) = Int.ofNat (2 ^ 64) := rfl
-
-private theorem normalizeCC_ptr_u64_def (x : Int) :
-    normalizeCC (.ptr .u64) x = some (x.emod (Int.ofNat (2 ^ 64))) := by
-  show (if (Int.ofNat (2 ^ 64)) = 0 then none
-    else some (x.emod (Int.ofNat (2 ^ 64)))) = _
-  rw [if_neg (by decide)]
-
-private theorem norm_u64_id {x : Int} (h0 : 0 ≤ x) (h1 : x < ((M : Nat) : Int)) :
-    normalizeCC .u64 x = some x := by
-  rw [normalizeCC_u64_def]
-  exact congrArg some (Int.emod_eq_of_lt h0 h1)
-
-private theorem norm_ptr_id {x : Int} (h0 : 0 ≤ x) (h1 : x < ((M : Nat) : Int)) :
-    normalizeCC (.ptr .u64) x = some x := by
-  rw [normalizeCC_ptr_u64_def]
-  exact congrArg some (Int.emod_eq_of_lt h0 h1)
-
-private theorem lit_eight (env : CCEnv) :
-    evalOperand env (.uintLit .u64 cellBytes) = some 8 :=
-  norm_u64_id (by decide) (by decide)
-
-private theorem lit_zero (env : CCEnv) :
-    evalOperand env (.uintLit .u64 0) = some 0 :=
-  norm_u64_id (by decide) (by decide)
-
-private theorem addr_ne_base (regCount : Nat) :
-    (baseDecl regCount).id ≠ (addrDecl regCount).id := by
-  intro hEq
-  have := congrArg CCIR.LocalId.value hEq
-  simp only [baseDecl, addrDecl] at this
-  omega
-
-private theorem ptr_ne_base (regCount : Nat) :
-    (baseDecl regCount).id ≠ (ptrDecl regCount).id := by
-  intro hEq
-  have := congrArg CCIR.LocalId.value hEq
-  simp only [baseDecl, ptrDecl] at this
-  omega
-
-private theorem addr_high (regCount : Nat) :
-    regCount < (addrDecl regCount).id.value := by
-  show regCount < regCount + 1
-  omega
-
-private theorem ptr_high (regCount : Nat) :
-    regCount < (ptrDecl regCount).id.value := by
-  show regCount < regCount + 2
-  omega
-
-/--
-Running the three address instructions from a related state with an in-range
-index leaves the registers and the base parameter alone, and puts the exact
-byte address `cellAddr base (regs idxReg)` in the cell-pointer local.
--/
-theorem addressStraights_correct
-    {regCount arrayLen idxReg : Nat} {base : Int}
-    (hBase : BaseOk arrayLen base)
-    {s : RegState} {env : CCEnv}
-    (hInv : StateInv regCount s env)
-    (hbase : env (baseDecl regCount).id = some base)
-    (hIdx : idxReg < regCount)
-    (hLt : s idxReg < arrayLen) :
-    ∃ env', evalCCSequence env (addressStraights regCount idxReg) = some env' ∧
-      StateInv regCount s env' ∧
-      env' (baseDecl regCount).id = some base ∧
-      env' (ptrDecl regCount).id = some (cellAddr base (s idxReg)) := by
-  obtain ⟨hBase0, hBaseFit⟩ := hBase
-  have hIdxVal : env ⟨idxReg + 1⟩ = some ((s idxReg : Nat) : Int) := hInv.1 idxReg hIdx
-  have hLtI : ((s idxReg : Nat) : Int) < (arrayLen : Int) := by omega
-  have hOff0 : (0 : Int) ≤ ((s idxReg : Nat) : Int) * 8 := by omega
-  have hOff1 : ((s idxReg : Nat) : Int) * 8 < ((M : Nat) : Int) := by omega
-  have hAddr0 : (0 : Int) ≤ cellAddr base (s idxReg) := by
-    show (0 : Int) ≤ ((s idxReg : Nat) : Int) * 8 + base
-    omega
-  have hAddr1 : cellAddr base (s idxReg) < ((M : Nat) : Int) := by
-    show ((s idxReg : Nat) : Int) * 8 + base < ((M : Nat) : Int)
-    omega
-  obtain ⟨env1, hStep1, hInv1, hbase1, haddr1⟩ :
-      ∃ e, evalCCStraight env
-          (.binary (addrDecl regCount) .mul
-            (.local ⟨idxReg + 1⟩) (.uintLit .u64 cellBytes)) = some e ∧
-        StateInv regCount s e ∧
-        e (baseDecl regCount).id = some base ∧
-        e (addrDecl regCount).id = some (((s idxReg : Nat) : Int) * 8) := by
-    refine ⟨env.set (addrDecl regCount).id (((s idxReg : Nat) : Int) * 8),
-      evalCCStraight_binary_of hIdxVal (lit_eight env) (norm_u64_id hOff0 hOff1),
-      stateInv_set_high hInv (addr_high regCount) _, ?_, ?_⟩
-    · simp only [CCEnv.set, if_neg (addr_ne_base regCount)]
-      exact hbase
-    · simp [CCEnv.set]
-  obtain ⟨env2, hStep2, hInv2, hbase2, haddr2⟩ :
-      ∃ e, evalCCStraight env1
-          (.binary (addrDecl regCount) .add
-            (.local (addrDecl regCount).id) (.local (baseDecl regCount).id)) = some e ∧
-        StateInv regCount s e ∧
-        e (baseDecl regCount).id = some base ∧
-        e (addrDecl regCount).id = some (cellAddr base (s idxReg)) := by
-    refine ⟨env1.set (addrDecl regCount).id (cellAddr base (s idxReg)),
-      evalCCStraight_binary_of haddr1 hbase1 (norm_u64_id hAddr0 hAddr1),
-      stateInv_set_high hInv1 (addr_high regCount) _, ?_, ?_⟩
-    · simp only [CCEnv.set, if_neg (addr_ne_base regCount)]
-      exact hbase1
-    · simp [CCEnv.set]
-  obtain ⟨env3, hStep3, hInv3, hbase3, hptr3⟩ :
-      ∃ e, evalCCStraight env2
-          (.cast (ptrDecl regCount) (.local (addrDecl regCount).id)) = some e ∧
-        StateInv regCount s e ∧
-        e (baseDecl regCount).id = some base ∧
-        e (ptrDecl regCount).id = some (cellAddr base (s idxReg)) := by
-    refine ⟨env2.set (ptrDecl regCount).id (cellAddr base (s idxReg)),
-      evalCCStraight_cast_of haddr2 (norm_ptr_id hAddr0 hAddr1),
-      stateInv_set_high hInv2 (ptr_high regCount) _, ?_, ?_⟩
-    · simp only [CCEnv.set, if_neg (ptr_ne_base regCount)]
-      exact hbase2
-    · simp [CCEnv.set]
-  refine ⟨env3, ?_, hInv3, hbase3, hptr3⟩
-  show ((evalCCStraight env _) >>= fun e => evalCCSequence e _) = _
-  rw [hStep1, mbind_some]
-  show ((evalCCStraight env1 _) >>= fun e => evalCCSequence e _) = _
-  rw [hStep2, mbind_some]
-  show ((evalCCStraight env2 _) >>= fun e => evalCCSequence e _) = _
-  rw [hStep3, mbind_some]
-  rfl
-
 /-- The base parameter survives a compiled scalar instruction. -/
 theorem compileInstr_base_frame {regCount index : Nat} {i : Instr}
     (hWF : i.WF regCount) {env env' : CCEnv}
@@ -649,7 +482,7 @@ theorem preamble_base_frame {regCount : Nat} {env env' : CCEnv}
 
 theorem compileAInstr_correct
     {regCount arrayLen index : Nat} {base : Int}
-    (hBase : BaseOk arrayLen base)
+    (_hBase : BaseOk arrayLen base)
     {a : AInstr} (hWF : a.WF regCount)
     {s : AState} {m : MCCState} (hRel : ARel regCount arrayLen base s m) :
     AStepRel regCount arrayLen base
@@ -680,41 +513,37 @@ theorem compileAInstr_correct
       simp only [denoteAInstr]
       split
       · rename_i hLt
-        obtain ⟨env', hRun, hInv', hbase', hptr'⟩ :=
-          addressStraights_correct hBase hRel.hregs hRel.hbase hIdx hLt
         show AStepRel regCount arrayLen base _
-          (evalMCCSequence m
-            ((addressStraights regCount idxReg).map MInstr.straight ++ _))
-        rw [evalMCCSequence_append, evalMCCSequence_straight, hRun]
-        show AStepRel regCount arrayLen base _
-          (evalMCCSequence { m with env := env' }
-            [MInstr.load (regLocal dest) (.local (ptrDecl regCount).id)])
+          (evalMCCSequence m [MInstr.loadIndex (regLocal dest)
+            (.local (baseDecl regCount).id) (.local ⟨idxReg + 1⟩)])
+        have hBaseVal : evalOperand m.env (.local (baseDecl regCount).id) = some base :=
+          hRel.hbase
+        have hIdxVal : evalOperand m.env (.local ⟨idxReg + 1⟩) =
+            some ((s.regs idxReg : Nat) : Int) := hRel.hregs.1 idxReg hIdx
         have hCell := hRel.hcells (s.regs idxReg) hLt
-        have hLoad : evalMCCSequence { m with env := env' }
-            [MInstr.load (regLocal dest) (.local (ptrDecl regCount).id)] =
-            some { env := env'.set (regLocal dest).id
+        have hLoad : evalMCCSequence m [MInstr.loadIndex (regLocal dest)
+            (.local (baseDecl regCount).id) (.local ⟨idxReg + 1⟩)] =
+            some { env := m.env.set (regLocal dest).id
                      ((s.arr (s.regs idxReg) : Nat) : Int)
                  , mem := m.mem } := by
-          show Option.bind (evalMCC { m with env := env' }
-            (.load (regLocal dest) (.local (ptrDecl regCount).id))) _ = _
-          show Option.bind (Option.bind
-            (evalOperand env' (.local (ptrDecl regCount).id)) _) _ = _
-          rw [show evalOperand env' (.local (ptrDecl regCount).id) =
-            some (cellAddr base (s.regs idxReg)) from hptr']
-          show Option.bind (Option.bind (m.mem (cellAddr base (s.regs idxReg))) _) _ = _
+          simp only [evalMCCSequence, evalMCC]
+          rw [hBaseVal, hIdxVal]
+          simp only [obind_some]
+          rw [show indexedAddr base ((s.regs idxReg : Nat) : Int) =
+            cellAddr base (s.regs idxReg) from rfl]
           rw [hCell]
           rfl
         rw [hLoad]
         refine ⟨?_, ?_, ?_, hRel.hcellsLt⟩
-        · exact stateInv_set_reg hInv' dest _ (hRel.hcellsLt _ hLt)
+        · exact stateInv_set_reg hRel.hregs dest _ (hRel.hcellsLt _ hLt)
         · have hne : (baseDecl regCount).id ≠ (regLocal dest).id := by
             intro hEq
             have := congrArg CCIR.LocalId.value hEq
             simp only [baseDecl, regLocal] at this
             omega
-          show (env'.set (regLocal dest).id _) (baseDecl regCount).id = _
+          show (m.env.set (regLocal dest).id _) (baseDecl regCount).id = _
           simp only [CCEnv.set, if_neg hne]
-          exact hbase'
+          exact hRel.hbase
         · exact hRel.hcells
       · trivial
   | store idxReg srcReg =>
@@ -722,35 +551,27 @@ theorem compileAInstr_correct
       simp only [denoteAInstr]
       split
       · rename_i hLt
-        obtain ⟨env', hRun, hInv', hbase', hptr'⟩ :=
-          addressStraights_correct hBase hRel.hregs hRel.hbase hIdx hLt
         show AStepRel regCount arrayLen base _
-          (evalMCCSequence m
-            ((addressStraights regCount idxReg).map MInstr.straight ++ _))
-        rw [evalMCCSequence_append, evalMCCSequence_straight, hRun]
-        show AStepRel regCount arrayLen base _
-          (evalMCCSequence { m with env := env' }
-            [MInstr.store (.local (ptrDecl regCount).id) (.local ⟨srcReg + 1⟩)])
-        have hSrcVal : env' ⟨srcReg + 1⟩ = some ((s.regs srcReg : Nat) : Int) :=
-          hInv'.1 srcReg hSrc
-        have hStore : evalMCCSequence { m with env := env' }
-            [MInstr.store (.local (ptrDecl regCount).id) (.local ⟨srcReg + 1⟩)] =
-            some { env := env'
+          (evalMCCSequence m [MInstr.storeIndex (.local (baseDecl regCount).id)
+            (.local ⟨idxReg + 1⟩) (.local ⟨srcReg + 1⟩)])
+        have hBaseVal : evalOperand m.env (.local (baseDecl regCount).id) = some base :=
+          hRel.hbase
+        have hIdxVal : evalOperand m.env (.local ⟨idxReg + 1⟩) =
+            some ((s.regs idxReg : Nat) : Int) := hRel.hregs.1 idxReg hIdx
+        have hSrcVal : evalOperand m.env (.local ⟨srcReg + 1⟩) =
+            some ((s.regs srcReg : Nat) : Int) := hRel.hregs.1 srcReg hSrc
+        have hStore : evalMCCSequence m [MInstr.storeIndex
+            (.local (baseDecl regCount).id) (.local ⟨idxReg + 1⟩)
+            (.local ⟨srcReg + 1⟩)] =
+            some { env := m.env
                  , mem := Mem.set m.mem (cellAddr base (s.regs idxReg))
                      ((s.regs srcReg : Nat) : Int) } := by
-          show Option.bind (evalMCC { m with env := env' }
-            (.store (.local (ptrDecl regCount).id) (.local ⟨srcReg + 1⟩))) _ = _
-          show Option.bind (Option.bind
-            (evalOperand env' (.local (ptrDecl regCount).id)) _) _ = _
-          rw [show evalOperand env' (.local (ptrDecl regCount).id) =
-            some (cellAddr base (s.regs idxReg)) from hptr']
-          show Option.bind (Option.bind
-            (evalOperand env' (.local ⟨srcReg + 1⟩)) _) _ = _
-          rw [show evalOperand env' (.local ⟨srcReg + 1⟩) =
-            some ((s.regs srcReg : Nat) : Int) from hSrcVal]
+          simp only [evalMCCSequence, evalMCC]
+          rw [hBaseVal, hIdxVal, hSrcVal]
+          simp only [obind_some]
           rfl
         rw [hStore]
-        refine ⟨hInv', hbase', ?_, ?_⟩
+        refine ⟨hRel.hregs, hRel.hbase, ?_, ?_⟩
         · intro n hn
           show Mem.set m.mem (cellAddr base (s.regs idxReg))
             ((s.regs srcReg : Nat) : Int) (cellAddr base n) = _
@@ -841,36 +662,7 @@ theorem apreamble_correct (p : AProgram) (base : Int) :
     simp [CCEnv.set]
   have hInvMid : StateInv p.regCount initialState envMid :=
     ⟨fun i hi => hRegs i hi, fun i _ => M_pos⟩
-  obtain ⟨env1, hStep1, hInv1, hbase1, haddr1⟩ :
-      ∃ e, evalCCStraight envMid
-          (.assign (addrDecl p.regCount) (.uintLit .u64 0)) = some e ∧
-        StateInv p.regCount initialState e ∧
-        e (baseDecl p.regCount).id = some base ∧
-        e (addrDecl p.regCount).id = some 0 := by
-    refine ⟨envMid.set (addrDecl p.regCount).id 0,
-      evalCCStraight_assign_of (lit_zero envMid),
-      stateInv_set_high hInvMid (addr_high p.regCount) _, ?_, ?_⟩
-    · simp only [CCEnv.set, if_neg (addr_ne_base p.regCount)]
-      exact hbaseMid
-    · simp [CCEnv.set]
-  obtain ⟨env2, hStep2, hInv2, hbase2⟩ :
-      ∃ e, evalCCStraight env1
-          (.cast (ptrDecl p.regCount) (.local (addrDecl p.regCount).id)) = some e ∧
-        StateInv p.regCount initialState e ∧
-        e (baseDecl p.regCount).id = some base := by
-    refine ⟨env1.set (ptrDecl p.regCount).id 0,
-      evalCCStraight_cast_of haddr1 (norm_ptr_id (by decide) (by decide)),
-      stateInv_set_high hInv1 (ptr_high p.regCount) _, ?_⟩
-    · simp only [CCEnv.set, if_neg (ptr_ne_base p.regCount)]
-      exact hbase1
-  refine ⟨env2, ?_, hInv2, hbase2⟩
-  unfold apreambleStraights
-  rw [evalCCSequence_append, hMid, mbind_some]
-  show ((evalCCStraight envMid _) >>= fun e => evalCCSequence e _) = _
-  rw [hStep1, mbind_some]
-  show ((evalCCStraight env1 _) >>= fun e => evalCCSequence e _) = _
-  rw [hStep2, mbind_some]
-  rfl
+  exact ⟨envMid, by simpa only [apreambleStraights] using hMid, hInvMid, hbaseMid⟩
 
 /--
 **The array reflection bridge.**  The compiled CCIR trace of a well-formed
@@ -1009,7 +801,7 @@ driver supplies storage:
 
 ```c
 static uint64_t cells[N];
-... l_name((uint64_t)(uintptr_t)cells) ...
+... l_name(cells) ...
 ```
 -/
 
@@ -1040,8 +832,9 @@ Unrolling keeps the theorems honest at any size but the emitted C must not be
 gigabytes at 10⁶ cells.  The rolled form mirrors `Verified.Rolled`: the loop
 index lives in a dedicated counter register, the body is compiled **once**
 with `.idx` mapped to that register, and the emitted function is a single
-`while` loop.  As in `Rolled`, this is an emission choice — every theorem
-above flows through the unrolled trace.
+`while` loop. `Verified.ArrayRolled` proves that this counter-driven dynamic
+trace has the same CCIR-with-memory semantics as the literal-index unrolled
+trace used by the denotation bridge.
 -/
 
 /-- Compile an operand with the loop index read from the counter register. -/
@@ -1069,11 +862,11 @@ def AProgram.augCount (p : AProgram) : Nat := p.regCount + 1
 def compileAInstrVar (p : AProgram) : AInstr → List MInstr
   | .scalar i => (compileAInstrVarScalar p i).map MInstr.straight
   | .load dest idxReg =>
-      (addressStraights p.augCount idxReg).map MInstr.straight ++
-        [ .load (regLocal dest) (.local (ptrDecl p.augCount).id) ]
+      [ .loadIndex (regLocal dest) (.local (baseDecl p.augCount).id)
+          (.local ⟨idxReg + 1⟩) ]
   | .store idxReg srcReg =>
-      (addressStraights p.augCount idxReg).map MInstr.straight ++
-        [ .store (.local (ptrDecl p.augCount).id) (.local ⟨srcReg + 1⟩) ]
+      [ .storeIndex (.local (baseDecl p.augCount).id) (.local ⟨idxReg + 1⟩)
+          (.local ⟨srcReg + 1⟩) ]
 
 def compileAInstrsVar (p : AProgram) (l : List AInstr) : List MInstr :=
   l.flatMap (compileAInstrVar p)
@@ -1106,14 +899,12 @@ def AProgram.rolledCFunction (p : AProgram) (name : String) : Option C.CFunction
   let counter : C.CExpr := .var (ABI.localName (p.regCount + 1)) .u64
   some {
     name := ABI.mangle name
-    params := #[{ name := ABI.localName (baseDecl p.augCount).id.value, type := .u64 }]
+    params := #[{ name := ABI.localName (baseDecl p.augCount).id.value, type := .ptr .u64 }]
     result := .u64
     body :=
       #[C.CStmt.decl .u8 (ABI.localName 0) none] ++
       ((Array.range p.augCount).map fun i =>
         C.CStmt.decl .u64 (ABI.localName (i + 1)) none) ++
-      #[.decl .u64 (ABI.localName (addrDecl p.augCount).id.value) none,
-        .decl (.ptr .u64) (ABI.localName (ptrDecl p.augCount).id.value) none] ++
       initStatements.toArray ++
       #[.assign counter (.uintLit .u64 0)] ++
       #[.whileLoop (.binary .u8 .lt counter (.uintLit .u64 p.loopCount))

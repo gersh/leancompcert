@@ -36,7 +36,7 @@ def driver (name : String) (cells : Nat) : String :=
   "\n#include <stdio.h>\n" ++
   "static uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
-  "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    uint64_t r = l_" ++ name ++ "(cells);\n" ++
   "    printf(\"flag=%llu\\n\", (unsigned long long)r);\n" ++
   "    return r == 0 ? 0 : 1;\n}\n"
 

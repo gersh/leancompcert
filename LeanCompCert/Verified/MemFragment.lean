@@ -5,8 +5,9 @@ import LeanCompCert.Proof.PureSemantics
 
 This file extends the proved straight-line fragment of
 `LeanCompCert.Proof.PureSemantics` with memory instructions, bringing the
-production lowering of CCIR `.load`/`.store` (see `Lower.lowerInstruction`)
-into the certified fragment.
+production lowering of CCIR `.load`/`.store` and typed
+`.loadIndex`/`.storeIndex` (see `Lower.lowerInstruction`) into the certified
+fragment.
 
 ## The disjoint-single-array discipline
 
@@ -49,6 +50,11 @@ abbrev Mem := Int → Option Int
 def Mem.set (mem : Mem) (addr value : Int) : Mem :=
   fun candidate => if candidate = addr then some value else mem candidate
 
+/-- Byte address of a `uint64_t` array element in the abstract flat-memory
+model.  The production lowering keeps `base` pointer-typed and lets C perform
+this scaling; only the proof model computes the corresponding integer key. -/
+def indexedAddr (base index : Int) : Int := index * 8 + base
+
 /-- CCIR-side memory-extended state: the scalar register environment of the
 proved fragment plus the single abstract memory. -/
 structure MCCState where
@@ -74,11 +80,13 @@ def MResultsRel : Option MCCState → Option MCState → Prop
   | _, _ => False
 
 /-- Memory-extended instructions: the proved straight-line fragment embedded
-unchanged, plus CCIR `.load` and `.store`. -/
+unchanged, plus raw-address and typed-indexed CCIR memory operations. -/
 inductive MInstr where
   | straight (si : Proof.StraightInstruction)
   | load (dest : CCIR.LocalDecl) (address : CCIR.Operand)
   | store (address value : CCIR.Operand)
+  | loadIndex (dest : CCIR.LocalDecl) (base index : CCIR.Operand)
+  | storeIndex (base index value : CCIR.Operand)
   deriving Repr
 
 /-- The CCIR instruction denoted by a memory-extended instruction. -/
@@ -86,13 +94,18 @@ def MInstr.toCCIR : MInstr → CCIR.Instruction
   | .straight si => si.toCCIR
   | .load dest address => .load dest address
   | .store address value => .store address value
+  | .loadIndex dest base index => .loadIndex dest base index
+  | .storeIndex base index value => .storeIndex base index value
 
-/-- Loads and stores need no side conditions beyond operand lowerability;
-straight instructions carry the scalar fragment's well-formedness. -/
+/-- Memory operations need no semantic side conditions beyond operand
+lowerability; production CCIR validation separately enforces their types.
+Straight instructions carry the scalar fragment's well-formedness. -/
 def MInstr.WellFormed (fn : CCIR.Function) : MInstr → Prop
   | .straight si => si.WellFormed fn
   | .load _ _ => True
   | .store _ _ => True
+  | .loadIndex _ _ _ => True
+  | .storeIndex _ _ _ => True
 
 instance (fn : CCIR.Function) (mi : MInstr) : Decidable (mi.WellFormed fn) := by
   cases mi <;> simp only [MInstr.WellFormed] <;> infer_instance
@@ -113,13 +126,25 @@ def evalMCC (s : MCCState) : MInstr → Option MCCState
           some { s with env := s.env.set dest.id value }
   | .store address value =>
       Option.bind (Proof.evalOperand s.env address) fun addr =>
-        Option.bind (Proof.evalOperand s.env value) fun stored =>
-          some { s with mem := Mem.set s.mem addr stored }
+      Option.bind (Proof.evalOperand s.env value) fun stored =>
+        some { s with mem := Mem.set s.mem addr stored }
+  | .loadIndex dest base index =>
+      Option.bind (Proof.evalOperand s.env base) fun baseValue =>
+      Option.bind (Proof.evalOperand s.env index) fun indexValue =>
+      Option.bind (s.mem (indexedAddr baseValue indexValue)) fun value =>
+        some { s with env := s.env.set dest.id value }
+  | .storeIndex base index value =>
+      Option.bind (Proof.evalOperand s.env base) fun baseValue =>
+      Option.bind (Proof.evalOperand s.env index) fun indexValue =>
+      Option.bind (Proof.evalOperand s.env value) fun stored =>
+        some { s with mem := Mem.set s.mem (indexedAddr baseValue indexValue) stored }
 
 /--
-Generated-C-side extended statement semantics. The three assignment shapes
+Generated-C-side extended statement semantics. The memory assignment shapes
 are disjoint by construction of the match:
 
+* a variable target with an `.index` value is an indexed memory load;
+* an `.index` target is an indexed memory store;
 * a variable target with a `.deref` value is a memory load;
 * a `.deref` target is a memory store;
 * every other assignment defers to the scalar `Proof.evalCAssign` with
@@ -131,6 +156,16 @@ are disjoint by construction of the match:
 Like the CCIR side, loads and stores move values with no renormalization.
 -/
 def evalMC (t : MCState) : C.CStmt → Option MCState
+  | .assign (.var name _) (.index _ baseExpr indexExpr) =>
+      Option.bind (Proof.evalCExpr t.env baseExpr) fun base =>
+      Option.bind (Proof.evalCExpr t.env indexExpr) fun index =>
+      Option.bind (t.mem (indexedAddr base index)) fun value =>
+        some { t with env := t.env.set name value }
+  | .assign (.index _ baseExpr indexExpr) valueExpr =>
+      Option.bind (Proof.evalCExpr t.env baseExpr) fun base =>
+      Option.bind (Proof.evalCExpr t.env indexExpr) fun index =>
+      Option.bind (Proof.evalCExpr t.env valueExpr) fun value =>
+        some { t with mem := Mem.set t.mem (indexedAddr base index) value }
   | .assign (.var name _) (.deref _ addressExpr) =>
       Option.bind (Proof.evalCExpr t.env addressExpr) fun addr =>
         Option.bind (t.mem addr) fun value =>
@@ -146,9 +181,10 @@ def evalMC (t : MCState) : C.CStmt → Option MCState
 
 /--
 Lowering of memory-extended instructions. Straight instructions defer to
-the proved `Proof.lowerStraight`; `.load` and `.store` build exactly the
-statement shapes emitted by the production `Lower.lowerInstruction`
-(connected below by `lowerM_is_lowerInstruction`).
+the proved `Proof.lowerStraight`; raw-address and typed-indexed memory
+operations build exactly the statement shapes emitted by the production
+`Lower.lowerInstruction` (connected below by
+`lowerM_is_lowerInstruction`).
 -/
 def lowerM (fn : CCIR.Function) : MInstr → Except Lower.LowerError C.CStmt
   | .straight si => Proof.lowerStraight fn si
@@ -160,6 +196,16 @@ def lowerM (fn : CCIR.Function) : MInstr → Except Lower.LowerError C.CStmt
       let addressExpr ← Lower.lowerOperand fn address
       let valueExpr ← Lower.lowerOperand fn value
       pure (.assign (.deref valueExpr.type addressExpr) valueExpr)
+  | .loadIndex dest base index => do
+      let baseExpr ← Lower.lowerOperand fn base
+      let indexExpr ← Lower.lowerOperand fn index
+      pure (.assign (Lower.localExpr dest)
+        (.index (Lower.lowerType dest.type) baseExpr indexExpr))
+  | .storeIndex base index value => do
+      let baseExpr ← Lower.lowerOperand fn base
+      let indexExpr ← Lower.lowerOperand fn index
+      let valueExpr ← Lower.lowerOperand fn value
+      pure (.assign (.index valueExpr.type baseExpr indexExpr) valueExpr)
 
 private theorem obind_none {α β : Type} (f : α → Option β) :
     Option.bind (none : Option α) f = none := rfl
@@ -430,6 +476,95 @@ theorem lowerM_correct
                   | some stored =>
                       simp only [obind_some, MResultsRel, MRel]
                       exact ⟨hEnv, by first | trivial | exact hMem⟩
+  | loadIndex dest base index =>
+      simp only [lowerM] at hLower
+      generalize hBase : Lower.lowerOperand fn base = baseResult at hLower
+      cases baseResult with
+      | error error =>
+          change Except.error error = Except.ok stmt at hLower
+          contradiction
+      | ok baseExpr =>
+          generalize hIndex : Lower.lowerOperand fn index = indexResult at hLower
+          cases indexResult with
+          | error error =>
+              change Except.error error = Except.ok stmt at hLower
+              contradiction
+          | ok indexExpr =>
+              change Except.ok (.assign (Lower.localExpr dest)
+                (.index (Lower.lowerType dest.type) baseExpr indexExpr)) =
+                  Except.ok stmt at hLower
+              injection hLower with hStmt
+              subst stmt
+              have hBaseEq := Proof.lowerOperand_correct fn base baseExpr
+                s.env t.env hEnv hBase
+              have hIndexEq := Proof.lowerOperand_correct fn index indexExpr
+                s.env t.env hEnv hIndex
+              simp only [evalMCC, Lower.localExpr, evalMC]
+              rw [hBaseEq, hIndexEq, ← hMem]
+              generalize hBaseValue : Proof.evalOperand s.env base = baseValue
+              cases baseValue with
+              | none => trivial
+              | some baseValue =>
+                  simp only [obind_some]
+                  generalize hIndexValue : Proof.evalOperand s.env index = indexValue
+                  cases indexValue with
+                  | none => trivial
+                  | some indexValue =>
+                      simp only [obind_some]
+                      generalize hLoaded : s.mem (indexedAddr baseValue indexValue) = loaded
+                      cases loaded with
+                      | none => trivial
+                      | some value =>
+                          simp only [obind_some, MResultsRel, MRel]
+                          exact ⟨hEnv.set dest.id value, by first | trivial | exact hMem⟩
+  | storeIndex base index value =>
+      simp only [lowerM] at hLower
+      generalize hBase : Lower.lowerOperand fn base = baseResult at hLower
+      cases baseResult with
+      | error error =>
+          change Except.error error = Except.ok stmt at hLower
+          contradiction
+      | ok baseExpr =>
+          generalize hIndex : Lower.lowerOperand fn index = indexResult at hLower
+          cases indexResult with
+          | error error =>
+              change Except.error error = Except.ok stmt at hLower
+              contradiction
+          | ok indexExpr =>
+              generalize hValue : Lower.lowerOperand fn value = valueResult at hLower
+              cases valueResult with
+              | error error =>
+                  change Except.error error = Except.ok stmt at hLower
+                  contradiction
+              | ok valueExpr =>
+                  change Except.ok (.assign (.index valueExpr.type baseExpr indexExpr)
+                    valueExpr) = Except.ok stmt at hLower
+                  injection hLower with hStmt
+                  subst stmt
+                  have hBaseEq := Proof.lowerOperand_correct fn base baseExpr
+                    s.env t.env hEnv hBase
+                  have hIndexEq := Proof.lowerOperand_correct fn index indexExpr
+                    s.env t.env hEnv hIndex
+                  have hValueEq := Proof.lowerOperand_correct fn value valueExpr
+                    s.env t.env hEnv hValue
+                  simp only [evalMCC, evalMC]
+                  rw [hBaseEq, hIndexEq, hValueEq, ← hMem]
+                  generalize hBaseValue : Proof.evalOperand s.env base = baseValue
+                  cases baseValue with
+                  | none => trivial
+                  | some baseValue =>
+                      simp only [obind_some]
+                      generalize hIndexValue : Proof.evalOperand s.env index = indexValue
+                      cases indexValue with
+                      | none => trivial
+                      | some indexValue =>
+                          simp only [obind_some]
+                          generalize hStored : Proof.evalOperand s.env value = storedValue
+                          cases storedValue with
+                          | none => trivial
+                          | some stored =>
+                              simp only [obind_some, MResultsRel, MRel]
+                              exact ⟨hEnv, by first | trivial | exact hMem⟩
 
 /--
 Production connection for loads: whenever the address operand lowers, the
@@ -531,6 +666,57 @@ theorem lowerM_is_lowerInstruction
               subst stmt
               exact lowerInstruction_store fn block index address value
                 addressExpr valueExpr hAddr hValue
+  | loadIndex dest base offset =>
+      simp only [lowerM] at hLower
+      simp only [MInstr.toCCIR]
+      generalize hBase : Lower.lowerOperand fn base = baseResult at hLower
+      cases baseResult with
+      | error error =>
+          change Except.error error = Except.ok stmt at hLower
+          contradiction
+      | ok baseExpr =>
+          generalize hOffset : Lower.lowerOperand fn offset = offsetResult at hLower
+          cases offsetResult with
+          | error error =>
+              change Except.error error = Except.ok stmt at hLower
+              contradiction
+          | ok offsetExpr =>
+              change Except.ok (.assign (Lower.localExpr dest)
+                (.index (Lower.lowerType dest.type) baseExpr offsetExpr)) =
+                  Except.ok stmt at hLower
+              injection hLower with hStmt
+              subst stmt
+              simp only [Lower.lowerInstruction]
+              rw [hBase, hOffset]
+              rfl
+  | storeIndex base offset value =>
+      simp only [lowerM] at hLower
+      simp only [MInstr.toCCIR]
+      generalize hBase : Lower.lowerOperand fn base = baseResult at hLower
+      cases baseResult with
+      | error error =>
+          change Except.error error = Except.ok stmt at hLower
+          contradiction
+      | ok baseExpr =>
+          generalize hOffset : Lower.lowerOperand fn offset = offsetResult at hLower
+          cases offsetResult with
+          | error error =>
+              change Except.error error = Except.ok stmt at hLower
+              contradiction
+          | ok offsetExpr =>
+              generalize hValue : Lower.lowerOperand fn value = valueResult at hLower
+              cases valueResult with
+              | error error =>
+                  change Except.error error = Except.ok stmt at hLower
+                  contradiction
+              | ok valueExpr =>
+                  change Except.ok (.assign (.index valueExpr.type baseExpr offsetExpr)
+                    valueExpr) = Except.ok stmt at hLower
+                  injection hLower with hStmt
+                  subst stmt
+                  simp only [Lower.lowerInstruction]
+                  rw [hBase, hOffset, hValue]
+                  rfl
 
 /-- Whole-trace CCIR semantics for memory-extended straight-line programs. -/
 def evalMCCSequence (s : MCCState) : List MInstr → Option MCCState

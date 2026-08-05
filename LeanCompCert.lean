@@ -30,6 +30,7 @@ import LeanCompCert.Verified.Frontend
 import LeanCompCert.Verified.ArrayState
 import LeanCompCert.Verified.MemFragment
 import LeanCompCert.Verified.ArrayBridge
+import LeanCompCert.Verified.ArrayRolled
 import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Ports.LogFixPort
 import LeanCompCert.Verified.AddWide
@@ -122,6 +123,7 @@ import LeanCompCert.Ports.Section413Sweep
 import LeanCompCert.Ports.Section413Cells
 import LeanCompCert.Ports.Section413G2Sound
 import LeanCompCert.Ports.Section413G2Denote
+import LeanCompCert.Ports.Section413G2FinalDenote
 import LeanCompCert.Ports.CeDyadicFold
 import LeanCompCert.Ports.CeDyadicBlock
 import LeanCompCert.Ports.CeDyadicClaim

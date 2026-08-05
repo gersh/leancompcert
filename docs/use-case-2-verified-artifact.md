@@ -34,7 +34,10 @@ Three machine-checked layers meet at the artifact:
    `eval_funcall function_entry2 ge m (Internal f) nil E0 m (Vlong value)` for **every**
    global environment and **every** memory (proved via a fragment
    evaluator shown sound against `ClightBigstep.exec_stmt`; see
-   `scripts/coq/ClightFragmentSem.v`).
+   `scripts/coq/ClightFragmentSem.v`).  The reusable Coq endpoint also covers
+   fuelled rolled loops and pointer-backed loads/stores
+   (`scripts/coq/ClightMemorySem.v`), including Clight2 pointer parameters and
+   CompCert's real `Mem.loadv`/`Mem.storev` semantics.
 3. **CompCert's theorem** (machine-checked in Coq, independent of this
    package): the assembly it generates preserves the semantics of the
    Clight program. Composed with layer 2: the machine code computes your
@@ -49,7 +52,14 @@ Clight translation (mutation-tested — one flipped operator fails), and
 the same comparison is re-done inside Coq with the equality discharged
 at `Qed`. On the direct path the printer drops out entirely — the Clight
 AST is generated straight from the proven statement lists — currently
-for the straight-line fragment. This package never claims verified
+for the straight-line fragment. The generic Coq theorem also has rolled and
+memory cases. For production arrays, the complete `clightgen` AST is now
+checked as an exact instance; Lean proves the counter-driven trace equivalent
+to the literal denotation trace; and Coq proves the flat-array/CompCert-block
+load/store invariant. The remaining condition on the exact-AST theorem is an
+artifact-specific refinement between the fast, kernel-checked production step
+and one iteration of the exact Clight body. The flat-to-CompCert simulation
+and concrete zero-global initialization theorem are proved. This package never claims verified
 compilation of general Lean code; the claim is scoped to certificates
 authored in the fragment, and that scope is exactly what the gates
 check.
@@ -97,11 +107,19 @@ python3 scripts/clight-correspond.py artifact.c artifact.v
 python3 scripts/clight-correspond-coq.py artifact.c artifact.v workdir/
 ```
 
-For straight-line certificates, the direct path additionally proves the
+For straight-line certificates, the production direct path additionally proves the
 CompCert-semantics theorem itself
 (`scripts/clight-direct-verify.py`, driven by a Clight AST emitted from
 the proven statements — see the `emit-clight-fixedpoint-v` command for
-the working model).
+the working model).  `ClightFragmentSemTest.v` and
+`ClightMemorySemTest.v` separately kernel-check the generic rolled and
+pointer-memory theorem instances. `scripts/clight-array-verify.py` additionally
+checks that the complete production array function is in this fragment and
+specializes the endpoint to that exact AST. The memory test kernel-checks the
+pointer-indexed store and subsequent load and derives
+`ClightBigstep.eval_funcall` for that concrete function. Closing the final
+numeric array claim requires the artifact-specific step-refinement certificate
+described above.
 
 ## Why you should trust this method
 

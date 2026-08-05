@@ -230,7 +230,7 @@ partial def evalInstruction
         function := some fn.name
         block := some block.id
       }
-  | .load _ _ | .store _ _ =>
+  | .load _ _ | .store _ _ | .loadIndex _ _ _ | .storeIndex _ _ _ =>
       throw {
         message := "raw memory operations are unavailable in the safe CCIR interpreter"
         function := some fn.name

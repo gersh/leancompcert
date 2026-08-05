@@ -54,7 +54,7 @@ def symbolName : String := "ArraySeg.mertens32k"
 def mainC : String :=
   "\nstatic uint64_t cells[" ++ toString program.arrayLen ++ "];\n" ++
   "int main(void)\n{\n" ++
-  "    return l_ArraySeg_mertens32k((uint64_t)(uintptr_t)cells)" ++
+  "    return l_ArraySeg_mertens32k(cells)" ++
   " == UINT64_C(" ++ toString expected ++ ") ? 0 : 1;\n}\n"
 
 def emittedC : Except (Array String) String := do
