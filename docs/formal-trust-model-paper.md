@@ -335,4 +335,4 @@ As documented in Milestone M8 of [`ROADMAP.md`](file:///home/gersh/leancompcert/
 
 1. Xavier Leroy. *Formal verification of a realistic compiler.* Communications of the ACM, 52(7):107–115, 2009.
 2. Leonardo de Moura and Sebastian Ullrich. *The Lean 4 Theorem Prover and Programming Language.* Automated Reasoning (IJCAR 2021).
-3. `lean-compcert` Codebase and Documentation Repository (`file:///home/gersh/leancompcert`).
+3. [lean-compcert Codebase and Documentation Repository](file:///home/gersh/leancompcert).
