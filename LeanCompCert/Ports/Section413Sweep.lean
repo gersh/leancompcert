@@ -192,6 +192,28 @@ is intended to equal `section413G2SmallCertificateNative (10 ^ 6)`
 downstream. -/
 def g2SweepOK (R checkLo N : Nat) : Bool := (g2Run R checkLo N).ok
 
+/-- Sweep state for the ungated `g₁` recurrence.  It is kept distinct
+from `G2State` so the two verified programs cannot be mixed accidentally. -/
+structure G1State where
+  acc : Array Cell
+  g : Cell
+  ok : Bool
+
+/-- One step of the `v = 1` sweep. -/
+def g1Step (R checkLo : Nat) (s : G1State) (X : Nat) : G1State :=
+  let w := weightV1 R X
+  let ad := stepDivisors R X w (s.acc, czero)
+  let g' := cadd s.g ad.2
+  { acc := ad.1, g := g',
+    ok := s.ok && (if checkLo ≤ X then g2Check X g' else true) }
+
+/-- The complete `v = 1` sweep over `X = 1, …, N`. -/
+def g1Run (R checkLo N : Nat) : G1State :=
+  (List.range N).foldl (fun s i => g1Step R checkLo s (i + 1))
+    ⟨Array.replicate (N + 1) czero, czero, true⟩
+
+def g1SweepOK (R checkLo N : Nat) : Bool := (g1Run R checkLo N).ok
+
 /-! ## Atom 1: the four (4.31) head-mass / main-term residuals
 
 The same sweep, with the `g_v` cell folded into two running aggregates
@@ -371,6 +393,7 @@ structure KState where
   k1 : Cell
   k2 : Cell
   ok : Bool
+  deriving Repr, DecidableEq
 
 def kStep (G : Nat → Cell) (v lo : Nat) (boundNum : Int) (boundDen n : Nat)
     (p : KState) : KState :=

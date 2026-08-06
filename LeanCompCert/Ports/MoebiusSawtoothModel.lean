@@ -280,117 +280,8 @@ def rowStep (U n code : Nat) (z : Acc) : Acc :=
   let fail := n = 2 * U ∧ (a > b + limit U ∨ b > a + limit U)
   ⟨z.bad ||| bit fail, a, b⟩
 
-/- The projection-by-projection proof below deliberately replaces this
-monolithic draft; keeping it commented briefly makes the memory regression
-and its factoring boundary explicit while the replacement is checked.
-theorem machineRowStep_sound_monolithic {U n code : Nat} {z : Acc}
-    (hza : z.a < LeanCompCert.Verified.Reflect.M)
-    (hzb : z.b < LeanCompCert.Verified.Reflect.M)
-    (hU : U < stopU)
-    (hzero : (machineRowStep U n code z).bad = 0) :
-    machineRowStep U n code z = rowStep U n code z := by
-  let z0 : Acc := ⟨z.bad, if n = 1 then 0 else z.a,
-    if n = 1 then P else z.b⟩
-  let term := 2 * P * U / n
-  let d1 := bit (n ≤ U ∧ code = 1) * term
-  let d2 := bit (n ≤ U ∧ code = 2) * term
-  let d3 := bit (n ≤ 2 * U ∧ code = 1) * P
-  let d4 := bit (n ≤ 2 * U ∧ code = 2) * P
-  let d5 := bit (n ≤ U ∧ code = 2) * P
-  let d6 := bit (n ≤ U ∧ code = 1) * P
-  let z1 := addA d1 z0
-  let z2 := addB d2 z1
-  let z3 := addA d3 z2
-  let z4 := addB d4 z3
-  let z5 := addA d5 z4
-  let z6 := addB d6 z5
-  have hcheck : (checkStep U n z6).bad = 0 := by exact hzero
-  have h6 : z6.bad = 0 := checkStep_bad_zero_input hcheck
-  have h5 : z5.bad = 0 := addB_bad_zero_input h6
-  have h4 : z4.bad = 0 := addA_bad_zero_input h5
-  have h3 : z3.bad = 0 := addB_bad_zero_input h4
-  have h2 : z2.bad = 0 := addA_bad_zero_input h3
-  have h1 : z1.bad = 0 := addB_bad_zero_input h2
-  have hz0 : z0.bad = 0 := addA_bad_zero_input h1
-  have hzbad : z.bad = 0 := by exact hz0
-  have hz0a : z0.a < LeanCompCert.Verified.Reflect.M := by
-    by_cases hn : n = 1 <;> simp [z0, hn, hza,
-      LeanCompCert.Verified.Reflect.M_pos]
-  have hz0b : z0.b < LeanCompCert.Verified.Reflect.M := by
-    by_cases hn : n = 1 <;> simp [z0, hn, hzb, P_lt_M]
-  have ht : term < LeanCompCert.Verified.Reflect.M := term_lt_M hU
-  have hd1 : d1 < LeanCompCert.Verified.Reflect.M := bit_mul_lt ht
-  have hd2 : d2 < LeanCompCert.Verified.Reflect.M := bit_mul_lt ht
-  have hd3 : d3 < LeanCompCert.Verified.Reflect.M := bit_mul_lt P_lt_M
-  have hd4 : d4 < LeanCompCert.Verified.Reflect.M := bit_mul_lt P_lt_M
-  have hd5 : d5 < LeanCompCert.Verified.Reflect.M := bit_mul_lt P_lt_M
-  have hd6 : d6 < LeanCompCert.Verified.Reflect.M := bit_mul_lt P_lt_M
-  have hz1b : z1.b < LeanCompCert.Verified.Reflect.M := by
-    change (addA d1 z0).b < LeanCompCert.Verified.Reflect.M
-    rw [addA_b]
-    exact hz0b
-  have hz2a : z2.a < LeanCompCert.Verified.Reflect.M := by
-    change (addB d2 z1).a < LeanCompCert.Verified.Reflect.M
-    rw [addB_a]
-    exact addA_a_lt d1 z0
-  have hz2b : z2.b < LeanCompCert.Verified.Reflect.M := addB_b_lt d2 z1
-  have hz3b : z3.b < LeanCompCert.Verified.Reflect.M := by
-    change (addA d3 z2).b < LeanCompCert.Verified.Reflect.M
-    rw [addA_b]
-    exact hz2b
-  have hz4a : z4.a < LeanCompCert.Verified.Reflect.M := by
-    change (addB d4 z3).a < LeanCompCert.Verified.Reflect.M
-    rw [addB_a]
-    exact addA_a_lt d3 z2
-  have hz4b : z4.b < LeanCompCert.Verified.Reflect.M := addB_b_lt d4 z3
-  have hz5b : z5.b < LeanCompCert.Verified.Reflect.M := by
-    change (addA d5 z4).b < LeanCompCert.Verified.Reflect.M
-    rw [addA_b]
-    exact hz4b
-  have e1 : z1 = ⟨0, z0.a + d1, z0.b⟩ :=
-    addA_sound d1 z0 hz0a hd1 h1
-  have e2 : z2 = ⟨0, z1.a, z1.b + d2⟩ :=
-    addB_sound d2 z1 hz1b hd2 h2
-  have e3 : z3 = ⟨0, z2.a + d3, z2.b⟩ :=
-    addA_sound d3 z2 hz2a hd3 h3
-  have e4 : z4 = ⟨0, z3.a, z3.b + d4⟩ :=
-    addB_sound d4 z3 hz3b hd4 h4
-  have e5 : z5 = ⟨0, z4.a + d5, z4.b⟩ :=
-    addA_sound d5 z4 hz4a hd5 h5
-  have e6 : z6 = ⟨0, z5.a, z5.b + d6⟩ :=
-    addB_sound d6 z5 hz5b hd6 h6
-  have ha6 : z6.a = (if n = 1 then 0 else z.a) + deltaA U n code := by
-    rw [e6, e5, e4, e3, e2, e1]
-    simp only [Acc.a]
-    dsimp [z0, term, d1, d3, d5, deltaA]
-    omega
-  have hb6 : z6.b = (if n = 1 then P else z.b) + deltaB U n code := by
-    rw [e6, e5, e4, e3, e2, e1]
-    simp only [Acc.b]
-    dsimp [z0, term, d2, d4, d6, deltaB]
-    omega
-  have hz6a : z6.a < LeanCompCert.Verified.Reflect.M := by
-    change (addB d6 z5).a < LeanCompCert.Verified.Reflect.M
-    rw [addB_a]
-    exact addA_a_lt d5 z4
-  have hz6b : z6.b < LeanCompCert.Verified.Reflect.M := addB_b_lt d6 z5
-  have hfail6 := checkStep_no_fail hz6a hz6b (limit_lt_M hU) hcheck
-  have hfail : ¬ (n = 2 * U ∧
-      ((if n = 1 then 0 else z.a) + deltaA U n code >
-          (if n = 1 then P else z.b) + deltaB U n code + limit U ∨
-        (if n = 1 then P else z.b) + deltaB U n code >
-          (if n = 1 then 0 else z.a) + deltaA U n code + limit U)) := by
-    rw [ha6, hb6] at hfail6
-    exact hfail6
-  change checkStep U n z6 = rowStep U n code z
-  apply acc_ext
-  · rw [hcheck]
-    simp [rowStep, hzbad, hfail, bit]
-  · change z6.a = (if n = 1 then 0 else z.a) + deltaA U n code
-    exact ha6
-  · change z6.b = (if n = 1 then P else z.b) + deltaB U n code
-    exact hb6
--/
+/- The source refinement is intentionally proved projection by projection below.
+A monolithic six-stage proof made kernel checking exceed 3.5 GiB. -/
 
 theorem stage6_bad_zero {U n code : Nat} {z : Acc}
     (h : (machineRowStep U n code z).bad = 0) :
@@ -601,6 +492,74 @@ theorem machineRowStep_sound {U n code : Nat} {z : Acc}
       (if n = 1 then P else z.b) + deltaB U n code
     exact stage6_b_source hzb hU hzero
 
+def rowDeltaA (U : Nat) : Nat → Nat
+  | 0 => 0
+  | k + 1 => rowDeltaA U k + deltaA U (k + 1) (muCode (k + 1) trialRounds)
+
+def rowDeltaB (U : Nat) : Nat → Nat
+  | 0 => 0
+  | k + 1 => rowDeltaB U k + deltaB U (k + 1) (muCode (k + 1) trialRounds)
+
+def rowFold (U k : Nat) (z : Acc) : Acc :=
+  (List.range k).foldl
+    (fun s r => rowStep U (r + 1) (muCode (r + 1) trialRounds) s) z
+
+theorem rowFold_succ (U k : Nat) (z : Acc) :
+    rowFold U (k + 1) z =
+      rowStep U (k + 1) (muCode (k + 1) trialRounds) (rowFold U k z) := by
+  simp [rowFold, List.range_succ, List.foldl_append]
+
+theorem rowFold_succ_a (U k : Nat) (z : Acc) :
+    (rowFold U (k + 1) z).a = rowDeltaA U (k + 1) := by
+  induction k with
+  | zero => simp [rowFold, rowStep, rowDeltaA]
+  | succ k ih =>
+      rw [rowFold_succ]
+      simp only [rowStep, Acc.a]
+      rw [if_neg (by omega), ih]
+      rfl
+
+theorem rowFold_succ_b (U k : Nat) (z : Acc) :
+    (rowFold U (k + 1) z).b = P + rowDeltaB U (k + 1) := by
+  induction k with
+  | zero => simp [rowFold, rowStep, rowDeltaB]
+  | succ k ih =>
+      rw [rowFold_succ]
+      simp only [rowStep, Acc.b]
+      rw [if_neg (by omega), ih]
+      rw [show rowDeltaB U (k + 1 + 1) =
+        rowDeltaB U (k + 1) +
+          deltaB U (k + 1 + 1) (muCode (k + 1 + 1) trialRounds) from rfl]
+      omega
+
+theorem rowStep_bounds_of_bad_zero {U n code : Nat} {z : Acc}
+    (hn : n = 2 * U) (hzero : (rowStep U n code z).bad = 0) :
+    (rowStep U n code z).a ≤ (rowStep U n code z).b + limit U ∧
+      (rowStep U n code z).b ≤ (rowStep U n code z).a + limit U := by
+  subst n
+  dsimp [rowStep] at hzero ⊢
+  have hfail := bit_eq_zero_iff.mp (or_eq_zero hzero).2
+  simp only [true_and] at hfail
+  omega
+
+theorem rowFold_twice_bounds {U : Nat} (hU : 0 < U) (z : Acc)
+    (hzero : (rowFold U (2 * U) z).bad = 0) :
+    rowDeltaA U (2 * U) ≤ P + rowDeltaB U (2 * U) + limit U ∧
+      P + rowDeltaB U (2 * U) ≤ rowDeltaA U (2 * U) + limit U := by
+  have hk : 2 * U = (2 * U - 1) + 1 := by omega
+  have hzero' := hzero
+  rw [hk, rowFold_succ] at hzero'
+  have hb' : (rowFold U (2 * U) z).a ≤
+        (rowFold U (2 * U) z).b + limit U ∧
+      (rowFold U (2 * U) z).b ≤
+        (rowFold U (2 * U) z).a + limit U := by
+    rw [hk, rowFold_succ]
+    exact rowStep_bounds_of_bad_zero (by omega) hzero'
+  rw [hk, rowFold_succ_a U (2 * U - 1) z,
+    rowFold_succ_b U (2 * U - 1) z] at hb'
+  rw [← hk] at hb'
+  exact hb'
+
 def modelStep (index : Nat) (z : Acc) : Acc :=
   let U := index / width + firstU
   let n := index % width + 1
@@ -611,6 +570,84 @@ def machineModelStep (index : Nat) (z : Acc) : Acc :=
   let n := index % width + 1
   machineRowStep U n (muCode n trialRounds) z
 
+theorem machineModelStep_bad_zero_input {index : Nat} {z : Acc}
+    (h : (machineModelStep index z).bad = 0) : z.bad = 0 :=
+  machineRowStep_bad_zero_input h
+
+theorem rowStep_bad_zero_input {U n code : Nat} {z : Acc}
+    (h : (rowStep U n code z).bad = 0) : z.bad = 0 := by
+  dsimp [rowStep] at h
+  exact (or_eq_zero h).1
+
+theorem modelStep_bad_zero_input {index : Nat} {z : Acc}
+    (h : (modelStep index z).bad = 0) : z.bad = 0 :=
+  rowStep_bad_zero_input h
+
+theorem machineModelStep_a_lt (index : Nat) (z : Acc) :
+    (machineModelStep index z).a < LeanCompCert.Verified.Reflect.M :=
+  machineRowStep_a_lt _ _ _ _
+
+theorem machineModelStep_b_lt (index : Nat) (z : Acc) :
+    (machineModelStep index z).b < LeanCompCert.Verified.Reflect.M :=
+  machineRowStep_b_lt _ _ _ _
+
+theorem machineModelStep_sound {index : Nat} {z : Acc}
+    (hindex : index < loopCount)
+    (hza : z.a < LeanCompCert.Verified.Reflect.M)
+    (hzb : z.b < LeanCompCert.Verified.Reflect.M)
+    (hzero : (machineModelStep index z).bad = 0) :
+    machineModelStep index z = modelStep index z := by
+  have hq : index / width < rounds := by
+    have hm : index < width * rounds := by
+      simpa only [loopCount, Nat.mul_comm] using hindex
+    exact Nat.div_lt_of_lt_mul hm
+  have hU : index / width + firstU < stopU := by
+    simp only [rounds, stopU, firstU] at hq ⊢
+    omega
+  exact machineRowStep_sound hza hzb hU hzero
+
+theorem fold_machine_bad_zero_input : ∀ (xs : List Nat) (z : Acc),
+    ((xs.foldl (fun s i => machineModelStep i s) z).bad = 0) → z.bad = 0 := by
+  intro xs
+  induction xs with
+  | nil => intro z h; exact h
+  | cons i xs ih =>
+      intro z h
+      exact machineModelStep_bad_zero_input (ih (machineModelStep i z) h)
+
+theorem fold_model_bad_zero_input : ∀ (xs : List Nat) (z : Acc),
+    ((xs.foldl (fun s i => modelStep i s) z).bad = 0) → z.bad = 0 := by
+  intro xs
+  induction xs with
+  | nil => intro z h; exact h
+  | cons i xs ih =>
+      intro z h
+      exact modelStep_bad_zero_input (ih (modelStep i z) h)
+
+theorem fold_machine_eq_model_of_bad_zero : ∀ (xs : List Nat) (z : Acc),
+    (∀ i ∈ xs, i < loopCount) →
+    z.a < LeanCompCert.Verified.Reflect.M →
+    z.b < LeanCompCert.Verified.Reflect.M →
+    (xs.foldl (fun s i => machineModelStep i s) z).bad = 0 →
+    xs.foldl (fun s i => machineModelStep i s) z =
+      xs.foldl (fun s i => modelStep i s) z := by
+  intro xs
+  induction xs with
+  | nil => intros; rfl
+  | cons i xs ih =>
+      intro z hmem hza hzb hfinal
+      have hi : i < loopCount := hmem i (by simp)
+      have htail : (machineModelStep i z).bad = 0 :=
+        fold_machine_bad_zero_input xs (machineModelStep i z) hfinal
+      have hstep := machineModelStep_sound hi hza hzb htail
+      simp only [List.foldl_cons]
+      calc
+        xs.foldl (fun s j => machineModelStep j s) (machineModelStep i z) =
+            xs.foldl (fun s j => modelStep j s) (machineModelStep i z) :=
+          ih (machineModelStep i z) (fun j hj => hmem j (by simp [hj]))
+            (machineModelStep_a_lt i z) (machineModelStep_b_lt i z) hfinal
+        _ = xs.foldl (fun s j => modelStep j s) (modelStep i z) := by rw [hstep]
+
 def initialAcc : Acc := ⟨0, 0, 0⟩
 
 def modelFinal : Acc :=
@@ -619,6 +656,81 @@ def modelFinal : Acc :=
 def machineModelFinal : Acc :=
   (List.range loopCount).foldl (fun z index => machineModelStep index z) initialAcc
 
-def value : Nat := modelFinal.bad
+private theorem foldl_congr_of_mem (Q : Nat → Prop) (f g : Acc → Nat → Acc)
+    (hstep : ∀ z i, Q i → f z i = g z i) : ∀ xs : List Nat,
+    (∀ i ∈ xs, Q i) → ∀ z, xs.foldl f z = xs.foldl g z := by
+  intro xs
+  induction xs with
+  | nil => intros; rfl
+  | cons i xs ih =>
+      intro hmem z
+      rw [List.foldl_cons, List.foldl_cons,
+        hstep z i (hmem i (by simp)),
+        ih (fun j hj => hmem j (by simp [hj]))]
+
+theorem modelStep_block (q r : Nat) (z : Acc) (hr : r < width) :
+    modelStep (q * width + r) z =
+      rowStep (q + firstU) (r + 1) (muCode (r + 1) trialRounds) z := by
+  have hw : 0 < width := by decide
+  have hdecode :
+      (q * width + r) / width = q ∧ (q * width + r) % width = r := by
+    constructor
+    · rw [Nat.mul_comm, Nat.mul_add_div hw, Nat.div_eq_of_lt hr, Nat.add_zero]
+    · rw [Nat.mul_comm, Nat.mul_add_mod, Nat.mod_eq_of_lt hr]
+  simp [modelStep, hdecode.1, hdecode.2]
+
+theorem global_prefix_block (q k : Nat) (hk : k ≤ width) :
+    (List.range (q * width + k)).foldl
+        (fun z index => modelStep index z) initialAcc =
+      rowFold (q + firstU) k
+        ((List.range (q * width)).foldl
+          (fun z index => modelStep index z) initialAcc) := by
+  rw [LeanCompCert.Verified.Segment.foldl_range_split]
+  rw [LeanCompCert.Ports.BlockedFold.foldl_range'_shift]
+  unfold rowFold
+  apply foldl_congr_of_mem (fun r => r < width)
+  · intro z r hr
+    exact modelStep_block q r z hr
+  · intro r hr
+    exact Nat.lt_of_lt_of_le (List.mem_range.mp hr) hk
+
+theorem model_prefix_bad_zero {k : Nat} (hk : k ≤ loopCount)
+    (hzero : modelFinal.bad = 0) :
+    ((List.range k).foldl (fun z index => modelStep index z) initialAcc).bad = 0 := by
+  have hcount : loopCount = k + (loopCount - k) := by omega
+  have hsplit := LeanCompCert.Verified.Segment.foldl_range_split
+    (fun z index => modelStep index z) initialAcc k (loopCount - k)
+  rw [← hcount] at hsplit
+  rw [modelFinal, hsplit] at hzero
+  exact fold_model_bad_zero_input _ _ hzero
+
+theorem modelFinal_zero_row_bounds (hzero : modelFinal.bad = 0)
+    (q : Nat) (hq : q < rounds) :
+    let U := q + firstU
+    rowDeltaA U (2 * U) ≤ P + rowDeltaB U (2 * U) + limit U ∧
+      P + rowDeltaB U (2 * U) ≤ rowDeltaA U (2 * U) + limit U := by
+  let U := q + firstU
+  have hU : 0 < U := by simp [U, firstU]
+  have hkw : 2 * U ≤ width := by
+    dsimp [U, rounds, firstU, stopU, width] at *
+    omega
+  have htotal : q * width + 2 * U ≤ loopCount := by
+    dsimp [U, rounds, firstU, stopU, width, loopCount] at *
+    omega
+  have hp := model_prefix_bad_zero htotal hzero
+  rw [global_prefix_block q (2 * U) hkw] at hp
+  exact rowFold_twice_bounds hU _ hp
+
+theorem machineModelFinal_eq_modelFinal_of_bad_zero
+    (hzero : machineModelFinal.bad = 0) : machineModelFinal = modelFinal := by
+  exact fold_machine_eq_model_of_bad_zero (List.range loopCount) initialAcc
+    (fun i hi => List.mem_range.mp hi)
+    (by simp [initialAcc, LeanCompCert.Verified.Reflect.M_pos])
+    (by simp [initialAcc, LeanCompCert.Verified.Reflect.M_pos]) hzero
+
+theorem modelFinal_bad_zero_of_machine
+    (hzero : machineModelFinal.bad = 0) : modelFinal.bad = 0 := by
+  have he := congrArg Acc.bad (machineModelFinal_eq_modelFinal_of_bad_zero hzero)
+  exact he.symm.trans hzero
 
 end LeanCompCert.Ports.MoebiusSawtooth

@@ -1,3 +1,4 @@
 gen/
 results/*.bin
 results/*.c
+artifacts/*/
