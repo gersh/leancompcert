@@ -37,8 +37,8 @@ transfers to `Int` arithmetic term by term.
    of these, `tcmul_spec`, is the heaviest single block of the program
    (378 of its instructions, three uses per iteration).  The wrapped
    `+`, `2·` and `0−` of the surrounding blocks transfer likewise.
-4. **Phase 1, phase 2, the run.**  Still open; see the closing `## OPEN`
-   section for the precise remaining statements.
+4. **Phase 1, phase 2, the run.**  `sweep_prefix` relates every candidate
+   boundary to `g2Prefix`; `tFlag_zero_sound` reads the final Boolean.
 
 Nothing below is an axiom, a `sorry`, a `native_decide`, or a weakened
 restatement of an obligation.  Everything is
@@ -106,6 +106,24 @@ theorem Admissible.loopCount_lt {c : Cfg} (h : Admissible c) : c.loopCount < M :
   unfold Cfg.loopCount Cfg.phase1
   omega
 
+/-- The finalizer's factor `10 * X` is an ordinary `u64` natural throughout
+the configured sweep.  The large-cap case follows from `weight_fits`; the
+three smaller admissible caps are discharged directly against `2^64`. -/
+theorem Admissible.ten_cap_lt {c : Cfg} (h : Admissible c) :
+    c.cap * 10 < M := by
+  by_cases hlarge : 4 ≤ c.cap
+  · have hten : 10 ≤ 2 * c.cap + 2 := by omega
+    have hmul := Nat.mul_le_mul_left c.cap hten
+    have hfit := h.weight_fits
+    omega
+  · have hsmall : c.cap * 10 ≤ 30 := by omega
+    exact Nat.lt_of_le_of_lt hsmall (by decide)
+
+theorem Admissible.ten_lt {c : Cfg} (h : Admissible c) {X : Nat}
+    (hX : X ≤ c.cap) : X * 10 < M := by
+  have := Nat.mul_le_mul_right 10 hX
+  exact Nat.lt_of_le_of_lt this h.ten_cap_lt
+
 /-- Forget the mathematical covering and fixed-point guards when invoking
 the already-proved machine-stage range lemmas from the denotation layer. -/
 theorem Admissible.toDenote {c : Cfg} (h : Admissible c) :
@@ -140,6 +158,10 @@ theorem CAP_val : CAP = 1152921504606846976 := rfl
 theorem SCALE_eq_sweep : SCALE = LeanCompCert.Ports.Section413Sweep.SCALE := rfl
 
 theorem H63_val : H63 = 9223372036854775808 := rfl
+
+theorem KLO_val : KLO = 2553255926290448384 := rfl
+
+theorem threshold_split : KLO + M = 21 * SCALE := by decide
 
 theorem cellsH63_val :
     LeanCompCert.Ports.Section413Cells.H63 = 9223372036854775808 := rfl
@@ -215,6 +237,13 @@ theorem capped_range {w : Nat} (hw : w < M) (h : Capped w) :
   unfold Capped decodeZ at *
   simp only [M_val, CAP_val, cellsH63_val, B64_val] at *
   split at h <;> omega
+
+theorem capped_of_range {w : Nat}
+    (hlo : -(CAP : Int) ≤ decodeZ w) (hhi : decodeZ w ≤ (CAP : Int)) :
+    Capped w := by
+  unfold Capped decodeZ at *
+  simp only [M_val, CAP_val, cellsH63_val, B64_val] at *
+  split at * <;> omega
 
 theorem encodeZ_decodeZ_self {w : Nat} (hw : w < M) : encodeZ (decodeZ w) = w :=
   encodeZ_decodeZ w (by rw [B64_val]; exact hw)
@@ -405,6 +434,27 @@ theorem tstep_viol_le (c : Cfg) (idx : Nat) (t : TState) :
   refine Nat.le_trans ?_ (ttouch_viol_le _ _ _ _)
   refine Nat.le_trans ?_ (ttouch_viol_le _ _ _ _)
   exact tcmul_viol_le _ _ _ _ _ _
+
+/-- The flag produced by the weight multiplication is also below the flag of
+the complete iteration.  This finer cut of `tstep_viol_le` lets a clean final
+run discharge the square block without postulating a global invariant. -/
+theorem tweight_viol_le_tstep (c : Cfg) (idx : Nat) (t : TState) :
+    let z := c.tsel idx
+    let u := tpassA z (ttrial z t)
+    (tweight z u).viol ≤ (c.tstep idx t).viol := by
+  let z := c.tsel idx
+  let u := tpassA z (ttrial z t)
+  let w := tweight z u
+  have hpass : w.viol ≤ (c.tpassB z w).viol := by
+    unfold Cfg.tpassB
+    exact Nat.le_trans (ttouch_viol_le _ _ _ _)
+      (ttouch_viol_le _ _ _ _)
+  change w.viol ≤ (c.tfin z (c.tpassB z w)).viol
+  unfold Cfg.tfin Cfg.tfinViol
+  exact Nat.le_trans hpass
+    (Nat.le_trans (tguard_le _ _ _)
+      (Nat.le_trans (tguard_le _ _ _)
+        (Nat.le_trans Nat.left_le_or Nat.left_le_or)))
 
 /-- The run truncated to its first `k` iterations. -/
 def tRunUpto (c : Cfg) (k : Nat) : TState :=
@@ -663,6 +713,12 @@ theorem natAbs_decodeZ (w : Nat) (hw : w < M) :
   rw [decodeZ_eq]
   simp only [M_val] at hw
   split <;> split <;> omega
+
+theorem natAbs_decodeZ_lt (w : Nat) (hw : w < M) :
+    (decodeZ w).natAbs < M := by
+  rw [natAbs_decodeZ w hw]
+  simp only [M_val] at *
+  split <;> omega
 
 theorem tmag_sign (w : Nat) (hw : w < M) :
     (tmag w).1 = bnat (decodeZ w < 0) :=
@@ -935,6 +991,85 @@ theorem cceilDiv_signed_range {z : Int} (hb : z.natAbs ≤ CAP * CAP) :
       (by decide)]
     simp only [LeanCompCert.Ports.Section413Sweep.SCALE, H63_val] at *
     omega
+
+/-- Symbolic fixed-scale rounding bounds.  Keeping `SCALE` opaque here is
+important: unfolding the 19-digit divisor makes kernel reduction enormous. -/
+theorem scale_round_bounds (n : Nat) (h : n ≤ SCALE * SCALE) :
+    n / SCALE ≤ SCALE ∧ (n + (SCALE - 1)) / SCALE ≤ SCALE := by
+  constructor
+  · exact Nat.div_le_of_le_mul h
+  · apply Nat.le_of_lt_succ
+    apply (Nat.div_lt_iff_lt_mul (by decide : 0 < SCALE)).2
+    rw [Nat.succ_eq_add_one, Nat.add_mul, Nat.one_mul]
+    have hpos : 0 < SCALE := by decide
+    omega
+
+theorem cfloorDiv_scale_range {z : Int} (h : z.natAbs ≤ SCALE * SCALE) :
+    -(CAP : Int) ≤ LeanCompCert.Ports.Section413Sweep.cfloorDiv z
+        LeanCompCert.Ports.Section413Sweep.SCALE ∧
+      LeanCompCert.Ports.Section413Sweep.cfloorDiv z
+        LeanCompCert.Ports.Section413Sweep.SCALE ≤ (CAP : Int) := by
+  obtain ⟨hq, hc⟩ := scale_round_bounds z.natAbs h
+  unfold LeanCompCert.Ports.Section413Sweep.cfloorDiv
+  by_cases hz : z < 0
+  · rw [zfloorDiv_neg z LeanCompCert.Ports.Section413Sweep.SCALE hz (by decide)]
+    simp only [LeanCompCert.Ports.Section413Sweep.SCALE, SCALE, CAP_val] at *
+    omega
+  · rw [zfloorDiv_nonneg z LeanCompCert.Ports.Section413Sweep.SCALE (by omega)]
+    simp only [LeanCompCert.Ports.Section413Sweep.SCALE, SCALE, CAP_val] at *
+    omega
+
+theorem cceilDiv_scale_range {z : Int} (h : z.natAbs ≤ SCALE * SCALE) :
+    -(CAP : Int) ≤ LeanCompCert.Ports.Section413Sweep.cceilDiv z
+        LeanCompCert.Ports.Section413Sweep.SCALE ∧
+      LeanCompCert.Ports.Section413Sweep.cceilDiv z
+        LeanCompCert.Ports.Section413Sweep.SCALE ≤ (CAP : Int) := by
+  obtain ⟨hq, hc⟩ := scale_round_bounds z.natAbs h
+  unfold LeanCompCert.Ports.Section413Sweep.cceilDiv
+  by_cases hz : z < 0
+  · rw [zceilDiv_neg z LeanCompCert.Ports.Section413Sweep.SCALE hz]
+    simp only [LeanCompCert.Ports.Section413Sweep.SCALE, SCALE, CAP_val] at *
+    omega
+  · rw [zceilDiv_nonneg z LeanCompCert.Ports.Section413Sweep.SCALE (by omega)
+      (by decide)]
+    simp only [LeanCompCert.Ports.Section413Sweep.SCALE, SCALE, CAP_val] at *
+    omega
+
+theorem natAbs_min_le {a b : Int} {q : Nat}
+    (ha : a.natAbs ≤ q) (hb : b.natAbs ≤ q) : (min a b).natAbs ≤ q := by
+  rw [Int.min_def]
+  split <;> assumption
+
+theorem natAbs_max_le {a b : Int} {q : Nat}
+    (ha : a.natAbs ≤ q) (hb : b.natAbs ≤ q) : (max a b).natAbs ≤ q := by
+  rw [Int.max_def]
+  split <;> assumption
+
+/-- Scale-bounded input endpoints put both normalized product endpoints in
+the machine cap interval. -/
+theorem cmul_scale_range
+    (A B : LeanCompCert.Ports.Section413Sweep.Cell)
+    (haLo : A.lo.natAbs ≤ SCALE) (haHi : A.hi.natAbs ≤ SCALE)
+    (hbLo : B.lo.natAbs ≤ SCALE) (hbHi : B.hi.natAbs ≤ SCALE) :
+    (-(CAP : Int) ≤ (LeanCompCert.Ports.Section413Sweep.cmul A B).lo ∧
+      (LeanCompCert.Ports.Section413Sweep.cmul A B).lo ≤ (CAP : Int)) ∧
+    (-(CAP : Int) ≤ (LeanCompCert.Ports.Section413Sweep.cmul A B).hi ∧
+      (LeanCompCert.Ports.Section413Sweep.cmul A B).hi ≤ (CAP : Int)) := by
+  have b1 : (A.lo * B.lo).natAbs ≤ SCALE * SCALE := by
+    rw [Int.natAbs_mul]
+    exact Nat.mul_le_mul haLo hbLo
+  have b2 : (A.lo * B.hi).natAbs ≤ SCALE * SCALE := by
+    rw [Int.natAbs_mul]
+    exact Nat.mul_le_mul haLo hbHi
+  have b3 : (A.hi * B.lo).natAbs ≤ SCALE * SCALE := by
+    rw [Int.natAbs_mul]
+    exact Nat.mul_le_mul haHi hbLo
+  have b4 : (A.hi * B.hi).natAbs ≤ SCALE * SCALE := by
+    rw [Int.natAbs_mul]
+    exact Nat.mul_le_mul haHi hbHi
+  have blo := natAbs_min_le (natAbs_min_le b1 b2) (natAbs_min_le b3 b4)
+  have bhi := natAbs_max_le (natAbs_max_le b1 b2) (natAbs_max_le b3 b4)
+  exact ⟨cfloorDiv_scale_range blo, cceilDiv_scale_range bhi⟩
 
 /-- The lower endpoint of the rounded cell: outward rounding picks the
 ceiling of the magnitude on the negative branch, the floor otherwise. -/
@@ -2092,6 +2227,141 @@ theorem ttouch_arr_frame (c : Cfg) (g d : Nat) (t : TState) (i : Nat)
     else if i = c.touchA1 g d then _ else t.arr i) = t.arr i
   simp only [h2, h1, ↓reduceIte]
 
+/-- The raw `u64` bounds needed by pass B.  These are deliberately weaker
+than `Capped`: inactive or not-yet-used cells need only be machine words. -/
+def PassU64 (t : TState) : Prop :=
+  t.wLo < M ∧ t.wHi < M ∧ t.wwLo < M ∧ t.wwHi < M ∧
+    t.dLo < M ∧ t.dHi < M ∧ ∀ i, t.arr i < M
+
+/-- The raw words inherited by a weight round. -/
+def CoreU64 (t : TState) : Prop :=
+  t.dLo < M ∧ t.dHi < M ∧ ∀ i, t.arr i < M
+
+/-- A touch preserves raw machine-word bounds independently of its gate and
+independently of whether its arithmetic guards remain clean. -/
+theorem ttouch_passU64 (c : Cfg) (g d : Nat) (t : TState)
+    (h : PassU64 t) : PassU64 (c.ttouch g d t) := by
+  rcases h with ⟨hwLo, hwHi, hwwLo, hwwHi, hdLo, hdHi, harr⟩
+  have hMpos : 0 < M := by simp only [M_val]; omega
+  refine ⟨hwLo, hwHi, hwwLo, hwwHi, ?_, ?_, ?_⟩
+  · simp only [Cfg.ttouch, ttouchDelta]
+    exact Nat.mod_lt _ hMpos
+  · simp only [Cfg.ttouch, ttouchDelta]
+    exact Nat.mod_lt _ hMpos
+  · intro i
+    change (if i = c.touchA2 g d then
+        (ttouchStore g (t.arr (c.touchA1 g d))
+          (t.arr (c.touchA2 g d)) t.wLo t.wHi).2
+      else if i = c.touchA1 g d then
+        (ttouchStore g (t.arr (c.touchA1 g d))
+          (t.arr (c.touchA2 g d)) t.wLo t.wHi).1
+      else t.arr i) < M
+    split
+    · unfold ttouchStore
+      exact Nat.mod_lt _ hMpos
+    · split
+      · unfold ttouchStore
+        exact Nat.mod_lt _ hMpos
+      · exact harr i
+
+theorem tpassB_passU64 (c : Cfg) (z : TSel) (t : TState)
+    (h : PassU64 t) : PassU64 (c.tpassB z t) := by
+  unfold Cfg.tpassB
+  exact ttouch_passU64 c _ _ _ (ttouch_passU64 c _ _ _ h)
+
+theorem ttouch_coreU64 (c : Cfg) (g d : Nat) (t : TState)
+    (h : CoreU64 t) : CoreU64 (c.ttouch g d t) := by
+  rcases h with ⟨hdLo, hdHi, harr⟩
+  have hMpos : 0 < M := by simp only [M_val]; omega
+  refine ⟨?_, ?_, ?_⟩
+  · simp only [Cfg.ttouch, ttouchDelta]
+    exact Nat.mod_lt _ hMpos
+  · simp only [Cfg.ttouch, ttouchDelta]
+    exact Nat.mod_lt _ hMpos
+  · intro i
+    change (if i = c.touchA2 g d then
+        (ttouchStore g (t.arr (c.touchA1 g d))
+          (t.arr (c.touchA2 g d)) t.wLo t.wHi).2
+      else if i = c.touchA1 g d then
+        (ttouchStore g (t.arr (c.touchA1 g d))
+          (t.arr (c.touchA2 g d)) t.wLo t.wHi).1
+      else t.arr i) < M
+    split
+    · unfold ttouchStore
+      exact Nat.mod_lt _ hMpos
+    · split
+      · unfold ttouchStore
+        exact Nat.mod_lt _ hMpos
+      · exact harr i
+
+theorem ttrial_coreU64 (z : TSel) (t : TState) (h : CoreU64 t) :
+    CoreU64 (ttrial z t) := by
+  rcases h with ⟨hdLo, hdHi, harr⟩
+  have hMpos : 0 < M := by simp only [M_val]; omega
+  refine ⟨hdLo, hdHi, ?_⟩
+  intro i
+  simp only [ttrial]
+  split
+  · exact Nat.mod_lt _ hMpos
+  · exact harr i
+
+theorem tpassA_coreU64 (z : TSel) (t : TState) (h : CoreU64 t) :
+    CoreU64 (tpassA z t) := by
+  simpa only [CoreU64, tpassA] using h
+
+theorem tweight_coreU64 (z : TSel) (t : TState) (h : CoreU64 t) :
+    CoreU64 (tweight z t) := by
+  simpa only [CoreU64, tweight] using h
+
+theorem tpassB_coreU64 (c : Cfg) (z : TSel) (t : TState)
+    (h : CoreU64 t) : CoreU64 (c.tpassB z t) := by
+  unfold Cfg.tpassB
+  exact ttouch_coreU64 c _ _ _ (ttouch_coreU64 c _ _ _ h)
+
+theorem tfin_coreU64 (c : Cfg) (z : TSel) (t : TState)
+    (h : CoreU64 t) : CoreU64 (c.tfin z t) := by
+  rcases h with ⟨_hdLo, _hdHi, harr⟩
+  have hMpos : 0 < M := by simp only [M_val]; omega
+  refine ⟨?_, ?_, ?_⟩
+  · change tfinDLo z t < M
+    unfold tfinDLo
+    exact Nat.mod_lt _ hMpos
+  · change tfinDHi z t < M
+    unfold tfinDHi
+    exact Nat.mod_lt _ hMpos
+  · exact harr
+
+theorem tfin_passU64 (c : Cfg) (z : TSel) (t : TState)
+    (h : PassU64 t) : PassU64 (c.tfin z t) := by
+  rcases h with ⟨hwLo, hwHi, hwwLo, hwwHi, _hdLo, _hdHi, harr⟩
+  have hMpos : 0 < M := by simp only [M_val]; omega
+  refine ⟨hwLo, hwHi, hwwLo, hwwHi, ?_, ?_, harr⟩
+  · change tfinDLo z t < M
+    unfold tfinDLo
+    exact Nat.mod_lt _ hMpos
+  · change tfinDHi z t < M
+    unfold tfinDHi
+    exact Nat.mod_lt _ hMpos
+
+theorem tstep_coreU64 (c : Cfg) (idx : Nat) (t : TState)
+    (h : CoreU64 t) : CoreU64 (c.tstep idx t) := by
+  let z := c.tsel idx
+  exact tfin_coreU64 c z _
+    (tpassB_coreU64 c z _
+      (tweight_coreU64 z _ (tpassA_coreU64 z _ (ttrial_coreU64 z t h))))
+
+theorem tInit_coreU64 : CoreU64 tInit := by
+  refine ⟨by simp [tInit, M_val], by simp [tInit, M_val], ?_⟩
+  intro i
+  by_cases hi : i = 1 <;> simp [tInit, M_val, hi]
+
+theorem tRunUpto_coreU64 (c : Cfg) (k : Nat) : CoreU64 (tRunUpto c k) := by
+  induction k with
+  | zero => simpa only [tRunUpto_zero] using tInit_coreU64
+  | succ k ih =>
+      rw [show k + 1 = k + 1 by rfl, tRunUpto_succ]
+      exact tstep_coreU64 c k _ ih
+
 /-- With μ-plane cell zero, an inactive touch leaves every persistent
 quantity unchanged.  The hypotheses are only the generic machine-word
 bounds needed to remove the final `% M` from the no-op additions/stores. -/
@@ -2149,6 +2419,18 @@ theorem ttouch_gate_zero (c : Cfg) (d : Nat) (t : TState)
         simp [h2, aLo]
       · simp [h2, h1]
 
+/-- With the permanent `arr[0]=0` seed and raw word bounds, an inactive
+touch is the identity on the entire transparent state. -/
+theorem ttouch_gate_zero_eq (c : Cfg) (d : Nat) (t : TState)
+    (hzero : t.arr 0 = 0) (hu64 : PassU64 t) : c.ttouch 0 d t = t := by
+  have h := ttouch_gate_zero c d t hzero
+    (hu64.2.2.2.2.2.2 (c.touchA1 0 d))
+    (hu64.2.2.2.2.2.2 (c.touchA2 0 d))
+    hu64.2.2.2.2.1 hu64.2.2.2.2.2.1
+  rw [TState.mk.injEq]
+  exact ⟨h.1, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl,
+    h.2.1, h.2.2.1, rfl, rfl, h.2.2.2⟩
+
 /-- One live touch simultaneously has the reference accumulator update and
 the reference delta update.  Only the scheduling facts `hmu` and `hww`, the
 incoming delta caps, and the current touch's clean guards remain as premises;
@@ -2196,6 +2478,260 @@ theorem ttouch_live_spec (c : Cfg) (d : Nat) (t : TState)
       hcaps.1 hcaps.2.1 hcaps.2.2.1 hcaps.2.2.2.1,
     ttouch_live_deltaTerm c d t hc hd hmu haLo haHi hwLo hwHi
       hwwLo hwwHi hdLo hdHi cwwLo cwwHi cdLo cdHi hclean hww⟩
+
+/-- The two persistent cells represented by a transparent state. -/
+def accAt (c : Cfg) (t : TState) (d : Nat) :
+    LeanCompCert.Ports.Section413Sweep.Cell :=
+  ⟨decodeZ (t.arr (d + c.plane1)), decodeZ (t.arr (d + c.plane2))⟩
+
+def deltaAt (t : TState) : LeanCompCert.Ports.Section413Sweep.Cell :=
+  ⟨decodeZ t.dLo, decodeZ t.dHi⟩
+
+def weightAt (t : TState) : LeanCompCert.Ports.Section413Sweep.Cell :=
+  ⟨decodeZ t.wLo, decodeZ t.wHi⟩
+
+def squareAt (t : TState) : LeanCompCert.Ports.Section413Sweep.Cell :=
+  ⟨decodeZ t.wwLo, decodeZ t.wwHi⟩
+
+def AccRel (c : Cfg) (t : TState)
+    (A : Array LeanCompCert.Ports.Section413Sweep.Cell) : Prop :=
+  A.size = c.cap + 1 ∧ ∀ d, d ≤ c.cap → accAt c t d = A[d]!
+
+/-- The exact invariant carried between pass-B touches. -/
+structure PassInv (c : Cfg) (W : LeanCompCert.Ports.Section413Sweep.Cell)
+    (t : TState)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell) : Prop where
+  u64 : PassU64 t
+  arr_zero : t.arr 0 = 0
+  wwLo_cap : Capped t.wwLo
+  wwHi_cap : Capped t.wwHi
+  dLo_cap : Capped t.dLo
+  dHi_cap : Capped t.dHi
+  weight_eq : weightAt t = W
+  square_eq : squareAt t = LeanCompCert.Ports.Section413Sweep.cmul W W
+  acc_rel : AccRel c t p.1
+  delta_eq : deltaAt t = p.2
+
+/-- Equality of precisely the state fields observed by `PassInv`. -/
+structure PassFrame (a b : TState) : Prop where
+  wLo : a.wLo = b.wLo
+  wHi : a.wHi = b.wHi
+  wwLo : a.wwLo = b.wwLo
+  wwHi : a.wwHi = b.wwHi
+  dLo : a.dLo = b.dLo
+  dHi : a.dHi = b.dHi
+  arr : a.arr = b.arr
+
+structure DAFrame (a b : TState) : Prop where
+  dLo : a.dLo = b.dLo
+  dHi : a.dHi = b.dHi
+  arr : a.arr = b.arr
+
+theorem DAFrame.trans {a b d : TState} (hab : DAFrame a b)
+    (hbd : DAFrame b d) : DAFrame a d :=
+  ⟨hab.dLo.trans hbd.dLo, hab.dHi.trans hbd.dHi, hab.arr.trans hbd.arr⟩
+
+theorem PassFrame.trans {a b d : TState} (hab : PassFrame a b)
+    (hbd : PassFrame b d) : PassFrame a d := by
+  exact ⟨hab.wLo.trans hbd.wLo, hab.wHi.trans hbd.wHi,
+    hab.wwLo.trans hbd.wwLo, hab.wwHi.trans hbd.wwHi,
+    hab.dLo.trans hbd.dLo, hab.dHi.trans hbd.dHi, hab.arr.trans hbd.arr⟩
+
+theorem ttrial_pass_frame (z : TSel) (t : TState)
+    (harr : (ttrial z t).arr = t.arr) : PassFrame (ttrial z t) t :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, harr⟩
+
+theorem tpassA_pass_frame (z : TSel) (t : TState) :
+    PassFrame (tpassA z t) t :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+theorem tweight_pass_frame (z : TSel) (t : TState) (hW : z.isW = 0) :
+    PassFrame (tweight z t) t := by
+  have hWne : z.isW ≠ 1 := by omega
+  refine ⟨?_, ?_, ?_, ?_, rfl, rfl, rfl⟩
+  · simp only [tweight, hWne, if_false]
+  · simp only [tweight, hWne, if_false]
+  · simp only [tweight, hWne, if_false]
+  · simp only [tweight, hWne, if_false]
+
+theorem PassInv.of_frame {c : Cfg}
+    {W : LeanCompCert.Ports.Section413Sweep.Cell} {a b : TState}
+    {p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell}
+    (h : PassInv c W b p) (hf : PassFrame a b) : PassInv c W a p := by
+  rcases hf with ⟨hwLo, hwHi, hwwLo, hwwHi, hdLo, hdHi, harr⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · simpa only [PassU64, hwLo, hwHi, hwwLo, hwwHi, hdLo, hdHi, harr]
+      using h.u64
+  · simpa only [harr] using h.arr_zero
+  · simpa only [hwwLo] using h.wwLo_cap
+  · simpa only [hwwHi] using h.wwHi_cap
+  · simpa only [hdLo] using h.dLo_cap
+  · simpa only [hdHi] using h.dHi_cap
+  · simpa only [weightAt, hwLo, hwHi] using h.weight_eq
+  · simpa only [squareAt, hwwLo, hwwHi] using h.square_eq
+  · rcases h.acc_rel with ⟨hsize, hcells⟩
+    refine ⟨hsize, ?_⟩
+    intro d hd
+    simpa only [accAt, harr] using hcells d hd
+  · simpa only [deltaAt, hdLo, hdHi] using h.delta_eq
+
+theorem getElem_bang_set_bang {α : Type} [Inhabited α]
+    (A : Array α) (d e : Nat) (v : α) (hd : d < A.size) (he : e < A.size) :
+    (A.set! d v)[e]! = if d = e then v else A[e]! := by
+  rw [Array.set!_eq_setIfInBounds]
+  have he' : e < (A.setIfInBounds d v).size := by
+    simpa only [Array.size_setIfInBounds] using he
+  rw [getElem!_pos (A.setIfInBounds d v) e he', Array.getElem_setIfInBounds he,
+    getElem!_pos A e he]
+
+/-- A live touch frames every other accumulator slot. -/
+theorem ttouch_live_acc_frame (c : Cfg) (d e : Nat) (t : TState)
+    (hc : Admissible c) (hd : d ≤ c.cap) (he : e ≤ c.cap) (hne : e ≠ d) :
+    accAt c (c.ttouch 1 d t) e = accAt c t e := by
+  have haddr := touch_addr c hc.arr_fits hd
+  have hp : 0 < c.plane1 := by unfold Cfg.plane1; omega
+  have hp12 : c.plane1 < c.plane2 := by
+    unfold Cfg.plane1 Cfg.plane2
+    omega
+  have ha1 : c.touchA1 1 d = d + c.plane1 := by
+    unfold Cfg.touchA1
+    exact haddr.2.1
+  have ha2 : c.touchA2 1 d = d + c.plane2 := by
+    unfold Cfg.touchA2
+    exact haddr.2.2
+  unfold accAt
+  congr 1
+  · rw [ttouch_arr_frame]
+    · rw [ha2]
+      unfold Cfg.plane1 Cfg.plane2
+      omega
+    · rw [ha1]
+      omega
+  · rw [ttouch_arr_frame]
+    · rw [ha2]
+      omega
+    · rw [ha1]
+      unfold Cfg.plane1 Cfg.plane2
+      omega
+
+/-- A clean live touch caps the delta registers it emits, providing the
+inductive cap premise for the next divisor touch. -/
+theorem ttouch_live_delta_capped (c : Cfg) (d : Nat) (t : TState)
+    (hclean : (c.ttouch 1 d t).viol = 0) :
+    Capped (c.ttouch 1 d t).dLo ∧ Capped (c.ttouch 1 d t).dHi := by
+  let r := tcmul 1 (t.arr (c.touchA1 1 d)) (t.arr (c.touchA2 1 d))
+    t.wLo t.wHi t.viol
+  let pViol := ttouchProductViol 1 r.1 r.2.1 r.2.2
+  let term := ttouchTerm 1 r.1 r.2.1 t.wwLo t.wwHi pViol
+  let delta := ttouchDelta 1 (t.arr (c.touchBase 1 d)) term.1 term.2.1
+    t.dLo t.dHi term.2.2
+  have hparts := ttouch_clean_parts c 1 d t hclean
+  have hdelta : delta.2.2 = 0 := hparts.2.2.2
+  have hMpos : 0 < M := by simp only [M_val]; omega
+  have hlo : delta.1 < M := by
+    dsimp only [delta]
+    unfold ttouchDelta
+    exact Nat.mod_lt _ hMpos
+  have hhi : delta.2.1 < M := by
+    dsimp only [delta]
+    unfold ttouchDelta
+    exact Nat.mod_lt _ hMpos
+  have chi : Capped delta.2.1 := capped_of_tguard_eq_zero hhi (by decide) hdelta
+  have hinner : tguard 1 delta.1 term.2.2 = 0 := (tguard_eq_zero hdelta).1
+  have clo : Capped delta.1 := capped_of_tguard_eq_zero hlo (by decide) hinner
+  exact ⟨clo, chi⟩
+
+/-- `ttouch_live_spec` in the compact persistent-cell vocabulary used by the
+pass-B induction. -/
+theorem ttouch_live_decoded (c : Cfg) (d : Nat) (t : TState)
+    (hc : Admissible c) (hd : d ≤ c.cap)
+    (hmu : t.arr d = LeanCompCert.Ports.MertensCDEM.muCode d c.rounds)
+    (hu64 : PassU64 t) (cwwLo : Capped t.wwLo) (cwwHi : Capped t.wwHi)
+    (cdLo : Capped t.dLo) (cdHi : Capped t.dHi)
+    (hclean : (c.ttouch 1 d t).viol = 0)
+    (hww : squareAt t = LeanCompCert.Ports.Section413Sweep.cmul
+      (weightAt t) (weightAt t)) :
+    accAt c (c.ttouch 1 d t) d =
+      LeanCompCert.Ports.Section413Sweep.cadd (accAt c t d) (weightAt t) ∧
+    deltaAt (c.ttouch 1 d t) =
+      LeanCompCert.Ports.Section413Sweep.cadd (deltaAt t)
+        (LeanCompCert.Ports.Section413Sweep.deltaTerm
+          (LeanCompCert.Ports.Section413Sweep.muZ d c.rounds)
+          (accAt c t d) (weightAt t)) := by
+  rcases hu64 with ⟨hwLo, hwHi, hwwLo, hwwHi, hdLo, hdHi, harr⟩
+  have haddr := touch_addr c hc.arr_fits hd
+  have ha1 : c.touchA1 1 d = d + c.plane1 := by
+    unfold Cfg.touchA1
+    exact haddr.2.1
+  have ha2 : c.touchA2 1 d = d + c.plane2 := by
+    unfold Cfg.touchA2
+    exact haddr.2.2
+  have hs := ttouch_live_spec c d t hc hd hmu
+    (harr _) (harr _) hwLo hwHi hwwLo hwwHi hdLo hdHi
+    cwwLo cwwHi cdLo cdHi hclean hww
+  simpa only [accAt, deltaAt, weightAt, squareAt, ha1, ha2] using hs
+
+theorem AccRel_live_store (c : Cfg) (d : Nat) (t : TState)
+    (A : Array LeanCompCert.Ports.Section413Sweep.Cell)
+    (hc : Admissible c) (hd : d ≤ c.cap) (hrel : AccRel c t A)
+    (hupdate : accAt c (c.ttouch 1 d t) d =
+      LeanCompCert.Ports.Section413Sweep.cadd (accAt c t d) (weightAt t)) :
+    AccRel c (c.ttouch 1 d t)
+      (A.set! d (LeanCompCert.Ports.Section413Sweep.cadd A[d]! (weightAt t))) := by
+  constructor
+  · rw [Array.size_set!, hrel.1]
+  · intro e he
+    have hdA : d < A.size := by rw [hrel.1]; omega
+    have heA : e < A.size := by rw [hrel.1]; omega
+    rw [getElem_bang_set_bang A d e _ hdA heA]
+    by_cases hde : d = e
+    · subst e
+      rw [if_pos rfl, hupdate, hrel.2 d hd]
+    · rw [if_neg hde]
+      exact (ttouch_live_acc_frame c d e t hc hd he (Ne.symm hde)).trans
+        (hrel.2 e he)
+
+/-- One live machine touch advances exactly one reference `touch` while
+preserving every premise required by the next live touch. -/
+theorem PassInv.touch_live (c : Cfg)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell) (t : TState)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (d : Nat) (hc : Admissible c) (hd : d ≤ c.cap)
+    (hmu : t.arr d = LeanCompCert.Ports.MertensCDEM.muCode d c.rounds)
+    (hinv : PassInv c W t p) (hclean : (c.ttouch 1 d t).viol = 0) :
+    PassInv c W (c.ttouch 1 d t)
+      (LeanCompCert.Ports.Section413Sweep.touch c.rounds W p d) := by
+  have hww : squareAt t = LeanCompCert.Ports.Section413Sweep.cmul
+      (weightAt t) (weightAt t) := by
+    rw [hinv.weight_eq]
+    exact hinv.square_eq
+  have hdec := ttouch_live_decoded c d t hc hd hmu hinv.u64
+    hinv.wwLo_cap hinv.wwHi_cap hinv.dLo_cap hinv.dHi_cap hclean hww
+  have hacc := AccRel_live_store c d t p.1 hc hd hinv.acc_rel hdec.1
+  have hzero : (c.ttouch 1 d t).arr 0 = 0 := by
+    rw [ttouch_mu_frame c 1 d t 0 hc (by simpa using hd) (by omega),
+      hinv.arr_zero]
+  refine ⟨ttouch_passU64 c 1 d t hinv.u64, hzero,
+    hinv.wwLo_cap, hinv.wwHi_cap,
+    (ttouch_live_delta_capped c d t hclean).1,
+    (ttouch_live_delta_capped c d t hclean).2,
+    hinv.weight_eq, hinv.square_eq, ?_, ?_⟩
+  · simpa only [LeanCompCert.Ports.Section413Sweep.touch, hinv.weight_eq]
+      using hacc
+  · simpa only [LeanCompCert.Ports.Section413Sweep.touch, hinv.delta_eq,
+      hinv.weight_eq, hinv.acc_rel.2 d hd] using hdec.2
+
+theorem PassInv.touch_zero (c : Cfg)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell) (t : TState)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (d : Nat) (hinv : PassInv c W t p) :
+    PassInv c W (c.ttouch 0 d t) p := by
+  rw [ttouch_gate_zero_eq c d t hinv.arr_zero hinv.u64]
+  exact hinv
 
 /-! ## §16 A legacy global guard invariant
 
@@ -2503,6 +3039,34 @@ theorem weight_quotients_le (sig : Nat) (hsig : 0 < sig) :
         Nat.add_le_add_left hm SCALE
       _ = sig * SCALE := hsigEq.symm
 
+/-- Every endpoint of the reference weight has magnitude at most one fixed
+scale unit. -/
+theorem weightV2_natAbs_le_scale (R X : Nat) (hX : 1 ≤ X) :
+    (LeanCompCert.Ports.Section413Sweep.weightV2 R X).lo.natAbs ≤ SCALE ∧
+      (LeanCompCert.Ports.Section413Sweep.weightV2 R X).hi.natAbs ≤ SCALE := by
+  let mc := LeanCompCert.Ports.MertensCDEM.muCode X R
+  let sig := LeanCompCert.Ports.Section413Sweep.sigmaPair X
+  have hmc := muCode_cases X R
+  have hsig : 0 < sig := sigmaPair_pos X hX
+  have hq := weight_quotients_le sig hsig
+  have hrat := cratSMul_of_code hmc hsig
+  have hmuz :
+      (if mc = 1 then (1 : Int) else if mc = 2 then -1 else 0) =
+        LeanCompCert.Ports.Section413Sweep.muZ X R :=
+    muZ_of_code (X := X) (R := R) (mc := mc) rfl
+  rw [hmuz, ← SCALE_eq_sweep] at hrat
+  by_cases hodd : X % 2 = 1
+  · rw [LeanCompCert.Ports.Section413Sweep.weightV2, if_pos hodd, hrat]
+    rcases hmc with h0 | h1 | h2
+    · simp [h0]
+    · simp only [h1, if_pos, Int.natAbs_natCast]
+      exact hq
+    · simp only [h2, Nat.reduceEqDiff, ↓reduceIte, Int.natAbs_neg,
+        Int.natAbs_natCast]
+      exact ⟨hq.2, hq.1⟩
+  · rw [LeanCompCert.Ports.Section413Sweep.weightV2, if_neg hodd]
+    simp [LeanCompCert.Ports.Section413Sweep.czero]
+
 /-- At a live weight selector, the transparent word block decodes to the
 reference `weightV2` cell. -/
 theorem tweight_live_weight (R X sig mc : Nat) (z : TSel) (t : TState)
@@ -2606,6 +3170,74 @@ theorem tweight_live_weight (R X sig mc : Nat) (z : TSel) (t : TState)
       bnat, hodd, LeanCompCert.Ports.Section413Sweep.czero,
       LeanCompCert.Ports.Section413Cells.decodeZ_zero]
 
+/-- A clean live weight block also records the exact interval square of the
+weight it just wrote.  This is the relation consumed by every pass-B touch;
+keeping it local avoids a global register invariant. -/
+theorem tweight_live_square (z : TSel) (t : TState)
+    (hW : z.isW = 1) (hclean : (tweight z t).viol = 0) :
+    (⟨decodeZ (tweight z t).wwLo, decodeZ (tweight z t).wwHi⟩ :
+      LeanCompCert.Ports.Section413Sweep.Cell) =
+      LeanCompCert.Ports.Section413Sweep.cmul
+        (⟨decodeZ (tweight z t).wLo, decodeZ (tweight z t).wHi⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell)
+        (⟨decodeZ (tweight z t).wLo, decodeZ (tweight z t).wHi⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell) := by
+  let muX := t.arr (z.isW * z.X % M)
+  let isP := bnat (muX = 1)
+  let isM := bnat (muX = 2)
+  let live := (isP + isM) * bnat (z.X % 2 = 1) * z.isW
+  let sig1 := (t.sigma + bnat (t.sigma = 0)) % M
+  let magF := SCALE / sig1
+  let magC := ((sig1 + (SCALE - 1)) % M) / sig1
+  let wLo := (isP * magF + isM * tsub 0 magC) % M * live % M
+  let wHi := (isP * magC + isM * tsub 0 magF) % M * live % M
+  let ww := tcmul z.isW wLo wHi wLo wHi t.viol
+  have hMpos : 0 < M := by simp only [M_val]; omega
+  have hwLo : wLo < M := Nat.mod_lt _ hMpos
+  have hwHi : wHi < M := Nat.mod_lt _ hMpos
+  have hww : ww.2.2 = 0 := by
+    simpa only [ww, tweight, hW, if_pos, muX, isP, isM, live, sig1,
+      magF, magC, wLo, wHi] using hclean
+  have hmul := tcmul_decode (gate := z.isW) (aLo := wLo) (aHi := wHi)
+    (bLo := wLo) (bHi := wHi) (viol := t.viol)
+    (by omega) hwLo hwHi hwLo hwHi hww
+  have hcell := congrArg
+    (fun p : Int × Int =>
+      (⟨p.1, p.2⟩ : LeanCompCert.Ports.Section413Sweep.Cell)) hmul
+  simpa only [ww, tweight, hW, if_pos, muX, isP, isM, live, sig1,
+    magF, magC, wLo, wHi] using hcell
+
+/-- A clean live weight round establishes all raw bounds required by pass B,
+provided the inherited delta registers and array were already words. -/
+theorem tweight_passU64 (z : TSel) (t : TState) (hW : z.isW = 1)
+    (hdLo : t.dLo < M) (hdHi : t.dHi < M)
+    (harr : ∀ i, t.arr i < M) (hclean : (tweight z t).viol = 0) :
+    PassU64 (tweight z t) := by
+  let muX := t.arr (z.isW * z.X % M)
+  let isP := bnat (muX = 1)
+  let isM := bnat (muX = 2)
+  let live := (isP + isM) * bnat (z.X % 2 = 1) * z.isW
+  let sig1 := (t.sigma + bnat (t.sigma = 0)) % M
+  let magF := SCALE / sig1
+  let magC := ((sig1 + (SCALE - 1)) % M) / sig1
+  let wLo := (isP * magF + isM * tsub 0 magC) % M * live % M
+  let wHi := (isP * magC + isM * tsub 0 magF) % M * live % M
+  let ww := tcmul z.isW wLo wHi wLo wHi t.viol
+  have hMpos : 0 < M := by simp only [M_val]; omega
+  have hwLo : wLo < M := Nat.mod_lt _ hMpos
+  have hwHi : wHi < M := Nat.mod_lt _ hMpos
+  have hwwClean : ww.2.2 = 0 := by
+    simpa only [ww, tweight, hW, if_pos, muX, isP, isM, live, sig1,
+      magF, magC, wLo, wHi] using hclean
+  have hww := tcmul_lt (gate := z.isW) (aLo := wLo) (aHi := wHi)
+    (bLo := wLo) (bHi := wHi) (viol := t.viol)
+    (by omega) hwLo hwHi hwLo hwHi hwwClean
+  have hout : wLo < M ∧ wHi < M ∧ ww.1 < M ∧ ww.2.1 < M ∧
+      t.dLo < M ∧ t.dHi < M ∧ ∀ i, t.arr i < M :=
+    ⟨hwLo, hwHi, hww.1, hww.2, hdLo, hdHi, harr⟩
+  simpa only [PassU64, tweight, hW, if_pos, muX, isP, isM, live, sig1,
+    magF, magC, wLo, wHi, ww] using hout
+
 /-- Selector decoding inside candidate `x+1` and phase-2 position `pos`.
 All word-valued fields are ordinary naturals in the live range. -/
 theorem tsel_phase2_block (c : Cfg) (hc : Admissible c) (x pos : Nat)
@@ -2658,6 +3290,533 @@ theorem tsel_phase2_block (c : Cfg) (hc : Admissible c) (x pos : Nat)
   simp [Cfg.tsel, hphase, hsub, hdecode.1, hdecode.2, Nat.mod_eq_of_lt hxM,
     Nat.mod_eq_of_lt hposM, bnat]
 
+/-- Selector specialization for pass B.  Position `s+r` is the live divisor
+slot `r`, for every `1 ≤ r ≤ s`; in particular no modular subtraction is
+hidden in the scheduled divisor. -/
+theorem tsel_passB_block (c : Cfg) (hc : Admissible c) (x r : Nat)
+    (hx : x < c.cap) (hr : 1 ≤ r) (hrs : r ≤ c.s) :
+    let z := c.tsel (c.phase1 + x * c.p + (c.s + r))
+    z.inP1 = 0 ∧ z.inP2 = 1 ∧ z.X = x + 1 ∧
+      z.inB = 1 ∧ z.rBr = r ∧ z.rB = r := by
+  have hpos : c.s + r < c.p := by unfold Cfg.p; omega
+  have hz := tsel_phase2_block c hc x (c.s + r) hx hpos
+  rcases hz with ⟨hP1, hP2, _hb2, _hx0, hpX, hX, _hA, _hW, _hrA⟩
+  let z := c.tsel (c.phase1 + x * c.p + (c.s + r))
+  have hInB : z.inB = 1 := by
+    change bnat (c.s + 1 ≤ z.pX) * bnat (z.pX ≤ 2 * c.s) * z.inP2 = 1
+    rw [hpX, hP2]
+    have hlo : c.s + 1 ≤ c.s + r := by omega
+    have hhi : c.s + r ≤ 2 * c.s := by omega
+    simp [bnat, hlo, hhi]
+  have hsCap : c.s ≤ c.cap := sqrt_le_self c.cap
+  have hposM : c.s + r < M := by
+    have := hc.arr_fits
+    simp only [M_val] at this ⊢
+    omega
+  have hsM : c.s ≤ M := by omega
+  have hrM : r < M := by omega
+  have hsub : tsub (c.s + r) c.s = r := by
+    unfold tsub
+    have heq : c.s + r + (M - c.s) = r + M := by omega
+    rw [heq, Nat.add_mod_right, Nat.mod_eq_of_lt hrM]
+  have hrBr : z.rBr = r := by
+    change tsub z.pX c.s = r
+    rw [hpX, hsub]
+  have hrB : z.rB = r := by
+    change (bnat (z.rBr = 0) + z.rBr) % M = r
+    rw [hrBr]
+    simp [bnat, Nat.ne_of_gt hr, Nat.mod_eq_of_lt hrM]
+  exact ⟨hP1, hP2, hX, hInB, hrBr, hrB⟩
+
+/-- Every scheduled pass-B square test is an ordinary natural square test:
+the product is below `2^64`, so the machine's `% M` is inert. -/
+theorem passB_square_no_wrap (c : Cfg) (hc : Admissible c) (r : Nat)
+    (hrs : r ≤ c.s) : r * r < M := by
+  have hsCap : c.s ≤ c.cap := sqrt_le_self c.cap
+  have hrCap : r ≤ c.cap := Nat.le_trans hrs hsCap
+  have hrr : r * r ≤ c.cap * c.cap := Nat.mul_le_mul hrCap hrCap
+  have hcap : c.cap * c.cap ≤ c.cap * (2 * c.cap + 2) :=
+    Nat.mul_le_mul_left c.cap (by omega)
+  have hlarge : c.cap * (2 * c.cap + 2) < M := by
+    have := hc.loop_fits
+    omega
+  exact Nat.lt_of_le_of_lt (Nat.le_trans hrr hcap) hlarge
+
+/-- On a reference divisor round `r ≤ √X`, the two machine gates are exactly
+the divisor gate and its unequal-partner gate. -/
+theorem passB_gates_live (c : Cfg) (hc : Admissible c) (x r : Nat)
+    (hx : x < c.cap) (hr : 1 ≤ r) (hrs : r ≤ c.s)
+    (hrX : r ≤ Nat.sqrt (x + 1)) :
+    let z := c.tsel (c.phase1 + x * c.p + (c.s + r))
+    let g₁ := bnat (z.X % z.rB = 0) *
+      bnat (z.rB * z.rB % M ≤ z.X) * z.inB
+    let q₂ := z.X / z.rB
+    let g₂ := g₁ * (1 - bnat (q₂ = z.rB))
+    g₁ = bnat ((x + 1) % r = 0) ∧ q₂ = (x + 1) / r ∧
+      g₂ = bnat ((x + 1) % r = 0) *
+        (1 - bnat ((x + 1) / r = r)) := by
+  have hz := tsel_passB_block c hc x r hx hr hrs
+  rcases hz with ⟨_hP1, _hP2, hX, hInB, _hrBr, hrB⟩
+  have hrrM := passB_square_no_wrap c hc r hrs
+  have hsq : r * r ≤ x + 1 :=
+    LeanCompCert.Verified.SqrtEquiv.sq_le_of_le_sqrt hrX
+  simp [hX, hrB, hInB, Nat.mod_eq_of_lt hrrM, hsq, bnat]
+
+/-- Rounds beyond `√X` are genuine no-ops: the explicit square gate turns
+both touches off. -/
+theorem passB_gates_past_sqrt (c : Cfg) (hc : Admissible c) (x r : Nat)
+    (hx : x < c.cap) (hr : 1 ≤ r) (hrs : r ≤ c.s)
+    (hrX : Nat.sqrt (x + 1) < r) :
+    let z := c.tsel (c.phase1 + x * c.p + (c.s + r))
+    let g₁ := bnat (z.X % z.rB = 0) *
+      bnat (z.rB * z.rB % M ≤ z.X) * z.inB
+    let q₂ := z.X / z.rB
+    let g₂ := g₁ * (1 - bnat (q₂ = z.rB))
+    g₁ = 0 ∧ g₂ = 0 := by
+  have hz := tsel_passB_block c hc x r hx hr hrs
+  rcases hz with ⟨_hP1, _hP2, hX, hInB, _hrBr, hrB⟩
+  have hrrM := passB_square_no_wrap c hc r hrs
+  have hsq : ¬ r * r ≤ x + 1 := by
+    intro h
+    have := LeanCompCert.Verified.SqrtEquiv.le_sqrt_of_sq_le h
+    omega
+  simp [hX, hrB, hInB, Nat.mod_eq_of_lt hrrM, hsq, bnat]
+
+/-- One scheduled pass-B round is exactly one iteration of the reference
+divisor-pair fold. -/
+theorem PassInv.passB_round (c : Cfg) (hc : Admissible c) (x r : Nat)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell) (t : TState)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (hx : x < c.cap) (hr : 1 ≤ r) (hrs : r ≤ c.s)
+    (hrX : r ≤ Nat.sqrt (x + 1))
+    (hmu : ∀ d, 1 ≤ d → d ≤ c.cap →
+      t.arr d = LeanCompCert.Ports.MertensCDEM.muCode d c.rounds)
+    (hinv : PassInv c W t p)
+    (hclean : (c.tpassB
+      (c.tsel (c.phase1 + x * c.p + (c.s + r))) t).viol = 0) :
+    let X := x + 1
+    let q := X / r
+    let p' := if X % r = 0 then
+        let p1 := LeanCompCert.Ports.Section413Sweep.touch c.rounds W p r
+        if q ≠ r then
+          LeanCompCert.Ports.Section413Sweep.touch c.rounds W p1 q
+        else p1
+      else p
+    PassInv c W
+      (c.tpassB (c.tsel (c.phase1 + x * c.p + (c.s + r))) t) p' := by
+  let X := x + 1
+  let z := c.tsel (c.phase1 + x * c.p + (c.s + r))
+  let g₁ := bnat (z.X % z.rB = 0) *
+    bnat (z.rB * z.rB % M ≤ z.X) * z.inB
+  let q₂ := z.X / z.rB
+  let g₂ := g₁ * (1 - bnat (q₂ = z.rB))
+  let q := X / r
+  have hz := tsel_passB_block c hc x r hx hr hrs
+  have hg := passB_gates_live c hc x r hx hr hrs hrX
+  dsimp only at hz hg
+  rcases hz with ⟨_hP1, _hP2, _hX, _hInB, _hrBr, hrB⟩
+  rcases hg with ⟨hg₁, _hq₂, _hg₂⟩
+  change (c.ttouch g₂ q₂ (c.ttouch g₁ z.rB t)).viol = 0 at hclean
+  dsimp only [g₁, q₂, g₂, z] at hclean
+  rw [hg₁] at hclean
+  simp only [_hX, hrB] at hclean
+  change PassInv c W (c.ttouch g₂ q₂ (c.ttouch g₁ z.rB t)) _
+  dsimp only [g₁, q₂, g₂, z]
+  rw [hg₁]
+  simp only [_hX, hrB]
+  have hrCap : r ≤ c.cap :=
+    Nat.le_trans hrs (Nat.le_trans (sqrt_le_self c.cap) (Nat.le_refl _))
+  have hXCap : X ≤ c.cap := by dsimp only [X]; omega
+  have hqCap : q ≤ c.cap := by
+    dsimp only [q]
+    exact Nat.le_trans (Nat.div_le_self X r) hXCap
+  have hqPos : 1 ≤ q := by
+    apply Nat.div_pos (Nat.le_trans hrX (sqrt_le_self (x + 1))) hr
+  by_cases hdiv : X % r = 0
+  · have hg1one : bnat (X % r = 0) = 1 := bnat_true hdiv
+    rw [hg1one, Nat.one_mul] at hclean ⊢
+    by_cases heq : q = r
+    · have hg2zero : 1 - bnat (q = r) = 0 := by simp [heq, bnat]
+      have hg2zero' : 1 - bnat ((x + 1) / r = r) = 0 := by
+        simpa only [q, X] using hg2zero
+      rw [hg2zero'] at hclean ⊢
+      change (c.ttouch 0 q (c.ttouch 1 r t)).viol = 0 at hclean
+      have hclean1 : (c.ttouch 1 r t).viol = 0 := by
+        have hle := ttouch_viol_le c 0 q (c.ttouch 1 r t)
+        omega
+      have hi1 := PassInv.touch_live c W t p r hc hrCap (hmu r hr hrCap)
+        hinv hclean1
+      have hi2 := PassInv.touch_zero c W (c.ttouch 1 r t)
+        (LeanCompCert.Ports.Section413Sweep.touch c.rounds W p r) q hi1
+      simpa only [X, q, hdiv, if_pos, heq, ne_eq, not_true_eq_false,
+        if_false] using hi2
+    · have hg2one : 1 - bnat (q = r) = 1 := by simp [heq, bnat]
+      have hg2one' : 1 - bnat ((x + 1) / r = r) = 1 := by
+        simpa only [q, X] using hg2one
+      rw [hg2one'] at hclean ⊢
+      change (c.ttouch 1 q (c.ttouch 1 r t)).viol = 0 at hclean
+      have hclean1 : (c.ttouch 1 r t).viol = 0 := by
+        have hle := ttouch_viol_le c 1 q (c.ttouch 1 r t)
+        omega
+      have hi1 := PassInv.touch_live c W t p r hc hrCap (hmu r hr hrCap)
+        hinv hclean1
+      have hmuq : (c.ttouch 1 r t).arr q =
+          LeanCompCert.Ports.MertensCDEM.muCode q c.rounds := by
+        rw [ttouch_mu_frame c 1 r t q hc (by simpa using hrCap) hqCap]
+        exact hmu q hqPos hqCap
+      have hi2 := PassInv.touch_live c W (c.ttouch 1 r t)
+        (LeanCompCert.Ports.Section413Sweep.touch c.rounds W p r)
+        q hc hqCap hmuq hi1 hclean
+      simpa only [X, q, hdiv, if_pos, heq, ne_eq, not_false_eq_true]
+        using hi2
+  · have hg1zero : bnat (X % r = 0) = 0 := bnat_false hdiv
+    rw [hg1zero, Nat.zero_mul] at hclean ⊢
+    have hi1 := PassInv.touch_zero c W t p r hinv
+    have hi2 := PassInv.touch_zero c W (c.ttouch 0 r t) p q hi1
+    simpa only [X, q, hdiv, if_false] using hi2
+
+theorem PassInv.passB_round_past_sqrt (c : Cfg) (hc : Admissible c)
+    (x r : Nat) (W : LeanCompCert.Ports.Section413Sweep.Cell) (t : TState)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (hx : x < c.cap) (hr : 1 ≤ r) (hrs : r ≤ c.s)
+    (hrX : Nat.sqrt (x + 1) < r) (hinv : PassInv c W t p) :
+    PassInv c W
+      (c.tpassB (c.tsel (c.phase1 + x * c.p + (c.s + r))) t) p := by
+  let z := c.tsel (c.phase1 + x * c.p + (c.s + r))
+  let g₁ := bnat (z.X % z.rB = 0) *
+    bnat (z.rB * z.rB % M ≤ z.X) * z.inB
+  let q₂ := z.X / z.rB
+  let g₂ := g₁ * (1 - bnat (q₂ = z.rB))
+  have hz := tsel_passB_block c hc x r hx hr hrs
+  have hg := passB_gates_past_sqrt c hc x r hx hr hrs hrX
+  dsimp only at hz hg
+  rcases hz with ⟨_hP1, _hP2, _hX, _hInB, _hrBr, hrB⟩
+  rcases hg with ⟨hg₁, _hg₂⟩
+  change PassInv c W (c.ttouch g₂ q₂ (c.ttouch g₁ z.rB t)) p
+  dsimp only [g₁, q₂, g₂, z]
+  rw [hg₁, Nat.zero_mul, hrB]
+  exact PassInv.touch_zero c W (c.ttouch 0 r t) p _
+    (PassInv.touch_zero c W t p r hinv)
+
+/-- Trial, pass A, and weight are frames on the pass-B persistent fields. -/
+theorem passB_pre_frame (c : Cfg) (hc : Admissible c) (x r : Nat)
+    (t : TState) (hx : x < c.cap) (hr : 1 ≤ r) (hrs : r ≤ c.s)
+    (hzero : t.arr 0 = 0) :
+    let z := c.tsel (c.phase1 + x * c.p + (c.s + r))
+    let pre := tweight z (tpassA z (ttrial z t))
+    PassFrame pre t := by
+  let z := c.tsel (c.phase1 + x * c.p + (c.s + r))
+  let pre := tweight z (tpassA z (ttrial z t))
+  have hpos : c.s + r < c.p := by unfold Cfg.p; omega
+  have hz := tsel_phase2_block c hc x (c.s + r) hx hpos
+  rcases hz with ⟨hP1, _hP2, _hb2, _hx0, _hpX, _hX, _hA, hW, _hrA⟩
+  have hW0 : z.isW = 0 := by
+    dsimp only [z]
+    rw [hW]
+    simp [bnat]
+    omega
+  have hDL : z.isDL = 0 := by
+    change bnat (z.r1 = c.rounds - 1) * z.inP1 = 0
+    dsimp only [z]
+    rw [hP1]
+    simp
+  have htrialArr : (ttrial z t).arr = t.arr := by
+    funext i
+    simp only [ttrial, hDL, Nat.zero_mul, Nat.zero_mod]
+    by_cases hi : i = 0
+    · simp [hi, hzero]
+    · simp [hi]
+  exact PassFrame.trans (tweight_pass_frame z _ hW0)
+    (PassFrame.trans (tpassA_pass_frame z _)
+      (ttrial_pass_frame z t htrialArr))
+
+/-- An inactive finalizer frames the pass-B persistent fields. -/
+theorem tfin_pass_frame (c : Cfg) (z : TSel) (t : TState)
+    (hF : z.isF = 0) (hu64 : PassU64 t) : PassFrame (c.tfin z t) t := by
+  refine ⟨rfl, rfl, rfl, rfl, ?_, ?_, rfl⟩
+  · change tfinDLo z t = t.dLo
+    simp [tfinDLo, hF, Nat.mod_eq_of_lt hu64.2.2.2.2.1]
+  · change tfinDHi z t = t.dHi
+    simp [tfinDHi, hF, Nat.mod_eq_of_lt hu64.2.2.2.2.2.1]
+
+theorem tfin_viol_le (c : Cfg) (z : TSel) (t : TState) :
+    t.viol ≤ (c.tfin z t).viol := by
+  unfold Cfg.tfin Cfg.tfinViol
+  exact Nat.le_trans (tguard_le _ _ _)
+    (Nat.le_trans (tguard_le _ _ _)
+      (Nat.le_trans Nat.left_le_or Nat.left_le_or))
+
+theorem tfin_DA_frame (c : Cfg) (z : TSel) (t : TState)
+    (hF : z.isF = 0) (hcore : CoreU64 t) : DAFrame (c.tfin z t) t := by
+  refine ⟨?_, ?_, rfl⟩
+  · change tfinDLo z t = t.dLo
+    unfold tfinDLo
+    simp only [hF, Nat.sub_zero, Nat.mul_one,
+      Nat.mod_eq_of_lt hcore.1]
+  · change tfinDHi z t = t.dHi
+    unfold tfinDHi
+    simp only [hF, Nat.sub_zero, Nat.mul_one,
+      Nat.mod_eq_of_lt hcore.2.1]
+
+/-- Positions `0 … s` of a candidate (pass A plus the weight round) frame
+the accumulator array and delta registers. -/
+theorem prePass_step_DA_frame (c : Cfg) (hc : Admissible c) (x pos : Nat)
+    (t : TState) (hx : x < c.cap) (hpos : pos ≤ c.s)
+    (hzero : t.arr 0 = 0) (hcore : CoreU64 t) :
+    DAFrame (c.tstep (c.phase1 + x * c.p + pos) t) t := by
+  let idx := c.phase1 + x * c.p + pos
+  let z := c.tsel idx
+  let trial := ttrial z t
+  let pre := tweight z (tpassA z trial)
+  let g₁ := bnat (z.X % z.rB = 0) *
+    bnat (z.rB * z.rB % M ≤ z.X) * z.inB
+  let q₂ := z.X / z.rB
+  let g₂ := g₁ * (1 - bnat (q₂ = z.rB))
+  let first := c.ttouch g₁ z.rB pre
+  let pb := c.ttouch g₂ q₂ first
+  have hposp : pos < c.p := by unfold Cfg.p; omega
+  have hz := tsel_phase2_block c hc x pos hx hposp
+  rcases hz with ⟨hP1, hP2, _hb2, _hx0, hpX, _hX, _hA, _hW, _hrA⟩
+  have hDL : z.isDL = 0 := by
+    change bnat (z.r1 = c.rounds - 1) * z.inP1 = 0
+    dsimp only [z, idx]
+    rw [hP1]
+    simp
+  have hB : z.inB = 0 := by
+    change bnat (c.s + 1 ≤ z.pX) * bnat (z.pX ≤ 2 * c.s) * z.inP2 = 0
+    dsimp only [z, idx]
+    rw [hpX, hP2]
+    have hn : ¬ c.s + 1 ≤ pos := by omega
+    simp [bnat, hn]
+  have hF : z.isF = 0 := by
+    change bnat (z.pX = 2 * c.s + 1) * z.inP2 = 0
+    dsimp only [z, idx]
+    rw [hpX, hP2]
+    have hn : pos ≠ 2 * c.s + 1 := by omega
+    simp [bnat, hn]
+  have htrialArr : trial.arr = t.arr := by
+    dsimp only [trial]
+    funext i
+    simp only [ttrial, hDL, Nat.zero_mul, Nat.zero_mod]
+    by_cases hi : i = 0
+    · simp [hi, hzero]
+    · simp [hi]
+  have htrialCore : CoreU64 trial := ttrial_coreU64 z t hcore
+  have hpreCore : CoreU64 pre :=
+    tweight_coreU64 z _ (tpassA_coreU64 z _ htrialCore)
+  have hpreDLo : pre.dLo = t.dLo := rfl
+  have hpreDHi : pre.dHi = t.dHi := rfl
+  have hpreArr : pre.arr = trial.arr := rfl
+  have hpreZero : pre.arr 0 = 0 := by
+    change trial.arr 0 = 0
+    rw [htrialArr, hzero]
+  have hg₁ : g₁ = 0 := by simp [g₁, hB]
+  have hg₂ : g₂ = 0 := by simp [g₂, hg₁]
+  have hfirst := ttouch_gate_zero c z.rB pre hpreZero
+    (hpreCore.2.2 (c.touchA1 0 z.rB))
+    (hpreCore.2.2 (c.touchA2 0 z.rB)) hpreCore.1 hpreCore.2.1
+  have hfirstCore : CoreU64 first := by
+    dsimp only [first]
+    exact ttouch_coreU64 c g₁ z.rB pre hpreCore
+  have hfirstZero : first.arr 0 = 0 := by
+    dsimp only [first]
+    rw [hg₁, hfirst.2.2.2, hpreZero]
+  have hpb := ttouch_gate_zero c q₂ first hfirstZero
+    (hfirstCore.2.2 (c.touchA1 0 q₂))
+    (hfirstCore.2.2 (c.touchA2 0 q₂)) hfirstCore.1 hfirstCore.2.1
+  have hpbCore : CoreU64 pb := by
+    dsimp only [pb]
+    exact ttouch_coreU64 c g₂ q₂ first hfirstCore
+  have hpbdLo : pb.dLo = t.dLo := by
+    dsimp only [pb]
+    rw [hg₂, hpb.2.1]
+    dsimp only [first]
+    rw [hg₁, hfirst.2.1, hpreDLo]
+  have hpbdHi : pb.dHi = t.dHi := by
+    dsimp only [pb]
+    rw [hg₂, hpb.2.2.1]
+    dsimp only [first]
+    rw [hg₁, hfirst.2.2.1, hpreDHi]
+  have hpbArr : pb.arr = t.arr := by
+    dsimp only [pb]
+    rw [hg₂, hpb.2.2.2]
+    dsimp only [first]
+    rw [hg₁, hfirst.2.2.2]
+    exact hpreArr.trans htrialArr
+  exact DAFrame.trans (tfin_DA_frame c z pb hF hpbCore)
+    ⟨hpbdLo, hpbdHi, hpbArr⟩
+
+theorem prePass_DA_prefix (c : Cfg) (hc : Admissible c) (x : Nat)
+    (hx : x < c.cap)
+    (hzero : (tRunUpto c (c.phase1 + x * c.p)).arr 0 = 0) :
+    ∀ k, k ≤ c.s + 1 →
+      DAFrame (tRunUpto c (c.phase1 + x * c.p + k))
+        (tRunUpto c (c.phase1 + x * c.p)) := by
+  intro k
+  induction k with
+  | zero =>
+      intro _
+      simpa only [Nat.add_zero] using
+        (show DAFrame (tRunUpto c (c.phase1 + x * c.p))
+          (tRunUpto c (c.phase1 + x * c.p)) from ⟨rfl, rfl, rfl⟩)
+  | succ k ih =>
+      intro hk
+      have hkpos : k ≤ c.s := by omega
+      have hprev := ih (by omega)
+      let start := c.phase1 + x * c.p
+      let cur := tRunUpto c (start + k)
+      have hcurZero : cur.arr 0 = 0 := by
+        have := congrArg (fun a => a 0) hprev.arr
+        simpa only [cur, start] using this.trans hzero
+      have hstep := prePass_step_DA_frame c hc x k cur hx hkpos hcurZero
+        (tRunUpto_coreU64 c (start + k))
+      rw [show start + (k + 1) = (start + k) + 1 by omega, tRunUpto_succ]
+      have hidx : start + k = c.phase1 + x * c.p + k := by
+        dsimp only [start]
+      rw [hidx]
+      exact DAFrame.trans hstep hprev
+
+/-- The full scheduled transition at `s+r` realizes one reference divisor
+round; the surrounding transparent stages and inactive finalizer are frames. -/
+theorem PassInv.tstep_passB_round (c : Cfg) (hc : Admissible c) (x r : Nat)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell) (t : TState)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (hx : x < c.cap) (hr : 1 ≤ r) (hrs : r ≤ c.s)
+    (hrX : r ≤ Nat.sqrt (x + 1))
+    (hmu : ∀ d, 1 ≤ d → d ≤ c.cap →
+      t.arr d = LeanCompCert.Ports.MertensCDEM.muCode d c.rounds)
+    (hinv : PassInv c W t p)
+    (hclean : (c.tstep (c.phase1 + x * c.p + (c.s + r)) t).viol = 0) :
+    let X := x + 1
+    let q := X / r
+    let p' := if X % r = 0 then
+        let p1 := LeanCompCert.Ports.Section413Sweep.touch c.rounds W p r
+        if q ≠ r then
+          LeanCompCert.Ports.Section413Sweep.touch c.rounds W p1 q
+        else p1
+      else p
+    PassInv c W (c.tstep (c.phase1 + x * c.p + (c.s + r)) t) p' := by
+  let idx := c.phase1 + x * c.p + (c.s + r)
+  let z := c.tsel idx
+  let pre := tweight z (tpassA z (ttrial z t))
+  let pb := c.tpassB z pre
+  have hfpre : PassFrame pre t := by
+    simpa only [idx, z, pre] using passB_pre_frame c hc x r t hx hr hrs hinv.arr_zero
+  have hipre : PassInv c W pre p := PassInv.of_frame hinv hfpre
+  have hmupre : ∀ d, 1 ≤ d → d ≤ c.cap →
+      pre.arr d = LeanCompCert.Ports.MertensCDEM.muCode d c.rounds := by
+    intro d hdpos hd
+    rw [hfpre.arr]
+    exact hmu d hdpos hd
+  have hpbclean : pb.viol = 0 := by
+    change (c.tfin z pb).viol = 0 at hclean
+    have hle := tfin_viol_le c z pb
+    omega
+  have hipb :
+      let X := x + 1
+      let q := X / r
+      let p' := if X % r = 0 then
+          let p1 := LeanCompCert.Ports.Section413Sweep.touch c.rounds W p r
+          if q ≠ r then
+            LeanCompCert.Ports.Section413Sweep.touch c.rounds W p1 q
+          else p1
+        else p
+      PassInv c W pb p' := by
+    simpa only [idx, z, pre, pb] using
+      PassInv.passB_round c hc x r W pre p hx hr hrs hrX hmupre hipre hpbclean
+  have hpos : c.s + r < c.p := by unfold Cfg.p; omega
+  have hzsel := tsel_phase2_block c hc x (c.s + r) hx hpos
+  have hF : z.isF = 0 := by
+    rcases hzsel with ⟨_hP1, hP2, _hb2, _hx0, hpX, _hX, _hA, _hW, _hrA⟩
+    change bnat (z.pX = 2 * c.s + 1) * z.inP2 = 0
+    dsimp only [z, idx]
+    rw [hpX, hP2]
+    simp [bnat]
+    omega
+  have hfpost : PassFrame (c.tfin z pb) pb := tfin_pass_frame c z pb hF hipb.u64
+  change PassInv c W (c.tfin z pb) _
+  exact PassInv.of_frame hipb hfpost
+
+theorem PassInv.tstep_passB_past_sqrt (c : Cfg) (hc : Admissible c)
+    (x r : Nat) (W : LeanCompCert.Ports.Section413Sweep.Cell) (t : TState)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (hx : x < c.cap) (hr : 1 ≤ r) (hrs : r ≤ c.s)
+    (hrX : Nat.sqrt (x + 1) < r) (hinv : PassInv c W t p) :
+    PassInv c W (c.tstep (c.phase1 + x * c.p + (c.s + r)) t) p := by
+  let idx := c.phase1 + x * c.p + (c.s + r)
+  let z := c.tsel idx
+  let pre := tweight z (tpassA z (ttrial z t))
+  let pb := c.tpassB z pre
+  have hfpre : PassFrame pre t := by
+    simpa only [idx, z, pre] using passB_pre_frame c hc x r t hx hr hrs hinv.arr_zero
+  have hipre : PassInv c W pre p := PassInv.of_frame hinv hfpre
+  have hipb : PassInv c W pb p := by
+    simpa only [idx, z, pre, pb] using
+      PassInv.passB_round_past_sqrt c hc x r W pre p hx hr hrs hrX hipre
+  have hpos : c.s + r < c.p := by unfold Cfg.p; omega
+  have hzsel := tsel_phase2_block c hc x (c.s + r) hx hpos
+  have hF : z.isF = 0 := by
+    rcases hzsel with ⟨_hP1, hP2, _hb2, _hx0, hpX, _hX, _hA, _hW, _hrA⟩
+    change bnat (z.pX = 2 * c.s + 1) * z.inP2 = 0
+    dsimp only [z, idx]
+    rw [hpX, hP2]
+    simp [bnat]
+    omega
+  have hfpost : PassFrame (c.tfin z pb) pb := tfin_pass_frame c z pb hF hipb.u64
+  change PassInv c W (c.tfin z pb) p
+  exact PassInv.of_frame hipb hfpost
+
+/-- The reference divisor-pair fold truncated to its first `k` rounds. -/
+def divisorPrefix (R X : Nat)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell) (k : Nat)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell) :
+    Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell :=
+  (List.range k).foldl
+    (fun p i =>
+      let r := i + 1
+      if X % r = 0 then
+        let p1 := LeanCompCert.Ports.Section413Sweep.touch R W p r
+        if X / r ≠ r then
+          LeanCompCert.Ports.Section413Sweep.touch R W p1 (X / r)
+        else p1
+      else p) p
+
+theorem divisorPrefix_zero (R X : Nat)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell) :
+    divisorPrefix R X W 0 p = p := rfl
+
+theorem divisorPrefix_succ (R X : Nat)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell) (k : Nat)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell) :
+    divisorPrefix R X W (k + 1) p =
+      let q := X / (k + 1)
+      let p0 := divisorPrefix R X W k p
+      if X % (k + 1) = 0 then
+        let p1 := LeanCompCert.Ports.Section413Sweep.touch R W p0 (k + 1)
+        if q ≠ k + 1 then
+          LeanCompCert.Ports.Section413Sweep.touch R W p1 q
+        else p1
+      else p0 := by
+  unfold divisorPrefix
+  rw [List.range_succ, List.foldl_append]
+  rfl
+
+theorem divisorPrefix_sqrt (R X : Nat)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell) :
+    divisorPrefix R X W (Nat.sqrt X) p =
+      LeanCompCert.Ports.Section413Sweep.stepDivisors R X W p := rfl
+
 /-- Every phase-2 transition frames the μ plane.  The pass-B address bounds
 come from the already-proved selector/gate range theorem used by machine
 denotation; `ttouch_pair_mu_frame` then discharges both array writes. -/
@@ -2708,6 +3867,132 @@ theorem phase2_muCode (c : Cfg) (hc : Admissible c) (n : Nat)
         tstep_phase2_mu_frame c hc (c.phase1 + k) (tRunUpto c (c.phase1 + k))
           n (by omega) hnc (by omega) hidx]
       exact ih (by omega)
+
+/-- The scheduled machine prefixes simulate every prefix of the reference
+divisor fold. -/
+theorem passB_prefix (c : Cfg) (hc : Admissible c) (X : Nat)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (hflag : c.tFlag = 0) (hX : 1 ≤ X) (hXc : X ≤ c.cap)
+    (hbase : PassInv c W
+      (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s + 1)) p) :
+    ∀ k, k ≤ Nat.sqrt X →
+      PassInv c W
+        (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s + 1 + k))
+        (divisorPrefix c.rounds X W k p) := by
+  intro k
+  induction k with
+  | zero =>
+      intro _
+      simpa only [Nat.add_zero, divisorPrefix_zero] using hbase
+  | succ k ih =>
+      intro hk
+      have hkroot : k + 1 ≤ Nat.sqrt X := by simpa using hk
+      have hkprev : k ≤ Nat.sqrt X := by omega
+      have hprev := ih hkprev
+      let base := c.phase1 + (X - 1) * c.p + c.s + 1
+      let off := (X - 1) * c.p + c.s + 1 + k
+      let idx := c.phase1 + off
+      let cur := tRunUpto c (base + k)
+      have hsCover : Nat.sqrt X ≤ c.s := sqrt_le_cfg_s c hXc
+      have hwithin : c.s + 1 + k < c.p := by
+        unfold Cfg.p
+        omega
+      have hXp : X * c.p ≤ c.cap * c.p := Nat.mul_le_mul_right c.p hXc
+      have hsplit : (X - 1) * c.p + c.p = X * c.p := by
+        have hsucc : X - 1 + 1 = X := by omega
+        calc
+          (X - 1) * c.p + c.p = ((X - 1) + 1) * c.p := by
+            rw [Nat.add_mul, Nat.one_mul]
+          _ = X * c.p := by rw [hsucc]
+      have hoff : off < c.cap * c.p := by
+        dsimp only [off]
+        omega
+      have hidx : idx < c.loopCount := by
+        dsimp only [idx]
+        unfold Cfg.loopCount
+        omega
+      have htime : idx = base + k := by
+        dsimp only [idx, off, base]
+        omega
+      have htime' : c.phase1 + off = base + k := by
+        simpa only [idx] using htime
+      have hmu : ∀ d, 1 ≤ d → d ≤ c.cap →
+          cur.arr d = LeanCompCert.Ports.MertensCDEM.muCode d c.rounds := by
+        intro d hdpos hdc
+        have hm := phase2_muCode c hc d hdpos hdc off (Nat.le_of_lt hoff)
+        rw [htime'] at hm
+        exact hm
+      have hclean := (tstep_clean_of_tFlag c hflag hidx).2
+      have hsched :
+          c.phase1 + (X - 1) * c.p + (c.s + (k + 1)) = idx := by
+        dsimp only [idx, off]
+        omega
+      have hclean' :
+          (c.tstep (c.phase1 + (X - 1) * c.p + (c.s + (k + 1))) cur).viol = 0 := by
+        rw [hsched]
+        simpa only [cur, htime] using hclean
+      have hxone : X - 1 + 1 = X := by omega
+      have hroot' : k + 1 ≤ Nat.sqrt (X - 1 + 1) := by
+        rw [hxone]
+        exact hkroot
+      have hround := PassInv.tstep_passB_round c hc (X - 1) (k + 1)
+        W cur (divisorPrefix c.rounds X W k p)
+        (by omega) (by omega) (by omega) hroot'
+        hmu (by simpa only [cur, base, Nat.add_assoc] using hprev) hclean'
+      have hstepIndex :
+          c.phase1 + (X - 1) * c.p + (c.s + (k + 1)) =
+            c.phase1 + (X - 1) * c.p + (c.s + (1 + k)) := by omega
+      rw [hstepIndex] at hround
+      rw [show base + (k + 1) = (base + k) + 1 by omega, tRunUpto_succ,
+        divisorPrefix_succ]
+      simpa only [cur, base, Nat.add_assoc, hxone] using hround
+
+theorem passB_tail (c : Cfg) (hc : Admissible c) (X : Nat)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (hX : 1 ≤ X) (hXc : X ≤ c.cap)
+    (hstart : PassInv c W
+      (tRunUpto c
+        (c.phase1 + (X - 1) * c.p + c.s + 1 + Nat.sqrt X)) p) :
+    ∀ d, Nat.sqrt X + d ≤ c.s →
+      PassInv c W
+        (tRunUpto c
+          (c.phase1 + (X - 1) * c.p + c.s + 1 + Nat.sqrt X + d)) p := by
+  intro d
+  induction d with
+  | zero =>
+      intro _
+      simpa only [Nat.add_zero] using hstart
+  | succ d ih =>
+      intro hd
+      have hprev := ih (by omega)
+      let base := c.phase1 + (X - 1) * c.p + c.s + 1 + Nat.sqrt X
+      let cur := tRunUpto c (base + d)
+      let r := Nat.sqrt X + d + 1
+      have hr : 1 ≤ r := by dsimp only [r]; omega
+      have hrs : r ≤ c.s := by dsimp only [r]; omega
+      have hrX : Nat.sqrt (X - 1 + 1) < r := by
+        have hxone : X - 1 + 1 = X := by omega
+        rw [hxone]
+        dsimp only [r]
+        omega
+      have hstep := PassInv.tstep_passB_past_sqrt c hc (X - 1) r W cur p
+        (by omega) hr hrs hrX
+        (by simpa only [cur, base, Nat.add_assoc] using hprev)
+      have hidx :
+          c.phase1 + (X - 1) * c.p + (c.s + r) = base + d := by
+        dsimp only [r, base]
+        omega
+      change PassInv c W (tRunUpto c (base + (d + 1))) p
+      have hrun : tRunUpto c (base + (d + 1)) =
+          c.tstep (c.phase1 + (X - 1) * c.p + (c.s + r)) cur := by
+        rw [show base + (d + 1) = (base + d) + 1 by omega, tRunUpto_succ]
+        rw [hidx]
+      rw [hrun]
+      exact hstep
 
 theorem tstep_sigma (c : Cfg) (idx : Nat) (t : TState) :
     (c.tstep idx t).sigma =
@@ -2941,6 +4226,54 @@ theorem tstep_weight_spec (c : Cfg) (hc : Admissible c) (X : Nat)
   · exact hsigPos
   · exact hsigAddM
 
+/-- At a live weight position, a clean complete iteration frames the exact
+square written by `tweight` through the two pass-B touches and finalizer. -/
+theorem tstep_weight_square (c : Cfg) (idx : Nat) (t : TState)
+    (hW : (c.tsel idx).isW = 1) (hclean : (c.tstep idx t).viol = 0) :
+    (⟨decodeZ (c.tstep idx t).wwLo, decodeZ (c.tstep idx t).wwHi⟩ :
+      LeanCompCert.Ports.Section413Sweep.Cell) =
+      LeanCompCert.Ports.Section413Sweep.cmul
+        (⟨decodeZ (c.tstep idx t).wLo, decodeZ (c.tstep idx t).wHi⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell)
+        (⟨decodeZ (c.tstep idx t).wLo, decodeZ (c.tstep idx t).wHi⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell) := by
+  let z := c.tsel idx
+  let u := tpassA z (ttrial z t)
+  have hwClean : (tweight z u).viol = 0 := by
+    have hle : (tweight z u).viol ≤ (c.tstep idx t).viol := by
+      simpa only [z, u] using tweight_viol_le_tstep c idx t
+    rw [hclean] at hle
+    omega
+  have hsquare := tweight_live_square z u (by simpa only [z] using hW) hwClean
+  change
+    (⟨decodeZ (tweight z u).wwLo, decodeZ (tweight z u).wwHi⟩ :
+      LeanCompCert.Ports.Section413Sweep.Cell) =
+      LeanCompCert.Ports.Section413Sweep.cmul
+        (⟨decodeZ (tweight z u).wLo, decodeZ (tweight z u).wHi⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell)
+        (⟨decodeZ (tweight z u).wLo, decodeZ (tweight z u).wHi⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell)
+  exact hsquare
+
+/-- A clean live weight iteration establishes and preserves the raw pass-B
+word invariant through its inactive touches and finalizer. -/
+theorem tstep_weight_passU64 (c : Cfg) (idx : Nat) (t : TState)
+    (hW : (c.tsel idx).isW = 1) (hcore : CoreU64 t)
+    (hclean : (c.tstep idx t).viol = 0) : PassU64 (c.tstep idx t) := by
+  let z := c.tsel idx
+  let u := tpassA z (ttrial z t)
+  have huCore : CoreU64 u :=
+    tpassA_coreU64 z _ (ttrial_coreU64 z t hcore)
+  have hwClean : (tweight z u).viol = 0 := by
+    have hle : (tweight z u).viol ≤ (c.tstep idx t).viol := by
+      simpa only [z, u] using tweight_viol_le_tstep c idx t
+    rw [hclean] at hle
+    omega
+  have hw := tweight_passU64 z u (by simpa only [z] using hW)
+    huCore.1 huCore.2.1 huCore.2.2 hwClean
+  change PassU64 (c.tfin z (c.tpassB z (tweight z u)))
+  exact tfin_passU64 c z _ (tpassB_passU64 c z _ hw)
+
 /-- The scheduled weight round in the transparent run computes `weightV2`.
 The preceding μ and sigma theorems supply the two explicit premises of
 `tstep_weight_spec`. -/
@@ -2972,126 +4305,1073 @@ theorem weight_spec (c : Cfg) (hc : Admissible c) (X : Nat)
   · simpa only [idx, k, Nat.add_assoc] using hmu
   · simpa only [idx, Nat.add_assoc] using hsigma
 
-/-! ## OPEN: what remains of obligation (2)
+/-- The scheduled weight round records the exact square throughout a clean
+run.  This is the pass-B invariant at its induction base. -/
+theorem weight_square_spec (c : Cfg) (hc : Admissible c) (X : Nat)
+    (hflag : c.tFlag = 0) (hX : 1 ≤ X) (hXc : X ≤ c.cap) :
+    let idx := c.phase1 + (X - 1) * c.p + c.s
+    (⟨decodeZ (tRunUpto c (idx + 1)).wwLo,
+      decodeZ (tRunUpto c (idx + 1)).wwHi⟩ :
+      LeanCompCert.Ports.Section413Sweep.Cell) =
+      LeanCompCert.Ports.Section413Sweep.cmul
+        (⟨decodeZ (tRunUpto c (idx + 1)).wLo,
+          decodeZ (tRunUpto c (idx + 1)).wHi⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell)
+        (⟨decodeZ (tRunUpto c (idx + 1)).wLo,
+          decodeZ (tRunUpto c (idx + 1)).wHi⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell) := by
+  let x := X - 1
+  let idx := c.phase1 + x * c.p + c.s
+  have hx : x < c.cap := by dsimp only [x]; omega
+  have hsp : c.s < c.p := by unfold Cfg.p; omega
+  have hz := tsel_phase2_block c hc x c.s hx hsp
+  have hW : (c.tsel idx).isW = 1 := by
+    dsimp only [idx]
+    simpa only [bnat_true] using hz.2.2.2.2.2.2.2.1
+  have hidx : idx < c.loopCount := by
+    have hx1 : x + 1 ≤ c.cap := by omega
+    have hmul := Nat.mul_le_mul_right c.p hx1
+    rw [Nat.add_mul, Nat.one_mul] at hmul
+    have htail : x * c.p + c.s < c.cap * c.p := by omega
+    simpa only [idx, Cfg.loopCount, Nat.add_assoc] using
+      Nat.add_lt_add_left htail c.phase1
+  have hclean := (tstep_clean_of_tFlag c hflag hidx).2
+  dsimp only
+  rw [tRunUpto_succ]
+  exact tstep_weight_square c idx (tRunUpto c idx) hW hclean
 
-Nothing below is proved; each item is stated exactly as it will have to be
-proved, so that the next pass can pick any one of them up in isolation.
-None of them is asserted anywhere in this file, as an axiom or otherwise.
+/-- Raw word bounds at the scheduled pass-B entry. -/
+theorem weight_passU64_spec (c : Cfg) (hc : Admissible c) (X : Nat)
+    (hflag : c.tFlag = 0) (hX : 1 ≤ X) (hXc : X ≤ c.cap) :
+    let idx := c.phase1 + (X - 1) * c.p + c.s
+    PassU64 (tRunUpto c (idx + 1)) := by
+  let x := X - 1
+  let idx := c.phase1 + x * c.p + c.s
+  have hx : x < c.cap := by dsimp only [x]; omega
+  have hsp : c.s < c.p := by unfold Cfg.p; omega
+  have hz := tsel_phase2_block c hc x c.s hx hsp
+  have hW : (c.tsel idx).isW = 1 := by
+    dsimp only [idx]
+    simpa only [bnat_true] using hz.2.2.2.2.2.2.2.1
+  have hx1 : x + 1 ≤ c.cap := by omega
+  have hmul := Nat.mul_le_mul_right c.p hx1
+  rw [Nat.add_mul, Nat.one_mul] at hmul
+  have htail : x * c.p + c.s < c.cap * c.p := by omega
+  have hidx : idx < c.loopCount := by
+    simpa only [idx, Cfg.loopCount, Nat.add_assoc] using
+      Nat.add_lt_add_left htail c.phase1
+  have hclean := (tstep_clean_of_tFlag c hflag hidx).2
+  dsimp only
+  rw [tRunUpto_succ]
+  exact tstep_weight_passU64 c idx (tRunUpto c idx) hW
+    (tRunUpto_coreU64 c idx) hclean
 
-**(O1, retired) A global `Inv_tstep`.**
+/-- The exact scheduled square is capped.  This is the last arithmetic
+component needed by `ttouch_live_spec` at the first divisor round. -/
+theorem weight_square_capped_spec (c : Cfg) (hc : Admissible c) (X : Nat)
+    (hflag : c.tFlag = 0) (hX : 1 ≤ X) (hXc : X ≤ c.cap) :
+    let idx := c.phase1 + (X - 1) * c.p + c.s
+    Capped (tRunUpto c (idx + 1)).wwLo ∧
+      Capped (tRunUpto c (idx + 1)).wwHi := by
+  let idx := c.phase1 + (X - 1) * c.p + c.s
+  let st := tRunUpto c (idx + 1)
+  let W := LeanCompCert.Ports.Section413Sweep.weightV2 c.rounds X
+  have hw :
+      (⟨decodeZ st.wLo, decodeZ st.wHi⟩ :
+        LeanCompCert.Ports.Section413Sweep.Cell) = W := by
+    simpa only [idx, st, W] using weight_spec c hc X hX hXc
+  have hsquare :
+      (⟨decodeZ st.wwLo, decodeZ st.wwHi⟩ :
+        LeanCompCert.Ports.Section413Sweep.Cell) =
+      LeanCompCert.Ports.Section413Sweep.cmul W W := by
+    have hs := weight_square_spec c hc X hflag hX hXc
+    dsimp only at hs
+    rw [hw] at hs
+    simpa only [idx, st, W] using hs
+  have hWcap := weightV2_natAbs_le_scale c.rounds X hX
+  have hrange := cmul_scale_range W W hWcap.1 hWcap.2 hWcap.1 hWcap.2
+  have hlo := congrArg (fun I : LeanCompCert.Ports.Section413Sweep.Cell => I.lo)
+    hsquare
+  have hhi := congrArg (fun I : LeanCompCert.Ports.Section413Sweep.Cell => I.hi)
+    hsquare
+  change decodeZ st.wwLo = (LeanCompCert.Ports.Section413Sweep.cmul W W).lo at hlo
+  change decodeZ st.wwHi = (LeanCompCert.Ports.Section413Sweep.cmul W W).hi at hhi
+  change Capped st.wwLo ∧ Capped st.wwHi
+  constructor
+  · apply capped_of_range
+    · rw [hlo]
+      exact hrange.1.1
+    · rw [hlo]
+      exact hrange.1.2
+  · apply capped_of_range
+    · rw [hhi]
+      exact hrange.2.1
+    · rw [hhi]
+      exact hrange.2.2
 
-This is deliberately no longer an obligation.  Accumulator-plane stores are
-unguarded until their next live use, so preservation of `ArrCapped` is too
-strong.  The local clean-guard lemmas named above replace it and match the
-actual program.
+/-- **Pass B is one `stepDivisors` block**, under the explicit incoming
+accumulator relation and zero-delta reset supplied by the outer sweep
+induction. -/
+theorem passB_stepDivisors (c : Cfg) (hc : Admissible c) (X : Nat)
+    (A : Array LeanCompCert.Ports.Section413Sweep.Cell)
+    (hflag : c.tFlag = 0) (hX : 1 ≤ X) (hXc : X ≤ c.cap)
+    (hzero :
+      (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s + 1)).arr 0 = 0)
+    (hacc : AccRel c
+      (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s + 1)) A)
+    (hdelta : deltaAt
+      (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s + 1)) =
+        LeanCompCert.Ports.Section413Sweep.czero) :
+    let W := LeanCompCert.Ports.Section413Sweep.weightV2 c.rounds X
+    PassInv c W
+      (tRunUpto c
+        (c.phase1 + (X - 1) * c.p + c.s + 1 + Nat.sqrt X))
+      (LeanCompCert.Ports.Section413Sweep.stepDivisors c.rounds X W
+        (A, LeanCompCert.Ports.Section413Sweep.czero)) := by
+  let base := c.phase1 + (X - 1) * c.p + c.s + 1
+  let st := tRunUpto c base
+  let W := LeanCompCert.Ports.Section413Sweep.weightV2 c.rounds X
+  have hu64 : PassU64 st := by
+    simpa only [base, st, Nat.add_assoc] using
+      weight_passU64_spec c hc X hflag hX hXc
+  have hww := weight_square_capped_spec c hc X hflag hX hXc
+  dsimp only at hww
+  have hw : weightAt st = W := by
+    simpa only [weightAt, base, st, W, Nat.add_assoc] using
+      weight_spec c hc X hX hXc
+  have hsquare : squareAt st =
+      LeanCompCert.Ports.Section413Sweep.cmul W W := by
+    have hs := weight_square_spec c hc X hflag hX hXc
+    dsimp only at hs
+    have hs' : squareAt st = LeanCompCert.Ports.Section413Sweep.cmul
+        (weightAt st) (weightAt st) := by
+      simpa only [squareAt, weightAt, base, st, Nat.add_assoc] using hs
+    rw [hw] at hs'
+    exact hs'
+  have hdLo0 : decodeZ st.dLo = 0 := by
+    have hd := congrArg
+      (fun I : LeanCompCert.Ports.Section413Sweep.Cell => I.lo) hdelta
+    simpa only [deltaAt, base, st,
+      LeanCompCert.Ports.Section413Sweep.czero] using hd
+  have hdHi0 : decodeZ st.dHi = 0 := by
+    have hd := congrArg
+      (fun I : LeanCompCert.Ports.Section413Sweep.Cell => I.hi) hdelta
+    simpa only [deltaAt, base, st,
+      LeanCompCert.Ports.Section413Sweep.czero] using hd
+  have cdLo : Capped st.dLo := by
+    unfold Capped
+    rw [hdLo0]
+    simp
+  have cdHi : Capped st.dHi := by
+    unfold Capped
+    rw [hdHi0]
+    simp
+  have hbase : PassInv c W st
+      (A, LeanCompCert.Ports.Section413Sweep.czero) :=
+    ⟨hu64, by simpa only [base, st] using hzero,
+      by simpa only [base, st] using hww.1,
+      by simpa only [base, st] using hww.2,
+      cdLo, cdHi, hw, hsquare,
+      by simpa only [base, st] using hacc,
+      by simpa only [base, st] using hdelta⟩
+  have hp := passB_prefix c hc X W
+    (A, LeanCompCert.Ports.Section413Sweep.czero)
+    hflag hX hXc hbase (Nat.sqrt X) (Nat.le_refl _)
+  rw [divisorPrefix_sqrt] at hp
+  simpa only [base, st, W, Nat.add_assoc] using hp
 
-**(O2, arithmetic proved) The touch block computes
-`Section413Sweep.touch`.**
+/-- The remaining configured slots past `√X` are no-ops, so the state just
+before finalization still denotes the same `stepDivisors` result. -/
+theorem passB_full (c : Cfg) (hc : Admissible c) (X : Nat)
+    (A : Array LeanCompCert.Ports.Section413Sweep.Cell)
+    (hflag : c.tFlag = 0) (hX : 1 ≤ X) (hXc : X ≤ c.cap)
+    (hzero :
+      (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s + 1)).arr 0 = 0)
+    (hacc : AccRel c
+      (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s + 1)) A)
+    (hdelta : deltaAt
+      (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s + 1)) =
+        LeanCompCert.Ports.Section413Sweep.czero) :
+    let W := LeanCompCert.Ports.Section413Sweep.weightV2 c.rounds X
+    PassInv c W
+      (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s + 1 + c.s))
+      (LeanCompCert.Ports.Section413Sweep.stepDivisors c.rounds X W
+        (A, LeanCompCert.Ports.Section413Sweep.czero)) := by
+  let W := LeanCompCert.Ports.Section413Sweep.weightV2 c.rounds X
+  let p := LeanCompCert.Ports.Section413Sweep.stepDivisors c.rounds X W
+    (A, LeanCompCert.Ports.Section413Sweep.czero)
+  have hp : PassInv c W
+      (tRunUpto c
+        (c.phase1 + (X - 1) * c.p + c.s + 1 + Nat.sqrt X)) p := by
+    simpa only [W, p] using
+      passB_stepDivisors c hc X A hflag hX hXc hzero hacc hdelta
+  have hs : Nat.sqrt X ≤ c.s := sqrt_le_cfg_s c hXc
+  have ht := passB_tail c hc X W p hX hXc hp (c.s - Nat.sqrt X) (by omega)
+  have hadd : Nat.sqrt X + (c.s - Nat.sqrt X) = c.s := by omega
+  have htime :
+      c.phase1 + (X - 1) * c.p + c.s + 1 + Nat.sqrt X +
+          (c.s - Nat.sqrt X) =
+        c.phase1 + (X - 1) * c.p + c.s + 1 + c.s := by omega
+  rw [htime] at ht
+  simpa only [W, p] using ht
 
-```text
-theorem ttouch_spec (c : Cfg) (g d : Nat) (t : TState) (hg : g = 1)
-    (hd : 0 < d) (hdc : d ≤ c.cap)
-    (hclean : (c.ttouch g d t).viol = 0)
-    (hmu : t.arr d = MertensCDEM.muCode d c.rounds) :
-    ((c.ttouch g d t).arr (d + c.plane1),
-     (c.ttouch g d t).arr (d + c.plane2),
-     (c.ttouch g d t).dLo, (c.ttouch g d t).dHi)
-      = (encodeZ (Section413Sweep.touch c.rounds W (A, D) d).1[d]!.lo, …)
-```
+/-- The two-limb finalizer comparison is exactly comparison with
+`21 * SCALE`. -/
+theorem tfinBadCore_eq_zero_iff (w tenX : Nat) (hw : w < M) (ht : tenX < M) :
+    tfinBadCore w tenX = 0 ↔ w * tenX ≤ 21 * SCALE := by
+  let p := LeanCompCert.Verified.MulWide.hl w tenX
+  have hs := LeanCompCert.Verified.MulWide.hl_spec w tenX
+    (by rw [B64_val]; exact hw) (by rw [B64_val]; exact ht)
+  have heq : p.1 + M * p.2 = w * tenX := by
+    simpa only [p, B64_val] using hs.1
+  have hlo : p.1 < M := by simpa only [p, B64_val] using hs.2
+  unfold tfinBadCore
+  change bnat (1 < p.2) + bnat (p.2 = 1) * bnat (KLO < p.1) = 0 ↔ _
+  by_cases hhi : 1 < p.2
+  · rw [bnat_true hhi]
+    have hm : 2 * M ≤ M * p.2 := by
+      simpa only [Nat.mul_comm] using Nat.mul_le_mul_left M (show 2 ≤ p.2 by omega)
+    have h2 : 21 * SCALE < 2 * M := by decide
+    constructor
+    · omega
+    · intro hle
+      omega
+  · have hhile : p.2 ≤ 1 := by omega
+    by_cases hhi1 : p.2 = 1
+    · rw [bnat_false hhi, bnat_true hhi1, Nat.zero_add, Nat.one_mul]
+      rw [hhi1, Nat.mul_one] at heq
+      rw [bnat_eq_zero_iff]
+      constructor <;> intro h
+      · have hthr := threshold_split
+        omega
+      · have hthr := threshold_split
+        omega
+    · have hhi0 : p.2 = 0 := by omega
+      rw [bnat_false hhi, bnat_false hhi1, Nat.zero_add, Nat.zero_mul]
+      rw [hhi0, Nat.mul_zero, Nat.add_zero] at heq
+      constructor
+      · intro _
+        have hthr := threshold_split
+        omega
+      · intro _
+        rfl
 
-where `A`, `W`, `D` are the decoded accumulator table, weight cell and
-delta cell.  `ttouch_live_spec` now proves both updated accumulator endpoints
-and both delta endpoints in exactly the reference `cadd`/`deltaTerm` form;
-`ttouch_arr_frame`, `ttouch_mu_frame`, and `ttouch_pair_mu_frame` prove the
-needed array frames, while `ttouch_gate_zero` proves the gated-off identity.
-What remains is only the scheduling layer: provide the weight-square and
-incoming-delta premises and package the pointwise cells as the reference
-`Array`.
+/-- A vanished lower-endpoint bad bit is precisely the lower half of
+`g2Check`.  The signed-negative branch is converted to the natural
+sign-magnitude product tested by `tfinBadCore`; the nonnegative branch is
+automatic. -/
+theorem tfinBadLo_zero_sound (c : Cfg) (hc : Admissible c) (z : TSel)
+    (t : TState) (hF : z.isF = 1) (hX : z.X ≤ c.cap)
+    (hcheck : c.checkLo ≤ z.X) (hbad : c.tfinBadLo z t = 0) :
+    -21 * (SCALE : Int) ≤
+      decodeZ (tfinGLo z t) * ((10 * z.X : Nat) : Int) := by
+  let g := tfinGLo z t
+  let tenX := z.X * 10 % M
+  have hg : g < M := by
+    dsimp only [g, tfinGLo]
+    exact Nat.mod_lt _ (by decide)
+  have htenRaw : z.X * 10 < M := hc.ten_lt hX
+  have htenMod : z.X * 10 % M = z.X * 10 := Nat.mod_eq_of_lt htenRaw
+  change -21 * (SCALE : Int) ≤
+    decodeZ g * ((10 * z.X : Nat) : Int)
+  rw [Nat.mul_comm 10 z.X]
+  by_cases hneg : decodeZ g < 0
+  · have hH : H63 ≤ g := by
+      have hh := (decodeZ_lt_zero_iff g hg).mp hneg
+      simpa only [H63_val] using hh
+    have hsign : bnat (H63 ≤ g) = 1 := bnat_true hH
+    have hmag : tsub 0 g = (decodeZ g).natAbs := by
+      have hm := tmag_mag g hg
+      simpa only [tmag, if_pos hH] using hm
+    have hcore : tfinBadCore (decodeZ g).natAbs (z.X * 10) = 0 := by
+      change bnat (H63 ≤ g) *
+        tfinBadCore (if bnat (H63 ≤ g) = 1 then tsub 0 g else g)
+          (z.X * 10 % M) *
+        (z.isF * bnat (c.checkLo ≤ z.X)) = 0 at hbad
+      simpa only [hsign, if_pos, hF, bnat_true hcheck, hmag, htenMod,
+        Nat.one_mul, Nat.mul_one] using hbad
+    have hprod := (tfinBadCore_eq_zero_iff _ _
+      (natAbs_decodeZ_lt g hg) htenRaw).mp hcore
+    have hcast :
+        ((decodeZ g).natAbs * (z.X * 10) : Nat) ≤ 21 * SCALE := hprod
+    have hmagEq : decodeZ g = -((decodeZ g).natAbs : Int) := by
+      rcases Int.natAbs_eq (decodeZ g) with hp | hn
+      · have hp0 : 0 ≤ decodeZ g := by
+          rw [hp]
+          exact Int.natCast_nonneg _
+        omega
+      · exact hn
+    have hcast' :
+        (((decodeZ g).natAbs : Int) * ((z.X * 10 : Nat) : Int)) ≤
+          21 * (SCALE : Int) := by
+      exact_mod_cast hcast
+    rw [hmagEq]
+    simpa only [Int.neg_mul] using Int.neg_le_neg hcast'
+  · have hg0 : 0 ≤ decodeZ g := by omega
+    have hten0 : 0 ≤ ((z.X * 10 : Nat) : Int) := Int.natCast_nonneg _
+    have hprod0 : 0 ≤ decodeZ g * ((z.X * 10 : Nat) : Int) :=
+      Int.mul_nonneg hg0 hten0
+    have hleft : -21 * (SCALE : Int) ≤ 0 := by
+      have := Int.natCast_nonneg SCALE
+      omega
+    exact Int.le_trans hleft hprod0
 
-**(O3, proved) Phase 1 computes `μ`.**
+/-- A vanished upper-endpoint bad bit is the upper half of `g2Check`. -/
+theorem tfinBadHi_zero_sound (c : Cfg) (hc : Admissible c) (z : TSel)
+    (t : TState) (hF : z.isF = 1) (hX : z.X ≤ c.cap)
+    (hcheck : c.checkLo ≤ z.X) (hbad : c.tfinBadHi z t = 0) :
+    decodeZ (tfinGHi z t) * ((10 * z.X : Nat) : Int) ≤
+      21 * (SCALE : Int) := by
+  let g := tfinGHi z t
+  let tenX := z.X * 10 % M
+  have hg : g < M := by
+    dsimp only [g, tfinGHi]
+    exact Nat.mod_lt _ (by decide)
+  have htenRaw : z.X * 10 < M := hc.ten_lt hX
+  have htenMod : z.X * 10 % M = z.X * 10 := Nat.mod_eq_of_lt htenRaw
+  change decodeZ g * ((10 * z.X : Nat) : Int) ≤ 21 * (SCALE : Int)
+  by_cases hneg : decodeZ g < 0
+  · have hten0 : 0 ≤ ((10 * z.X : Nat) : Int) := Int.natCast_nonneg _
+    have hprod0 : decodeZ g * ((10 * z.X : Nat) : Int) ≤ 0 :=
+      Int.mul_nonpos_of_nonpos_of_nonneg (by omega) hten0
+    have hright : 0 ≤ 21 * (SCALE : Int) :=
+      Int.mul_nonneg (by omega) (Int.natCast_nonneg _)
+    exact Int.le_trans hprod0 hright
+  · have hg0 : 0 ≤ decodeZ g := by omega
+    have hH : ¬ H63 ≤ g := by
+      intro hh
+      apply hneg
+      apply (decodeZ_lt_zero_iff g hg).mpr
+      simpa only [H63_val] using hh
+    have hsign : bnat (H63 ≤ g) = 0 := bnat_false hH
+    have hmag : g = (decodeZ g).natAbs := by
+      have hm := tmag_mag g hg
+      simpa only [tmag, if_neg hH] using hm
+    have hcore : tfinBadCore (decodeZ g).natAbs (z.X * 10) = 0 := by
+      change (1 - bnat (H63 ≤ g)) *
+        tfinBadCore (if bnat (H63 ≤ g) = 1 then tsub 0 g else g)
+          (z.X * 10 % M) *
+        (z.isF * bnat (c.checkLo ≤ z.X)) = 0 at hbad
+      rw [hsign] at hbad
+      simp only [Nat.sub_zero, Nat.zero_ne_one, if_false, hF,
+        bnat_true hcheck, Nat.one_mul, Nat.mul_one] at hbad
+      rw [hmag, htenMod] at hbad
+      exact hbad
+    have hmagLt : (decodeZ g).natAbs < M := by
+      rw [← hmag]
+      exact hg
+    have hprod := (tfinBadCore_eq_zero_iff _ _ hmagLt htenRaw).mp hcore
+    have hcast :
+        (((decodeZ g).natAbs : Int) * ((z.X * 10 : Nat) : Int)) ≤
+          21 * (SCALE : Int) := by
+      exact_mod_cast hprod
+    rw [Int.natAbs_of_nonneg hg0] at hcast
+    simpa only [Int.natCast_mul, Nat.mul_comm] using hcast
 
-```text
-theorem phase1_muCode (c : Cfg) (hc : Admissible c) (h : c.tFlag = 0)
-    (n : Nat) (hn : 2 ≤ n) (hnc : n ≤ c.cap) :
-    (tRunUpto c ((n - 1) * c.rounds)).arr n
-      = MertensCDEM.muCode n c.rounds
-```
+/-- The active finalizer adds the completed divisor delta to `G`, resets the
+delta registers, preserves the accumulator table, and turns a clean pair of
+wide comparison bits into the reference `g2Check`. -/
+theorem tfin_spec (c : Cfg) (hc : Admissible c) (X : Nat) (z : TSel)
+    (t : TState) (W G : LeanCompCert.Ports.Section413Sweep.Cell)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (hinv : PassInv c W t p)
+    (hgLo : t.gLo < M) (hgHi : t.gHi < M)
+    (cgLo : Capped t.gLo) (cgHi : Capped t.gHi)
+    (hG : ⟨decodeZ t.gLo, decodeZ t.gHi⟩ = G)
+    (hF : z.isF = 1) (hZX : z.X = X) (hXc : X ≤ c.cap)
+    (hclean : (c.tfin z t).viol = 0) :
+    AccRel c (c.tfin z t) p.1 ∧
+      (c.tfin z t).arr 0 = 0 ∧
+      deltaAt (c.tfin z t) = LeanCompCert.Ports.Section413Sweep.czero ∧
+      (c.tfin z t).gLo < M ∧ (c.tfin z t).gHi < M ∧
+      Capped (c.tfin z t).gLo ∧ Capped (c.tfin z t).gHi ∧
+      (⟨decodeZ (c.tfin z t).gLo, decodeZ (c.tfin z t).gHi⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell) =
+        LeanCompCert.Ports.Section413Sweep.cadd G p.2 ∧
+      (c.checkLo ≤ X →
+        LeanCompCert.Ports.Section413Sweep.g2Check X
+          (LeanCompCert.Ports.Section413Sweep.cadd G p.2) = true) := by
+  have hMpos : 0 < M := by decide
+  have hgLo' : tfinGLo z t < M := by
+    unfold tfinGLo
+    exact Nat.mod_lt _ hMpos
+  have hgHi' : tfinGHi z t < M := by
+    unfold tfinGHi
+    exact Nat.mod_lt _ hMpos
+  have hor2 := or_eq_zero hclean
+  have hor1 := or_eq_zero hor2.1
+  have hguards :
+      tguard z.isF (tfinGHi z t)
+        (tguard z.isF (tfinGLo z t) t.viol) = 0 := hor1.1
+  have hbadLo : c.tfinBadLo z t = 0 := hor1.2
+  have hbadHi : c.tfinBadHi z t = 0 := hor2.2
+  have cHi : Capped (tfinGHi z t) :=
+    capped_of_tguard_eq_zero hgHi' (by omega) hguards
+  have hinner : tguard z.isF (tfinGLo z t) t.viol = 0 :=
+    (tguard_eq_zero hguards).1
+  have cLo : Capped (tfinGLo z t) :=
+    capped_of_tguard_eq_zero hgLo' (by omega) hinner
+  have haddLo : decodeZ (tfinGLo z t) = decodeZ t.gLo + decodeZ t.dLo := by
+    simp only [tfinGLo, hF, Nat.one_mul]
+    rw [Nat.mod_eq_of_lt hinv.u64.2.2.2.2.1]
+    exact decodeZ_add hgLo hinv.u64.2.2.2.2.1 cgLo hinv.dLo_cap
+  have haddHi : decodeZ (tfinGHi z t) = decodeZ t.gHi + decodeZ t.dHi := by
+    simp only [tfinGHi, hF, Nat.one_mul]
+    rw [Nat.mod_eq_of_lt hinv.u64.2.2.2.2.2.1]
+    exact decodeZ_add hgHi hinv.u64.2.2.2.2.2.1 cgHi hinv.dHi_cap
+  have hgEq :
+      (⟨decodeZ (tfinGLo z t), decodeZ (tfinGHi z t)⟩ :
+          LeanCompCert.Ports.Section413Sweep.Cell) =
+        LeanCompCert.Ports.Section413Sweep.cadd G p.2 := by
+    have hdLo := congrArg
+      (fun I : LeanCompCert.Ports.Section413Sweep.Cell => I.lo) hinv.delta_eq
+    have hdHi := congrArg
+      (fun I : LeanCompCert.Ports.Section413Sweep.Cell => I.hi) hinv.delta_eq
+    have hGLo := congrArg
+      (fun I : LeanCompCert.Ports.Section413Sweep.Cell => I.lo) hG
+    have hGHi := congrArg
+      (fun I : LeanCompCert.Ports.Section413Sweep.Cell => I.hi) hG
+    change decodeZ t.dLo = p.2.lo at hdLo
+    change decodeZ t.dHi = p.2.hi at hdHi
+    change decodeZ t.gLo = G.lo at hGLo
+    change decodeZ t.gHi = G.hi at hGHi
+    rw [LeanCompCert.Ports.Section413Sweep.Cell.mk.injEq]
+    constructor
+    · change decodeZ (tfinGLo z t) = G.lo + p.2.lo
+      rw [haddLo, hGLo]
+      rw [hdLo]
+    · change decodeZ (tfinGHi z t) = G.hi + p.2.hi
+      rw [haddHi, hGHi]
+      rw [hdHi]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, hgEq, ?_⟩
+  · rcases hinv.acc_rel with ⟨hsize, hcells⟩
+    refine ⟨hsize, ?_⟩
+    intro d hd
+    simpa only [accAt, Cfg.tfin] using hcells d hd
+  · simpa only [Cfg.tfin] using hinv.arr_zero
+  · simp only [deltaAt, Cfg.tfin, tfinDLo, tfinDHi, hF, Nat.sub_self,
+      Nat.mul_zero, Nat.zero_mod,
+      LeanCompCert.Ports.Section413Cells.decodeZ_zero,
+      LeanCompCert.Ports.Section413Sweep.czero]
+  · simpa only [Cfg.tfin] using hgLo'
+  · simpa only [Cfg.tfin] using hgHi'
+  · simpa only [Cfg.tfin] using cLo
+  · simpa only [Cfg.tfin] using cHi
+  · intro hcheck
+    have hlo := tfinBadLo_zero_sound c hc z t hF
+      (by rw [hZX]; exact hXc) (by rw [hZX]; exact hcheck) hbadLo
+    have hhi := tfinBadHi_zero_sound c hc z t hF
+      (by rw [hZX]; exact hXc) (by rw [hZX]; exact hcheck) hbadHi
+    rw [← hgEq]
+    unfold LeanCompCert.Ports.Section413Sweep.g2Check
+    apply decide_eq_true
+    simpa only [hZX, ← SCALE_eq_sweep] using And.intro hlo hhi
 
-The theorem `phase1_muCode` above now has this conclusion without even the
-clean-flag premise.  `phase1_trial_prefix` proves the full per-round fold
-against `MertensCDEM.trialPrefix`; `ttrial_last_write` proves the branchless
-last-round code and its in-range store.  The later phase-1 stages are proved
-to frame the μ plane.  `μ(1) = +1` remains the `tInit` seed.
+/-- Selector specialization for the last slot of a candidate block. -/
+theorem tsel_final_block (c : Cfg) (hc : Admissible c) (x : Nat)
+    (hx : x < c.cap) :
+    let z := c.tsel (c.phase1 + x * c.p + (2 * c.s + 1))
+    z.inP1 = 0 ∧ z.inP2 = 1 ∧ z.X = x + 1 ∧ z.isF = 1 ∧
+      z.inB = 0 ∧ z.isW = 0 := by
+  have hpos : 2 * c.s + 1 < c.p := by unfold Cfg.p; omega
+  have hz := tsel_phase2_block c hc x (2 * c.s + 1) hx hpos
+  rcases hz with ⟨hP1, hP2, _hb2, _hx0, hpX, hX, _hA, hW, _hrA⟩
+  let z := c.tsel (c.phase1 + x * c.p + (2 * c.s + 1))
+  have hF : z.isF = 1 := by
+    change bnat (z.pX = 2 * c.s + 1) * z.inP2 = 1
+    dsimp only [z]
+    rw [hpX, hP2]
+    simp [bnat]
+  have hB : z.inB = 0 := by
+    change bnat (c.s + 1 ≤ z.pX) * bnat (z.pX ≤ 2 * c.s) * z.inP2 = 0
+    dsimp only [z]
+    rw [hpX, hP2]
+    have hn : ¬ 2 * c.s + 1 ≤ 2 * c.s := by omega
+    simp [bnat, hn]
+  have hW0 : z.isW = 0 := by
+    dsimp only [z]
+    rw [hW]
+    simp [bnat]
+    omega
+  exact ⟨hP1, hP2, hX, hF, hB, hW0⟩
 
-**(O4, proved) Pass A computes `sigmaPair`.**
+/-- All stages before `tfin` in the final slot are persistent-state no-ops.
+This isolates the finalizer from the phase-1, pass-A, weight, and pass-B
+instruction blocks that share the same compiled loop body. -/
+theorem final_pre_inv (c : Cfg) (hc : Admissible c) (x : Nat)
+    (W : LeanCompCert.Ports.Section413Sweep.Cell) (t : TState)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (hx : x < c.cap) (hinv : PassInv c W t p) :
+    let idx := c.phase1 + x * c.p + (2 * c.s + 1)
+    let z := c.tsel idx
+    let pre := tweight z (tpassA z (ttrial z t))
+    let pb := c.tpassB z pre
+    PassInv c W pb p ∧ pb.gLo = t.gLo ∧ pb.gHi = t.gHi := by
+  let idx := c.phase1 + x * c.p + (2 * c.s + 1)
+  let z := c.tsel idx
+  let trial := ttrial z t
+  let pre := tweight z (tpassA z trial)
+  let pb := c.tpassB z pre
+  have hz := tsel_final_block c hc x hx
+  have hP1 : z.inP1 = 0 := by simpa only [idx, z] using hz.1
+  have hP2 : z.inP2 = 1 := by simpa only [idx, z] using hz.2.1
+  have hF : z.isF = 1 := by simpa only [idx, z] using hz.2.2.2.1
+  have hB : z.inB = 0 := by simpa only [idx, z] using hz.2.2.2.2.1
+  have hW : z.isW = 0 := by simpa only [idx, z] using hz.2.2.2.2.2
+  have hDL : z.isDL = 0 := by
+    change bnat (z.r1 = c.rounds - 1) * z.inP1 = 0
+    rw [hP1]
+    simp
+  have htrialArr : trial.arr = t.arr := by
+    dsimp only [trial]
+    funext i
+    simp only [ttrial, hDL, Nat.zero_mul, Nat.zero_mod]
+    by_cases hi : i = 0
+    · simp [hi, hinv.arr_zero]
+    · simp [hi]
+  have hfpre : PassFrame pre t := by
+    exact PassFrame.trans (tweight_pass_frame z _ hW)
+      (PassFrame.trans (tpassA_pass_frame z _)
+        (ttrial_pass_frame z t htrialArr))
+  have hipre : PassInv c W pre p := PassInv.of_frame hinv hfpre
+  let g₁ := bnat (z.X % z.rB = 0) *
+    bnat (z.rB * z.rB % M ≤ z.X) * z.inB
+  let q₂ := z.X / z.rB
+  let g₂ := g₁ * (1 - bnat (q₂ = z.rB))
+  have hg₁ : g₁ = 0 := by simp [g₁, hB]
+  have hg₂ : g₂ = 0 := by simp [g₂, hg₁]
+  have hfirst : c.ttouch g₁ z.rB pre = pre := by
+    rw [hg₁]
+    exact ttouch_gate_zero_eq c z.rB pre hipre.arr_zero hipre.u64
+  have hpb : pb = pre := by
+    change c.ttouch g₂ q₂ (c.ttouch g₁ z.rB pre) = pre
+    rw [hg₂, hfirst]
+    exact ttouch_gate_zero_eq c q₂ pre hipre.arr_zero hipre.u64
+  refine ⟨?_, ?_, ?_⟩
+  · change PassInv c W pb p
+    rw [hpb]
+    exact hipre
+  · change pb.gLo = t.gLo
+    rw [hpb]
+    rfl
+  · change pb.gHi = t.gHi
+    rw [hpb]
+    rfl
 
-```text
-theorem passA_sigma (c : Cfg) (X : Nat) (hX : 1 ≤ X) (hXc : X ≤ c.cap) :
-    (tRunUpto c (c.phase1 + (X - 1) * c.p + c.s)).sigma
-      = Section413Sweep.sigmaPair X
-```
+/-- The scheduled last slot of candidate `X` realizes the reference
+finalization and lands exactly at the next candidate boundary. -/
+theorem final_step_spec (c : Cfg) (hc : Admissible c) (X : Nat)
+    (W G : LeanCompCert.Ports.Section413Sweep.Cell)
+    (p : Array LeanCompCert.Ports.Section413Sweep.Cell ×
+      LeanCompCert.Ports.Section413Sweep.Cell)
+    (hflag : c.tFlag = 0) (hX : 1 ≤ X) (hXc : X ≤ c.cap)
+    (hinv : PassInv c W
+      (tRunUpto c (c.phase1 + (X - 1) * c.p + (2 * c.s + 1))) p)
+    (hgLo : (tRunUpto c
+      (c.phase1 + (X - 1) * c.p + (2 * c.s + 1))).gLo < M)
+    (hgHi : (tRunUpto c
+      (c.phase1 + (X - 1) * c.p + (2 * c.s + 1))).gHi < M)
+    (cgLo : Capped (tRunUpto c
+      (c.phase1 + (X - 1) * c.p + (2 * c.s + 1))).gLo)
+    (cgHi : Capped (tRunUpto c
+      (c.phase1 + (X - 1) * c.p + (2 * c.s + 1))).gHi)
+    (hG :
+      (⟨decodeZ (tRunUpto c
+          (c.phase1 + (X - 1) * c.p + (2 * c.s + 1))).gLo,
+        decodeZ (tRunUpto c
+          (c.phase1 + (X - 1) * c.p + (2 * c.s + 1))).gHi⟩ :
+        LeanCompCert.Ports.Section413Sweep.Cell) = G) :
+    AccRel c (tRunUpto c (c.phase1 + X * c.p)) p.1 ∧
+      (tRunUpto c (c.phase1 + X * c.p)).arr 0 = 0 ∧
+      deltaAt (tRunUpto c (c.phase1 + X * c.p)) =
+        LeanCompCert.Ports.Section413Sweep.czero ∧
+      (tRunUpto c (c.phase1 + X * c.p)).gLo < M ∧
+      (tRunUpto c (c.phase1 + X * c.p)).gHi < M ∧
+      Capped (tRunUpto c (c.phase1 + X * c.p)).gLo ∧
+      Capped (tRunUpto c (c.phase1 + X * c.p)).gHi ∧
+      (⟨decodeZ (tRunUpto c (c.phase1 + X * c.p)).gLo,
+        decodeZ (tRunUpto c (c.phase1 + X * c.p)).gHi⟩ :
+        LeanCompCert.Ports.Section413Sweep.Cell) =
+          LeanCompCert.Ports.Section413Sweep.cadd G p.2 ∧
+      (c.checkLo ≤ X →
+        LeanCompCert.Ports.Section413Sweep.g2Check X
+          (LeanCompCert.Ports.Section413Sweep.cadd G p.2) = true) := by
+  let x := X - 1
+  let idx := c.phase1 + x * c.p + (2 * c.s + 1)
+  let t := tRunUpto c idx
+  let z := c.tsel idx
+  let pre := tweight z (tpassA z (ttrial z t))
+  let pb := c.tpassB z pre
+  have hx : x < c.cap := by dsimp only [x]; omega
+  have hz := tsel_final_block c hc x hx
+  have hF : z.isF = 1 := by simpa only [idx, z] using hz.2.2.2.1
+  have hxEq : x + 1 = X := by dsimp only [x]; omega
+  have hZX : z.X = X := by
+    have hzX : z.X = x + 1 := by simpa only [idx, z] using hz.2.2.1
+    exact hzX.trans hxEq
+  have hinv' : PassInv c W t p := by
+    simpa only [t, idx, x] using hinv
+  have hpre := final_pre_inv c hc x W t p hx hinv'
+  have hipb : PassInv c W pb p := by
+    simpa only [idx, z, pre, pb] using hpre.1
+  have hpbgLo : pb.gLo = t.gLo := by
+    simpa only [idx, z, pre, pb] using hpre.2.1
+  have hpbgHi : pb.gHi = t.gHi := by
+    simpa only [idx, z, pre, pb] using hpre.2.2
+  have hidx : idx < c.loopCount := by
+    have hXp : X * c.p ≤ c.cap * c.p := Nat.mul_le_mul_right c.p hXc
+    have htail : x * c.p + (2 * c.s + 1) < X * c.p := by
+      calc
+        x * c.p + (2 * c.s + 1) < x * c.p + c.p := by
+          unfold Cfg.p
+          omega
+        _ = (x + 1) * c.p := by simp only [Nat.add_mul, Nat.one_mul]
+        _ = X * c.p := by rw [hxEq]
+    simpa only [idx, Cfg.loopCount, Nat.add_assoc] using
+      Nat.add_lt_add_left (Nat.lt_of_lt_of_le htail hXp) c.phase1
+  have hcleanStep := (tstep_clean_of_tFlag c hflag hidx).2
+  have hclean : (c.tfin z pb).viol = 0 := by
+    simpa only [Cfg.tstep, idx, t, z, pre, pb] using hcleanStep
+  have hfin := tfin_spec c hc X z pb W G p hipb
+    (by rw [hpbgLo]; simpa only [t, idx, x] using hgLo)
+    (by rw [hpbgHi]; simpa only [t, idx, x] using hgHi)
+    (by rw [hpbgLo]; simpa only [t, idx, x] using cgLo)
+    (by rw [hpbgHi]; simpa only [t, idx, x] using cgHi)
+    (by rw [hpbgLo, hpbgHi]; simpa only [t, idx, x] using hG)
+    hF hZX hXc hclean
+  have htime : idx + 1 = c.phase1 + X * c.p := by
+    calc
+      idx + 1 = c.phase1 + x * c.p + c.p := by
+        dsimp only [idx]
+        unfold Cfg.p
+        omega
+      _ = c.phase1 + (x + 1) * c.p := by rw [Nat.add_mul]; omega
+      _ = c.phase1 + X * c.p := by rw [hxEq]
+  rw [← htime, tRunUpto_succ]
+  simpa only [Cfg.tstep, idx, t, z, pre, pb] using hfin
 
-The theorem `passA_sigma` above proves this exact statement.  The local
-`sigmaScan` model includes the machine's explicit square guard;
-`sigmaScan_cfg_s` proves that its `c.s = Nat.sqrt c.cap` rounds equal the
-reference `sigmaPair` fold for every `X ≤ c.cap`.  `phase2_sigma_prefix`
-then lifts the exact machine transition through the pass, including its
-position-zero reset and all `% M` non-wrapping obligations.
+/-- Persistent zero state carried through the trial-division phase.  The
+μ-plane may change, but all cells above it (including both accumulator
+planes) and every sweep register remain zero. -/
+structure Phase1Persist (c : Cfg) (t : TState) : Prop where
+  wLo : t.wLo = 0
+  wHi : t.wHi = 0
+  wwLo : t.wwLo = 0
+  wwHi : t.wwHi = 0
+  dLo : t.dLo = 0
+  dHi : t.dHi = 0
+  gLo : t.gLo = 0
+  gHi : t.gHi = 0
+  arr_zero : t.arr 0 = 0
+  arr_above : ∀ i, c.cap < i → t.arr i = 0
 
-**(O5, endpoint computation proved) The weight round computes `weightV2`.**
+theorem tInit_phase1Persist (c : Cfg) (hc : Admissible c) :
+    Phase1Persist c tInit := by
+  refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, ?_, ?_⟩
+  · simp [tInit]
+  · intro i hi
+    have hcap := hc.cap_ge_two
+    have hi1 : i ≠ 1 := by omega
+    simp [tInit, hi1]
 
-```text
-theorem weight_spec (c : Cfg) … :
-    (decodeZ (…).wLo, decodeZ (…).wHi)
-      = ((Section413Sweep.weightV2 c.rounds X).lo,
-         (Section413Sweep.weightV2 c.rounds X).hi)
-```
+theorem Phase1Persist.step (c : Cfg) (hc : Admissible c) (idx : Nat)
+    (hidx : idx < c.phase1) (h : Phase1Persist c (tRunUpto c idx)) :
+    Phase1Persist c (c.tstep idx (tRunUpto c idx)) := by
+  let t := tRunUpto c idx
+  let m := idx / c.rounds
+  let r := idx % c.rounds
+  have hR : 0 < c.rounds := Nat.lt_of_lt_of_le (by decide) hc.rounds_ge
+  have hr : r < c.rounds := Nat.mod_lt _ hR
+  have hm : m < c.cap - 1 := by
+    apply (Nat.div_lt_iff_lt_mul hR).2
+    simpa only [Cfg.phase1] using hidx
+  have hdecomp : idx = m * c.rounds + r := by
+    symm
+    simpa only [m, r, Nat.mul_comm] using Nat.div_add_mod idx c.rounds
+  have hz0 := tsel_phase1_block c hc m r hm hr
+  rcases hz0 with ⟨hP1', hP2', _hq, _hr1, hn1', _hd1, _hD0,
+    hDL', _hA, hW', hB', hF'⟩
+  let z := c.tsel idx
+  have hP1 : z.inP1 = 1 := by simpa only [z, hdecomp] using hP1'
+  have hP2 : z.inP2 = 0 := by simpa only [z, hdecomp] using hP2'
+  have hn1 : z.n1 = m + 2 := by simpa only [z, hdecomp] using hn1'
+  have hDL : z.isDL = bnat (r = c.rounds - 1) := by
+    simpa only [z, hdecomp] using hDL'
+  have hB : z.inB = 0 := by simpa only [z, hdecomp] using hB'
+  have hF : z.isF = 0 := by simpa only [z, hdecomp] using hF'
+  have hW : z.isW = 0 := by simpa only [z, hdecomp] using hW'
+  have hncap : z.n1 ≤ c.cap := by rw [hn1]; omega
+  have hcapM : c.cap < M := Nat.lt_trans (by omega) hc.arr_fits
+  have hnM : z.n1 < M := Nat.lt_of_le_of_lt hncap hcapM
+  have hDLle : z.isDL ≤ 1 := by rw [hDL]; exact bnat_le_one _
+  have hwrRaw : z.isDL * z.n1 < M := by
+    exact Nat.lt_of_le_of_lt
+      (Nat.le_trans (Nat.mul_le_mul_right z.n1 hDLle) (by simp)) hnM
+  have hwr : z.isDL * z.n1 % M = z.isDL * z.n1 :=
+    Nat.mod_eq_of_lt hwrRaw
+  let trial := ttrial z t
+  have htrialZero : trial.arr 0 = 0 := by
+    dsimp only [trial]
+    change (if 0 = z.isDL * z.n1 % M then z.isDL * _ % M else t.arr 0) = 0
+    rw [hwr]
+    by_cases hw0 : z.isDL * z.n1 = 0
+    · have hd0 : z.isDL = 0 := by
+        rcases Nat.mul_eq_zero.mp hw0 with hd | hn
+        · exact hd
+        · rw [hn1] at hn
+          omega
+      rw [if_pos hw0.symm, hd0]
+      simp
+    · rw [if_neg (Ne.symm hw0)]
+      exact h.arr_zero
+  have htrialAbove : ∀ i, c.cap < i → trial.arr i = 0 := by
+    intro i hi
+    dsimp only [trial]
+    change (if i = z.isDL * z.n1 % M then _ else t.arr i) = 0
+    rw [hwr]
+    have haddr : z.isDL * z.n1 ≤ c.cap := by
+      exact Nat.le_trans (Nat.mul_le_mul_right z.n1 hDLle) (by simpa using hncap)
+    rw [if_neg (show i ≠ z.isDL * z.n1 by omega)]
+    exact h.arr_above i hi
+  let pre := tweight z (tpassA z trial)
+  have hWne : z.isW ≠ 1 := by omega
+  have hpreFields : pre.wLo = 0 ∧ pre.wHi = 0 ∧ pre.wwLo = 0 ∧
+      pre.wwHi = 0 ∧ pre.dLo = 0 ∧ pre.dHi = 0 ∧
+      pre.gLo = 0 ∧ pre.gHi = 0 ∧ pre.arr = trial.arr := by
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, rfl⟩
+    · simpa only [pre, tweight, hWne, if_false, tpassA, trial, ttrial, t]
+        using h.wLo
+    · simpa only [pre, tweight, hWne, if_false, tpassA, trial, ttrial, t]
+        using h.wHi
+    · simpa only [pre, tweight, hWne, if_false, tpassA, trial, ttrial, t]
+        using h.wwLo
+    · simpa only [pre, tweight, hWne, if_false, tpassA, trial, ttrial, t]
+        using h.wwHi
+    · exact h.dLo
+    · exact h.dHi
+    · exact h.gLo
+    · exact h.gHi
+  have hpreU64 : PassU64 pre := by
+    have hcore := tweight_coreU64 z _
+      (tpassA_coreU64 z _ (ttrial_coreU64 z t (tRunUpto_coreU64 c idx)))
+    exact ⟨by rw [hpreFields.1]; decide,
+      by rw [hpreFields.2.1]; decide,
+      by rw [hpreFields.2.2.1]; decide,
+      by rw [hpreFields.2.2.2.1]; decide,
+      hcore.1, hcore.2.1, hcore.2.2⟩
+  let g₁ := bnat (z.X % z.rB = 0) *
+    bnat (z.rB * z.rB % M ≤ z.X) * z.inB
+  let q₂ := z.X / z.rB
+  let g₂ := g₁ * (1 - bnat (q₂ = z.rB))
+  have hg₁ : g₁ = 0 := by simp [g₁, hB]
+  have hg₂ : g₂ = 0 := by simp [g₂, hg₁]
+  let pb := c.tpassB z pre
+  have hpb : pb = pre := by
+    change c.ttouch g₂ q₂ (c.ttouch g₁ z.rB pre) = pre
+    rw [hg₂, hg₁, ttouch_gate_zero_eq c z.rB pre
+      (by rw [hpreFields.2.2.2.2.2.2.2.2, htrialZero]) hpreU64]
+    exact ttouch_gate_zero_eq c q₂ pre
+      (by rw [hpreFields.2.2.2.2.2.2.2.2, htrialZero]) hpreU64
+  change Phase1Persist c (c.tfin z pb)
+  rw [hpb]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · exact hpreFields.1
+  · exact hpreFields.2.1
+  · exact hpreFields.2.2.1
+  · exact hpreFields.2.2.2.1
+  · simp [Cfg.tfin, tfinDLo, hF, hpreFields.2.2.2.2.1]
+  · simp [Cfg.tfin, tfinDHi, hF, hpreFields.2.2.2.2.2.1]
+  · simp [Cfg.tfin, tfinGLo, hF, hpreFields.2.2.2.2.2.2.1]
+  · simp [Cfg.tfin, tfinGHi, hF, hpreFields.2.2.2.2.2.2.2.1]
+  · simpa only [Cfg.tfin, hpreFields.2.2.2.2.2.2.2.2] using htrialZero
+  · intro i hi
+    simpa only [Cfg.tfin, hpreFields.2.2.2.2.2.2.2.2] using htrialAbove i hi
 
-The theorem `weight_spec` above proves this scheduled endpoint equality.
-`cratSMul_of_code` handles the exact signed floor/ceiling identities for the
-three μ codes; `phase1_muCode_final_ge_one` and `phase2_muCode` prove that the
-μ plane remains live through the weight round; and (O4) supplies the
-positive `sigmaPair` denominator.  The rounded numerator's non-wrapping bound
-is now an explicit `Admissible.weight_fits` field.  The separate `ww = w²`
-relation needed by pass B remains part of (O6)'s incoming invariant.
+theorem phase1_persist (c : Cfg) (hc : Admissible c) : ∀ k, k ≤ c.phase1 →
+    Phase1Persist c (tRunUpto c k) := by
+  intro k
+  induction k with
+  | zero => intro _; simpa only [tRunUpto_zero] using tInit_phase1Persist c hc
+  | succ k ih =>
+      intro hk
+      rw [tRunUpto_succ]
+      exact Phase1Persist.step c hc k (by omega) (ih (by omega))
 
-**(O6) Pass B is one `stepDivisors` block.**
+/-- Before the last slot of a candidate, the finalizer gate is inactive, so
+the global `G` registers are framed exactly. -/
+theorem tstep_g_frame (c : Cfg) (hc : Admissible c) (x pos : Nat)
+    (t : TState) (hx : x < c.cap) (hpos : pos ≤ 2 * c.s)
+    (hgLo : t.gLo < M) (hgHi : t.gHi < M) :
+    (c.tstep (c.phase1 + x * c.p + pos) t).gLo = t.gLo ∧
+      (c.tstep (c.phase1 + x * c.p + pos) t).gHi = t.gHi := by
+  let idx := c.phase1 + x * c.p + pos
+  let z := c.tsel idx
+  have hposp : pos < c.p := by unfold Cfg.p; omega
+  have hz := tsel_phase2_block c hc x pos hx hposp
+  have hF : z.isF = 0 := by
+    rcases hz with ⟨_hP1, hP2, _hb2, _hx0, hpX, _hX, _hA, _hW, _hrA⟩
+    change bnat (z.pX = 2 * c.s + 1) * z.inP2 = 0
+    dsimp only [z, idx]
+    rw [hpX, hP2]
+    have hn : pos ≠ 2 * c.s + 1 := by omega
+    simp [bnat, hn]
+  let pb := c.tpassB z (tweight z (tpassA z (ttrial z t)))
+  have hpbLo : pb.gLo = t.gLo := rfl
+  have hpbHi : pb.gHi = t.gHi := rfl
+  change (c.tfin z pb).gLo = t.gLo ∧ (c.tfin z pb).gHi = t.gHi
+  constructor
+  · simp only [Cfg.tfin, tfinGLo, hF, Nat.zero_mul, Nat.zero_mod,
+      Nat.add_zero]
+    rw [hpbLo, Nat.mod_eq_of_lt hgLo]
+  · simp only [Cfg.tfin, tfinGHi, hF, Nat.zero_mul, Nat.zero_mod,
+      Nat.add_zero]
+    rw [hpbHi, Nat.mod_eq_of_lt hgHi]
 
-```text
-theorem passB_stepDivisors (c : Cfg) … :
-    (decoded accumulator table, decoded delta) after the 2·s rounds
-      = Section413Sweep.stepDivisors c.rounds X W (A, czero)
-```
+theorem candidate_g_prefix (c : Cfg) (hc : Admissible c) (x : Nat)
+    (hx : x < c.cap)
+    (hgLo : (tRunUpto c (c.phase1 + x * c.p)).gLo < M)
+    (hgHi : (tRunUpto c (c.phase1 + x * c.p)).gHi < M) :
+    ∀ k, k ≤ 2 * c.s + 1 →
+      (tRunUpto c (c.phase1 + x * c.p + k)).gLo =
+          (tRunUpto c (c.phase1 + x * c.p)).gLo ∧
+        (tRunUpto c (c.phase1 + x * c.p + k)).gHi =
+          (tRunUpto c (c.phase1 + x * c.p)).gHi := by
+  intro k
+  induction k with
+  | zero =>
+      intro _
+      simp
+  | succ k ih =>
+      intro hk
+      have hprev := ih (by omega)
+      let start := c.phase1 + x * c.p
+      let cur := tRunUpto c (start + k)
+      have hcurLo : cur.gLo < M := by
+        rw [show cur.gLo = (tRunUpto c start).gLo by
+          simpa only [cur, start] using hprev.1]
+        simpa only [start] using hgLo
+      have hcurHi : cur.gHi < M := by
+        rw [show cur.gHi = (tRunUpto c start).gHi by
+          simpa only [cur, start] using hprev.2]
+        simpa only [start] using hgHi
+      have hs := tstep_g_frame c hc x k cur hx (by omega) hcurLo hcurHi
+      rw [show start + (k + 1) = (start + k) + 1 by omega,
+        tRunUpto_succ]
+      constructor
+      · exact hs.1.trans (by simpa only [cur, start] using hprev.1)
+      · exact hs.2.trans (by simpa only [cur, start] using hprev.2)
 
-The two gated touches per round realize exactly one iteration of
-`stepDivisors`' fold — divisor `r` and partner `X / r`, the partner
-suppressed when equal — so this is (O2) plus an induction over `c.s`.
+/-- Reference sweep after exactly `k` candidates, retaining the production
+array size `N+1` in every prefix. -/
+def g2Prefix (R checkLo N k : Nat) :
+    LeanCompCert.Ports.Section413Sweep.G2State :=
+  (List.range k).foldl
+    (fun s i => LeanCompCert.Ports.Section413Sweep.g2Step R checkLo s (i + 1))
+    ⟨Array.replicate (N + 1) LeanCompCert.Ports.Section413Sweep.czero,
+      LeanCompCert.Ports.Section413Sweep.czero, true⟩
 
-**(O7) Finalize is `cadd` and `g2Check`.**
+theorem g2Prefix_zero (R checkLo N : Nat) :
+    g2Prefix R checkLo N 0 =
+      ⟨Array.replicate (N + 1) LeanCompCert.Ports.Section413Sweep.czero,
+        LeanCompCert.Ports.Section413Sweep.czero, true⟩ := rfl
 
-```text
-theorem fin_spec (c : Cfg) … (hclean : …) :
-    c.checkLo ≤ X → Section413Sweep.g2Check X G' = true
-```
+theorem g2Prefix_succ (R checkLo N k : Nat) :
+    g2Prefix R checkLo N (k + 1) =
+      LeanCompCert.Ports.Section413Sweep.g2Step R checkLo
+        (g2Prefix R checkLo N k) (k + 1) := by
+  unfold g2Prefix
+  rw [List.range_succ, List.foldl_append]
+  rfl
 
-`g += delta` is `cadd`; the two wide comparisons against the two-limb
-literal `21·10¹⁸` are `g2Check` of the decoded `g` cell — via
-`Verified.MulWide.hl_spec` on `|g.lo| · 10X` and `|g.hi| · 10X`, with the
-sign registers `sLo`/`sHi` selecting which side of the two-sided test the
-comparison discharges.
+theorem g2Prefix_full (R checkLo N : Nat) :
+    g2Prefix R checkLo N N =
+      LeanCompCert.Ports.Section413Sweep.g2Run R checkLo N := rfl
 
-**(O8) The run.**
+/-- Boundary invariant between candidate blocks of the machine loop and the
+corresponding reference sweep prefix. -/
+structure SweepRel (c : Cfg) (t : TState)
+    (s : LeanCompCert.Ports.Section413Sweep.G2State) : Prop where
+  acc_rel : AccRel c t s.acc
+  arr_zero : t.arr 0 = 0
+  delta_zero : deltaAt t = LeanCompCert.Ports.Section413Sweep.czero
+  gLo_u64 : t.gLo < M
+  gHi_u64 : t.gHi < M
+  gLo_cap : Capped t.gLo
+  gHi_cap : Capped t.gHi
+  g_eq : (⟨decodeZ t.gLo, decodeZ t.gHi⟩ :
+    LeanCompCert.Ports.Section413Sweep.Cell) = s.g
+  ok_true : s.ok = true
 
-```text
+theorem phase1_sweepRel (c : Cfg) (hc : Admissible c) :
+    SweepRel c (tRunUpto c c.phase1) (g2Prefix c.rounds c.checkLo c.cap 0) := by
+  have hp := phase1_persist c hc c.phase1 (Nat.le_refl _)
+  have hzeroDecode := LeanCompCert.Ports.Section413Cells.decodeZ_zero
+  refine ⟨?_, hp.arr_zero, ?_, ?_, ?_, ?_, ?_, ?_, rfl⟩
+  · refine ⟨by simp [g2Prefix], ?_⟩
+    intro d hd
+    have h1 : c.cap < d + c.plane1 := by unfold Cfg.plane1; omega
+    have h2 : c.cap < d + c.plane2 := by unfold Cfg.plane2; omega
+    have hdsize : d < (Array.replicate (c.cap + 1)
+        LeanCompCert.Ports.Section413Sweep.czero).size := by
+      simp only [Array.size_replicate]
+      omega
+    unfold accAt
+    rw [hp.arr_above _ h1, hp.arr_above _ h2,
+      hzeroDecode]
+    simp only [g2Prefix, List.range_zero, List.foldl_nil]
+    rw [getElem!_pos
+      (Array.replicate (c.cap + 1) LeanCompCert.Ports.Section413Sweep.czero)
+      d hdsize, Array.getElem_replicate]
+    rfl
+  · simp only [deltaAt, hp.dLo, hp.dHi, hzeroDecode,
+      LeanCompCert.Ports.Section413Sweep.czero]
+  · rw [hp.gLo]; decide
+  · rw [hp.gHi]; decide
+  · unfold Capped
+    rw [hp.gLo, hzeroDecode]
+    simp
+  · unfold Capped
+    rw [hp.gHi, hzeroDecode]
+    simp
+  · simp only [g2Prefix, List.range_zero, List.foldl_nil, hp.gLo, hp.gHi,
+      hzeroDecode, LeanCompCert.Ports.Section413Sweep.czero]
+
+theorem SweepRel.step (c : Cfg) (hc : Admissible c) (hflag : c.tFlag = 0)
+    (k : Nat) (hk : k < c.cap)
+    (hrel : SweepRel c (tRunUpto c (c.phase1 + k * c.p))
+      (g2Prefix c.rounds c.checkLo c.cap k)) :
+    SweepRel c (tRunUpto c (c.phase1 + (k + 1) * c.p))
+      (g2Prefix c.rounds c.checkLo c.cap (k + 1)) := by
+  let X := k + 1
+  let s := g2Prefix c.rounds c.checkLo c.cap k
+  let W := LeanCompCert.Ports.Section413Sweep.weightV2 c.rounds X
+  let ad := LeanCompCert.Ports.Section413Sweep.stepDivisors c.rounds X W
+    (s.acc, LeanCompCert.Ports.Section413Sweep.czero)
+  let base := c.phase1 + k * c.p
+  let wbase := base + c.s + 1
+  have hX : 1 ≤ X := by dsimp only [X]; omega
+  have hXc : X ≤ c.cap := by dsimp only [X]; omega
+  have hXsub : X - 1 = k := by dsimp only [X]; omega
+  have hpre := prePass_DA_prefix c hc k hk hrel.arr_zero (c.s + 1)
+    (Nat.le_refl _)
+  have hpre' : DAFrame (tRunUpto c wbase) (tRunUpto c base) := by
+    simpa only [wbase, base, Nat.add_assoc] using hpre
+  have hzeroW : (tRunUpto c wbase).arr 0 = 0 := by
+    have hz := congrArg (fun a => a 0) hpre'.arr
+    exact hz.trans (by simpa only [base] using hrel.arr_zero)
+  have haccW : AccRel c (tRunUpto c wbase) s.acc := by
+    rcases hrel.acc_rel with ⟨hsize, hcells⟩
+    refine ⟨hsize, ?_⟩
+    intro d hd
+    simpa only [accAt, hpre'.arr, base, s] using hcells d hd
+  have hdeltaW : deltaAt (tRunUpto c wbase) =
+      LeanCompCert.Ports.Section413Sweep.czero := by
+    unfold deltaAt
+    rw [hpre'.dLo, hpre'.dHi]
+    simpa only [deltaAt, base] using hrel.delta_zero
+  have hp0 := passB_full c hc X s.acc hflag hX hXc
+    (by simpa only [wbase, base, hXsub] using hzeroW)
+    (by simpa only [wbase, base, hXsub, s] using haccW)
+    (by simpa only [wbase, base, hXsub] using hdeltaW)
+  have htimeB :
+      c.phase1 + (X - 1) * c.p + c.s + 1 + c.s =
+        c.phase1 + k * c.p + (2 * c.s + 1) := by
+    rw [hXsub]
+    omega
+  have hp : PassInv c W
+      (tRunUpto c (c.phase1 + k * c.p + (2 * c.s + 1))) ad := by
+    simpa only [W, ad, s, htimeB] using hp0
+  have hgprefix := candidate_g_prefix c hc k hk hrel.gLo_u64 hrel.gHi_u64
+    (2 * c.s + 1) (Nat.le_refl _)
+  have hgLo : (tRunUpto c
+      (c.phase1 + k * c.p + (2 * c.s + 1))).gLo < M := by
+    rw [hgprefix.1]
+    exact hrel.gLo_u64
+  have hgHi : (tRunUpto c
+      (c.phase1 + k * c.p + (2 * c.s + 1))).gHi < M := by
+    rw [hgprefix.2]
+    exact hrel.gHi_u64
+  have cgLo : Capped (tRunUpto c
+      (c.phase1 + k * c.p + (2 * c.s + 1))).gLo := by
+    rw [hgprefix.1]
+    exact hrel.gLo_cap
+  have cgHi : Capped (tRunUpto c
+      (c.phase1 + k * c.p + (2 * c.s + 1))).gHi := by
+    rw [hgprefix.2]
+    exact hrel.gHi_cap
+  have hG :
+      (⟨decodeZ (tRunUpto c
+          (c.phase1 + k * c.p + (2 * c.s + 1))).gLo,
+        decodeZ (tRunUpto c
+          (c.phase1 + k * c.p + (2 * c.s + 1))).gHi⟩ :
+        LeanCompCert.Ports.Section413Sweep.Cell) = s.g := by
+    rw [hgprefix.1, hgprefix.2]
+    simpa only [s] using hrel.g_eq
+  have hfin := final_step_spec c hc X W s.g ad hflag hX hXc hp hgLo hgHi
+    cgLo cgHi hG
+  have hnext : c.phase1 + X * c.p = c.phase1 + (k + 1) * c.p := by
+    rfl
+  rw [← hnext]
+  rw [g2Prefix_succ]
+  change SweepRel c (tRunUpto c (c.phase1 + X * c.p))
+    (LeanCompCert.Ports.Section413Sweep.g2Step c.rounds c.checkLo s X)
+  have hok :
+      (LeanCompCert.Ports.Section413Sweep.g2Step c.rounds c.checkLo s X).ok =
+        true := by
+    unfold LeanCompCert.Ports.Section413Sweep.g2Step
+    dsimp only [W, ad]
+    rw [hrel.ok_true]
+    by_cases hcheck : c.checkLo ≤ X
+    · rw [if_pos hcheck, hfin.2.2.2.2.2.2.2.2 hcheck]
+      decide
+    · rw [if_neg hcheck]
+      decide
+  refine ⟨?_, hfin.2.1, hfin.2.2.1, hfin.2.2.2.1,
+    hfin.2.2.2.2.1, hfin.2.2.2.2.2.1, hfin.2.2.2.2.2.2.1, ?_, hok⟩
+  · simpa only [LeanCompCert.Ports.Section413Sweep.g2Step, W, ad] using hfin.1
+  · simpa only [LeanCompCert.Ports.Section413Sweep.g2Step, W, ad] using
+      hfin.2.2.2.2.2.2.2.1
+
+theorem sweep_prefix (c : Cfg) (hc : Admissible c) (hflag : c.tFlag = 0) :
+    ∀ k, k ≤ c.cap →
+      SweepRel c (tRunUpto c (c.phase1 + k * c.p))
+        (g2Prefix c.rounds c.checkLo c.cap k) := by
+  intro k
+  induction k with
+  | zero =>
+      intro _
+      simpa only [Nat.zero_mul, Nat.add_zero] using phase1_sweepRel c hc
+  | succ k ih =>
+      intro hk
+      exact SweepRel.step c hc hflag k (by omega) (ih (by omega))
+
+/-- **Transparent-model source soundness.**  A clean compiled sweep implies
+the independently defined reference Boolean.  Together with
+`Section413G2FinalDenote.g2Program_denote`, this closes both directions of
+the production LeanCompCert route. -/
 theorem tFlag_zero_sound (c : Cfg) (hc : Admissible c) (h : c.tFlag = 0) :
-    Section413Sweep.g2SweepOK c.rounds c.checkLo c.cap = true
-```
+    LeanCompCert.Ports.Section413Sweep.g2SweepOK
+      c.rounds c.checkLo c.cap = true := by
+  have hr := sweep_prefix c hc h c.cap (Nat.le_refl _)
+  unfold LeanCompCert.Ports.Section413Sweep.g2SweepOK
+  rw [← g2Prefix_full]
+  exact hr.ok_true
 
-One induction over `List.range c.loopCount` relating `tRunUpto c k` to the
-prefix state of `Section413Sweep.g2Run`, using
-`tRunUpto_viol_zero_of_tFlag` to keep the flag clean at every prefix and
-(O1)–(O7) for the per-block steps; the Boolean is then read off the final
-state.  This is the obligation itself.
+theorem production_tFlag_zero_sound (h : production.tFlag = 0) :
+    LeanCompCert.Ports.Section413Sweep.g2SweepOK
+      production.rounds production.checkLo production.cap = true :=
+  tFlag_zero_sound production production_admissible h
+
+/-! ## Obligation (2): closed
+
+`passB_full` proves the scheduled divisor fold, `final_step_spec` proves the
+active finalizer and wide `g2Check`, and `sweep_prefix` carries their joint
+invariant from the phase-1 zero state through all `cap` candidates.
+`tFlag_zero_sound` is the resulting model-to-reference theorem.  The separate
+module `Section413G2Verified` joins it to `g2Program_denote` and the verified
+compiler theorem without introducing an import cycle.
 -/
 
 end LeanCompCert.Ports.Section413G2Sound

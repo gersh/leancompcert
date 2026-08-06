@@ -583,12 +583,11 @@ theorem finalK_eq :
 
 /-! ## Emission packaging (artifact path, not a theorem)
 
-`LProgram.compile` and its correctness (`ListFold.LProgram.evalCC_compile`)
-are already proved; what is missing to reach a C file is the packaging into
-a CCIR function, which `Reflect.Program` has as `Program.toFn`.  The three
-definitions below are that packaging for a list loop, verbatim.  They carry
-no proof obligation and none of the theorems above depends on them: the
-artifact is an independent cross-check, exactly as `emitRolled` is.
+`LProgram.flatten_compile` proves that the zero-iteration flattened
+`Reflect.Program` has exactly the list program's compiled trace.  Emission
+therefore uses that same packaged function as `LProgram.toComputation`; the
+artifact and the named `Computation.Returns` proposition are not merely two
+lookalike packagings.
 
 Because the index list is *data*, this emission is unrolled — the emitted C
 grows with the number of records.  `Verified.Segment.foldl_range'_of_chain`
@@ -596,20 +595,9 @@ is the lemma that lets a long stream be split into independently compiled
 blocks.
 -/
 
-def toBlock (p : LProgram) : CCIR.Block := {
-  id := ⟨0⟩
-  instructions := (p.compile.map Proof.StraightInstruction.toCCIR).toArray
-  terminator := .return (some (.local ⟨p.output + 1⟩))
-}
+def toBlock (p : LProgram) : CCIR.Block := p.flatten.toBlock
 
-def toFn (p : LProgram) (name : String) : CCIR.Function := {
-  name := ⟨name⟩
-  params := #[]
-  result := .u64
-  entry := ⟨0⟩
-  blocks := #[toBlock p]
-  sourceDecl := some name
-}
+def toFn (p : LProgram) (name : String) : CCIR.Function := p.flatten.toFn name
 
 /-- Emit the unrolled checker as a checked translation unit. -/
 def emitUnrolled (p : LProgram) (name : String) :

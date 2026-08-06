@@ -1,4 +1,4 @@
-import LeanCompCert.Verified.Reflect
+import LeanCompCert.Verified.Package
 
 /-!
 # Certified-list loops: hoisting guards and tables out of a fold
@@ -212,6 +212,125 @@ def LProgram.WF (p : LProgram) : Prop :=
 instance (p : LProgram) : Decidable p.WF := by
   unfold LProgram.WF; infer_instance
 
+/-! ### Reusing the verified `Program` package
+
+An `LProgram` is unrolled before lowering, so it can be packaged through the
+already proved `Reflect.Program.toComputation` route.  We specialize every
+`.idx` operand to the corresponding literal and put the resulting instruction
+stream in a zero-iteration `Program`.  The theorem below records the important
+fact: this administrative flattening leaves the compiled trace unchanged.
+-/
+
+/-- Replace the current list index by a literal. -/
+def specializeOperand (index : Nat) : Operand → Operand
+  | .reg i => .reg i
+  | .lit value => .lit value
+  | .idx => .lit index
+
+/-- Specialize every index operand in one instruction. -/
+def specializeInstr (index : Nat) : Instr → Instr
+  | .mov dest src => .mov dest (specializeOperand index src)
+  | .binop dest op lhs rhs =>
+      .binop dest op (specializeOperand index lhs) (specializeOperand index rhs)
+
+@[simp] theorem Operand.compile_at (index : Nat) (operand : Operand) :
+    compileOperand 0 (specializeOperand index operand) =
+      compileOperand index operand := by
+  cases operand <;> rfl
+
+@[simp] theorem Instr.compile_at (index : Nat) (instr : Instr) :
+    compileInstr 0 (specializeInstr index instr) = compileInstr index instr := by
+  cases instr <;> simp [specializeInstr, compileInstr, Operand.compile_at]
+
+@[simp] theorem Operand.wf_at (index regCount : Nat) (operand : Operand) :
+    (specializeOperand index operand).WF regCount ↔ operand.WF regCount := by
+  cases operand <;> rfl
+
+@[simp] theorem Instr.wf_at (index regCount : Nat) (instr : Instr) :
+    (specializeInstr index instr).WF regCount ↔ instr.WF regCount := by
+  cases instr <;> simp [specializeInstr, Instr.WF, Operand.wf_at]
+
+/-- A zero-iteration `Program` containing exactly the specialized list trace. -/
+def LProgram.flatten (p : LProgram) : Program := {
+  regCount := p.regCount
+  loopCount := 0
+  init := p.init ++
+    p.indices.flatMap (fun index => p.body.map (specializeInstr index)) ++
+    p.epilogue
+  body := []
+  epilogue := []
+  output := p.output
+}
+
+theorem LProgram.flatten_WF {p : LProgram} (hWF : p.WF) : p.flatten.WF := by
+  obtain ⟨hOutput, hInit, hBody, hEpilogue⟩ := hWF
+  refine ⟨hOutput, ?_, ?_, ?_⟩
+  intro instr hInstr
+  change instr ∈ (p.init ++
+    p.indices.flatMap (fun index => p.body.map (specializeInstr index))) ++
+    p.epilogue at hInstr
+  rcases List.mem_append.mp hInstr with hInstr | hInstr
+  · rcases List.mem_append.mp hInstr with hInstr | hInstr
+    · exact hInit instr hInstr
+    · obtain ⟨index, _, hAt⟩ := List.mem_flatMap.mp hInstr
+      obtain ⟨original, hOriginal, rfl⟩ := List.mem_map.mp hAt
+      exact (Instr.wf_at index p.regCount original).2
+        (hBody original hOriginal)
+  · exact hEpilogue instr hInstr
+  · intro instr hInstr
+    exact (List.not_mem_nil hInstr).elim
+  · intro instr hInstr
+    exact (List.not_mem_nil hInstr).elim
+
+private theorem compile_specialized_body (index : Nat) (body : List Instr) :
+    compileInstrs 0 (body.map (specializeInstr index)) =
+      compileInstrs index body := by
+  induction body with
+  | nil => rfl
+  | cons instr tail ih =>
+      simp only [List.map_cons, compileInstrs, List.flatMap_cons]
+      rw [Instr.compile_at]
+      exact congrArg (compileInstr index instr ++ ·)
+        (by simpa only [compileInstrs] using ih)
+
+private theorem compile_specialized_trace (body : List Instr) :
+    ∀ indices : List Nat,
+      compileInstrs 0
+          (indices.flatMap (fun index => body.map (specializeInstr index))) =
+        foldTraceList indices (fun index => compileInstrs index body) := by
+  intro indices
+  induction indices with
+  | nil => rfl
+  | cons index rest ih =>
+      simp only [List.flatMap_cons, compileInstrs, List.flatMap_append,
+        foldTraceList]
+      rw [show List.flatMap (compileInstr 0)
+          (List.map (specializeInstr index) body) =
+          List.flatMap (compileInstr index) body by
+            exact compile_specialized_body index body]
+      rw [show List.flatMap (compileInstr 0)
+          (List.flatMap (fun index => List.map (specializeInstr index) body) rest) =
+          List.flatMap (fun index => List.flatMap (compileInstr index) body) rest by
+            simpa only [compileInstrs, foldTraceList] using ih]
+
+theorem LProgram.flatten_compile (p : LProgram) :
+    p.flatten.compile = p.compile := by
+  unfold LProgram.flatten Program.compile LProgram.compile
+  simp only [List.range_zero,
+    foldTrace, List.flatMap_nil, compileInstrs, List.flatMap_append,
+    List.append_nil]
+  rw [show List.flatMap (compileInstr 0)
+      (List.flatMap (fun index => List.map (specializeInstr index) p.body)
+        p.indices) =
+      foldTraceList p.indices (fun index => List.flatMap (compileInstr index) p.body) by
+        simpa only [compileInstrs] using compile_specialized_trace p.body p.indices]
+  simp only [List.append_assoc]
+
+/-- Package a list-driven program through the existing verified package. -/
+def LProgram.toComputation (p : LProgram) (name : String) (hWF : p.WF) :
+    Verified.Computation :=
+  p.flatten.toComputation name (LProgram.flatten_WF hWF)
+
 theorem LProgram.ofProgram_denote (p : Program) :
     (LProgram.ofProgram p).denote = p.denote := rfl
 
@@ -314,6 +433,30 @@ theorem LProgram.evalCC_compile (p : LProgram) (hWF : p.WF) :
                           simp only [bind_some_option]
                           show env3 ⟨p.output + 1⟩ = some ((s3 p.output : Nat) : Int)
                           exact hEpilogueStep.1 p.output hOutput
+
+/-- Acceptance of the packaged compiled computation is exactly the list-fold
+denotation.  No CCIR trace is evaluated while checking this theorem. -/
+theorem LProgram.toComputation_returns (p : LProgram) (name : String)
+    (hWF : p.WF) (n : Nat) :
+    (p.toComputation name hWF).Returns ((n : Nat) : Int) ↔
+      p.denote = some n := by
+  unfold LProgram.toComputation Verified.Computation.Returns
+    Verified.Computation.sourceResult Verified.Reflect.Program.toComputation
+  change ((evalCCSequence Verified.emptyCCEnv p.flatten.compile).bind
+      (fun env => env ⟨p.output + 1⟩)) = some ((n : Nat) : Int) ↔
+    p.denote = some n
+  rw [LProgram.flatten_compile, LProgram.evalCC_compile p hWF]
+  cases p.denote with
+  | none => simp
+  | some value =>
+      constructor
+      · intro h
+        change some (value : Int) = some (n : Int) at h
+        exact congrArg some (Int.ofNat_inj.mp (Option.some.inj h))
+      · intro h
+        have : value = n := Option.some.inj h
+        cases this
+        rfl
 
 /-! ## Sanity checks -/
 

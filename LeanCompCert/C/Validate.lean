@@ -158,33 +158,36 @@ def validateExpr
   return errors
 
 /-
-Label collection, structural rather than `partial`.
+Label collection, structural and stack-safe.
 
 `CStmt` nests through `Array CStmt` and `Array CSwitchCase`; the companions
-below recurse on `.toList` of those arrays, which are projections of the
-constructor arguments, so the kernel unfolds the whole walk.  Statements are
-visited left to right and their labels concatenated in that order, exactly as
-the `foldl` this replaces did.
+below recurse on `.toList` of those arrays.  The list companion carries an
+accumulator so a long generated straight-line block does not consume one
+interpreter stack frame per statement.  Statements are visited left to right
+and their labels concatenated in that order.
 -/
 mutual
 private def collectLabelsStmt : CStmt → Array String
   | .label name => #[name]
   | .ifThenElse _ thenBody elseBody =>
-      collectLabelsList thenBody.toList ++ collectLabelsList elseBody.toList
+      collectLabelsListAux #[] thenBody.toList ++
+        collectLabelsListAux #[] elseBody.toList
   | .switch _ cases default =>
       collectLabelsCases cases.toList ++
         (match default with
           | none => #[]
-          | some body => collectLabelsList body.toList)
-  | .whileLoop _ body => collectLabelsList body.toList
+          | some body => collectLabelsListAux #[] body.toList)
+  | .whileLoop _ body => collectLabelsListAux #[] body.toList
   | _ => #[]
 
-private def collectLabelsList : List CStmt → Array String
-  | [] => #[]
-  | statement :: rest => collectLabelsStmt statement ++ collectLabelsList rest
+private def collectLabelsListAux (acc : Array String) :
+    List CStmt → Array String
+  | [] => acc
+  | statement :: rest =>
+      collectLabelsListAux (acc ++ collectLabelsStmt statement) rest
 
 private def collectLabelsCase : CSwitchCase → Array String
-  | ⟨_, body⟩ => collectLabelsList body.toList
+  | ⟨_, body⟩ => collectLabelsListAux #[] body.toList
 
 private def collectLabelsCases : List CSwitchCase → Array String
   | [] => #[]
@@ -192,7 +195,7 @@ private def collectLabelsCases : List CSwitchCase → Array String
 end
 
 private def collectLabels (statements : Array CStmt) : Array String :=
-  collectLabelsList statements.toList
+  collectLabelsListAux #[] statements.toList
 
 /-
 Statement validation, structural rather than `partial`.
@@ -325,19 +328,21 @@ def validateStatement
   | .unreachable _ | .comment _ => pure ()
   return errors
 
-/-- Errors of a statement list, whose first element sits at `path.push index`. -/
+/-- Errors of a statement list, whose first element sits at `path.push index`.
+The accumulator makes the long straight-line case tail-recursive. -/
 def validateStmtList
     (profile : Profile)
     (fn : CFunction)
     (statements : List CStmt)
     (labels : Array String)
     (path : Array Nat)
-    (index : Nat) : Array ValidationError :=
+    (index : Nat)
+    (errors : Array ValidationError := #[]) : Array ValidationError :=
   match statements with
-  | [] => #[]
+  | [] => errors
   | statement :: rest =>
-      validateStatement profile fn statement labels (path.push index)
-        ++ validateStmtList profile fn rest labels path (index + 1)
+      validateStmtList profile fn rest labels path (index + 1)
+        (errors ++ validateStatement profile fn statement labels (path.push index))
 
 /-- Errors of one switch arm's body, at the arm's own statement path. -/
 def validateCase
@@ -358,9 +363,10 @@ def validateCaseList
     (labels : Array String)
     (statementPath : Array Nat)
     (caseIndex : Nat)
-    (earlier : Array Nat) : Array ValidationError :=
+    (earlier : Array Nat)
+    (errors : Array ValidationError := #[]) : Array ValidationError :=
   match cases with
-  | [] => #[]
+  | [] => errors
   | case :: rest =>
       let duplicates : Array ValidationError :=
         earlier.foldl (init := #[]) fun current value =>
@@ -368,10 +374,10 @@ def validateCaseList
             current.push (error .duplicateCase
               s!"duplicate switch case {case.value}" (some fn.name) statementPath)
           else current
-      duplicates
-        ++ validateCase profile fn case labels (statementPath.push caseIndex)
-        ++ validateCaseList profile fn rest labels statementPath (caseIndex + 1)
-              (earlier.push case.value)
+      validateCaseList profile fn rest labels statementPath (caseIndex + 1)
+        (earlier.push case.value)
+        (errors ++ duplicates ++
+          validateCase profile fn case labels (statementPath.push caseIndex))
 end
 
 /-- Errors of a statement block, rooted at `path`. -/

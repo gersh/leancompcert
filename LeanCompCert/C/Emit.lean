@@ -178,10 +178,12 @@ def emitStatement (statement : CStmt) (level : Nat) : List String :=
       [s!"{pad}/* {safe} */"]
 
 /-- Emit each statement of the list in turn, all at `level`. -/
-def emitStmtList (statements : List CStmt) (level : Nat) : List String :=
+def emitStmtList (statements : List CStmt) (level : Nat)
+    (reversed : List String := []) : List String :=
   match statements with
-  | [] => []
-  | statement :: rest => emitStatement statement level ++ emitStmtList rest level
+  | [] => reversed.reverse
+  | statement :: rest =>
+      emitStmtList rest level ((emitStatement statement level).reverse ++ reversed)
 
 /-- Emit one `case` arm, label and `break` included. -/
 def emitCase (arm : CSwitchCase) (level : Nat) : List String :=
@@ -206,12 +208,21 @@ def emitStatements (statements : Array CStmt) (level : Nat) : List String :=
 def emitBlock (statements : Array CStmt) (level : Nat) : List String :=
   [s!"{indent level}\{"] ++ emitStatements statements (level + 1) ++ [s!"{indent level}}"]
 
+private theorem emitStmtList_acc (statements : List CStmt) (level : Nat)
+    (reversed : List String) :
+    emitStmtList statements level reversed =
+      reversed.reverse ++
+        statements.flatMap (fun statement => emitStatement statement level) := by
+  induction statements generalizing reversed with
+  | nil => simp [emitStmtList]
+  | cons statement rest ih =>
+      rw [emitStmtList, ih]
+      simp [List.reverse_append, List.append_assoc]
+
 theorem emitStmtList_eq_flatMap (statements : List CStmt) (level : Nat) :
     emitStmtList statements level
       = statements.flatMap (fun statement => emitStatement statement level) := by
-  induction statements with
-  | nil => rfl
-  | cons _ _ ih => simp [emitStmtList, ih]
+  simpa using emitStmtList_acc statements level []
 
 theorem emitStatements_eq (statements : Array CStmt) (level : Nat) :
     emitStatements statements level

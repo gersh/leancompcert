@@ -80,6 +80,9 @@ implemented, with per-milestone evidence recorded there.
 
 ## Documentation
 
+**Looking for a rigorous paper on the architecture and trust model?**
+[Formal Paper: Verified Computation in Lean 4 via Machine-Checked Compilation to CompCert C](docs/formal-trust-model-paper.md) — a formal publication-style paper detailing the DSL, denotational semantics, machine-proved compilation theorems (`evalCC_compile`), Clight Coq integration, explicit TCB breakdown, axiom isolation policies, and Lean 4 usage walkthroughs.
+
 **New to any of this?** [The complete walkthrough](docs/trust-walkthrough.md)
 — no assumed vocabulary, two real examples traced from a mathematical claim to
 bytes, naming what you must trust at each link.
