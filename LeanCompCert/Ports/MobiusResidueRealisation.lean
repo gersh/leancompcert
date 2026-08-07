@@ -394,10 +394,9 @@ registers the next one reads; `denoteAInstrs_frame` and
 says `resStep` is exactly the composition of the nine.
 
 Assembling those into a single equation `readRes s' = resStep k (readSig s)
-(readRes s)` is pure substitution, and it is *not* done here: the substituted
-proof term is large enough that the kernel reports `deep recursion detected`
-on it.  Splitting the assembly so that the kernel sees it in pieces is the
-remaining work; no mathematical content is missing.
+(readRes s)` is pure substitution.  The proof below keeps the six intermediate
+states explicit; this prevents the kernel from inlining the entire 50-step
+state transformer into one term.
 -/
 /-- `resStep` is exactly the composition of the six sections' outputs: the
 weight feeds the accumulator, the accumulator feeds the shift and the absolute
@@ -413,5 +412,116 @@ theorem resStep_eq_sections (k : Nat) (g : Sig) (r : Res) :
            (accStep g.pos g.neg (wPair k g.n).1 (wPair k g.n).2 r.tLo r.tHi).1
            (accStep g.pos g.neg (wPair k g.n).1 (wPair k g.n).2 r.tLo r.tHi).2))
          (celStep g.n r.celSq r.cel g.gate).1 g.gate r.viol⟩ := rfl
+
+private theorem denoteAInstrs_append_some (len idx : Nat) (s s' : AState)
+    (xs ys : List AInstr)
+    (h : denoteAInstrs len idx s (xs ++ ys) = some s') :
+    ∃ sm, denoteAInstrs len idx s xs = some sm ∧
+      denoteAInstrs len idx sm ys = some s' := by
+  rw [denoteAInstrs_append] at h
+  cases hx : denoteAInstrs len idx s xs with
+  | none => rw [hx] at h; contradiction
+  | some sm =>
+    refine ⟨sm, rfl, ?_⟩
+    rw [hx] at h
+    exact h
+
+set_option maxRecDepth 100000 in
+/-- **The complete residue block denotes `resStep`.**  Successful execution,
+plus the two divisors' nonzero facts, turns the 50 machine instructions into
+the transparent five-field model.  The hypotheses are exactly the divisions
+in sections A and F; the window invariant proves both at every live row. -/
+theorem mobiusLiveResidue_denote (k len idx : Nat) (s s' : AState)
+    (hn : s.regs 65 ≠ 0)
+    (hc : (celStep (s.regs 65) (s.regs 103) (s.regs 102) (s.regs 133)).1 ≠ 0)
+    (h : denoteAInstrs len idx s (mobiusLiveResidue k) = some s') :
+    readRes s' = resStep k (readSig s) (readRes s) := by
+  rw [mobiusLiveResidue_split] at h
+  obtain ⟨sA, hA0, h⟩ := denoteAInstrs_append_some len idx s s'
+    (blkA k) (blkB ++ (blkC k ++ (blkD ++ (blkE ++ blkF k)))) h
+  obtain ⟨sB, hB0, h⟩ := denoteAInstrs_append_some len idx sA s'
+    blkB (blkC k ++ (blkD ++ (blkE ++ blkF k))) h
+  obtain ⟨sC, hC0, h⟩ := denoteAInstrs_append_some len idx sB s'
+    (blkC k) (blkD ++ (blkE ++ blkF k)) h
+  obtain ⟨sD, hD0, h⟩ := denoteAInstrs_append_some len idx sC s'
+    blkD (blkE ++ blkF k) h
+  obtain ⟨sE, hE0, h⟩ := denoteAInstrs_append_some len idx sD s'
+    blkE (blkF k) h
+  exact (by
+            have hA (j : Nat) (hj : SA j = false) : sA.regs j = s.regs j :=
+              denoteAInstrs_frame len idx SA (blkA k) (SA_dests k) s sA hA0 j hj
+            have hB (j : Nat) (hj : SB j = false) : sB.regs j = sA.regs j :=
+              denoteAInstrs_frame len idx SB blkB SB_dests sA sB hB0 j hj
+            have hC (j : Nat) (hj : SC j = false) : sC.regs j = sB.regs j :=
+              denoteAInstrs_frame len idx SC (blkC k) (SC_dests k) sB sC hC0 j hj
+            have hD (j : Nat) (hj : SD j = false) : sD.regs j = sC.regs j :=
+              denoteAInstrs_frame len idx SD blkD SD_dests sC sD hD0 j hj
+            have hE (j : Nat) (hj : SE j = false) : sE.regs j = sD.regs j :=
+              denoteAInstrs_frame len idx SE blkE SE_dests sD sE hE0 j hj
+            have hAwl := blkA_wl k len idx s hn hA0
+            have hAwh := blkA_wh k len idx s hn hA0
+            have hBt : sB.regs 100 =
+                (accStep (s.regs 79) (s.regs 80) (wPair k (s.regs 65)).1
+                  (wPair k (s.regs 65)).2 (s.regs 100) (s.regs 101)).1 := by
+              rw [blkB_tLo k len idx sA hB0, hA 79 (by rfl), hA 80 (by rfl),
+                hAwl, hAwh, hA 100 (by rfl), hA 101 (by rfl)]
+            have hBh : sB.regs 101 =
+                (accStep (s.regs 79) (s.regs 80) (wPair k (s.regs 65)).1
+                  (wPair k (s.regs 65)).2 (s.regs 100) (s.regs 101)).2 := by
+              rw [blkB_tHi k len idx sA hB0, hA 79 (by rfl), hA 80 (by rfl),
+                hAwl, hAwh, hA 100 (by rfl), hA 101 (by rfl)]
+            have hCv : sC.regs 152 = vBias k (sB.regs 100) (sB.regs 101) :=
+              blkC_v k len idx sB hC0
+            have hDa : sD.regs 159 =
+                absBias (vBias k (sB.regs 100) (sB.regs 101)) := by
+              rw [blkD_abs k len idx sC hD0, hCv]
+            have hEc : sE.regs 102 =
+                (celStep (s.regs 65) (s.regs 103) (s.regs 102) (s.regs 133)).1 := by
+              rw [blkE_cel k len idx sD hE0,
+                hD 65 (by rfl), hC 65 (by rfl), hB 65 (by rfl), hA 65 (by rfl),
+                hD 103 (by rfl), hC 103 (by rfl), hB 103 (by rfl), hA 103 (by rfl),
+                hD 102 (by rfl), hC 102 (by rfl), hB 102 (by rfl), hA 102 (by rfl),
+                hD 133 (by rfl), hC 133 (by rfl), hB 133 (by rfl), hA 133 (by rfl)]
+            have hEcSq : sE.regs 103 =
+                (celStep (s.regs 65) (s.regs 103) (s.regs 102) (s.regs 133)).2 := by
+              rw [blkE_celSq k len idx sD hE0,
+                hD 65 (by rfl), hC 65 (by rfl), hB 65 (by rfl), hA 65 (by rfl),
+                hD 103 (by rfl), hC 103 (by rfl), hB 103 (by rfl), hA 103 (by rfl),
+                hD 102 (by rfl), hC 102 (by rfl), hB 102 (by rfl), hA 102 (by rfl),
+                hD 133 (by rfl), hC 133 (by rfl), hB 133 (by rfl), hA 133 (by rfl)]
+            have hE65 : sE.regs 65 = s.regs 65 := by
+              rw [hE 65 (by rfl), hD 65 (by rfl), hC 65 (by rfl),
+                hB 65 (by rfl), hA 65 (by rfl)]
+            have hE133 : sE.regs 133 = s.regs 133 := by
+              rw [hE 133 (by rfl), hD 133 (by rfl), hC 133 (by rfl),
+                hB 133 (by rfl), hA 133 (by rfl)]
+            have hE159 : sE.regs 159 =
+                absBias (vBias k (sB.regs 100) (sB.regs 101)) := by
+              rw [hE 159 (by rfl), hDa]
+            have hE104 : sE.regs 104 = s.regs 104 := by
+              rw [hE 104 (by rfl), hD 104 (by rfl), hC 104 (by rfl),
+                hB 104 (by rfl), hA 104 (by rfl)]
+            have hcE : sE.regs rCeil ≠ 0 := by
+              simpa [rCeil, hEc] using hc
+            have hFv := blkF_viol k len idx sE hcE h
+            have hF (j : Nat) (hj : SF j = false) : s'.regs j = sE.regs j :=
+              denoteAInstrs_frame len idx SF (blkF k) (SF_dests k) sE s' h j hj
+            have hEt : sE.regs 100 = sB.regs 100 := by
+              rw [hE 100 (by rfl), hD 100 (by rfl), hC 100 (by rfl)]
+            have hEh : sE.regs 101 = sB.regs 101 := by
+              rw [hE 101 (by rfl), hD 101 (by rfl), hC 101 (by rfl)]
+            rw [resStep_eq_sections]
+            simp only [readRes, readSig, Res.mk.injEq, rTLo, rTHi, rCeil,
+              rCeilSq, rMViol]
+            constructor
+            · rw [hF 100 (by rfl), hEt, hBt]
+            · constructor
+              · rw [hF 101 (by rfl), hEh, hBh]
+              · constructor
+                · rw [hF 102 (by rfl), hEc]
+                · constructor
+                  · rw [hF 103 (by rfl), hEcSq]
+                  · rw [hFv, hE65, hE159, hEc, hE133, hE104, hBt, hBh]
+    )
 
 end LeanCompCert.Ports.MobiusResidueRealisation

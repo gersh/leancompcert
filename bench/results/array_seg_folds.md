@@ -358,6 +358,13 @@ With it the sweep runs to **7 727 068 561** — the first genuinely uncertifiabl
 integer at accumulator scale `2⁶²` is `7 727 068 562`, twenty-five short of the
 endpoint.
 
+The register-level refinement for this 50-instruction block is now proved as
+`MobiusResidueRealisation.mobiusLiveResidue_denote`.  A source build of that
+proof, serialized under a 5 GiB soft / 6 GiB hard cgroup limit with swap
+disabled, took **0.83 s wall / 3.27 s user** and peaked at **628,680 KiB RSS**.
+This closes the block-to-`resStep` arrow; the whole-program sieve-to-Möbius
+signal refinement remains separate.
+
 **(2) The rounding budget — 25 more integers, by widening the accumulator.**
 `round(2⁶²/m)` costs half an ulp per term, so the test subtracts `⌈n/2⌉`,
 which at `n = 7.7·10⁹` is `1.47·10⁻⁴` of the threshold — six steps of

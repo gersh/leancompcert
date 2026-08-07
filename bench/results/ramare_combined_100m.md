@@ -163,6 +163,55 @@ ccomp -O2 -o /tmp/ramare_log_production /tmp/ramare_log_production.c
 /tmp/ramare_log_production
 ```
 
+### Composed lambda and psi carry
+
+`Ports/RamareCombined100MLambdaPsiSweep.lean` composes the classifier and
+log-ladder carry with the exact prime-power lambda selection and two carried
+psi quotient/remainder transitions.  Only the 2,459 active log-ladder cells
+are stored; all inactive table rows are omitted.  The compiler theorem is
+`LambdaPsiSweep.program_compiled`, and the standalone quotient transition
+retains its source-refinement theorem from `RamareCombined100MQuotient.lean`.
+
+The production artifact used the exact `[10001, 100000000]` configuration,
+the certified prefix-through-10 state, and denominator `100000001`.  It
+processed every one of the 99,990,000 candidates with no guard, mark, or shape
+failure:
+
+```text
+sumL       5022482397001815
+sumU       5022484809383406
+psiL.q     281469980046829
+psiL.r     8827400
+psiU.q     281470071170241
+psiU.r     53687095
+```
+
+Thus the two exact carried numerators are respectively
+`28146998286152888874229` and `28147007398494224857336`.  A control with every
+mark budget halved reports exactly 100 mark-coverage failures.
+
+| artifact | emit user / RSS | CompCert `-O2` user / RSS | run user / RSS | result |
+| --- | ---: | ---: | ---: | --- |
+| positive | 5.37 s / 3,154,580 KiB | 1.93 s / 439,664 KiB | 18.75 s / 56,212 KiB | guards 0; seen 99,990,000 |
+| half-budget control | 5.35 s / 3,152,332 KiB | 1.75 s / 439,960 KiB | 11.09 s / 56,224 KiB | guards 100; mark 100 |
+
+The program has a 334-instruction body, 426,020,600 loop iterations, and a
+112,158,760-byte static array.  Exact hashes:
+
+```text
+positive C      2a611c13281b9574c2d1889d96678defd7f8dd436998ce1f7426b9b15a815f5d
+positive binary 4ce60d4db4ac5144082bc167ef56505244b59c68c427fb3289787176d39846ba
+control C       f5a41c7559d586226bf84d6ed7565923cf42211573d9c32d8ca79667dcfc5784
+control binary  3a5f3bbd1d035556861e5631004d02b2f41532d9d3def0b13813c525f4633815
+```
+
+All phases were run without swap.  Emission used `MemoryHigh=9G` and
+`MemoryMax=10G`, CompCert used `4G`/`5G`, and execution used `768M`/`1G`.
+This completes the production runtime composition.  It does not yet retire
+the closed carrier: the remaining proof obligation is the whole-program
+number-theoretic refinement from the seven sieve planes and log cells to the
+unchanged source fold.
+
 ## Build-memory measurements
 
 The new quotient block compiles from source in under one second inside a
