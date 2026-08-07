@@ -244,4 +244,92 @@ theorem QSt.advancePsi_toSt (n lamL lamU : Nat) (st : QSt) :
   cases st
   simp only [QSt.advancePsi, QSt.toSt, PsiQR.advance_value]
 
+/-! ## Full candidate-level quotient model -/
+
+/-- The corrected-psi check expressed only through word-sized quotients,
+remainders, and one-step increments. -/
+def correctedQOK (n logL logU sumL sumU lamL lamU : Nat)
+    (psiL psiU : PsiQR) : Bool :=
+  let lo : Int := (sumL : Int) + gammaLower + scale - logU -
+    psiU.ceilAfter n lamU
+  let hi : Int := (sumU : Int) + gammaUpper + scale - logL -
+    psiL.floorAfter n lamL
+  decide (1000 * intervalAbsUpper lo hi ≤ 4 * scale)
+
+/-- Ceiling division detects an integral multiple bound exactly. -/
+theorem ceilDiv_le_iff_le_mul {x n k : Nat} (hn : 0 < n) :
+    ceilDiv x n ≤ k ↔ x ≤ k * n := by
+  unfold ceilDiv
+  constructor
+  · intro h
+    have hdm := Nat.div_add_mod (x + (n - 1)) n
+    have hr := Nat.mod_lt (x + (n - 1)) hn
+    have hx : x ≤ (x + (n - 1)) / n * n := by
+      rw [Nat.mul_comm]
+      omega
+    exact Nat.le_trans hx (Nat.mul_le_mul_right n h)
+  · intro h
+    rw [Nat.div_le_iff_le_mul hn]
+    omega
+
+/-- One source candidate step without ever materializing either wide psi
+endpoint.  This is the state transition implemented by the physical program. -/
+def qStep (c : Cfg) (n : Nat) (st : QSt) : QSt :=
+  let s := shapeOf n c.rounds
+  let lamL := lambdaLower c n s st.logL
+  let lamU := lambdaUpper c n s st.logU
+  let sumL := st.sumDivL + divLower lamL n
+  let sumU := st.sumDivU + divUpper lamU n
+  let I := coeffInterval c n s st.logL st.logU
+  let weighted := st.weightedAbs + divUpper32 (intervalAbsUpper I.1 I.2) n
+  let rLo := st.rLo + I.1
+  let rHi := st.rHi + I.2
+  let seam := if c.lower ≤ n then
+    decide (st.psiU.ceilAfter n lamU ≤ 2 * scale) &&
+      correctedQOK n st.logL st.logU sumL sumU lamL lamU st.psiL st.psiU
+    else true
+  let anchor := if n = c.limit then anchorOK st.logL st.logU sumL sumU else true
+  let ok := seam && anchor && shapeOK n s && qSubOK c n s st.logL st.logU &&
+    rowAt n weighted rLo rHi
+  { logL := st.logL + RS62.incLWord n
+    logU := st.logU + RS62.incUWord n
+    sumDivL := sumL
+    sumDivU := sumU
+    psiL := st.psiL.advance n lamL
+    psiU := st.psiU.advance n lamU
+    weightedAbs := weighted
+    rLo := rLo
+    rHi := rHi
+    bad := st.bad || !ok }
+
+/-- The word-sized candidate transition decodes to the original reference
+transition exactly.  In particular, the major-arc psi guard is neither
+weakened nor dropped. -/
+theorem qStep_toSt (c : Cfg) (n : Nat) (st : QSt) (hn : 0 < n) :
+    (qStep c n st).toSt (n + 1) = step c n (st.toSt n) := by
+  have hfloorL := PsiQR.floorAfter_eq (z := st.psiL)
+    (lam := lambdaLower c n (shapeOf n c.rounds) st.logL) hn
+  have hceilU := PsiQR.ceilAfter_eq (z := st.psiU)
+    (lam := lambdaUpper c n (shapeOf n c.rounds) st.logU) hn
+  have hbound :
+      ceilDiv
+          (st.psiU.value n +
+            lambdaUpper c n (shapeOf n c.rounds) st.logU) n ≤ 2 * scale ↔
+        st.psiU.value n +
+            lambdaUpper c n (shapeOf n c.rounds) st.logU ≤
+          2 * n * scale := by
+    simpa only [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm] using
+      (ceilDiv_le_iff_le_mul (x := st.psiU.value n +
+        lambdaUpper c n (shapeOf n c.rounds) st.logU)
+        (k := 2 * scale) hn)
+  simp only [qStep, QSt.toSt, step, correctedQOK, PsiQR.advance_value,
+    PsiQR.floorAfter_eq hn, PsiQR.ceilAfter_eq hn]
+  by_cases hb : st.psiU.value n +
+      lambdaUpper c n (shapeOf n c.rounds) st.logU ≤ 2 * n * scale
+  · have hc := hbound.mpr hb
+    simp [hb, hc, correctedOK, divUpper, divLower]
+    congr 1
+  · have hc := not_congr hbound |>.mpr hb
+    simp [hb, hc, correctedOK, divUpper, divLower]
+
 end LeanCompCert.Ports.RamareCombined100M
