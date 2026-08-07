@@ -42,6 +42,7 @@ import LeanCompCert.Ports.TGProth
 import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Testing.DirichletLadderCertificate
 import LeanCompCert.Ports.ArraySegSieve
+import LeanCompCert.Ports.ArraySegMobiusInit
 import LeanCompCert.Ports.ArraySegMobiusSignal
 import LeanCompCert.Ports.ArraySegMobiusMarkCore
 import LeanCompCert.Ports.ArraySegMobiusMarkStart
@@ -286,6 +287,8 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusProgram_wf
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensProgram_compiled
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusProgram_compiled
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_coreInit_terminal_guard
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.coreInit_terminal_guard_pos
 -- the per-integer threshold variant
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveResidue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveInit_all
@@ -409,6 +412,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTable.retain_next_of_marked
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.TablePrefix.append_single
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.TablePrefix.frame_below
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep.guard_pos
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.rootWriteSuffix_append
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.rootWriteSuffix_retain
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.RootTableInv.append_next
@@ -445,6 +449,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_cursor_live_start_of_limit
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_cursor_advance_nonstart_of_limit
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_cursor_terminal_nonstart_of_limit
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_cursor_terminal_main_of_tableRep
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_live_start_machineCell
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap

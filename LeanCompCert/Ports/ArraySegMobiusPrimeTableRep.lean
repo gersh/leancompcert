@@ -79,6 +79,13 @@ theorem TablePrefix.frame_below {arr arr' : Nat → Nat} {base : Nat}
 structure MachineTableRep (c : Cfg) (s : AState) (ps : List Nat) : Prop where
   table : TablePrefix s.arr c.primeBase ps
   cursor : s.regs rWrite = c.primeBase + ps.length
+  guard : s.arr (c.primeBase + c.tableLen) = c.sentinel
+
+theorem MachineTableRep.guard_pos {c : Cfg} {s : AState} {ps : List Nat}
+    (hRep : MachineTableRep c s ps) :
+    0 < s.arr (c.primeBase + c.tableLen) := by
+  rw [hRep.guard]
+  simp [Cfg.sentinel]
 
 /-- The verified collection suffix turns a represented prefix into its exact
 append and advances the represented cursor. -/
@@ -120,6 +127,12 @@ theorem rootWriteSuffix_append (c : Cfg) (idx : Nat) (s : AState)
   · calc
       (arun idx s (rootWriteSuffix c)).regs rWrite = write + 1 := hout.2
       _ = c.primeBase + (ps ++ [n]).length := by simp [write]; omega
+  · rw [arun_rootWriteSuffix_collect_frame c idx s n write c.primeSink
+      (c.primeBase + c.tableLen) h65 h67 h132 hWrite rfl hn2 hnCap hnM
+      hcapM hsinkM hnextM]
+    · exact hRep.guard
+    · simp only [write]
+      omega
 
 /-- A disabled collection store is redirected past the table and therefore
 preserves the represented prefix and cursor. -/
@@ -155,6 +168,12 @@ theorem rootWriteSuffix_retain (c : Cfg) (idx : Nat) (s : AState)
     exact (arun_rootWriteSuffix_marked_preserves c idx s write x h67
       hWrite hwriteM hA hxNe).1
   · exact hcursor
+  · have hendNe : c.primeBase + c.tableLen ≠ c.primeSink := by
+      simp only [Cfg.primeBase, Cfg.primeSink, Cfg.resultBase]
+      omega
+    exact (arun_rootWriteSuffix_marked_preserves c idx s write
+      (c.primeBase + c.tableLen) h67 hWrite hwriteM hA hendNe).1.trans
+        hRep.guard
 
 /-- The complete reusable root-table invariant: a concrete represented prefix
 that is exactly the increasing list of primes through `bound`. -/

@@ -1187,3 +1187,13 @@ leave every live product/flag pair unchanged.  Rebuilding the final
 peak RSS with zero swap under the 2 GiB hard cap.  Together with the live
 point-event and cursor theorems, every branch needed by the finite schedule
 induction now has both cursor and cell semantics.
+
+`ArraySegMobiusInit.lean` isolates the fixed five-instruction initializer tail
+and proves that the main table's selected limit cell contains the positive
+configured sentinel.  The machine table representation now carries this
+guard, and both root append and retain branches preserve it; the main terminal
+cursor theorem consumes that representation directly, so no schedule branch
+depends on division-by-zero semantics.  The initializer target checked in
+0.33 s wall at 533,388 KiB peak RSS, and rebuilding the represented-table,
+cell-fold, and root-schedule consumer chain completed in 1.43 s wall at
+613,304 KiB peak RSS, both with zero swap under the 2 GiB hard cap.

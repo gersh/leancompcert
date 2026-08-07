@@ -383,6 +383,36 @@ theorem arun_coreBody_cursor_terminal_nonstart_of_limit (c : Cfg) (idx : Nat)
   · rw [arun_reg_frame idx rLimit (postSignal c) t (by rfl), htLimit]
     exact hs.2.2.2.2
 
+/-- Main-phase terminal slack uses the represented table's positive guard.
+This consumer form removes any dependence on division-by-zero behavior from
+the terminal cursor invariant. -/
+theorem arun_coreBody_cursor_terminal_main_of_tableRep (c : Cfg) (idx : Nat)
+    (s : AState) (ps : List Nat) (w : Nat)
+    (hRep : LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s ps)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hpi : s.regs rPi = c.tableLen)
+    (hj : c.segLen ≤ s.regs rJ)
+    (hw : s.regs rW = w)
+    (hselectorLimit :
+      (arun idx s (selectorBlock c)).regs rLimit = c.tableLen)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hcurPM : s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (hA : c.arrayLen < M) :
+    let out := arun idx s c.coreBody
+    out.regs rPi = c.tableLen ∧ out.regs rP = c.sentinel ∧
+      out.regs rJ = c.segLen + 1 ∧ out.regs rLimit = c.tableLen := by
+  have hsentPos : 0 < c.sentinel := by simp [Cfg.sentinel]
+  have hsentM : c.sentinel < M := by
+    simp only [Cfg.sentinel, Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+    omega
+  exact arun_coreBody_cursor_terminal_nonstart_of_limit c idx s c.sentinel w
+    c.tableLen hmark hR hpi hj hw hselectorLimit (Nat.le_refl _)
+    hTM hp1Pos hp1M hcurPM hjM hRep.guard hsentPos hsentM hA
+
 /-- The same point-event theorem for the first live mark at a window
 boundary. -/
 theorem arun_coreBody_mark_live_start_machineCell (c : Cfg) (idx : Nat)
