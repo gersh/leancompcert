@@ -48,11 +48,14 @@ the indexed run definitionally available to a future denotation trace.
 direction: a zero final counter forces every transparent per-step comparison
 to pass.
 
-**Still not proved here** (and not assumed anywhere): the final assembly from
-that comparison and `ResInv` to `sound_of_test`'s exact signed input, and that
-the sieve core emits `muSig mu n` at each gated iteration.  Those are the two
-remaining mathematical arrows from an accepting whole program to the source
-family.
+`stepAbs_exact_bound`, `StepPass.sound`, and `resRun_zero_sound` complete the
+final arithmetic assembly from those passing comparisons to the exact
+cross-multiplied source family.
+
+**Still not proved here** (and not assumed anywhere): that the segmented sieve
+core emits `muSig mu n` at each gated iteration, and the corresponding
+whole-program denotation trace.  This is now the remaining mathematical arrow
+from the accepting compiled program to the source family.
 -/
 
 namespace LeanCompCert.Ports.MobiusResidueRealisation
@@ -207,6 +210,45 @@ theorem ResInv.subRange {k : Nat} {mu : Nat → Int} {n : Nat} {r : Res}
   have henc : 2 ^ (63 + k) ≤ r.tLo + M * r.tHi := by exact_mod_cast hencI
   omega
 
+/-- The biased accumulator occupies at most `k+1` high-limb bits, exactly the
+range required by `vBias_spec`. -/
+theorem ResInv.hiSmall {k : Nat} {mu : Nat → Int} {n : Nat} {r : Res}
+    (h : ResInv k mu n r) : r.tHi < 2 ^ (k + 1) := by
+  have hAupper : accTrue k mu n ≤ ((2 ^ (62 + k) : Nat) : Int) := by
+    by_cases hA : 0 ≤ accTrue k mu n
+    · have hb : (((accTrue k mu n).natAbs : Nat) : Int) ≤
+          ((2 ^ (62 + k) : Nat) : Int) := by exact_mod_cast h.bnd
+      rw [Int.natAbs_of_nonneg hA] at hb
+      exact hb
+    · exact Int.le_trans (by omega) (Int.natCast_nonneg _)
+  have hencI : ((r.tLo + M * r.tHi : Nat) : Int) ≤
+      ((2 ^ (64 + k) + 2 ^ (62 + k) : Nat) : Int) := by
+    push_cast
+    rw [h.acc]
+    exact Int.add_le_add_left hAupper _
+  have henc : r.tLo + M * r.tHi ≤ 2 ^ (64 + k) + 2 ^ (62 + k) := by
+    exact_mod_cast hencI
+  have hp64 : (2 : Nat) ^ (64 + k) = 4 * 2 ^ (62 + k) := by
+    rw [show 64 + k = (62 + k) + 2 by omega, Nat.pow_add]
+    simp [Nat.mul_comm]
+  have hp65 : (2 : Nat) ^ (65 + k) = 8 * 2 ^ (62 + k) := by
+    rw [show 65 + k = (62 + k) + 3 by omega, Nat.pow_add]
+    simp [Nat.mul_comm]
+  have hMshift : M * 2 ^ (k + 1) = 2 ^ (65 + k) := by
+    rw [M_eq']
+    rw [← Nat.pow_add]
+    congr 1
+    omega
+  have hcap : 2 ^ (64 + k) + 2 ^ (62 + k) < M * 2 ^ (k + 1) := by
+    rw [hMshift, hp64, hp65]
+    have hp : 0 < (2 : Nat) ^ (62 + k) := Nat.two_pow_pos _
+    omega
+  apply Nat.lt_of_not_ge
+  intro hhi
+  have hmul : M * 2 ^ (k + 1) ≤ M * r.tHi :=
+    Nat.mul_le_mul_left M hhi
+  omega
+
 /-- One gated `μ` signal preserves the exact accumulator and ceiling
 invariant.  This theorem assembles the independently proved weight,
 two-limb-arithmetic, and ceiling-recurrence components into the transparent
@@ -295,6 +337,123 @@ def stepAbs (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res) : Nat :=
 
 def stepCel (n : Nat) (r : Res) : Nat :=
   (celStep n r.celSq r.cel 1).1
+
+private theorem centeredDiv_pos (q B E a : Nat) (hq : 0 < q)
+    (hE : E = B * q + a) :
+    B ≤ E / q ∧ a < (E / q - B + 1) * q := by
+  have hB : B ≤ E / q := by
+    apply (Nat.le_div_iff_mul_le hq).2
+    omega
+  have hd := Nat.div_add_mod E q
+  rw [Nat.mul_comm q (E / q)] at hd
+  have hr := Nat.mod_lt E hq
+  have hu : E < (E / q + 1) * q := by
+    rw [Nat.add_mul]
+    omega
+  constructor
+  · exact hB
+  · rw [Nat.add_mul, Nat.sub_mul]
+    omega
+
+private theorem centeredDiv_neg (q B E a : Nat) (hq : 0 < q) (ha : 0 < a)
+    (hE : E + a = B * q) :
+    E / q < B ∧ a < (B - E / q + 1) * q := by
+  have hd := Nat.div_add_mod E q
+  rw [Nat.mul_comm q (E / q)] at hd
+  have hr := Nat.mod_lt E hq
+  have hl : E / q * q ≤ E := by omega
+  have hv : E / q < B := by
+    apply Nat.lt_of_not_ge
+    intro h
+    have hm := Nat.mul_le_mul_right q h
+    omega
+  constructor
+  · exact hv
+  · rw [Nat.add_mul, Nat.sub_mul]
+    have hq1 : 1 ≤ q := hq
+    omega
+
+/-- The absolute word formed after the biased right shift encloses the exact
+signed accumulator to strictly less than one shifted unit.  This is the
+direction-critical hypothesis `sound_of_test` needs. -/
+theorem stepAbs_exact_bound (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
+    (hk15 : k ≤ 15)
+    (hnext : ResInv k mu n (resStep k (muSig mu n) r)) :
+    (accTrue k mu n).natAbs <
+      (stepAbs k mu n r + 1) * 2 ^ (k + 1) := by
+  let t := stepAcc k mu n r
+  let E := t.1 + M * t.2
+  let q := 2 ^ (k + 1)
+  let B := 2 ^ 63
+  have hlo : t.1 < M := by
+    simpa only [t, stepAcc, resStep, muSig] using hnext.loLt
+  have hhi : t.2 < q := by
+    have hs := hnext.hiSmall
+    simpa only [t, q, stepAcc, resStep, muSig] using hs
+  have hv := vBias_spec k t.1 t.2 hk15 hlo hhi
+  have hq : 0 < q := Nat.two_pow_pos _
+  have hEcap : E < M * q := by
+    have hs : t.2 + 1 ≤ q := Nat.succ_le_of_lt hhi
+    dsimp only [E]
+    have hm := Nat.mul_le_mul_left M hs
+    have hfirst : t.1 + M * t.2 < M * (t.2 + 1) := by
+      rw [Nat.mul_succ]
+      omega
+    exact Nat.lt_of_lt_of_le hfirst hm
+  have hvM : vBias k t.1 t.2 < M := by
+    rw [hv]
+    exact (Nat.div_lt_iff_lt_mul hq).2 hEcap
+  have habs := absBias_spec (vBias k t.1 t.2) hvM
+  have henc : ((E : Nat) : Int) =
+      2 ^ (64 + k) + accTrue k mu n := by
+    dsimp only [E]
+    rw [Int.natCast_add, Int.natCast_mul]
+    simpa only [t, stepAcc, resStep, muSig] using hnext.acc
+  have hbias : B * q = 2 ^ (64 + k) := by
+    dsimp only [B, q]
+    rw [← Nat.pow_add]
+    congr 1
+    omega
+  by_cases hA : 0 ≤ accTrue k mu n
+  · have hAnat : (((accTrue k mu n).natAbs : Nat) : Int) =
+        accTrue k mu n := Int.natAbs_of_nonneg hA
+    have hEI : ((E : Nat) : Int) =
+        ((B * q + (accTrue k mu n).natAbs : Nat) : Int) := by
+      have hbI := congrArg (fun x : Nat => (x : Int)) hbias
+      push_cast at hbI
+      push_cast
+      rw [hAnat, hbI]
+      exact henc
+    have hE : E = B * q + (accTrue k mu n).natAbs := by exact_mod_cast hEI
+    obtain ⟨hB, ha⟩ := centeredDiv_pos q B E (accTrue k mu n).natAbs hq hE
+    have habsEq : stepAbs k mu n r = E / q - B := by
+      unfold stepAbs
+      change absBias (vBias k t.1 t.2) = _
+      rw [habs, hv, if_pos hB]
+    rw [habsEq]
+    exact ha
+  · have hAle : accTrue k mu n ≤ 0 := by omega
+    have haPos : 0 < (accTrue k mu n).natAbs := by
+      have hneg : accTrue k mu n < 0 := by omega
+      exact Int.natAbs_pos.mpr (by omega)
+    have hAnat : (((accTrue k mu n).natAbs : Nat) : Int) =
+        -accTrue k mu n := Int.ofNat_natAbs_of_nonpos hAle
+    have hEI : ((E + (accTrue k mu n).natAbs : Nat) : Int) =
+        ((B * q : Nat) : Int) := by
+      push_cast
+      rw [henc, hAnat]
+      have hbI := congrArg (fun x : Nat => (x : Int)) hbias
+      push_cast at hbI
+      omega
+    have hE : E + (accTrue k mu n).natAbs = B * q := by exact_mod_cast hEI
+    obtain ⟨hvB, ha⟩ := centeredDiv_neg q B E (accTrue k mu n).natAbs
+      hq haPos hE
+    have habsEq : stepAbs k mu n r = B - E / q := by
+      unfold stepAbs
+      change absBias (vBias k t.1 t.2) = _
+      rw [habs, hv, if_neg (Nat.not_le_of_lt hvB)]
+    rw [habsEq]
+    exact ha
 
 /-- The literal comparison made at one gated integer. -/
 abbrev StepPass (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res) : Prop :=
@@ -479,6 +638,61 @@ theorem accTrue_close (k : Nat) (mu : Nat → Int)
           - 2 ^ (63 + k) * ((D / (n + 1) : Nat) : Int)))
       have hexp : (n + 1) * D = n * D + D := by grind
       omega
+
+/-- A passing transparent step is the exact cross-multiplied source-family
+bound at that integer. -/
+theorem StepPass.sound (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
+    (hmu : ∀ m, mu m = 1 ∨ mu m = -1 ∨ mu m = 0)
+    (hk15 : k ≤ 15) (hn : 1 ≤ n) (D : Nat) (hD : 0 < D)
+    (hdvd : ∀ m, 1 ≤ m → m ≤ n → m ∣ D)
+    (hnext : ResInv k mu n (resStep k (muSig mu n) r))
+    (hpass : StepPass k mu n r) :
+    4 * ((n : Int) + 1) * (numTrue mu D n) ^ 2 ≤ (D : Int) ^ 2 := by
+  have hceil : CeilInv (stepCel n r) (n + 1) := by
+    simpa only [stepCel, resStep, muSig] using hnext.cel
+  have hV := stepAbs_exact_bound k mu n r hk15 hnext
+  have happ := accTrue_close k mu hmu D n hdvd
+  exact sound_of_test k n (stepCel n r) (stepAbs k mu n r)
+    (accTrue k mu n) (numTrue mu D n) D hn hD hceil.1 hceil.2.1 hV happ hpass
+
+/-- **Whole transparent-run soundness.**  A zero final counter proves the
+cross-multiplied family at every integer in the run.  The remaining hypotheses
+are machine-width facts and the broad exact-accumulator bound; the production
+endpoint discharges them independently of the target inequality. -/
+theorem resRun_zero_sound (k : Nat) (mu : Nat → Int) (r0 : Res) (N : Nat)
+    (hmu : ∀ m, mu m = 1 ∨ mu m = -1 ∨ mu m = 0)
+    (hk : 1 ≤ k) (hk15 : k ≤ 15) (hN : N < 2 ^ (64 - k))
+    (hbnd : ∀ m, m ≤ N → (accTrue k mu m).natAbs ≤ 2 ^ (62 + k))
+    (hcelInv : ∀ m, m < N →
+      (celStep (m + 1) (resRun k mu r0 m).celSq
+        (resRun k mu r0 m).cel 1).1 + 1 < 2 ^ 32)
+    (h0 : ResInv k mu 0 r0)
+    (hcelLo : ∀ m, m < N → 1 ≤ stepCel (m + 1) (resRun k mu r0 m))
+    (hcelHi : ∀ m, m < N → stepCel (m + 1) (resRun k mu r0 m) < M)
+    (hnM : ∀ m, m < N → m + 1 + 2 ^ (k + 2) < M)
+    (habs : ∀ m, m < N → stepAbs k mu (m + 1) (resRun k mu r0 m) < 2 ^ 62)
+    (hviol : ∀ m, m < N → (resRun k mu r0 m).viol + 1 < M)
+    (hz : (resRun k mu r0 N).viol = 0) :
+    ∀ n, 1 ≤ n → n ≤ N → ∀ D, 0 < D →
+      (∀ m, 1 ≤ m → m ≤ n → m ∣ D) →
+      4 * ((n : Int) + 1) * (numTrue mu D n) ^ 2 ≤ (D : Int) ^ 2 := by
+  have hpasses := resRun_zero_all_pass k mu r0 N hk15 hcelLo hcelHi hnM
+    habs hviol hz
+  intro n hn1 hnN D hD hdvd
+  cases n with
+  | zero => omega
+  | succ m =>
+      have hmN : m < N := by omega
+      have hpass := hpasses m hmN
+      have hinv := resRun_inv k mu r0 (m + 1) hmu hk hk15
+        (Nat.lt_of_le_of_lt hnN hN)
+        (fun j hj => hbnd j (Nat.le_trans hj hnN))
+        (fun j hj => hcelInv j (by omega)) h0
+      have hnext : ResInv k mu (m + 1)
+          (resStep k (muSig mu (m + 1)) (resRun k mu r0 m)) := by
+        simpa only [resRun] using hinv
+      exact StepPass.sound k mu (m + 1) (resRun k mu r0 m) hmu hk15
+        (by omega) D hD hdvd hnext hpass
 
 
 /-! ## Non-interference: the sieve core never touches the residue's registers -/

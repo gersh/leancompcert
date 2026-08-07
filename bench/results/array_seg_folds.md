@@ -370,11 +370,13 @@ weight and two-limb sections, `ResInv.step` derives machine range safety and
 advances one exact Möbius signal, and `resRun_inv` plus
 `resFold_range_eq_resRun` chain the transparent invariant across a window.  A
 fresh source compile of the extended `MobiusResidueWindow.lean`, under the same
-5/6 GiB no-swap cap, took **0.64 s wall / 1.50 s user** and peaked at
-**592,944 KiB RSS**.  `resStep_viol_eq` and `resRun_zero_all_pass` additionally
-prove that zero final violations imply every transparent comparison passed.
-The exact shifted-word-to-signed-sum assembly and sieve-to-Möbius signal
-refinement remain open.
+5/6 GiB no-swap cap, took **0.73 s wall / 2.25 s user** and peaked at
+**643,600 KiB RSS**.  `resStep_viol_eq` and `resRun_zero_all_pass` prove that
+zero final violations imply every transparent comparison passed;
+`stepAbs_exact_bound`, `StepPass.sound`, and `resRun_zero_sound` now turn all
+of those passes into the exact cross-multiplied source family.  Only the
+whole-program segmented-sieve-to-Möbius signal refinement remains open on
+this arithmetic route.
 
 **(2) The rounding budget — 25 more integers, by widening the accumulator.**
 `round(2⁶²/m)` costs half an ulp per term, so the test subtracts `⌈n/2⌉`,

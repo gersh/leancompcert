@@ -279,6 +279,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.resRun_inv
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.resStep_viol_eq
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.resRun_zero_all_pass
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.ResInv.hiSmall
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.stepAbs_exact_bound
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.StepPass.sound
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.resRun_zero_sound
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf
