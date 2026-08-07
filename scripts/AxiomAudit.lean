@@ -55,6 +55,7 @@ import LeanCompCert.Ports.ArraySegMobiusRootWrite
 import LeanCompCert.Ports.ArraySegMobiusPrimeInvariant
 import LeanCompCert.Ports.ArraySegMobiusPrimeTable
 import LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
+import LeanCompCert.Ports.ArraySegMobiusRootCellFold
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.MobiusResidueScalar
@@ -407,6 +408,14 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.rootWriteSuffix_retain
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.RootTableInv.append_next
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.RootTableInv.retain_next
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellStep_hit
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellStep_miss
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFoldFrom_append
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.unmarkedBool_eq_true_iff
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.unmarkedBool_iff_prime_next
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootTableStep_preserves
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFold_eq_zero_of_unmarked
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFold_single_hit_ne_zero
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

@@ -1107,3 +1107,14 @@ proving its final two multiplications in a separate generic slice reduced the
 successful source peak to 554,600 KiB.  The remaining representation work is
 the product/flag marking fold that supplies the unmarked/marked premise for
 each root accumulation cell, then the outer root-window fold.
+
+`ArraySegMobiusRootCellFold.lean` adds the runnable finite reference for that
+cell fold.  It applies the production `prodUpdate` and `flagUpdate` functions
+over a finite prime list, proves append/hit/miss equations, and proves that
+its executable `unmarkedBool` is equivalent to `UnmarkedBy`.  The Boolean
+table step is consequently proved to preserve the exact ordered-prime prefix
+for every next candidate.  A fresh direct source check completed in 0.22 s
+wall at 536,172 KiB peak RSS with zero swap under the 2 GiB cap.  The open
+step is now specifically to show that the scheduled machine marking rounds
+realize this finite cell fold (including non-wrapping products) across a root
+window.
