@@ -43,6 +43,7 @@ import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Testing.DirichletLadderCertificate
 import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Ports.ArraySegMobiusSignal
+import LeanCompCert.Ports.ArraySegMobiusMarkCore
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.MobiusResidueScalar
@@ -320,6 +321,17 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_coreBody_main
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_coreBody_eq_muSig
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_coreBody_eq_muSig_of_input_cell
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.selectorBlock_markGate
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.markBeforeProd_live_nonstart
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.markBetweenStores_live
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markPrefix_live_nonstart
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.signalInput_mark_live_nonstart
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeClear_mark_addresses
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.postRootGate_mark
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.postRootAddress_mark
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_cells
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.signalBlock_mark_controls
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_coreBody_mark_live_nonstart
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

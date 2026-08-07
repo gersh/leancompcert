@@ -915,3 +915,39 @@ post-prefix machine state.  This is the boundary needed by a future induction
 over the preceding marking rounds.  Its capped source check completed in
 1.50 s wall with 672,960 KiB peak RSS under `MemoryHigh=3G`,
 `MemoryMax=4G`, and zero swap.
+
+The ordinary live marking round is now proved against the actual production
+core.  `prodUpdate` and `flagUpdate` are pure word-level models of the two
+cell writes; `arun_markPrefix_live_nonstart` proves the exact two-store array
+effect and frames every other cell.  The signal decoder and the three tail
+stores are then composed by `arun_coreBody_mark_live_nonstart`, which proves
+that one complete non-window-start marking iteration performs those two
+updates on the live product/flag banks.
+
+This proof exposed a reproducible elaborator memory trap.  A monolithic
+simplification of the 25-instruction tail reached 3.1 GiB RSS at the 3 GiB
+soft limit and was stopped.  Merely splitting at the three stores was not
+enough: eagerly evaluating the first three root-gate instructions before the
+known-zero final multiplication again reached the soft limit.  The final
+proof frames register 132 across those instructions and evaluates only the
+last multiply.  Source modules are also separated at semantic boundaries so
+each check starts with imported opaque declarations.
+
+All measurements below used `MemorySwapMax=0`; the first module was checked
+directly and the remaining rows are Lake target builds with prerequisites
+already present:
+
+| production marking source target | wall | peak RSS |
+| --- | ---: | ---: |
+| `ArraySegMobiusMark.lean` (selector and exact live two-store prefix) | 0.81 s | 591,300 KiB |
+| `ArraySegMobiusMarkTail.lean` (clear/root address lemmas) | 1.24 s | 619,464 KiB |
+| `ArraySegMobiusMarkStep.lean` (three tail stores) | 0.44 s | 543,908 KiB |
+| `ArraySegMobiusMarkCore.lean` (complete 111-instruction live round) | 0.43 s | 556,932 KiB |
+| full axiom audit with the new declarations | 0.56 s | 1,592,240 KiB |
+
+The source targets used a 2 GiB hard cap (1 GiB soft); the audit used a 4 GiB
+hard cap (3 GiB soft).  Every successful row used zero swap.  The new theorems
+depend only on `propext` and `Quot.sound`.  This advances the production
+refinement through an ordinary live mark; the induction base at a window
+start, cursor-exhausted iterations, window/root transitions, and the
+number-theoretic `CellRepresents` invariant remain separate obligations.
