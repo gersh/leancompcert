@@ -365,6 +365,17 @@ disabled, took **0.83 s wall / 3.27 s user** and peaked at **628,680 KiB RSS**.
 This closes the block-to-`resStep` arrow; the whole-program sieve-to-Möbius
 signal refinement remains separate.
 
+The next model-composition layer is also proved: `accStep_mu` combines the
+weight and two-limb sections, `ResInv.step` derives machine range safety and
+advances one exact Möbius signal, and `resRun_inv` plus
+`resFold_range_eq_resRun` chain the transparent invariant across a window.  A
+fresh source compile of the extended `MobiusResidueWindow.lean`, under the same
+5/6 GiB no-swap cap, took **0.64 s wall / 1.50 s user** and peaked at
+**592,944 KiB RSS**.  `resStep_viol_eq` and `resRun_zero_all_pass` additionally
+prove that zero final violations imply every transparent comparison passed.
+The exact shifted-word-to-signed-sum assembly and sieve-to-Möbius signal
+refinement remain open.
+
 **(2) The rounding budget — 25 more integers, by widening the accumulator.**
 `round(2⁶²/m)` costs half an ulp per term, so the test subtracts `⌈n/2⌉`,
 which at `n = 7.7·10⁹` is `1.47·10⁻⁴` of the threshold — six steps of

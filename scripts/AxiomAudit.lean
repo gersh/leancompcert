@@ -43,6 +43,7 @@ import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Testing.DirichletLadderCertificate
 import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Ports.MobiusResidueRealisation
+import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.LogFixPort
 import LeanCompCert.Verified.AddWide
 import LeanCompCert.Verified.LogAccum
@@ -272,6 +273,12 @@ fails elaboration, so an entry cannot silently audit nothing.
 -- the per-integer Sum mu(m)/m variant, on a two-limb accumulator
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveResidue_all
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.mobiusLiveResidue_denote
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.accStep_mu
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.ResInv.step
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.resFold_range_eq_resRun
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.resRun_inv
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.resStep_viol_eq
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.resRun_zero_all_pass
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

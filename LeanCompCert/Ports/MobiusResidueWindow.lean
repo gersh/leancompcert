@@ -36,14 +36,23 @@ i.e. `MathExtras.Reductions.PlattStrongerRangeNatFamily` at `n`.
 
 Nothing here assumes anything about the sieve: `mu` is an arbitrary function
 into `{−1, 0, 1}` and the signals are the ones a correct sieve would present.
-Supplying that the sieve *does* present them is the one remaining premise.
+Supplying that the sieve *does* present them remains the principal
+whole-program denotation premise.
 
-**Not proved here** (and not assumed anywhere either — it is simply absent):
-the induction that chains `ResInv` across a whole window, i.e. that a zero
-violation count at the *end* of the loop forces the per-step hypotheses at
-*every* integer of the window.  The per-step content is complete; what is
-missing is the routine `List.foldl` induction over `resFold`, together with the
-proof that the sieve core emits `muSig mu n` at the gated iterations.
+`accStep_mu` and `ResInv.step` now assemble the per-section arithmetic into one
+exact model step, including machine overflow/underflow safety.  `resRun_inv`
+chains that invariant over every integer, and `resFold_range_eq_resRun` makes
+the indexed run definitionally available to a future denotation trace.
+
+`resStep_viol_eq` and `resRun_zero_all_pass` also prove the reverse acceptance
+direction: a zero final counter forces every transparent per-step comparison
+to pass.
+
+**Still not proved here** (and not assumed anywhere): the final assembly from
+that comparison and `ResInv` to `sound_of_test`'s exact signed input, and that
+the sieve core emits `muSig mu n` at each gated iteration.  Those are the two
+remaining mathematical arrows from an accepting whole program to the source
+family.
 -/
 
 namespace LeanCompCert.Ports.MobiusResidueRealisation
@@ -86,6 +95,314 @@ structure ResInv (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res) : Prop where
   cel : CeilInv r.cel (n + 1)
   celSq : r.celSq = r.cel * r.cel
   celLt : r.cel + 1 < 2 ^ 32
+
+/-! ## One exact accumulator step -/
+
+/-- The two indicator bits produced for a value of `μ(n)` advance the
+two-limb accumulator by exactly `μ(n) * wgt k n`.  The two range hypotheses
+are the ordinary unsigned add/subtract preconditions; a window invariant will
+derive the relevant one from its bound on the next exact partial sum. -/
+theorem accStep_mu (k n tLo tHi : Nat) (mu : Int)
+    (hmu : mu = 1 ∨ mu = -1 ∨ mu = 0)
+    (hk : 1 ≤ k) (hk15 : k ≤ 15) (hn : 1 ≤ n)
+    (hnlt : n < 2 ^ (64 - k)) (hlo : tLo < M) (hhi : tHi < M)
+    (hadd : (tLo + M * tHi) + wgt k n < M * M)
+    (hsub : wgt k n ≤ tLo + M * tHi) :
+    let w := wPair k n
+    ((accStep (if mu = 1 then 1 else 0) (if mu = -1 then 1 else 0)
+        w.1 w.2 tLo tHi).1 : Int) +
+      (M : Int) * (accStep (if mu = 1 then 1 else 0)
+        (if mu = -1 then 1 else 0) w.1 w.2 tLo tHi).2 =
+      (tLo : Int) + (M : Int) * tHi + mu * (wgt k n : Nat) := by
+  dsimp only
+  have hw := wPair_spec k n hk hk15 hn hnlt
+  have hwl := wPair_fst_lt k n
+  have hwh := wPair_snd_lt k n
+  rcases hmu with hmu | hmu | hmu
+  · rw [hmu]
+    have hone : (1 : Int) ≠ -1 := by omega
+    simp [hone]
+    rw [← hw] at hadd ⊢
+    exact_mod_cast accStep_add (wPair k n).1 (wPair k n).2 tLo tHi
+      hwl hwh hlo hhi hadd
+  · rw [hmu]
+    have hneg : (-1 : Int) ≠ 1 := by omega
+    simp [hneg]
+    rw [← hw] at hsub ⊢
+    have ha := accStep_sub (wPair k n).1 (wPair k n).2 tLo tHi
+      hwl hwh hlo hhi hsub
+    have ha' := congrArg (fun x : Nat => (x : Int)) ha
+    push_cast at ha'
+    rw [Int.natCast_sub hsub] at ha'
+    omega
+  · rw [hmu]
+    have hzero1 : (0 : Int) ≠ 1 := by omega
+    have hzeroNeg : (0 : Int) ≠ -1 := by omega
+    simp [hzero1, hzeroNeg,
+      accStep_zero (wPair k n).1 (wPair k n).2 tLo tHi hlo hhi]
+
+/-- The invariant leaves enough headroom for the next positive weight. -/
+theorem ResInv.addRange {k : Nat} {mu : Nat → Int} {n : Nat} {r : Res}
+    (hk15 : k ≤ 15) (h : ResInv k mu n r) :
+    r.tLo + M * r.tHi + wgt k (n + 1) < M * M := by
+  have hw := wgt_le k (n + 1) (by omega)
+  have h64 : (2 : Nat) ^ (64 + k) ≤ 2 ^ 79 :=
+    Nat.pow_le_pow_right (by decide) (by omega)
+  have h63 : (2 : Nat) ^ (63 + k) ≤ 2 ^ 78 :=
+    Nat.pow_le_pow_right (by decide) (by omega)
+  have h62 : (2 : Nat) ^ (62 + k) ≤ 2 ^ 77 :=
+    Nat.pow_le_pow_right (by decide) (by omega)
+  have hcap : (2 : Nat) ^ 79 + 2 ^ 77 + 2 ^ 78 < M * M := by decide
+  have hAupper : accTrue k mu n ≤ ((2 ^ (62 + k) : Nat) : Int) := by
+    by_cases hA : 0 ≤ accTrue k mu n
+    · have hb : (((accTrue k mu n).natAbs : Nat) : Int) ≤
+          ((2 ^ (62 + k) : Nat) : Int) := by exact_mod_cast h.bnd
+      rw [Int.natAbs_of_nonneg hA] at hb
+      exact hb
+    · have hp0 : (0 : Int) ≤ ((2 ^ (62 + k) : Nat) : Int) :=
+        Int.natCast_nonneg _
+      omega
+  have hencI : ((r.tLo + M * r.tHi : Nat) : Int) ≤
+      ((2 ^ (64 + k) + 2 ^ (62 + k) : Nat) : Int) := by
+    push_cast
+    rw [h.acc]
+    exact Int.add_le_add_left hAupper _
+  have henc : r.tLo + M * r.tHi ≤ 2 ^ (64 + k) + 2 ^ (62 + k) := by
+    exact_mod_cast hencI
+  omega
+
+/-- The invariant's positive bias is larger than any one weight, so the next
+unsigned subtraction cannot underflow. -/
+theorem ResInv.subRange {k : Nat} {mu : Nat → Int} {n : Nat} {r : Res}
+    (h : ResInv k mu n r) : wgt k (n + 1) ≤ r.tLo + M * r.tHi := by
+  have hw := wgt_le k (n + 1) (by omega)
+  have hp64 : (2 : Nat) ^ (64 + k) = 4 * 2 ^ (62 + k) := by
+    rw [show 64 + k = (62 + k) + 2 by omega, Nat.pow_add]
+    simp [Nat.mul_comm]
+  have hp63 : (2 : Nat) ^ (63 + k) = 2 * 2 ^ (62 + k) := by
+    rw [show 63 + k = (62 + k) + 1 by omega, Nat.pow_add]
+    simp [Nat.mul_comm]
+  have hp64I : (2 : Int) ^ (64 + k) = 4 * 2 ^ (62 + k) := by
+    exact_mod_cast hp64
+  have hp63I : (2 : Int) ^ (63 + k) = 2 * 2 ^ (62 + k) := by
+    exact_mod_cast hp63
+  have hAlower : -(((2 ^ (62 + k) : Nat) : Int)) ≤ accTrue k mu n := by
+    by_cases hA : accTrue k mu n ≤ 0
+    · have hb : (((accTrue k mu n).natAbs : Nat) : Int) ≤
+          ((2 ^ (62 + k) : Nat) : Int) := by exact_mod_cast h.bnd
+      rw [Int.ofNat_natAbs_of_nonpos hA] at hb
+      omega
+    · have hp0 : (0 : Int) ≤ ((2 ^ (62 + k) : Nat) : Int) :=
+        Int.natCast_nonneg _
+      omega
+  have hcast62 : (((2 : Nat) ^ (62 + k) : Nat) : Int) =
+      (2 : Int) ^ (62 + k) := Int.natCast_pow 2 (62 + k)
+  rw [hcast62] at hAlower
+  have hencI : ((2 ^ (63 + k) : Nat) : Int) ≤
+      ((r.tLo + M * r.tHi : Nat) : Int) := by
+    push_cast
+    rw [h.acc]
+    rw [hp64I, hp63I]
+    omega
+  have henc : 2 ^ (63 + k) ≤ r.tLo + M * r.tHi := by exact_mod_cast hencI
+  omega
+
+/-- One gated `μ` signal preserves the exact accumulator and ceiling
+invariant.  This theorem assembles the independently proved weight,
+two-limb-arithmetic, and ceiling-recurrence components into the transparent
+`resStep` model used by the compiled block. -/
+theorem ResInv.step (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
+    (hmu : ∀ m, mu m = 1 ∨ mu m = -1 ∨ mu m = 0)
+    (hk : 1 ≤ k) (hk15 : k ≤ 15) (hnlt : n + 1 < 2 ^ (64 - k))
+    (hnext : (accTrue k mu (n + 1)).natAbs ≤ 2 ^ (62 + k))
+    (hcelNext :
+      (celStep (n + 1) r.celSq r.cel 1).1 + 1 < 2 ^ 32)
+    (h : ResInv k mu n r) :
+    ResInv k mu (n + 1) (resStep k (muSig mu (n + 1)) r) := by
+  have hadd := h.addRange hk15
+  have hsub := h.subRange
+  have hacc := accStep_mu k (n + 1) r.tLo r.tHi (mu (n + 1))
+    (hmu (n + 1)) hk hk15 (by omega) hnlt h.loLt h.hiLt hadd hsub
+  have hceil0 := celStep_invariant (n + 1) r.cel h.cel h.celLt
+  have hceil :
+      CeilInv (celStep (n + 1) r.celSq r.cel 1).1 (n + 2) ∧
+        (celStep (n + 1) r.celSq r.cel 1).2 =
+          (celStep (n + 1) r.celSq r.cel 1).1 *
+            (celStep (n + 1) r.celSq r.cel 1).1 := by
+    simpa only [h.celSq] using hceil0
+  unfold resStep muSig
+  dsimp only
+  refine
+    { loLt := accStep_fst_lt
+        (if mu (n + 1) = 1 then 1 else 0)
+        (if mu (n + 1) = -1 then 1 else 0)
+        (wPair k (n + 1)).1 (wPair k (n + 1)).2 r.tLo r.tHi
+      hiLt := accStep_snd_lt
+        (if mu (n + 1) = 1 then 1 else 0)
+        (if mu (n + 1) = -1 then 1 else 0)
+        (wPair k (n + 1)).1 (wPair k (n + 1)).2 r.tLo r.tHi
+      acc := ?_
+      bnd := hnext
+      cel := hceil.1
+      celSq := hceil.2
+      celLt := hcelNext }
+  calc
+    ((accStep (if mu (n + 1) = 1 then 1 else 0)
+          (if mu (n + 1) = -1 then 1 else 0)
+          (wPair k (n + 1)).1 (wPair k (n + 1)).2 r.tLo r.tHi).1 : Int) +
+        (M : Int) *
+          (accStep (if mu (n + 1) = 1 then 1 else 0)
+            (if mu (n + 1) = -1 then 1 else 0)
+            (wPair k (n + 1)).1 (wPair k (n + 1)).2 r.tLo r.tHi).2 =
+      (r.tLo : Int) + (M : Int) * r.tHi +
+        mu (n + 1) * (wgt k (n + 1) : Nat) := hacc
+    _ = 2 ^ (64 + k) + accTrue k mu (n + 1) := by
+      rw [h.acc]
+      simp only [accTrue]
+      grind
+
+/-- The transparent residue model run from `1` through `N`. -/
+def resRun (k : Nat) (mu : Nat → Int) (r0 : Res) : Nat → Res
+  | 0 => r0
+  | n + 1 => resStep k (muSig mu (n + 1)) (resRun k mu r0 n)
+
+theorem resFold_append (k : Nat) (xs ys : List Sig) (r : Res) :
+    resFold k (xs ++ ys) r = resFold k ys (resFold k xs r) := by
+  induction xs generalizing r with
+  | nil => rfl
+  | cons x xs ih => simpa only [List.cons_append, resFold] using ih (resStep k x r)
+
+/-- The list fold over the consecutive signals `1, …, N` is the indexed
+`resRun`.  This is the seam used to transfer the induction to a denotation
+trace once the sieve's signal theorem is available. -/
+theorem resFold_range_eq_resRun (k : Nat) (mu : Nat → Int) (r0 : Res) (N : Nat) :
+    resFold k ((List.range N).map (fun i => muSig mu (i + 1))) r0 =
+      resRun k mu r0 N := by
+  induction N with
+  | zero => rfl
+  | succ n =>
+      rw [List.range_succ, List.map_append, resFold_append]
+      simpa only [List.map_cons, List.map_nil, resFold, resRun] using congrArg
+        (fun r => resStep k (muSig mu (n + 1)) r) (by assumption)
+
+/-- The updated accumulator pair used by one transparent Möbius step. -/
+def stepAcc (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res) : Nat × Nat :=
+  accStep (if mu n = 1 then 1 else 0) (if mu n = -1 then 1 else 0)
+    (wPair k n).1 (wPair k n).2 r.tLo r.tHi
+
+def stepAbs (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res) : Nat :=
+  absBias (vBias k (stepAcc k mu n r).1 (stepAcc k mu n r).2)
+
+def stepCel (n : Nat) (r : Res) : Nat :=
+  (celStep n r.celSq r.cel 1).1
+
+/-- The literal comparison made at one gated integer. -/
+abbrev StepPass (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res) : Prop :=
+  stepAbs k mu n r + (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1 ≤
+    2 ^ 61 / stepCel n r
+
+/-- On its machine range, one transparent step increments the violation
+counter exactly when its literal comparison fails. -/
+theorem resStep_viol_eq (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
+    (hk15 : k ≤ 15) (hcel : 1 ≤ stepCel n r) (hcelM : stepCel n r < M)
+    (hn : n + 2 ^ (k + 2) < M) (habs : stepAbs k mu n r < 2 ^ 62)
+    (hviol : r.viol + 1 < M) :
+    (resStep k (muSig mu n) r).viol =
+      r.viol + if StepPass k mu n r then 0 else 1 := by
+  have hv := violStep_spec_of_lt k n (stepAbs k mu n r) (stepCel n r)
+    1 r.viol hk15 hcel hcelM hn habs (by omega) hviol
+  unfold resStep muSig
+  dsimp only
+  change violStep k n (stepAbs k mu n r) (stepCel n r) 1 r.viol = _
+  rw [hv]
+  simp only [Nat.mul_one]
+  by_cases hp : StepPass k mu n r
+  · rw [if_pos hp]
+    have hnot : ¬(2 ^ 61 / stepCel n r < stepAbs k mu n r +
+        (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1) := by
+      unfold StepPass at hp
+      omega
+    rw [if_neg hnot]
+  · rw [if_neg hp]
+    have hlt : 2 ^ 61 / stepCel n r < stepAbs k mu n r +
+        (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1 := by
+      unfold StepPass at hp
+      omega
+    rw [if_pos hlt]
+
+/-- Therefore a zero next counter forces a zero carry-in counter and a
+passing current comparison. -/
+theorem stepPass_of_next_viol_zero (k : Nat) (mu : Nat → Int) (n : Nat)
+    (r : Res) (hk15 : k ≤ 15) (hcel : 1 ≤ stepCel n r)
+    (hcelM : stepCel n r < M) (hn : n + 2 ^ (k + 2) < M)
+    (habs : stepAbs k mu n r < 2 ^ 62) (hviol : r.viol + 1 < M)
+    (hz : (resStep k (muSig mu n) r).viol = 0) :
+    r.viol = 0 ∧ StepPass k mu n r := by
+  rw [resStep_viol_eq k mu n r hk15 hcel hcelM hn habs hviol] at hz
+  by_cases hp : StepPass k mu n r
+  · simp [hp] at hz
+    exact ⟨hz, hp⟩
+  · simp [hp] at hz
+
+/-- **Acceptance induction.**  A zero final counter means that every literal
+comparison in the transparent run passed.  The hypotheses are exactly the
+non-wrapping preconditions of `violStep_spec_of_lt`, stated prefixwise so they
+can later be discharged from `resRun_inv` and the campaign endpoint. -/
+theorem resRun_zero_all_pass (k : Nat) (mu : Nat → Int) (r0 : Res) (N : Nat)
+    (hk15 : k ≤ 15)
+    (hcelLo : ∀ m, m < N → 1 ≤ stepCel (m + 1) (resRun k mu r0 m))
+    (hcelHi : ∀ m, m < N → stepCel (m + 1) (resRun k mu r0 m) < M)
+    (hn : ∀ m, m < N → m + 1 + 2 ^ (k + 2) < M)
+    (habs : ∀ m, m < N → stepAbs k mu (m + 1) (resRun k mu r0 m) < 2 ^ 62)
+    (hviol : ∀ m, m < N → (resRun k mu r0 m).viol + 1 < M)
+    (hz : (resRun k mu r0 N).viol = 0) :
+    ∀ m, m < N → StepPass k mu (m + 1) (resRun k mu r0 m) := by
+  induction N with
+  | zero => intro m hm; omega
+  | succ n ih =>
+      have hzStep :
+          (resStep k (muSig mu (n + 1)) (resRun k mu r0 n)).viol = 0 := by
+        simpa only [resRun] using hz
+      obtain ⟨hzPrev, hpass⟩ := stepPass_of_next_viol_zero k mu (n + 1)
+        (resRun k mu r0 n) hk15 (hcelLo n (by omega)) (hcelHi n (by omega))
+        (hn n (by omega)) (habs n (by omega)) (hviol n (by omega)) hzStep
+      have hprev := ih
+        (fun m hm => hcelLo m (by omega))
+        (fun m hm => hcelHi m (by omega))
+        (fun m hm => hn m (by omega))
+        (fun m hm => habs m (by omega))
+        (fun m hm => hviol m (by omega)) hzPrev
+      intro m hm
+      by_cases hmn : m = n
+      · subst m
+        exact hpass
+      · exact hprev m (by omega)
+
+/-- **Window induction.**  Exact bounds on the mathematical partial sum at
+each prefix propagate the register invariant through the whole transparent
+run.  `hcel` is only the machine-width side condition for the next ceiling
+register; source-scale campaigns discharge it from their endpoint. -/
+theorem resRun_inv (k : Nat) (mu : Nat → Int) (r0 : Res) (N : Nat)
+    (hmu : ∀ m, mu m = 1 ∨ mu m = -1 ∨ mu m = 0)
+    (hk : 1 ≤ k) (hk15 : k ≤ 15)
+    (hN : N < 2 ^ (64 - k))
+    (hbnd : ∀ m, m ≤ N → (accTrue k mu m).natAbs ≤ 2 ^ (62 + k))
+    (hcel : ∀ m, m < N →
+      (celStep (m + 1) (resRun k mu r0 m).celSq
+        (resRun k mu r0 m).cel 1).1 + 1 < 2 ^ 32)
+    (h0 : ResInv k mu 0 r0) :
+    ResInv k mu N (resRun k mu r0 N) := by
+  induction N with
+  | zero => simpa only [resRun] using h0
+  | succ n ih =>
+      have hprev := ih
+        (Nat.lt_of_lt_of_le (by omega) (Nat.le_refl _))
+        (fun m hm => hbnd m (by omega))
+        (fun m hm => hcel m (by omega))
+      simpa only [resRun] using ResInv.step k mu n (resRun k mu r0 n)
+        hmu hk hk15
+        (Nat.lt_of_lt_of_le (by omega) (Nat.le_refl _))
+        (hbnd (n + 1) (Nat.le_refl _)) (hcel n (by omega)) hprev
 
 
 /-! ## The rounding budget, summed over the window -/
