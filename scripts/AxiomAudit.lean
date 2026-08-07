@@ -451,6 +451,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.dvd_window_advance
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_tableCell
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_tableCell_nonstart
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_tableCell_start
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_live_nonstart_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_live_nonstart_machineCell
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_exhausted_machineCell
@@ -471,8 +472,14 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.scheduleStep_exhausted
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.cursorStep_table_congr
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.scheduleStep_table_congr
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.cursorStep_main_ready
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.scheduleStart_cursor_ready
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.scheduleStep_cursor_main_ready
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.scheduleRun_cursor_main_ready
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_scheduleRun
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_mark_position
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_mark_position_from
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_succ_start
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.arun_coreBody_mark_preserves_tableRep
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_mark_tableCell
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_mark_preserves_tableRep
@@ -483,9 +490,14 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.arun_coreBody_simulates_terminal_nonstart
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.arun_coreBody_mark_preserves_tableRep_nonstart
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_mark_preserves_tableRep_nonstart
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.arun_coreBody_mark_preserves_tableRep_start
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.MainNonstartReady.of_cursor
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.arun_coreBody_simulates_main_nonstart
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_nonstart
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_nonstart_of_cursor
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_nonstart_from
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.arun_coreBody_simulates_start
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_from_start
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap
