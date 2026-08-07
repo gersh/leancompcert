@@ -59,6 +59,7 @@ import LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 import LeanCompCert.Ports.ArraySegMobiusRootCellFold
 import LeanCompCert.Ports.ArraySegMobiusRootSchedule
 import LeanCompCert.Ports.ArraySegMobiusCursorModel
+import LeanCompCert.Ports.ArraySegMobiusScheduleFold
 import LeanCompCert.Ports.ArraySegMobiusMarkProgress
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
@@ -498,6 +499,14 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_nonstart_from
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.arun_coreBody_simulates_start
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_from_start
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.primeCellScan_eq_rootCellStep
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.referenceCellSchedule_eq_rootCellFoldFrom
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.referenceCellSchedule_eq_rootCellFold
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.tracedScheduleRun_state
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.tracedScheduleRun_cell
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.scheduleRun_cell_eq_eventCellFold
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.eventCellFold_referenceLiveEvents
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.scheduleRun_cell_eq_rootCellFoldFrom_of_trace
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap
