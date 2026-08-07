@@ -64,6 +64,43 @@ theorem signalInput_cursor_live_nonstart_of_limit (c : Cfg) (idx : Nat)
   rw [signalInput, preSignal_eq_selector_mark, arun_append]
   exact ⟨hoPi, hoP, hoJ, hoW, hoLimit⟩
 
+/-- Away from a window start, an exhausted production decoder input frames
+every non-sink array cell. -/
+theorem signalInput_exhausted_cell_nonstart (c : Cfg) (idx : Nat)
+    (s : AState)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hj : c.segLen ≤ s.regs rJ)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hpiM : s.regs rPi < M)
+    (hpM : s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (hA : c.arrayLen < M)
+    (x : Nat)
+    (hprod : x ≠ c.sinkProd)
+    (hflag : x ≠ c.sinkProd + c.segLen) :
+    (signalInput c idx s).arr x = s.arr x := by
+  let q := arun idx s (selectorBlock c)
+  have hgate : q.regs 8 = 1 := selectorBlock_markGate c idx s hmark hTM
+  have hqR : q.regs rR = s.regs rR :=
+    arun_reg_frame idx rR (selectorBlock c) s (by rfl)
+  have hqPi : q.regs rPi = s.regs rPi :=
+    arun_reg_frame idx rPi (selectorBlock c) s (by rfl)
+  have hqP : q.regs rP = s.regs rP :=
+    arun_reg_frame idx rP (selectorBlock c) s (by rfl)
+  have hqJ : q.regs rJ = s.regs rJ :=
+    arun_reg_frame idx rJ (selectorBlock c) s (by rfl)
+  have hqArr : q.arr = s.arr :=
+    arun_arr_frame idx (selectorBlock c) s (by rfl)
+  have hpref := arun_markPrefix_exhausted_cell_nonstart c idx q hgate
+    (by rw [hqR]; exact hR) (by rw [hqJ]; exact hj) hp1Pos hp1M
+    (by rw [hqPi]; exact hpiM) (by rw [hqP]; exact hpM)
+    (by rw [hqJ]; exact hjM) hA x hprod hflag
+  rw [signalInput, preSignal_eq_selector_mark, arun_append, hpref,
+    congrFun hqArr]
+
 /-- Actual `preSignal` transition for an exhausted nonstart prime. -/
 theorem signalInput_cursor_advance_nonstart_of_limit (c : Cfg) (idx : Nat)
     (s : AState) (pi p w limit : Nat)

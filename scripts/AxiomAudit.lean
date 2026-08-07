@@ -369,15 +369,18 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundCursorInput_exhausted
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundBeforeProd_exhausted_addresses
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundCursorInput_exhausted_cell
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markRound_exhausted_cell
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markRound_cursor_live
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markRound_cursor_advance
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markSetup_nonstart
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markPrefix_cursor_live_nonstart
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markPrefix_cursor_advance_nonstart
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markPrefix_exhausted_cell_nonstart
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markPrefix_cursor_live_start
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.selectorBlock_limit_main
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.selectorBlock_limit_root
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.signalInput_cursor_live_nonstart_of_limit
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.signalInput_exhausted_cell_nonstart
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.signalInput_cursor_advance_nonstart_of_limit
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.signalInput_cursor_live_start_of_limit
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postAfterRootStore_nowrap
@@ -432,6 +435,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.dvd_window_advance
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_live_nonstart_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_live_nonstart_machineCell
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_exhausted_machineCell
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_cursor_live_nonstart_of_limit
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorIndex_advance_terminal
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundAfterFlag_advance_terminal

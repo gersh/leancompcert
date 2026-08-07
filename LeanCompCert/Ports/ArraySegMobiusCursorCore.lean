@@ -162,4 +162,24 @@ theorem arun_markRound_cursor_terminal (c : Cfg) (idx : Nat) (s : AState)
   rw [hdecomp]
   exact ⟨hoPi, hoP, hoJ, hoW, hoLimit⟩
 
+/-- An exhausted marking round writes only its two dedicated sinks; every
+other array cell is framed through the complete cursor tail. -/
+theorem arun_markRound_exhausted_cell (c : Cfg) (idx : Nat) (s : AState)
+    (hgate : s.regs 8 = 1)
+    (hj : c.segLen ≤ s.regs rJ)
+    (hA : c.arrayLen < M)
+    (x : Nat)
+    (hprod : x ≠ c.sinkProd)
+    (hflag : x ≠ c.sinkProd + c.segLen) :
+    (arun idx s (markRound c)).arr x = s.arr x := by
+  let q := arun idx s (roundCursorInput c)
+  have hqCell := roundCursorInput_exhausted_cell c idx s hgate hj hA x
+    hprod hflag
+  have htail : (arun idx q (roundAfterFlag c)).arr x = q.arr x :=
+    congrFun (arun_arr_frame idx (roundAfterFlag c) q (by rfl)) x
+  have hdecomp : arun idx s (markRound c) =
+      arun idx q (roundAfterFlag c) := by
+    rw [markRound_eq_cursorInput_after, arun_append]
+  rw [hdecomp, htail, hqCell]
+
 end LeanCompCert.Ports.ArraySegMobiusMark

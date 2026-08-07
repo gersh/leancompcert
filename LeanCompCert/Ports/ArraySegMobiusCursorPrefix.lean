@@ -187,6 +187,30 @@ theorem arun_markPrefix_cursor_terminal_nonstart (c : Cfg) (idx : Nat)
   rw [markPrefix_eq_setup_round, arun_append]
   exact ⟨hoPi, hoP, hoJ, hoW, hoLimit⟩
 
+/-- Away from a window start, an exhausted full marking prefix frames every
+non-sink array cell. -/
+theorem arun_markPrefix_exhausted_cell_nonstart (c : Cfg) (idx : Nat)
+    (s : AState)
+    (hgate : s.regs 8 = 1)
+    (hR : s.regs rR ≠ 0)
+    (hj : c.segLen ≤ s.regs rJ)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hpiM : s.regs rPi < M)
+    (hpM : s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (hA : c.arrayLen < M)
+    (x : Nat)
+    (hprod : x ≠ c.sinkProd)
+    (hflag : x ≠ c.sinkProd + c.segLen) :
+    (arun idx s (markPrefix c)).arr x = s.arr x := by
+  let q := arun idx s (markSetup c)
+  rcases arun_markSetup_nonstart c idx s hR hp1Pos hp1M hpiM hpM hjM with
+    ⟨_hqPi, _hqP, hqJ, _hqW, _hqLimit, hqGate, hqArr⟩
+  have hround := arun_markRound_exhausted_cell c idx q
+    (hqGate.trans hgate) (by rw [hqJ]; exact hj) hA x hprod hflag
+  rw [markPrefix_eq_setup_round, arun_append, hround, congrFun hqArr]
+
 /-- At a window boundary, the full prefix resets to the first prime, marks
 its first multiple, and leaves the cursor ready at the following multiple. -/
 theorem arun_markPrefix_cursor_live_start (c : Cfg) (idx : Nat)

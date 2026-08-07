@@ -1177,3 +1177,13 @@ and keeps the positive segment-length guard explicit.  Its fresh direct
 source check completed in 0.42 s wall at 551,472 KiB peak RSS with zero swap
 under the 2 GiB cap.  The machine cursor events can now be indexed by actual
 successive marking iterations.
+
+The schedule bridge now also proves the complementary exhausted-event cell
+semantics.  The complete marking prefix frames every non-sink array cell when
+the current multiple is outside the window; the selector, decoder, and tail
+preserve that fact, so both ordinary prime-advance and terminal-slack events
+leave every live product/flag pair unchanged.  Rebuilding the final
+`ArraySegMobiusRootSchedule` target completed in 0.73 s wall at 595,940 KiB
+peak RSS with zero swap under the 2 GiB hard cap.  Together with the live
+point-event and cursor theorems, every branch needed by the finite schedule
+induction now has both cursor and cell semantics.

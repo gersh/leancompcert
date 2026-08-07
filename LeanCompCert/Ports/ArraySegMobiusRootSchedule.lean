@@ -132,6 +132,50 @@ theorem arun_coreBody_mark_live_nonstart_machineCell (c : Cfg) (idx : Nat)
     rw [scheduledCellStep, if_neg hij, RootCellState.mk.injEq]
     exact ⟨hf.1, hf.2⟩
 
+/-- An exhausted nonstart cursor performs no live-cell update in the complete
+production body.  This covers both ordinary prime advancement and terminal
+slack iterations. -/
+theorem arun_coreBody_mark_exhausted_machineCell (c : Cfg) (idx : Nat)
+    (s : AState)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hj : c.segLen ≤ s.regs rJ)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hpiM : s.regs rPi < M)
+    (hpM : s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (hA : c.arrayLen < M)
+    (i : Nat) (hi : i < c.segLen) :
+    machineCell c (arun idx s c.coreBody) i = machineCell c s i := by
+  let q := signalInput c idx s
+  let t := arun idx q (signalBlock c)
+  have hqi := signalInput_exhausted_cell_nonstart c idx s hmark hR hj
+    hTM hp1Pos hp1M hpiM hpM hjM hA i
+    (by simp only [Cfg.sinkProd]; omega)
+    (by simp only [Cfg.sinkProd]; omega)
+  have hqf := signalInput_exhausted_cell_nonstart c idx s hmark hR hj
+    hTM hp1Pos hp1M hpiM hpM hjM hA (i + c.segLen)
+    (by simp only [Cfg.sinkProd]; omega)
+    (by simp only [Cfg.sinkProd]; omega)
+  have hc := signalInput_mark_controls c idx s hmark hTM
+  have ht := signalBlock_mark_controls c idx q hc.1 hc.2
+  have htarr : t.arr = q.arr :=
+    arun_arr_frame idx (signalBlock c) q (by rfl)
+  have hpost := arun_postSignal_mark_cells c idx t ht.1 ht.2.1 ht.2.2
+    hA i hi
+  have hcore : arun idx s c.coreBody = arun idx t (postSignal c) := by
+    rw [coreBody_eq_signalSlices, arun_append, arun_append]
+    rfl
+  change RootCellState.mk _ _ = RootCellState.mk _ _
+  rw [RootCellState.mk.injEq]
+  constructor
+  · rw [hcore]
+    exact hpost.1.trans ((congrFun htarr i).trans hqi)
+  · rw [hcore]
+    exact hpost.2.trans ((congrFun htarr (i + c.segLen)).trans hqf)
+
 /-- The cursor part of the same actual core-body event.  The store-free
 decoder and the complete tail frame the prime cursor, so the already verified
 `signalInput` transition lifts without unfolding the 111 instructions. -/
