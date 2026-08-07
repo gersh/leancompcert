@@ -820,3 +820,49 @@ build is below 600 MiB.  The full-build peak belongs to the pre-existing
 `LeanCompCertTests.Attest` kernel string/hash test, not this port; that single
 target took 738 seconds under memory reclaim.  All measurements above used
 `MemorySwapMax=0`.
+
+## Separate extrema residue for Helfgott (2.11) (2026-08-07)
+
+The looser `(2.11)` predicate now has a distinct verified path rather than
+reusing the stronger-range per-integer test:
+
+* `MobiusExtremaScalar` extracts the original nineteen-instruction
+  `mobiusOverNResidue` block and proves its exact accumulator/max/min step;
+* `MobiusExtremaTrial` composes that block with the proved trial producer and
+  proves a complete finite program with an explicit two-sided epilogue;
+* `MobiusExtremaTrialWindow` collapses all divisor rounds to one true
+  candidate update, preserving the ordered extrema invariant.
+
+All three source checks ran with `MemoryHigh=3G`, `MemoryMax=4G`,
+`MemorySwapMax=0`:
+
+| source target | wall | peak RSS |
+| --- | ---: | ---: |
+| `MobiusExtremaScalar.lean` | 0.52 s | 566,336 KiB |
+| `MobiusExtremaTrial.lean` | 0.74 s | 574,940 KiB |
+| `MobiusExtremaTrialWindow.lean` | 0.24 s | 558,136 KiB |
+
+This changes the proof route, not the asymptotic trial fallback cost: through
+`10^12` the producer still performs about `10^18` trial rounds, or roughly
+437 core-years at the measured 13.8 ns/round.  The completed segmented
+campaign remains the production evidence (31.3 core-hours); proving its
+sieve-to-Möbius refinement is therefore still the high-leverage route.
+
+The root Mathlib bridge now completes the paper-facing half of this route.
+`Platt211FixedPointReduction` proves that the integer sweep
+`(n+1)(n+2|A_n|)^2 <= 8(2^62)^2` implies the exact all-real `(2.11)` claim.
+`MobiusExtremaPaperBridge` proves zero extrema acceptance supplies that sweep,
+including reciprocal-rounding equality and explicit exclusion of word wrap,
+and composes it with `fullProgram_denote_mu`.  Direct capped source checks
+used an 8 GiB hard limit and zero swap:
+
+| root source target | wall | peak RSS |
+| --- | ---: | ---: |
+| `Platt211FixedPointReduction.lean` | 4.18 s | 6,849,388 KiB |
+| `MobiusExtremaPaperBridge.lean` | 4.14 s | 6,919,936 KiB |
+
+Fresh `#print axioms` for
+`fullProgram_zero_implies_platt211` reports only `propext`,
+`Classical.choice`, and `Quot.sound`.  The theorem is conditional on the
+finite program returning zero; it does not misreport the 437-core-year trial
+run as completed.
