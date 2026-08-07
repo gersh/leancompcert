@@ -1148,3 +1148,12 @@ current prime is proved to preserve it.  A fresh source build completed in
 remaining schedule work is to iterate these event theorems through every
 multiple and prime within the configured mark budget, then lift the result
 through the root windows.
+
+The same module now lifts the already verified `signalInput` cursor theorem
+through the store-free decoder and complete production tail.  Thus the actual
+core body not only realizes the selected cell event, but retains the prime
+table index/current prime and advances the live target from `j` to `j + p`.
+After importing the cursor composition modules, a fresh capped source build
+completed in 0.53 s wall at 607,656 KiB peak RSS with zero swap.  The next
+induction can therefore use one theorem for cell semantics and one for the
+persistent cursor without expanding the core body.

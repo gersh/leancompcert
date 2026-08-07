@@ -431,6 +431,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.dvd_window_advance
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_live_nonstart_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_live_nonstart_machineCell
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_cursor_live_nonstart_of_limit
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_live_start_machineCell
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all

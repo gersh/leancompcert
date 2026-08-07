@@ -1,5 +1,6 @@
 import LeanCompCert.Ports.ArraySegMobiusRootCellFold
 import LeanCompCert.Ports.ArraySegMobiusMarkStart
+import LeanCompCert.Ports.ArraySegMobiusCursorSignal
 
 /-!
 # Scheduled machine realization of one root marking event
@@ -130,6 +131,55 @@ theorem arun_coreBody_mark_live_nonstart_machineCell (c : Cfg) (idx : Nat)
     change RootCellState.mk _ _ = scheduledCellStep _ _ _ _ _
     rw [scheduledCellStep, if_neg hij, RootCellState.mk.injEq]
     exact ⟨hf.1, hf.2⟩
+
+/-- The cursor part of the same actual core-body event.  The store-free
+decoder and the complete tail frame the prime cursor, so the already verified
+`signalInput` transition lifts without unfolding the 111 instructions. -/
+theorem arun_coreBody_cursor_live_nonstart_of_limit (c : Cfg) (idx : Nat)
+    (s : AState) (pi p j w limit : Nat)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hpi : s.regs rPi = pi)
+    (hp : s.regs rP = p)
+    (hj : s.regs rJ = j)
+    (hw : s.regs rW = w)
+    (hselectorLimit :
+      (arun idx s (selectorBlock c)).regs rLimit = limit)
+    (hjL : j < c.segLen)
+    (hpiLe : pi ≤ limit)
+    (hlimitLe : limit ≤ c.tableLen)
+    (hlimitM : limit < M)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hpPos : 0 < p)
+    (hpM : p < M)
+    (hnextM : j + p < M)
+    (hA : c.arrayLen < M) :
+    let out := arun idx s c.coreBody
+    out.regs rPi = pi ∧ out.regs rP = p ∧ out.regs rJ = j + p := by
+  let q := signalInput c idx s
+  let t := arun idx q (signalBlock c)
+  have hs := signalInput_cursor_live_nonstart_of_limit c idx s pi p j w
+    limit hmark hR hpi hp hj hw hselectorLimit hjL hpiLe hlimitLe
+    hlimitM hTM hp1Pos hp1M hpPos hpM hnextM hA
+  have htPi : t.regs rPi = q.regs rPi :=
+    arun_reg_frame idx rPi (signalBlock c) q (by rfl)
+  have htP : t.regs rP = q.regs rP :=
+    arun_reg_frame idx rP (signalBlock c) q (by rfl)
+  have htJ : t.regs rJ = q.regs rJ :=
+    arun_reg_frame idx rJ (signalBlock c) q (by rfl)
+  have hcore : arun idx s c.coreBody = arun idx t (postSignal c) := by
+    rw [coreBody_eq_signalSlices, arun_append, arun_append]
+    rfl
+  rw [hcore]
+  refine ⟨?_, ?_, ?_⟩
+  · rw [arun_reg_frame idx rPi (postSignal c) t (by rfl), htPi]
+    exact hs.1
+  · rw [arun_reg_frame idx rP (postSignal c) t (by rfl), htP]
+    exact hs.2.1
+  · rw [arun_reg_frame idx rJ (postSignal c) t (by rfl), htJ]
+    exact hs.2.2.1
 
 /-- The same point-event theorem for the first live mark at a window
 boundary. -/
