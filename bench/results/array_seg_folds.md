@@ -943,7 +943,7 @@ already present:
 | `ArraySegMobiusMarkTail.lean` (clear/root address lemmas) | 1.24 s | 619,464 KiB |
 | `ArraySegMobiusMarkStep.lean` (three tail stores) | 0.44 s | 543,908 KiB |
 | `ArraySegMobiusMarkCore.lean` (complete 111-instruction live round) | 0.43 s | 556,932 KiB |
-| full axiom audit with the new declarations | 0.51 s | 1,584,132 KiB |
+| full axiom audit with the new declarations | 0.59 s | 1,594,912 KiB |
 
 The source targets used a 2 GiB hard cap (1 GiB soft); the audit used a 4 GiB
 hard cap (3 GiB soft).  Every successful row used zero swap.  The new theorems
@@ -993,3 +993,15 @@ no swap:
 The remaining reusable induction work is now the nonstart setup lift into
 these transitions, the root prime-table construction, clearing/window
 transitions, and number-theoretic preservation of `CellRepresents`.
+
+`ArraySegMobiusCursorPrefix.lean` completes that setup lift.  It proves that
+the twelve production reset instructions frame the persistent cursor away
+from a window boundary, then derives full-`markPrefix` transitions for an
+ordinary live multiple and an exhausted prime.  The complementary start
+theorem proves that reset-to-first-prime followed by the first mark leaves the
+cursor at `firstOffset w firstPrime + firstPrime`.  Its capped source build
+used 1.04 s wall, 551,336 KiB peak RSS, and zero swap.
+
+The reusable machine-level gap is therefore reduced to selector root/main
+limit selection, root prime-table construction, clearing/window transitions,
+and the final loop induction carrying `CellRepresents`.
