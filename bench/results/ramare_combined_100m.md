@@ -126,6 +126,43 @@ candidate arithmetic and quotient-state carry to the classification phase,
 then prove the seven-plane number-theoretic refinement at the consumer
 boundary.
 
+### Exact log-ladder carry
+
+`Ports/RamareCombined100MLogSweep.lean` appends the two word-safe RS62
+increment formulas to the classifier and carries `logL`/`logU` across segment
+boundaries.  Its `program_compiled` theorem covers the extended program, while
+kernel controls compare both carried outputs against direct folds of
+`incLWord` and `incUWord` over `[11,30]`.
+
+The exact production run starts from the kernel-certified `prefixState10`
+endpoints and returns:
+
+```text
+logL 5184959831595253
+logU 5184961464486049
+```
+
+The 233-instruction program completed the full suffix in 10.69 user seconds
+(10.72 wall) at 55,996 KiB RSS, with zero classifier guards and exactly
+99,990,000 commits.  Emitting the zero-seed variant took 0.27 user seconds at
+533,228 KiB; CompCert 3.17 `-O2` took 0.29 user seconds at 82,652 KiB.  The
+production-seed hashes are:
+
+```text
+C      a9bd629f96f1aed98f8414a934a93470d75ac7e7077d489343e5eb3e4396064c
+binary a3e1c57210491657fa9ce13a2d1e387dfbe3a65f6c9ca7970f4953a3fed79814
+```
+
+Reproduction:
+
+```bash
+lake env lean --run bench/RamareCombined100MLogEmit.lean \
+  positive 10001 999900 100 100000000 \
+  2592507685042803 2592509215128426 /tmp/ramare_log_production.c
+ccomp -O2 -o /tmp/ramare_log_production /tmp/ramare_log_production.c
+/tmp/ramare_log_production
+```
+
 ## Build-memory measurements
 
 The new quotient block compiles from source in under one second inside a
