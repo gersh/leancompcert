@@ -1137,3 +1137,14 @@ source check completed in 0.34 s wall at 574,748 KiB peak RSS with zero swap
 under the 2 GiB hard cap.  The remaining step is specifically the scheduled
 machine realization of this runnable cell fold, followed by the outer root
 window induction.
+
+`ArraySegMobiusRootSchedule.lean` begins that machine realization against the
+actual 111-instruction production body.  It proves that one live cursor event
+updates exactly its selected product/flag pair, frames every other live pair,
+and equals the finite `rootCellStep` pointwise.  The window-start multiple
+property is derived from the production `firstOffset`, and advancing by the
+current prime is proved to preserve it.  A fresh source build completed in
+0.63 s wall at 577,200 KiB peak RSS with zero swap under the 2 GiB cap.  The
+remaining schedule work is to iterate these event theorems through every
+multiple and prime within the configured mark budget, then lift the result
+through the root windows.
