@@ -1070,3 +1070,14 @@ half-gigabyte checks:
 All successful checks used the 2 GiB hard cap and zero swap.  The remaining
 work is the prime/unmarked equivalence, table-order induction, and the final
 cross-iteration `CellRepresents` proof.
+
+`ArraySegMobiusPrimeInvariant.lean` now proves the pure prime/unmarked
+equivalence.  It reuses LeanCompCert's ordinary-kernel theorem that every
+composite has a prime factor whose square is at most the candidate.  Thus an
+unmarked candidate is prime when the finite list is complete to that square
+bound, while a prime is unmarked by every smaller listed prime.  Its capped
+source check completed in 0.20 s wall at 527,296 KiB peak RSS with zero swap.
+
+The remaining root work is to carry list completeness and order through the
+machine's root-window fold and connect its product/flag cells to this pure
+criterion; after that comes the global `CellRepresents` induction.

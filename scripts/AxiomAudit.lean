@@ -52,6 +52,7 @@ import LeanCompCert.Ports.ArraySegMobiusCursorSignal
 import LeanCompCert.Ports.ArraySegMobiusWindow
 import LeanCompCert.Ports.ArraySegMobiusClear
 import LeanCompCert.Ports.ArraySegMobiusRootWrite
+import LeanCompCert.Ports.ArraySegMobiusPrimeInvariant
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.MobiusResidueScalar
@@ -384,6 +385,9 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_collect_address
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postAfterRootStore_write_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_rootWriteSuffix_collect
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeInvariant.isPrime_of_unmarked_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeInvariant.unmarked_of_prime
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeInvariant.unmarked_iff_prime
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf
