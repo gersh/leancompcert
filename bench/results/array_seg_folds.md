@@ -1118,3 +1118,12 @@ wall at 536,172 KiB peak RSS with zero swap under the 2 GiB cap.  The open
 step is now specifically to show that the scheduled machine marking rounds
 realize this finite cell fold (including non-wrapping products) across a root
 window.
+
+The same root-cell module now proves the non-wrap fact rather than assuming
+it: distinct entries of the ordered prime list are coprime, so the executable
+product of the listed divisors divides the represented integer.  It is
+therefore below `M` whenever the integer is.  The expanded direct source check
+completed in 0.27 s wall at 565,376 KiB peak RSS with zero swap under the
+2 GiB cap.  This leaves the structural equality between the encoded product
+component of `rootCellFold` and that bounded natural divisor product, followed
+by the scheduled-machine realization.

@@ -416,6 +416,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootTableStep_preserves
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFold_eq_zero_of_unmarked
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFold_single_hit_ne_zero
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.isPrime_coprime_of_ne
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.prime_coprime_divisorProduct
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.divisorProduct_dvd
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.divisorProduct_lt_modulus
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

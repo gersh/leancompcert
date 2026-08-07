@@ -46,6 +46,13 @@ def unmarkedBool (ps : List Nat) (n : Nat) : Bool :=
 def rootTableStep (ps : List Nat) (n : Nat) : List Nat :=
   if unmarkedBool ps n then ps ++ [n] else ps
 
+/-- Product of the distinct listed primes that divide `n`.  This is a finite
+ordinary-natural reference used to prove the word product cannot wrap. -/
+def divisorProduct : List Nat → Nat → Nat
+  | [], _ => 1
+  | p :: ps, n =>
+      if n % p = 0 then p * divisorProduct ps n else divisorProduct ps n
+
 @[simp] theorem rootCellStep_hit (n : Nat) (st : RootCellState) (p : Nat)
     (h : p ∣ n) :
     rootCellStep n st p =
@@ -105,6 +112,81 @@ theorem rootTableStep_preserves {ps : List Nat} {bound n : Nat}
         (unmarkedBool_eq_true_iff ps n).mp hb
       simpa [rootTableStep, hb] using
         append_next_of_unmarked hInv hnext hn2 hunmarked
+
+/-- Distinct primes are coprime, proved directly from LeanCompCert's finite
+`IsPrime` predicate. -/
+theorem isPrime_coprime_of_ne {p q : Nat}
+    (hp : IsPrime p) (hq : IsPrime q) (hne : p ≠ q) :
+    Nat.Coprime p q := by
+  rw [Nat.coprime_iff_gcd_eq_one]
+  rcases hp.eq_one_or_self (Nat.gcd_dvd_left p q) with hg | hg
+  · exact hg
+  · rcases hq.eq_one_or_self (Nat.gcd_dvd_right p q) with hg1 | hgq
+    · exact hg1
+    · exfalso
+      apply hne
+      exact hg.symm.trans hgq
+
+theorem prime_coprime_divisorProduct {p : Nat} (ps : List Nat) (n : Nat)
+    (hp : IsPrime p)
+    (hprime : ∀ q, q ∈ ps → IsPrime q)
+    (hne : ∀ q, q ∈ ps → p ≠ q) :
+    Nat.Coprime p (divisorProduct ps n) := by
+  induction ps with
+  | nil => exact Nat.coprime_one_right p
+  | cons q ps ih =>
+      have hqPrime : IsPrime q := hprime q (by simp)
+      have hpq : Nat.Coprime p q :=
+        isPrime_coprime_of_ne hp hqPrime (hne q (by simp))
+      have htailPrime : ∀ r, r ∈ ps → IsPrime r := by
+        intro r hr
+        exact hprime r (by simp [hr])
+      have htailNe : ∀ r, r ∈ ps → p ≠ r := by
+        intro r hr
+        exact hne r (by simp [hr])
+      have htail := ih htailPrime htailNe
+      simp only [divisorProduct]
+      split
+      · exact Nat.coprime_mul_iff_right.mpr ⟨hpq, htail⟩
+      · exact htail
+
+/-- For a strictly increasing prime list, the selected divisor product divides
+the represented integer. -/
+theorem divisorProduct_dvd (ps : List Nat) (n : Nat)
+    (hprime : ∀ p, p ∈ ps → IsPrime p)
+    (hordered : ps.Pairwise (· < ·)) :
+    divisorProduct ps n ∣ n := by
+  induction ps with
+  | nil => simp [divisorProduct]
+  | cons p ps ih =>
+      have hpPrime : IsPrime p := hprime p (by simp)
+      have htailPrime : ∀ q, q ∈ ps → IsPrime q := by
+        intro q hq
+        exact hprime q (by simp [hq])
+      have htailOrdered : ps.Pairwise (· < ·) := hordered.of_cons
+      have htailDvd := ih htailPrime htailOrdered
+      by_cases hpDvd : p ∣ n
+      · have hmod : n % p = 0 := Nat.dvd_iff_mod_eq_zero.mp hpDvd
+        rw [divisorProduct, if_pos hmod]
+        have hne : ∀ q, q ∈ ps → p ≠ q := by
+          intro q hq hpq
+          have hpLtQ := List.rel_of_pairwise_cons hordered hq
+          omega
+        exact (prime_coprime_divisorProduct (p := p) ps n hpPrime
+          htailPrime hne).mul_dvd_of_dvd_of_dvd hpDvd htailDvd
+      · have hmod : n % p ≠ 0 := by
+          simpa only [Nat.dvd_iff_mod_eq_zero] using hpDvd
+        simpa [divisorProduct, hmod] using htailDvd
+
+/-- Consequently every nontrivial selected product is bounded by `n`, and by
+the machine modulus whenever `n` is. -/
+theorem divisorProduct_lt_modulus (ps : List Nat) (n : Nat)
+    (hprime : ∀ p, p ∈ ps → IsPrime p)
+    (hordered : ps.Pairwise (· < ·))
+    (hnPos : 0 < n) (hnM : n < M) :
+    divisorProduct ps n < M := by
+  have hle := Nat.le_of_dvd hnPos (divisorProduct_dvd ps n hprime hordered)
+  omega
 
 /-- If every listed prime misses, the finite production fold leaves a cleared
 cell untouched. -/
