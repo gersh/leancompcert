@@ -1005,3 +1005,24 @@ used 1.04 s wall, 551,336 KiB peak RSS, and zero swap.
 The reusable machine-level gap is therefore reduced to selector root/main
 limit selection, root prime-table construction, clearing/window transitions,
 and the final loop induction carrying `CellRepresents`.
+
+`ArraySegMobiusSelector.lean` now discharges that selector gap for both
+production phases.  It proves that the actual seven-instruction selector
+installs `tableLen` in the main phase and `bootCount` in the root phase,
+including the modular subtraction used by the compiled root path and the
+explicit `bootCount <= tableLen` guard.  `ArraySegMobiusCursorSignal.lean`
+then composes either selected limit through the complete 66-instruction
+pre-decoder input, giving live, prime-advance, and window-start cursor
+transitions for `signalInput` itself rather than a reconstructed helper.
+
+Both source checks used `MemoryHigh=1G`, `MemoryMax=2G`, one Lake job, and
+`MemorySwapMax=0`:
+
+| selector/composition source target | wall | peak RSS |
+| --- | ---: | ---: |
+| `ArraySegMobiusSelector.lean` | 0.43 s | 570,176 KiB |
+| `ArraySegMobiusCursorSignal.lean` | 0.68 s | 532,216 KiB |
+
+The remaining machine-level work is the root prime-table construction,
+clearing/window transitions, and the final loop induction carrying
+`CellRepresents`.
