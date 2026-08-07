@@ -290,6 +290,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusProgram_compiled
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_coreInit_terminal_guard
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.coreInit_terminal_guard_pos
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_initTriple
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_bootInitFrom_tablePrefix
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_initTail_frame
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_coreInit_tableRep
 -- the per-integer threshold variant
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveResidue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mertensLiveInit_all
@@ -417,6 +421,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.rootWriteSuffix_append
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.rootWriteSuffix_retain
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.TablePrefix.frame_cells
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.TablePrefix.cell_property
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.TablePrefix.of_append_left
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep.cell_prime
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep.cell_bounds
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.RootTableInv.append_next
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.RootTableInv.retain_next
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellStep_hit

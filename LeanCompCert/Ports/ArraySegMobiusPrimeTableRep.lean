@@ -16,6 +16,7 @@ open LeanCompCert
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.PackedSieve
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusMark
 open LeanCompCert.Ports.ArraySegMobiusPrimeInvariant
@@ -93,6 +94,40 @@ theorem TablePrefix.frame_cells {arr arr' : Nat → Nat} {base : Nat}
         have h := hFrame (k + 1) (by simp; omega)
         simpa [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using h
 
+/-- A property of every represented list member holds at every represented
+array cell. -/
+theorem TablePrefix.cell_property {arr : Nat → Nat} {base : Nat}
+    {ps : List Nat} {P : Nat → Prop}
+    (hPrefix : TablePrefix arr base ps)
+    (hall : ∀ p, p ∈ ps → P p)
+    (k : Nat) (hk : k < ps.length) :
+    P (arr (base + k)) := by
+  induction ps generalizing base k with
+  | nil => simp at hk
+  | cons p ps ih =>
+      cases k with
+      | zero =>
+          simpa [hPrefix.1] using hall p (by simp)
+      | succ k =>
+          have htail : ∀ q, q ∈ ps → P q := by
+            intro q hq
+            exact hall q (by simp [hq])
+          have h := ih hPrefix.2 htail k (by simpa using hk)
+          rw [show base + (k + 1) = (base + 1) + k by omega]
+          exact h
+
+/-- A represented append contains its represented left prefix. -/
+theorem TablePrefix.of_append_left {arr : Nat → Nat} {base : Nat}
+    {ps qs : List Nat}
+    (hPrefix : TablePrefix arr base (ps ++ qs)) :
+    TablePrefix arr base ps := by
+  induction ps generalizing base with
+  | nil => trivial
+  | cons p ps ih =>
+      constructor
+      · exact hPrefix.1
+      · exact ih hPrefix.2
+
 /-- The concrete array prefix and live write cursor represent `ps`. -/
 structure MachineTableRep (c : Cfg) (s : AState) (ps : List Nat) : Prop where
   table : TablePrefix s.arr c.primeBase ps
@@ -104,6 +139,33 @@ theorem MachineTableRep.guard_pos {c : Cfg} {s : AState} {ps : List Nat}
     0 < s.arr (c.primeBase + c.tableLen) := by
   rw [hRep.guard]
   simp [Cfg.sentinel]
+
+/-- Every represented non-guard table cell contains a prime. -/
+theorem MachineTableRep.cell_prime {c : Cfg} {s : AState} {ps : List Nat}
+    {bound k : Nat}
+    (hRep : MachineTableRep c s ps)
+    (hInv : PrimeTableInv ps bound)
+    (hk : k < ps.length) :
+    IsPrime (s.arr (c.primeBase + k)) :=
+  TablePrefix.cell_property hRep.table hInv.sound k hk
+
+/-- Uniform word bounds for every represented prime cell, derived from the
+mathematical prime-table invariant. -/
+theorem MachineTableRep.cell_bounds {c : Cfg} {s : AState} {ps : List Nat}
+    {bound k : Nat}
+    (hRep : MachineTableRep c s ps)
+    (hInv : PrimeTableInv ps bound)
+    (hk : k < ps.length)
+    (hboundM : bound < M)
+    (hboundSqM : bound * bound < M) :
+    0 < s.arr (c.primeBase + k) ∧
+      s.arr (c.primeBase + k) < M ∧
+      s.arr (c.primeBase + k) * s.arr (c.primeBase + k) < M := by
+  have hp := hRep.cell_prime hInv hk
+  have hupper : s.arr (c.primeBase + k) ≤ bound :=
+    TablePrefix.cell_property hRep.table hInv.upper k hk
+  refine ⟨by have := hp.1; omega, by omega, ?_⟩
+  exact Nat.lt_of_le_of_lt (Nat.mul_le_mul hupper hupper) hboundSqM
 
 /-- The verified collection suffix turns a represented prefix into its exact
 append and advances the represented cursor. -/

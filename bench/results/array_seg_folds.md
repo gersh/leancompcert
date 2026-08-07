@@ -1225,3 +1225,16 @@ under the 2 GiB hard cap; the expanded root-schedule source check completed in
 0.79 s at 613,116 KiB.  The next proof is preservation of `MarkTableReady`
 from the represented ordered prime table and cursor bounds, which will
 discharge the per-event premise of the finite simulation.
+
+The production initializer now establishes the table representation rather
+than only its terminal guard.  A recursive proof for the actual literal-store
+block shows that it represents `bootTable` exactly and frames the cells
+outside that finite interval; the fixed tail is then proved to preserve the
+`bootPrimes` prefix while installing the main-limit sentinel and write cursor.
+Consequently `arun_coreInit_tableRep` produces the same `MachineTableRep` that
+the finite marking induction preserves.  Generic represented-cell theorems
+also derive primality, positivity, modulus bounds, and square bounds from
+`PrimeTableInv`, so later cursor loads need not trust arbitrary memory values.
+Fresh direct source checks completed at 555,588 KiB peak RSS for the expanded
+initializer and 582,148 KiB for the expanded table representation, both with
+zero swap under the 2 GiB hard cap.
