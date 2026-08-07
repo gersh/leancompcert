@@ -866,3 +866,13 @@ Fresh `#print axioms` for
 `Classical.choice`, and `Quot.sound`.  The theorem is conditional on the
 finite program returning zero; it does not misreport the 437-core-year trial
 run as completed.
+
+The first production-sieve refinement slice is now isolated as
+`ArraySegMobiusSignal.signalBlock`: it is definitionally instructions 66--85
+of the 111-instruction segmented core, not a reimplementation.  Its theorem
+proves that on a main-phase accumulation iteration the four residue registers
+are exactly `decodeCell n prod flag`; `CellRepresents` then leaves only the
+pure statement that the two marked cells encode `mu(n)`.  The capped source
+check used `MemoryHigh=3G`, `MemoryMax=4G`, no swap, and completed in 0.63 s
+wall with 593,640 KiB peak RSS.  This is a partial denotation arrow, not yet a
+proof that the whole segmented sieve establishes `CellRepresents`.

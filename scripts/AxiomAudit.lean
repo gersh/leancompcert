@@ -42,6 +42,7 @@ import LeanCompCert.Ports.TGProth
 import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Testing.DirichletLadderCertificate
 import LeanCompCert.Ports.ArraySegSieve
+import LeanCompCert.Ports.ArraySegMobiusSignal
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.MobiusResidueScalar
@@ -304,6 +305,8 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.MobiusExtremaScalar.residue_denote
 #print axioms LeanCompCert.Ports.MobiusExtremaTrial.fullProgram_denote
 #print axioms LeanCompCert.Ports.MobiusExtremaTrialWindow.finalAbs_eq_trialExtAt
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_signalBlock
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_eq_muSig_of_cell
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf
