@@ -1168,3 +1168,12 @@ clamp slice and framing the four untouched registers reduced the final direct
 source check to 0.60 s wall at 579,268 KiB peak RSS with zero swap.  This
 removes the terminal-slack edge case from the pending finite schedule
 induction.
+
+`ArraySegMobiusMarkProgress.lean` supplies the other cross-iteration fact:
+through the actual complete body, every marking iteration advances `rR` by
+one while keeping the window base and prime-table write cursor fixed.  The
+proof composes the disabled collection gate with the verified no-wrap suffix
+and keeps the positive segment-length guard explicit.  Its fresh direct
+source check completed in 0.42 s wall at 551,472 KiB peak RSS with zero swap
+under the 2 GiB cap.  The machine cursor events can now be indexed by actual
+successive marking iterations.

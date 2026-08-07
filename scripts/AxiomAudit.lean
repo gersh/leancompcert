@@ -57,6 +57,7 @@ import LeanCompCert.Ports.ArraySegMobiusPrimeTable
 import LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 import LeanCompCert.Ports.ArraySegMobiusRootCellFold
 import LeanCompCert.Ports.ArraySegMobiusRootSchedule
+import LeanCompCert.Ports.ArraySegMobiusMarkProgress
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.MobiusResidueScalar
@@ -441,6 +442,9 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_cursor_advance_nonstart_of_limit
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_cursor_terminal_nonstart_of_limit
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootSchedule.arun_coreBody_mark_live_start_machineCell
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_coreBody_mark_nowrap
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf
