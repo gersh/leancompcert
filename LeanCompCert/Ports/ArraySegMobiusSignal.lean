@@ -35,6 +35,10 @@ def preSignal (c : Cfg) : List AInstr := c.coreBody.take 66
 
 def postSignal (c : Cfg) : List AInstr := c.coreBody.drop 86
 
+def selectorBlock (c : Cfg) : List AInstr := c.coreBody.take 7
+
+def markPrefix (c : Cfg) : List AInstr := (preSignal c).drop 7
+
 def signalInput (c : Cfg) (idx : Nat) (s : AState) : AState :=
   arun idx s (preSignal c)
 
@@ -43,6 +47,10 @@ theorem signalBlock_length (c : Cfg) : (signalBlock c).length = 20 := by
 
 theorem coreBody_eq_signalSlices (c : Cfg) :
     c.coreBody = preSignal c ++ signalBlock c ++ postSignal c := by
+  rfl
+
+theorem preSignal_eq_selector_mark (c : Cfg) :
+    preSignal c = selectorBlock c ++ markPrefix c := by
   rfl
 
 /-- Register-frame predicate for an array instruction. -/
@@ -78,6 +86,56 @@ theorem arun_reg_frame (k r : Nat) : ∀ (l : List AInstr) (s : AState),
           simp only [avoidsReg, bne_iff_ne] at h
           simp [astep, AState.writeReg, Ne.symm h.1]
       | store a v => rfl
+
+/-- On a main-phase iteration the seven selector instructions set both the
+accumulation and main gates to one. -/
+theorem selectorBlock_main (c : Cfg) (idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hRoot : c.rootSpan ≤ idx)
+    (hRM : s.regs rR < M)
+    (hTM : c.markSteps < M)
+    (hidxM : idx < M)
+    (hrootM : c.rootSpan < M) :
+    (arun idx s (selectorBlock c)).regs 9 = 1 ∧
+      (arun idx s (selectorBlock c)).regs 133 = 1 := by
+  have hTmod : c.markSteps % M = c.markSteps := Nat.mod_eq_of_lt hTM
+  have hRmod : s.regs rR % M = s.regs rR := Nat.mod_eq_of_lt hRM
+  have hImod : idx % M = idx := Nat.mod_eq_of_lt hidxM
+  have hRootmod : c.rootSpan % M = c.rootSpan := Nat.mod_eq_of_lt hrootM
+  have h1mod : (1 : Nat) % M = 1 := by decide
+  have hT' : ¬ s.regs 5 < c.markSteps := by
+    have : c.markSteps ≤ s.regs 5 := by simpa [rR] using hT
+    omega
+  have hRoot' : ¬ idx < c.rootSpan := by omega
+  have hOne : (1 + M) % M = 1 := by decide
+  simp [selectorBlock, Cfg.coreBody, arun, astep,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval,
+    denoteOperand, denoteOp, AState.writeReg,
+    rR, rLimit, hTmod, hImod, hRootmod, h1mod, hT', hRoot', hOne]
+
+/-- The mark prefix does not change either selector output or the window
+coordinates used by the decoder. -/
+theorem signalInput_main_controls (c : Cfg) (idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hRoot : c.rootSpan ≤ idx)
+    (hRM : s.regs rR < M)
+    (hTM : c.markSteps < M)
+    (hidxM : idx < M)
+    (hrootM : c.rootSpan < M) :
+    (signalInput c idx s).regs rR = s.regs rR ∧
+      (signalInput c idx s).regs rW = s.regs rW ∧
+      (signalInput c idx s).regs 9 = 1 ∧
+      (signalInput c idx s).regs 133 = 1 := by
+  have hsel := selectorBlock_main c idx s hT hRoot hRM hTM hidxM hrootM
+  have hR := arun_reg_frame idx rR (preSignal c) s (by rfl)
+  have hW := arun_reg_frame idx rW (preSignal c) s (by rfl)
+  rw [signalInput, preSignal_eq_selector_mark, arun_append]
+  refine ⟨hR, hW, ?_, ?_⟩
+  · rw [arun_reg_frame idx 9 (markPrefix c) _ (by rfl)]
+    exact hsel.1
+  · rw [arun_reg_frame idx 133 (markPrefix c) _ (by rfl)]
+    exact hsel.2
 
 /-- The tail clears cells, bootstraps primes, and advances cursors, but does
 not overwrite any of the four registers observed by a Möbius residue. -/
@@ -297,5 +355,60 @@ theorem readSig_arun_coreBody (c : Cfg) (idx : Nat) (s : AState)
     readSig_arun_postSignal]
   exact readSig_arun_signalBlock c idx (signalInput c idx s)
     hT hi hgate hmain hRM hTM h2LM hWM
+
+/-- Main-phase form of the whole-core theorem.  Selector and coordinate
+premises are discharged from the input state; only the marked array in
+`signalInput` remains in the result. -/
+theorem readSig_arun_coreBody_main (c : Cfg) (idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hi : s.regs rR - c.markSteps < c.segLen)
+    (hRoot : c.rootSpan ≤ idx)
+    (hRM : s.regs rR < M)
+    (hTM : c.markSteps < M)
+    (hidxM : idx < M)
+    (hrootM : c.rootSpan < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (hWM : s.regs rW + (s.regs rR - c.markSteps) < M) :
+    readSig (arun idx s c.coreBody) =
+      decodeCell (s.regs rW + (s.regs rR - c.markSteps))
+        ((signalInput c idx s).arr (s.regs rR - c.markSteps))
+        ((signalInput c idx s).arr
+          (s.regs rR - c.markSteps + c.segLen)) := by
+  have hc := signalInput_main_controls c idx s hT hRoot hRM hTM hidxM hrootM
+  have hT' : c.markSteps ≤ (signalInput c idx s).regs rR := by
+    rw [hc.1]; exact hT
+  have hi' : (signalInput c idx s).regs rR - c.markSteps < c.segLen := by
+    rw [hc.1]; exact hi
+  have hRM' : (signalInput c idx s).regs rR < M := by
+    rw [hc.1]; exact hRM
+  have hWM' : (signalInput c idx s).regs rW +
+      ((signalInput c idx s).regs rR - c.markSteps) < M := by
+    rw [hc.1, hc.2.1]; exact hWM
+  rw [readSig_arun_coreBody c idx s hT' hi' hc.2.2.2 hc.2.2.1
+    hRM' hTM h2LM hWM', hc.1, hc.2.1]
+
+/-- The production core emits the canonical Möbius signal once its two
+marked cells satisfy the now-pure `CellRepresents` invariant. -/
+theorem readSig_arun_coreBody_eq_muSig (c : Cfg) (idx : Nat) (s : AState)
+    (mu : Nat → Int)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hi : s.regs rR - c.markSteps < c.segLen)
+    (hRoot : c.rootSpan ≤ idx)
+    (hRM : s.regs rR < M)
+    (hTM : c.markSteps < M)
+    (hidxM : idx < M)
+    (hrootM : c.rootSpan < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (hWM : s.regs rW + (s.regs rR - c.markSteps) < M)
+    (hcell : CellRepresents mu
+      (s.regs rW + (s.regs rR - c.markSteps))
+      ((signalInput c idx s).arr (s.regs rR - c.markSteps))
+      ((signalInput c idx s).arr
+        (s.regs rR - c.markSteps + c.segLen))) :
+    readSig (arun idx s c.coreBody) =
+      muSig mu (s.regs rW + (s.regs rR - c.markSteps)) := by
+  rw [readSig_arun_coreBody_main c idx s hT hi hRoot hRM hTM hidxM
+    hrootM h2LM hWM]
+  exact hcell
 
 end LeanCompCert.Ports.ArraySegMobiusSignal

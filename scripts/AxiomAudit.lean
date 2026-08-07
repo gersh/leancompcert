@@ -311,6 +311,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.denote_signalBlock_readSig
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_postSignal
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_coreBody
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.selectorBlock_main
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.signalInput_main_controls
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_coreBody_main
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_coreBody_eq_muSig
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

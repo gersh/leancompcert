@@ -891,3 +891,15 @@ core.  A first monolithic simplification of the tail climbed past the 3 GiB
 soft limit and was stopped; replacing it by the reusable structural
 `arun_reg_frame` proof brought the full source check back to 0.85 s wall and
 601,168 KiB peak RSS under the unchanged 4 GiB hard cap, with no swap.
+
+The seven-instruction production selector is now verified separately by
+`selectorBlock_main`, and `signalInput_main_controls` carries its gates and
+window coordinates through the marking prefix.  Consequently
+`readSig_arun_coreBody_main` discharges the decoder's control premises from
+the ordinary main-phase input state, while
+`readSig_arun_coreBody_eq_muSig` proves the complete production core emits
+the canonical Möbius signal from the pure `CellRepresents` condition on its
+two marked cells.  The remaining algorithmic obligation is therefore the
+marking invariant itself, not selector or decoder behavior.  A capped source
+check completed in 0.91 s wall with 629,960 KiB peak RSS under
+`MemoryHigh=3G`, `MemoryMax=4G`, and zero swap.
