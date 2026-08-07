@@ -1026,3 +1026,23 @@ Both source checks used `MemoryHigh=1G`, `MemoryMax=2G`, one Lake job, and
 The remaining machine-level work is the root prime-table construction,
 clearing/window transitions, and the final loop induction carrying
 `CellRepresents`.
+
+The next two structural slices cover the production clearing and window
+cursor suffix.  `ArraySegMobiusWindow.lean` proves ordinary position advance,
+ordinary window wrap, and the special root-to-main retargeting step from the
+actual final ten instructions.  The transition theorem keeps the compiled
+`wDelta` literal behind an explicit equality and word-range premise: an eager
+attempt to unfold that configuration expression crossed the 1 GiB soft limit
+and reached about 1.5 GiB before being stopped, while the abstract-but-exact
+version stayed below 600 MiB.  `ArraySegMobiusClear.lean` follows the two real
+accumulation stores through the root-table store and cursor suffix and proves
+both consumed banks are zero for the next window.
+
+| clearing/window source target | wall | peak RSS |
+| --- | ---: | ---: |
+| `ArraySegMobiusWindow.lean` | 0.54 s | 576,900 KiB |
+| `ArraySegMobiusClear.lean` | 0.38 s | 571,296 KiB |
+
+These checks again used `MemoryHigh=1G`, `MemoryMax=2G`, one Lake job, and
+zero swap.  The remaining machine-level work is the root prime-table
+construction and the final cross-iteration `CellRepresents` induction.
