@@ -1127,3 +1127,13 @@ completed in 0.27 s wall at 565,376 KiB peak RSS with zero swap under the
 2 GiB cap.  This leaves the structural equality between the encoded product
 component of `rootCellFold` and that bounded natural divisor product, followed
 by the scheduled-machine realization.
+
+That structural equality is now proved as well.  The executable product cell
+is exactly the machine encoding of the bounded natural divisor product, and
+is zero exactly when no represented prime divides the candidate.  The proof
+uses the preceding non-wrap theorem at each recursive prefix; it does not
+evaluate a large literal or appeal to native reduction.  A fresh direct
+source check completed in 0.34 s wall at 574,748 KiB peak RSS with zero swap
+under the 2 GiB hard cap.  The remaining step is specifically the scheduled
+machine realization of this runnable cell fold, followed by the outer root
+window induction.

@@ -420,6 +420,12 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.prime_coprime_divisorProduct
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.divisorProduct_dvd
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.divisorProduct_lt_modulus
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.dvd_divisorProduct_of_mem_dvd
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.divisorProduct_eq_one_iff_unmarked
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.divisorProduct_pos
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFoldFrom_prod_eq
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFold_prod_eq_encoded
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFold_prod_eq_zero_iff_unmarked
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

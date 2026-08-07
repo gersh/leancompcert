@@ -53,6 +53,11 @@ def divisorProduct : List Nat → Nat → Nat
   | p :: ps, n =>
       if n % p = 0 then p * divisorProduct ps n else divisorProduct ps n
 
+/-- Machine encoding of the empty product; nonempty bounded products are
+stored literally. -/
+def encodedProduct (d : Nat) : Nat :=
+  if d = 1 then 0 else d
+
 @[simp] theorem rootCellStep_hit (n : Nat) (st : RootCellState) (p : Nat)
     (h : p ∣ n) :
     rootCellStep n st p =
@@ -187,6 +192,163 @@ theorem divisorProduct_lt_modulus (ps : List Nat) (n : Nat)
     divisorProduct ps n < M := by
   have hle := Nat.le_of_dvd hnPos (divisorProduct_dvd ps n hprime hordered)
   omega
+
+theorem dvd_divisorProduct_of_mem_dvd {p n : Nat} (ps : List Nat)
+    (hpMem : p ∈ ps) (hpDvd : p ∣ n) :
+    p ∣ divisorProduct ps n := by
+  induction ps with
+  | nil => simp at hpMem
+  | cons q ps ih =>
+      simp only [List.mem_cons] at hpMem
+      by_cases hqDvd : q ∣ n
+      · have hqMod : n % q = 0 := Nat.dvd_iff_mod_eq_zero.mp hqDvd
+        rw [divisorProduct, if_pos hqMod]
+        rcases hpMem with rfl | hpTail
+        · exact Nat.dvd_mul_right _ (divisorProduct ps n)
+        · exact Nat.dvd_mul_left_of_dvd (ih hpTail) q
+      · have hqMod : n % q ≠ 0 := by
+          simpa only [Nat.dvd_iff_mod_eq_zero] using hqDvd
+        rw [divisorProduct, if_neg hqMod]
+        rcases hpMem with hpEq | hpTail
+        · subst q
+          exact False.elim (hqDvd hpDvd)
+        · exact ih hpTail
+
+theorem divisorProduct_eq_one_of_unmarked (ps : List Nat) (n : Nat)
+    (h : UnmarkedBy ps n) :
+    divisorProduct ps n = 1 := by
+  induction ps with
+  | nil => rfl
+  | cons p ps ih =>
+      have hp : ¬p ∣ n := h p (by simp)
+      have hmod : n % p ≠ 0 := by
+        simpa only [Nat.dvd_iff_mod_eq_zero] using hp
+      have htail : UnmarkedBy ps n := by
+        intro q hq
+        exact h q (by simp [hq])
+      simp [divisorProduct, hmod, ih htail]
+
+/-- The bounded natural product is trivial exactly when the finite prime list
+does not mark the candidate. -/
+theorem divisorProduct_eq_one_iff_unmarked (ps : List Nat) (n : Nat)
+    (hprime : ∀ p, p ∈ ps → IsPrime p) :
+    divisorProduct ps n = 1 ↔ UnmarkedBy ps n := by
+  constructor
+  · intro hprod p hpMem hpDvd
+    have hpProd := dvd_divisorProduct_of_mem_dvd ps hpMem hpDvd
+    rw [hprod] at hpProd
+    have hpLe : p ≤ 1 := Nat.le_of_dvd (by decide) hpProd
+    have hp2 := (hprime p hpMem).two_le
+    omega
+  · exact divisorProduct_eq_one_of_unmarked ps n
+
+theorem divisorProduct_pos (ps : List Nat) (n : Nat)
+    (hprime : ∀ p, p ∈ ps → IsPrime p) :
+    0 < divisorProduct ps n := by
+  induction ps with
+  | nil => simp [divisorProduct]
+  | cons p ps ih =>
+      have hpPos : 0 < p := by
+        have := (hprime p (by simp)).two_le
+        omega
+      have htailPrime : ∀ q, q ∈ ps → IsPrime q := by
+        intro q hq
+        exact hprime q (by simp [hq])
+      have htailPos := ih htailPrime
+      simp only [divisorProduct]
+      split
+      · exact Nat.mul_pos hpPos htailPos
+      · exact htailPos
+
+/-- General accumulator theorem for the executable product component.  The
+single total-product bound is inherited by every recursive prefix. -/
+theorem rootCellFoldFrom_prod_eq (ps : List Nat) (n : Nat)
+    (st : RootCellState) (a : Nat)
+    (haPos : 0 < a)
+    (hstate : st.prod = encodedProduct a)
+    (hprime : ∀ p, p ∈ ps → IsPrime p)
+    (hbound : a * divisorProduct ps n < M) :
+    (rootCellFoldFrom n st ps).prod =
+      encodedProduct (a * divisorProduct ps n) := by
+  induction ps generalizing st a with
+  | nil =>
+      simpa [rootCellFoldFrom, divisorProduct] using hstate
+  | cons p ps ih =>
+      have hpPrime : IsPrime p := hprime p (by simp)
+      have hpPos : 0 < p := by
+        have := hpPrime.two_le
+        omega
+      have htailPrime : ∀ q, q ∈ ps → IsPrime q := by
+        intro q hq
+        exact hprime q (by simp [hq])
+      by_cases hpDvd : p ∣ n
+      · have hmod : n % p = 0 := Nat.dvd_iff_mod_eq_zero.mp hpDvd
+        have htailPos := divisorProduct_pos ps n htailPrime
+        have htailOne : 1 ≤ divisorProduct ps n := htailPos
+        have hpLe : p ≤ p * divisorProduct ps n := by
+          have := Nat.mul_le_mul_left p htailOne
+          simpa using this
+        have hapLe : a * p ≤ a * (p * divisorProduct ps n) :=
+          Nat.mul_le_mul_left a hpLe
+        have hbound' : a * (p * divisorProduct ps n) < M := by
+          simpa [divisorProduct, hmod] using hbound
+        have hapM : a * p < M := Nat.lt_of_le_of_lt hapLe hbound'
+        have hstep : (rootCellStep n st p).prod = a * p := by
+          by_cases ha1 : a = 1
+          · subst a
+            have hs0 : st.prod = 0 := by simpa [encodedProduct] using hstate
+            have hpM : p < M := by simpa using hapM
+            have hpMod : p % M = p := Nat.mod_eq_of_lt hpM
+            simp [rootCellStep_hit n st p hpDvd, prodUpdate, hs0,
+              hpMod]
+          · have ha0 : a ≠ 0 := by omega
+            have hsa : st.prod = a := by simpa [encodedProduct, ha1] using hstate
+            simp [rootCellStep_hit n st p hpDvd, prodUpdate, hsa, ha0,
+              Nat.mod_eq_of_lt hapM]
+        have hstepEnc : (rootCellStep n st p).prod =
+            encodedProduct (a * p) := by
+          rw [hstep]
+          have hap2 : 2 ≤ a * p :=
+            Nat.le_trans hpPrime.two_le (Nat.le_mul_of_pos_left p haPos)
+          have hapNe : a * p ≠ 1 := by omega
+          simp [encodedProduct, hapNe]
+        have hrec := ih (rootCellStep n st p) (a * p)
+          (Nat.mul_pos haPos hpPos) hstepEnc htailPrime
+          (by simpa [Nat.mul_assoc] using hbound')
+        simpa [rootCellFoldFrom, divisorProduct, hmod, Nat.mul_assoc] using hrec
+      · have hmod : n % p ≠ 0 := by
+          simpa only [Nat.dvd_iff_mod_eq_zero] using hpDvd
+        have hrec := ih st a haPos hstate htailPrime
+          (by simpa [divisorProduct, hmod] using hbound)
+        simpa [rootCellFoldFrom, divisorProduct, hmod,
+          rootCellStep_miss n st p hpDvd] using hrec
+
+theorem rootCellFold_prod_eq_encoded (ps : List Nat) (n : Nat)
+    (hprime : ∀ p, p ∈ ps → IsPrime p)
+    (hordered : ps.Pairwise (· < ·))
+    (hnPos : 0 < n) (hnM : n < M) :
+    (rootCellFold ps n).prod = encodedProduct (divisorProduct ps n) := by
+  have hbound := divisorProduct_lt_modulus ps n hprime hordered hnPos hnM
+  have h := rootCellFoldFrom_prod_eq ps n ⟨0, 0⟩ 1 (by decide) rfl
+    hprime (by simpa using hbound)
+  simpa [rootCellFold] using h
+
+/-- The finite product component is zero exactly on the executable unmarked
+branch. -/
+theorem rootCellFold_prod_eq_zero_iff_unmarked (ps : List Nat) (n : Nat)
+    (hprime : ∀ p, p ∈ ps → IsPrime p)
+    (hordered : ps.Pairwise (· < ·))
+    (hnPos : 0 < n) (hnM : n < M) :
+    (rootCellFold ps n).prod = 0 ↔ UnmarkedBy ps n := by
+  rw [rootCellFold_prod_eq_encoded ps n hprime hordered hnPos hnM]
+  by_cases hu : UnmarkedBy ps n
+  · have hprod := divisorProduct_eq_one_of_unmarked ps n hu
+    simp [encodedProduct, hprod, hu]
+  · have hprod : divisorProduct ps n ≠ 1 := by
+      intro heq
+      exact hu ((divisorProduct_eq_one_iff_unmarked ps n hprime).mp heq)
+    have hprodPos := divisorProduct_pos ps n hprime
+    simp [encodedProduct, hprod, Nat.ne_of_gt hprodPos, hu]
 
 /-- If every listed prime misses, the finite production fold leaves a cleared
 cell untouched. -/
