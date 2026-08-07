@@ -45,6 +45,7 @@ import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Ports.ArraySegMobiusSignal
 import LeanCompCert.Ports.ArraySegMobiusMarkCore
 import LeanCompCert.Ports.ArraySegMobiusMarkStart
+import LeanCompCert.Ports.ArraySegMobiusCursorCore
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.MobiusResidueScalar
@@ -339,6 +340,25 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markPrefix_live_start
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.signalInput_mark_live_start
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_coreBody_mark_live_start
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorGate_marked
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorGate_exhausted
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorIndex_hold
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorIndex_advance
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorLoad_table
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorPrime_hold
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorPrime_advance
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorOffset_first
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorFinish_hold
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorFinish_advance
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.cursorFinish_terminal
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundAfterFlag_hold
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundAfterFlag_advance
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundCursorInput_live
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundCursorInput_exhausted
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundBeforeProd_exhausted_addresses
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundCursorInput_exhausted_cell
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markRound_cursor_live
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markRound_cursor_advance
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

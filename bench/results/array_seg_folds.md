@@ -943,7 +943,7 @@ already present:
 | `ArraySegMobiusMarkTail.lean` (clear/root address lemmas) | 1.24 s | 619,464 KiB |
 | `ArraySegMobiusMarkStep.lean` (three tail stores) | 0.44 s | 543,908 KiB |
 | `ArraySegMobiusMarkCore.lean` (complete 111-instruction live round) | 0.43 s | 556,932 KiB |
-| full axiom audit with the new declarations | 0.49 s | 1,562,012 KiB |
+| full axiom audit with the new declarations | 0.51 s | 1,584,132 KiB |
 
 The source targets used a 2 GiB hard cap (1 GiB soft); the audit used a 4 GiB
 hard cap (3 GiB soft).  Every successful row used zero swap.  The new theorems
@@ -969,3 +969,27 @@ Thus both the first live mark in a window and every ordinary live mark have
 exact production-core theorems.  Cursor exhaustion/prime changes, the
 root-table construction, window transitions, and the lifted
 `CellRepresents` induction remain.
+
+The cursor transition is now split into six production-derived slices: the
+range/advance gate, clamped table index, table load, old/new prime selector,
+first-multiple remainder, and terminal selector.  The composed
+`arun_markRound_cursor_live` and `arun_markRound_cursor_advance` theorems
+cover a complete reset-independent mark including both stores.  The latter
+proves that an exhausted prime advances exactly one table slot and chooses
+either `(p - w % p) % p` or the explicit `segLen + 1` terminal sentinel; its
+sink-store proof also frames the selected prime-table cell.
+
+All source work again used `MemoryHigh=1G`, `MemoryMax=2G`, one Lake job, and
+no swap:
+
+| cursor source target | wall | peak RSS |
+| --- | ---: | ---: |
+| `ArraySegMobiusCursor.lean` | 0.56 s | 609,944 KiB |
+| `ArraySegMobiusCursorStep.lean` | 1.42 s | 543,168 KiB |
+| `ArraySegMobiusCursorInput.lean` | 1.21 s | 567,036 KiB |
+| `ArraySegMobiusCursorCore.lean` | 0.38 s | 537,440 KiB |
+| capped dependency build through `CursorCore` | 3.63 s | 624,300 KiB |
+
+The remaining reusable induction work is now the nonstart setup lift into
+these transitions, the root prime-table construction, clearing/window
+transitions, and number-theoretic preservation of `CellRepresents`.
