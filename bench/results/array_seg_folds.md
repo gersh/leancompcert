@@ -1081,3 +1081,13 @@ source check completed in 0.20 s wall at 527,296 KiB peak RSS with zero swap.
 The remaining root work is to carry list completeness and order through the
 machine's root-window fold and connect its product/flag cells to this pure
 criterion; after that comes the global `CellRepresents` induction.
+
+`ArraySegMobiusPrimeTable.lean` packages that pure fold invariant: the table
+contains exactly the primes through the processed bound and is strictly
+increasing.  Its empty, append, retain, and unmarked/marked branch theorems
+compile the complete one-candidate induction step.  A fresh direct source
+check completed in 0.22 s wall at 542,060 KiB peak RSS with zero swap under
+the 2 GiB hard cap.  Rebuilding its changed primality dependency took 0.23 s
+at 531,936 KiB.  What remains is the representation theorem connecting the
+machine array prefix and product/flag cells to this invariant, followed by
+the outer fold induction.
