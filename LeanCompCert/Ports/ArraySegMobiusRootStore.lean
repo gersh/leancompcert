@@ -48,4 +48,36 @@ theorem postRootGate_collect (c : Cfg) (idx : Nat) (s : AState) (n : Nat)
     denoteOperand, denoteOp, AState.writeReg,
     h65', h67', h132', h2mod, h1mod, hsubRaw, hcapSubMod, hlt]
 
+def postRootMarkedPrefix (c : Cfg) : List AInstr :=
+  (postRootBeforeCollect c).take 2
+
+def postRootMarkedFinish : List AInstr :=
+  [ .scalar (.binop 136 .mul (.reg 135) (.reg 67))
+  , .scalar (.binop 137 .mul (.reg 136) (.reg 132)) ]
+
+theorem postRootGate_eq_markedSlices (c : Cfg) :
+    postRootGate c = postRootMarkedPrefix c ++ postRootMarkedFinish := by
+  rfl
+
+theorem postRootMarkedFinish_zero (idx : Nat) (s : AState)
+    (h67 : s.regs 67 = 0) :
+    (arun idx s postRootMarkedFinish).regs 137 = 0 := by
+  simp [postRootMarkedFinish, arun, astep,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval,
+    denoteOperand, denoteOp, AState.writeReg, h67]
+
+/-- A cell already marked by a bootstrap prime cannot enable root collection,
+independently of the candidate range checks.  The configured range comparison
+stays opaque in the prefix, avoiding its costly eager elaboration. -/
+theorem postRootGate_marked (c : Cfg) (idx : Nat) (s : AState)
+    (h67 : s.regs 67 = 0) :
+    (arun idx s (postRootGate c)).regs 137 = 0 := by
+  let q := arun idx s (postRootMarkedPrefix c)
+  have hq67 : q.regs 67 = 0 := by
+    rw [arun_reg_frame idx 67 (postRootMarkedPrefix c) s (by rfl)]
+    exact h67
+  rw [postRootGate_eq_markedSlices, arun_append]
+  exact postRootMarkedFinish_zero idx q hq67
+
 end LeanCompCert.Ports.ArraySegMobiusMark

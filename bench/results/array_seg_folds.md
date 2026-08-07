@@ -1091,3 +1091,19 @@ the 2 GiB hard cap.  Rebuilding its changed primality dependency took 0.23 s
 at 531,936 KiB.  What remains is the representation theorem connecting the
 machine array prefix and product/flag cells to this invariant, followed by
 the outer fold induction.
+
+`ArraySegMobiusPrimeTableRep.lean` now discharges the array-prefix half of
+that representation theorem.  It proves that the production root suffix
+appends an unmarked candidate at the live cursor, frames every earlier table
+cell, and advances the cursor; the marked branch writes only to `primeSink`
+and preserves both the represented prefix and cursor.  These are composed
+with `PrimeTableInv` into complete append/retain steps.  Its direct source
+check completed in 0.35 s wall at 563,956 KiB peak RSS with zero swap under
+the 2 GiB cap.
+
+An initial eager proof of the marked gate climbed to 1.59 GiB and was stopped
+before the hard limit.  Keeping the configured range comparison opaque and
+proving its final two multiplications in a separate generic slice reduced the
+successful source peak to 554,600 KiB.  The remaining representation work is
+the product/flag marking fold that supplies the unmarked/marked premise for
+each root accumulation cell, then the outer root-window fold.

@@ -54,6 +54,7 @@ import LeanCompCert.Ports.ArraySegMobiusClear
 import LeanCompCert.Ports.ArraySegMobiusRootWrite
 import LeanCompCert.Ports.ArraySegMobiusPrimeInvariant
 import LeanCompCert.Ports.ArraySegMobiusPrimeTable
+import LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.MobiusResidueScalar
@@ -382,10 +383,14 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeClear_acc_addresses
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_acc_clears
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postRootGate_collect
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.postRootGate_marked
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postRootAddress_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_collect_address
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postAfterRootStore_write_collect
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.postAfterRootStore_write_disabled
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_rootWriteSuffix_collect
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_rootWriteSuffix_collect_frame
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_rootWriteSuffix_marked_preserves
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeInvariant.isPrime_of_unmarked_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeInvariant.unmarked_of_prime_lt
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeInvariant.unmarked_of_prime
@@ -396,6 +401,12 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTable.unmarked_iff_prime_next
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTable.append_next_of_unmarked
 #print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTable.retain_next_of_marked
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.TablePrefix.append_single
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.TablePrefix.frame_below
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.rootWriteSuffix_append
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.rootWriteSuffix_retain
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.RootTableInv.append_next
+#print axioms LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.RootTableInv.retain_next
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf
