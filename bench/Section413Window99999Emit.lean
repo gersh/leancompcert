@@ -21,7 +21,7 @@ def main (args : List String) : IO UInt32 := do
   if mode != "positive" && !control then
     IO.eprintln "mode must be positive or control"
     return 1
-  let words := if control then commonBound + 1 :: windowWords.tail else windowWords
+  let words := if control then (commonBound + 1) :: windowWords.tail else windowWords
   let lp := LeanCompCert.Ports.TotalWordBounds.boundsProgram commonBound words
   let p := lp.flatten
   let name := if control then "S413Window99999Control" else "S413Window99999"

@@ -35,3 +35,34 @@ is proved in 100 kernel-checked chunks; the physical `flag=0` result is
 connected to the source model through `compiled_zero_expected_g2`.  The
 control changes expected cell 1 to zero and demonstrates that the compiled
 comparison path rejects a mismatched table.
+
+## Full 99,999-row campaign
+
+Measured 2026-08-06 on the same Linux/aarch64 host from the tree based on
+commit `315339d` plus the compact rolled-lowering context recorded with this
+receipt. Every phase ran with `MemorySwapMax=0`. The C compiler used
+CompCert 3.17 at `-O0`; the generated 799,992-statement epilogue required a
+512 MiB parser stack (`ulimit -s 524288`) inside the stated memory cgroup.
+
+Configuration: `cap=99999`, `R=999`, 99,999 rows, `arrayLen=500000`,
+`loopCount=163297368`, 1,456 loop-body instructions, and 799,992 table-check
+epilogue instructions.
+
+| Phase | Wall time | Peak RSS | Hard memory limit | Result |
+|---|---:|---:|---:|---|
+| Emit positive C | 32.97 s | 1,182,832 KiB | 6 GiB | success |
+| CompCert `-O0`, positive | 3:00.59 | 3,190,708 KiB | 6 GiB | success |
+| Run positive | 34.49 s | 13,776 KiB | 1 GiB | `flag=0`, exit 0 |
+| Emit one-cell corruption control | 32.83 s | 1,221,768 KiB | 6 GiB | success |
+| CompCert `-O0`, control | 3:02.02 | 3,190,968 KiB | 6 GiB | success |
+| Run control | 34.46 s | 13,684 KiB | 1 GiB | `flag=1`, exit 1 |
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| positive C | 32,202,548 | `c6759f6b8c711133787641a3a3d7e2c7bead2c4a026c86ee0e74bf2db6f4a621` |
+| control C | 32,202,533 | `573d190295fce8198fd7b7b564d88b5918e124a7c8e3e805a0283fb29fff74ac` |
+| positive executable | 8,852,464 | `8e8f7ea14b66b0cdf559bf3b0d96a3fe7fde48c66da2513978e33ce1c1c4b4a2` |
+| control executable | 8,852,472 | `d6a896cd285b908044cffe209511c056e4b10f31ca1675457d16ecd42f07ee79` |
+
+The same compact typing context removes quadratic emitter allocation without
+changing the generated recurrence, comparison program, or proof chain.

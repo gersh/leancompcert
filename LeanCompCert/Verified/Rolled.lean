@@ -801,18 +801,21 @@ Emission is unchanged, byte for byte.  What is new is that every piece of it
 now has a name, so the theorems below can be about the emitted statements
 themselves rather than about a paraphrase of them. -/
 
-/-- The padded program: one more register (the loop counter), and a single
-loop iteration.  Only its *typing* is used. -/
+/-- The minimal typing program: one more register (the loop counter), with no
+user instructions. Its generated preamble declares the scratch and every
+scalar local, which is all `Lower.localType?` needs. Keeping `init`, `body`,
+and `epilogue` empty avoids reconstructing a flattened data trace once per
+operand during emission. -/
 def loweringProgram (p : Program) : Program :=
-  { p with regCount := p.regCount + 1, loopCount := 1 }
+  { regCount := p.regCount + 1
+    loopCount := 0
+    init := []
+    body := []
+    epilogue := []
+    output := p.output }
 
-/-- Typing context for rolled lowering: the padded program at
-`loopCount := 1`.  `lowerSequence` consults the function only through
-`localType?`, and the preamble plus a single body copy already declares
-every local at its (uniform) type, so lowering against this context
-produces exactly the statements it would against the full program —
-without materializing `loopCount` unrolled body copies at emission
-time. -/
+/-- Typing context for rolled lowering. The minimal program's preamble
+declares all locals at their uniform types. -/
 def loweringContext (p : Program) (name : String) : CCIR.Function :=
   (loweringProgram p).toFn name
 
@@ -955,11 +958,8 @@ theorem instrWF_widen {a b : Nat} (h : a ≤ b) :
 
 theorem loweringProgram_WF (p : Program) (hWF : p.WF) :
     (loweringProgram p).WF := by
-  obtain ⟨hOut, hInit, hBody, hEpi⟩ := hWF
-  exact ⟨Nat.lt_succ_of_lt hOut,
-    fun i hi => instrWF_widen (Nat.le_succ _) (hInit i hi),
-    fun i hi => instrWF_widen (Nat.le_succ _) (hBody i hi),
-    fun i hi => instrWF_widen (Nat.le_succ _) (hEpi i hi)⟩
+  refine ⟨Nat.lt_succ_of_lt hWF.1, ?_, ?_, ?_⟩ <;>
+    simp [loweringProgram]
 
 /-- The counter-augmented program is well formed whenever `p` is: the extra
 register is the counter, and the extra instruction only touches it. -/

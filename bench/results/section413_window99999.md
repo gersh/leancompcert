@@ -1,44 +1,39 @@
 # Section 4.1.3 99,999-point window certificate
 
-Measured 2026-08-05 on Linux/aarch64 (20-core Cortex-X925), leancompcert
-commit `856beb6fa01889cfc8b7a9c55ebc67dd323746ac`. Every command ran in a
-systemd cgroup with `MemorySwapMax=0`; generated artifacts are local benchmark
-products and are not proof inputs.
+Measured 2026-08-06 on Linux/aarch64 (20-core Cortex-X925) from the tree
+based on commit `315339d` plus the compact rolled-lowering context recorded
+with this receipt. Every command ran in a systemd cgroup with
+`MemorySwapMax=0`; generated artifacts are local benchmark products and are
+not proof inputs.
 
-The source Boolean is `Section413Sweep.windowOK 999 99999`. It performs both
-complete `g₁`/`g₂` table sweeps and both Section 4.1.3 window-event scans.
-`ClosedBoolCarrier.computation_returns_zero_iff` proves that the packaged
-LeanCompCert computation returns zero exactly when that Boolean is true.
+The emitted runtime program checks all 199,998 source-derived `g₁`/`g₂`
+event words against `commonBound`. It does not evaluate `windowOK` or bake
+its answer into the generated C. The rejecting control replaces exactly the
+first event word by `commonBound + 1`.
 
 | Phase | Wall time | Peak RSS | Hard memory limit | Result |
 |---|---:|---:|---:|---|
-| Direct certificate source check | 0.13 s | 512,952 KiB | 3 GiB | success |
-| Emit positive C, including closed-model evaluation | 13:35.12 | 545,336 KiB | 3 GiB | `some 0` |
-| CompCert 3.17 `-O2`, positive | 0.02 s | 15,548 KiB | 2 GiB | success |
-| Run positive | <0.01 s | 1,256 KiB | 1 GiB | `flag=0`, exit 0 |
-| Emit false-Boolean control | 0.35 s | 697,148 KiB | 3 GiB | `some 1` |
-| CompCert 3.17 `-O2`, control | 0.03 s | 15,548 KiB | 2 GiB | success |
-| Run control | <0.01 s | 1,256 KiB | 1 GiB | `flag=1`, exit 1 |
+| Emit positive C | 10.20 s | 1,562,080 KiB | 6 GiB | `some 0` |
+| CompCert 3.17 `-O0`, positive | 55.64 s | 1,424,272 KiB | 6 GiB | success |
+| Run positive | <0.01 s | 3,664 KiB | 1 GiB | `flag=0`, exit 0 |
+| Emit one-word-over-bound control | 10.29 s | 1,560,324 KiB | 6 GiB | `some 1` |
+| CompCert 3.17 `-O0`, control | 59.44 s | 1,383,256 KiB | 6 GiB | success |
+| Run control | <0.01 s | 3,664 KiB | 1 GiB | `flag=1`, exit 1 |
 
-Artifact identities:
+The emitted program contains 199,998 epilogue comparisons. CompCert needed
+the same bounded 512 MiB parser stack used for the full table artifacts; all
+process memory remained inside the 6 GiB cgroup and swap stayed disabled.
 
 | Artifact | Bytes | SHA-256 |
 |---|---:|---|
-| positive C | 495 | `41a164964d177f0c481ebb74676b370bda5639ea42b1aed70f550fad074013ae` |
-| control C | 516 | `4a9ff1ec7e7b33bdd23447c6927ddb0d60502b6596b99ef24d043c780d2f89bc` |
-| positive executable | 70,584 | `1b7e3d525b7ea51ecf9fcc16827995dc064ff1bad449c83016c0c27f50894d3c` |
-| control executable | 70,592 | `b889bd8bd6d5c15c77a4ac9456d8f6fd0ff161a21bc94a40f6b4a59348b6d6d3` |
+| positive C | 24,999,409 | `d4bc575d7888a403230b9b3ee8e9e2d2ea435c22471e307e663ac411d91bc836` |
+| control C | 24,999,447 | `20a5b0a241c87355dec2c007aa88cbafe901816a9a5a1df16656c73a7c83c818` |
+| positive executable | 2,429,880 | `e64957d895a65a4f83cd41d399503294b4e68f1a3c4220da16a35a04504d9a63` |
+| control executable | 2,429,888 | `2c38435ff7669880824a205b57984c8468bdcc567ebff0c850a14f438f2afb5a` |
 
-As an independent source-model cross-check, the expected `g₁` and `g₂`
-tables through 99,999 were generated in 100 kernel-checked chunks each. The
-`g₁` generation took 6:42.77 / 586,516 KiB and `g₂` took 6:30.12 /
-595,240 KiB; all 200 chunks and their aggregate modules then built under a
-16 GiB hard cap with eight workers. Those large tables are deliberately not
-embedded in the final carrier: the direct source Boolean is the exact model
-used by the theorem, and omitting a 33 MB literal-table epilogue keeps both
-emission and CompCert compilation bounded.
-
-The sole non-foundational atom, `section413Window99999_compcert_run`, is the
-packaged computation's exact `Returns 0` proposition. The generic packaging
-theorem proves the CCIR/generated-C lowering, and the source bridge
-`section413Window431_of_model` derives the unchanged project certificate.
+`TotalWordBounds.all_le_of_returns_zero` proves that an accepted compiled
+result bounds every emitted word. The generated K-trace proofs identify those
+words with the source recurrences, the separate full G1/G2 table runs prove
+all 99,999 source table rows, and `windowOK_of_tables` derives the unchanged
+Section 4.1.3 window predicate. Thus the physical positive/control pair tests
+the same runtime path used by the admitted `Returns 0` proposition.

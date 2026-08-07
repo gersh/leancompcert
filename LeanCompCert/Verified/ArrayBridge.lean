@@ -876,10 +876,22 @@ def AProgram.incInstr (p : AProgram) : MInstr :=
   .straight (.binary { id := ⟨p.regCount + 1⟩, type := .u64 } .add
     (.local ⟨p.regCount + 1⟩) (.uintLit .u64 1))
 
-/-- Typing context for rolled lowering: the counter-augmented program at
-`loopCount := 1`, whose single body copy declares every local. -/
-def AProgram.loweringContext (p : AProgram) (name : String) : CCIR.Function :=
-  AProgram.toFn { p with regCount := p.augCount, loopCount := 1 } name
+/-- Compact typing context for rolled lowering.
+
+`Lower.lowerOperand` consults a function only through `localType?`. Listing
+the scratch, scalar registers, counter, and array base as parameters provides
+the same types without embedding the complete epilogue in the lookup context.
+This matters for large literal-table checkers: rebuilding and scanning that
+epilogue once per operand made emission quadratic in the table length. -/
+def AProgram.loweringContext (p : AProgram) (name : String) : CCIR.Function := {
+  name := ⟨name⟩
+  params := #[scratchLocal] ++
+    (Array.range p.augCount).map regLocal ++ #[baseDecl p.augCount]
+  result := .u64
+  entry := ⟨0⟩
+  blocks := #[]
+  sourceDecl := some name
+}
 
 private def lowerOrNone (fn : CCIR.Function) (l : List MInstr) :
     Option (List C.CStmt) :=
