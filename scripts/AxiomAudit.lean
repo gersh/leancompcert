@@ -307,6 +307,8 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.MobiusExtremaTrialWindow.finalAbs_eq_trialExtAt
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_signalBlock
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_eq_muSig_of_cell
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.signalBlock_defined
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.denote_signalBlock_readSig
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

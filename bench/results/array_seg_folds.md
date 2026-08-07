@@ -876,3 +876,9 @@ pure statement that the two marked cells encode `mu(n)`.  The capped source
 check used `MemoryHigh=3G`, `MemoryMax=4G`, no swap, and completed in 0.63 s
 wall with 593,640 KiB peak RSS.  This is a partial denotation arrow, not yet a
 proof that the whole segmented sieve establishes `CellRepresents`.
+
+The follow-up `signalBlock_defined` proves the two product/parity loads are
+in bounds in the two-bank layout, and `denote_signalBlock_readSig` composes
+that fact with the generic array bridge.  Thus this slice now covers the
+partial machine denotation, not merely the total helper evaluator.  Its capped
+source rebuild completed in 0.83 s wall with 602,204 KiB peak RSS and no swap.

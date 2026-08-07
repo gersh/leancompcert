@@ -53,6 +53,53 @@ def decodeCell (n prod flag : Nat) : Sig :=
 def CellRepresents (mu : Nat → Int) (n prod flag : Nat) : Prop :=
   decodeCell n prod flag = muSig mu n
 
+/-- The extracted block's two loads are in bounds in the production two-bank
+layout.  Scalar instructions in this slice contain no partial division or
+remainder operations, so these are its complete definedness conditions. -/
+theorem signalBlock_defined (arrayLen : Nat) (c : Cfg) (idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hi : s.regs rR - c.markSteps < c.segLen)
+    (hmain : s.regs 9 = 1)
+    (_hRM : s.regs rR < M)
+    (hTM : c.markSteps < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (harray : c.segLen + c.segLen ≤ arrayLen) :
+    AllDefined arrayLen idx s (signalBlock c) := by
+  have hsub :
+      (s.regs rR + (M - c.markSteps)) % M = s.regs rR - c.markSteps := by
+    have heq : s.regs rR + (M - c.markSteps) =
+        M + (s.regs rR - c.markSteps) := by omega
+    rw [heq, Nat.add_mod_left, Nat.mod_eq_of_lt]
+    omega
+  have hiM : s.regs rR - c.markSteps < M := by omega
+  have hiLM : s.regs rR - c.markSteps + c.segLen < M := by omega
+  have hiA : s.regs rR - c.markSteps < arrayLen := by omega
+  have hiLA : s.regs rR - c.markSteps + c.segLen < arrayLen := by omega
+  have hTmod : c.markSteps % M = c.markSteps := Nat.mod_eq_of_lt hTM
+  have hsub' :
+      (s.regs 5 + (M - c.markSteps)) % M = s.regs 5 - c.markSteps := by
+    simpa [rR] using hsub
+  have hiM' : s.regs 5 - c.markSteps < M := by simpa [rR] using hiM
+  have hiLM' : s.regs 5 - c.markSteps + c.segLen < M := by
+    simpa [rR] using hiLM
+  have hiA' : s.regs 5 - c.markSteps < arrayLen := by simpa [rR] using hiA
+  have hiLA' : s.regs 5 - c.markSteps + c.segLen < arrayLen := by
+    simpa [rR] using hiLA
+  set_option maxRecDepth 10000 in
+  simp [signalBlock, Cfg.coreBody, AllDefined, ADefined, astep,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval,
+    denoteOperand, denoteOp, AState.writeReg,
+    rR, rW, hmain, hTmod, hsub', Nat.mod_eq_of_lt hiM',
+    Nat.mod_eq_of_lt hiLM', hiA', hiLA']
+
+/-- Partial array-machine denotation of the extracted decoder block. -/
+theorem denote_signalBlock (arrayLen : Nat) (c : Cfg) (idx : Nat) (s : AState)
+    (hdef : AllDefined arrayLen idx s (signalBlock c)) :
+    denoteAInstrs arrayLen idx s (signalBlock c) =
+      some (arun idx s (signalBlock c)) :=
+  denoteAInstrs_eq_arun arrayLen idx (signalBlock c) s hdef
+
 /-- Exact meaning of the extracted twenty instructions during a main-phase
 accumulation iteration. -/
 theorem readSig_arun_signalBlock (c : Cfg) (idx : Nat) (s : AState)
@@ -146,5 +193,27 @@ theorem readSig_eq_muSig_of_cell (c : Cfg) (idx : Nat) (s : AState)
       muSig mu (s.regs rW + (s.regs rR - c.markSteps)) := by
   rw [readSig_arun_signalBlock c idx s hT hi hgate hmain hRM hTM h2LM hWM]
   exact hcell
+
+/-- End-to-end partial denotation of the extracted block, including both load
+bounds and its exact observable result. -/
+theorem denote_signalBlock_readSig (arrayLen : Nat) (c : Cfg)
+    (idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hi : s.regs rR - c.markSteps < c.segLen)
+    (hgate : s.regs 133 = 1)
+    (hmain : s.regs 9 = 1)
+    (hRM : s.regs rR < M)
+    (hTM : c.markSteps < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (harray : c.segLen + c.segLen ≤ arrayLen)
+    (hWM : s.regs rW + (s.regs rR - c.markSteps) < M) :
+    (denoteAInstrs arrayLen idx s (signalBlock c)).map readSig =
+      some (decodeCell (s.regs rW + (s.regs rR - c.markSteps))
+        (s.arr (s.regs rR - c.markSteps))
+        (s.arr (s.regs rR - c.markSteps + c.segLen))) := by
+  rw [denote_signalBlock arrayLen c idx s
+    (signalBlock_defined arrayLen c idx s hT hi hmain hRM hTM h2LM harray)]
+  simp only [Option.map_some]
+  rw [readSig_arun_signalBlock c idx s hT hi hgate hmain hRM hTM h2LM hWM]
 
 end LeanCompCert.Ports.ArraySegMobiusSignal
