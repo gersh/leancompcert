@@ -44,6 +44,7 @@ import LeanCompCert.Testing.DirichletLadderCertificate
 import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Ports.ArraySegMobiusSignal
 import LeanCompCert.Ports.ArraySegMobiusMarkCore
+import LeanCompCert.Ports.ArraySegMobiusMarkStart
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.MobiusResidueScalar
@@ -332,6 +333,12 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_cells
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.signalBlock_mark_controls
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_coreBody_mark_live_nonstart
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markSetup_start
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.roundBeforeProd_live
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markRound_live
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_markPrefix_live_start
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.signalInput_mark_live_start
+#print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_coreBody_mark_live_start
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

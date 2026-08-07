@@ -943,7 +943,7 @@ already present:
 | `ArraySegMobiusMarkTail.lean` (clear/root address lemmas) | 1.24 s | 619,464 KiB |
 | `ArraySegMobiusMarkStep.lean` (three tail stores) | 0.44 s | 543,908 KiB |
 | `ArraySegMobiusMarkCore.lean` (complete 111-instruction live round) | 0.43 s | 556,932 KiB |
-| full axiom audit with the new declarations | 0.56 s | 1,592,240 KiB |
+| full axiom audit with the new declarations | 0.49 s | 1,562,012 KiB |
 
 The source targets used a 2 GiB hard cap (1 GiB soft); the audit used a 4 GiB
 hard cap (3 GiB soft).  Every successful row used zero swap.  The new theorems
@@ -951,3 +951,21 @@ depend only on `propext` and `Quot.sound`.  This advances the production
 refinement through an ordinary live mark; the induction base at a window
 start, cursor-exhausted iterations, window/root transitions, and the
 number-theoretic `CellRepresents` invariant remain separate obligations.
+
+The next source split removes the twelve window-start cursor instructions
+from the actual mark.  `arun_markRound_live` proves the same exact two-store
+effect without assuming `rR != 0`; `arun_markSetup_start` proves the real
+setup selects table cursor zero, `firstPrime`, and the paper-standard first
+multiple `(p - w % p) % p`.  `arun_coreBody_mark_live_start` composes that
+base case through the complete production core.  These capped target builds
+also used `MemoryHigh=1G`, `MemoryMax=2G`, and no swap:
+
+| window-start source target | wall | peak RSS |
+| --- | ---: | ---: |
+| `ArraySegMobiusMarkRound.lean` | 0.73 s | 579,076 KiB |
+| `ArraySegMobiusMarkStart.lean` | 0.53 s | 563,152 KiB |
+
+Thus both the first live mark in a window and every ordinary live mark have
+exact production-core theorems.  Cursor exhaustion/prime changes, the
+root-table construction, window transitions, and the lifted
+`CellRepresents` induction remain.
