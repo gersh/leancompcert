@@ -426,6 +426,16 @@ private theorem denoteAInstrs_append_some (len idx : Nat) (s s' : AState)
     rw [hx] at h
     exact h
 
+/-- Compose two successful straight-line executions without exposing the
+intermediate `Option.bind` normal form to every caller. -/
+private theorem denoteAInstrs_append_intro (len idx : Nat) (s sm s' : AState)
+    (xs ys : List AInstr)
+    (hx : denoteAInstrs len idx s xs = some sm)
+    (hy : denoteAInstrs len idx sm ys = some s') :
+    denoteAInstrs len idx s (xs ++ ys) = some s' := by
+  rw [denoteAInstrs_append, hx]
+  exact hy
+
 set_option maxRecDepth 100000 in
 /-- **The complete residue block denotes `resStep`.**  Successful execution,
 plus the two divisors' nonzero facts, turns the 50 machine instructions into
@@ -523,5 +533,60 @@ theorem mobiusLiveResidue_denote (k len idx : Nat) (s s' : AState)
                   · rw [hF 103 (by rfl), hEcSq]
                   · rw [hFv, hE65, hE159, hEc, hE133, hE104, hBt, hBh]
     )
+
+set_option maxRecDepth 1000000 in
+set_option maxHeartbeats 5000000 in
+/-- **The residue block is defined under exactly its two divisor guards.**
+This is the existence counterpart of `mobiusLiveResidue_denote`.  Keeping it
+beside the six-block transcription makes the private destination masks
+available and prevents downstream whole-program proofs from unfolding fifty
+instructions at once. -/
+theorem mobiusLiveResidue_defined (k len idx : Nat) (s : AState)
+    (hn : s.regs 65 ≠ 0)
+    (hc : (celStep (s.regs 65) (s.regs 103) (s.regs 102) (s.regs 133)).1 ≠ 0) :
+    ∃ s', denoteAInstrs len idx s (mobiusLiveResidue k) = some s' := by
+  obtain ⟨sA, hA⟩ := blkA_ok k len idx s hn
+  obtain ⟨sB, hB⟩ := blkB_ok len idx sA
+  obtain ⟨sC, hC⟩ := blkC_ok k len idx sB
+  obtain ⟨sD, hD⟩ := blkD_ok len idx sC
+  obtain ⟨sE, hE⟩ := blkE_ok len idx sD
+  have fA (j : Nat) (hj : SA j = false) : sA.regs j = s.regs j :=
+    denoteAInstrs_frame len idx SA (blkA k) (SA_dests k) s sA hA j hj
+  have fB (j : Nat) (hj : SB j = false) : sB.regs j = sA.regs j :=
+    denoteAInstrs_frame len idx SB blkB SB_dests sA sB hB j hj
+  have fC (j : Nat) (hj : SC j = false) : sC.regs j = sB.regs j :=
+    denoteAInstrs_frame len idx SC (blkC k) (SC_dests k) sB sC hC j hj
+  have fD (j : Nat) (hj : SD j = false) : sD.regs j = sC.regs j :=
+    denoteAInstrs_frame len idx SD blkD SD_dests sC sD hD j hj
+  have h65 : sD.regs 65 = s.regs 65 := by
+    rw [fD 65 (by rfl), fC 65 (by rfl), fB 65 (by rfl), fA 65 (by rfl)]
+  have h102 : sD.regs 102 = s.regs 102 := by
+    rw [fD 102 (by rfl), fC 102 (by rfl), fB 102 (by rfl), fA 102 (by rfl)]
+  have h103 : sD.regs 103 = s.regs 103 := by
+    rw [fD 103 (by rfl), fC 103 (by rfl), fB 103 (by rfl), fA 103 (by rfl)]
+  have h133 : sD.regs 133 = s.regs 133 := by
+    rw [fD 133 (by rfl), fC 133 (by rfl), fB 133 (by rfl), fA 133 (by rfl)]
+  have hcel := blkE_cel k len idx sD hE
+  have hcE : sE.regs rCeil ≠ 0 := by
+    simp only [rCeil]
+    rw [hcel, h65, h103, h102, h133]
+    exact hc
+  obtain ⟨sF, hF⟩ := blkF_ok k len idx sE hcE
+  have hEF : denoteAInstrs len idx sD (blkE ++ blkF k) = some sF :=
+    denoteAInstrs_append_intro len idx sD sE sF blkE (blkF k) hE hF
+  have hDEF : denoteAInstrs len idx sC (blkD ++ (blkE ++ blkF k)) = some sF :=
+    denoteAInstrs_append_intro len idx sC sD sF blkD (blkE ++ blkF k) hD hEF
+  have hCDEF : denoteAInstrs len idx sB
+      (blkC k ++ (blkD ++ (blkE ++ blkF k))) = some sF :=
+    denoteAInstrs_append_intro len idx sB sC sF (blkC k)
+      (blkD ++ (blkE ++ blkF k)) hC hDEF
+  have hBCDEF : denoteAInstrs len idx sA
+      (blkB ++ (blkC k ++ (blkD ++ (blkE ++ blkF k)))) = some sF :=
+    denoteAInstrs_append_intro len idx sA sB sF blkB
+      (blkC k ++ (blkD ++ (blkE ++ blkF k))) hB hCDEF
+  refine ⟨sF, ?_⟩
+  rw [mobiusLiveResidue_split]
+  exact denoteAInstrs_append_intro len idx s sA sF (blkA k)
+    (blkB ++ (blkC k ++ (blkD ++ (blkE ++ blkF k)))) hA hBCDEF
 
 end LeanCompCert.Ports.MobiusResidueRealisation

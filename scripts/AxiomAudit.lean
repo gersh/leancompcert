@@ -44,6 +44,8 @@ import LeanCompCert.Testing.DirichletLadderCertificate
 import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
+import LeanCompCert.Ports.MobiusResidueScalar
+import LeanCompCert.Ports.MobiusResidueTrial
 import LeanCompCert.Ports.LogFixPort
 import LeanCompCert.Verified.AddWide
 import LeanCompCert.Verified.LogAccum
@@ -283,6 +285,15 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.stepAbs_exact_bound
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.StepPass.sound
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.resRun_zero_sound
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.mobiusLiveResidue_defined
+#print axioms LeanCompCert.Ports.MobiusResidueScalar.residue_denote
+#print axioms LeanCompCert.Ports.MobiusResidueScalar.residue_defined
+#print axioms LeanCompCert.Ports.MobiusResidueTrial.signal_read
+#print axioms LeanCompCert.Ports.MobiusResidueTrial.fullBody_denote
+#print axioms LeanCompCert.Ports.MobiusResidueTrial.fullStep_fullObs
+#print axioms LeanCompCert.Ports.MobiusResidueTrial.safeRun_append
+#print axioms LeanCompCert.Ports.MobiusResidueTrial.safeCheck_eq_true
+#print axioms LeanCompCert.Ports.MobiusResidueTrial.fullProgram_denote
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveInit_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveEpilogue_all
 #print axioms LeanCompCert.Ports.ArraySegSieve.mobiusLiveProgram_wf

@@ -751,3 +751,56 @@ they were understood:
   Compute-bound processes with a stable working set were unaffected — which is
   why the artifacts themselves kept running at full speed while every
   `fork`/`exec` crawled.
+
+## Proved trial-division fallback for the live residue (2026-08-07)
+
+`Ports/MobiusResidueTrial.lean` now closes the previously missing
+producer-to-residue machine arrow without assuming the segmented sieve:
+
+* `MertensCDEM.body` is the already-denoted fixed-round trial-division
+  producer;
+* ten proved scalar instructions materialize `(n, μ⁺, μ⁻, gate)`;
+* `MobiusResidueScalar.residue` is extracted from the exact 50-instruction
+  live array residue, and its denotation is inherited from
+  `mobiusLiveResidue_denote`;
+* `fullProgram_denote` proves the resulting rolled scalar program denotes the
+  joint transparent fold; and
+* `SafeRun`/`safeCheck` state the only run-time definedness condition as a
+  finite Boolean computation.  `safeRun_append` proves that check can be
+  split at any list boundary, with the first shard's concrete carry-out as
+  the second shard's seed.
+
+This is a semantics-complete fallback, not the production algorithm.  Its
+work is `Θ(N·√N)` trial rounds for `[1,N]`, whereas the segmented route is
+near-linear.  On the current aarch64 host, single core, `gcc -O2`:
+
+| measurement | result |
+| --- | --- |
+| capped source build (`MemoryHigh=3G`, `MemoryMax=4G`, no swap) | 2.23 s wall, 576,364 KiB peak RSS |
+| full 371-target repository build (one Lake job, no swap) | 12:21.91 wall, 17,011,432 KiB peak RSS; passed inside a 20 GiB hard cgroup |
+| tiny rolled emission, 24 rounds | 0.27 s wall, 543,164 KiB peak RSS |
+| emitted C / hosted executable | 12,820 B / 70,328 B |
+| `gcc -O2` for the tiny artifact | 0.03 s wall, 25,536 KiB peak RSS |
+| native 10 million rounds | 0.14 s user |
+| native 100 million rounds | 1.38 s user |
+| fitted rate | about **13.8 ns/trial round** |
+
+At that measured rate, a single complete trial-division pass would cost
+approximately 109 core-days through `7.727·10⁹`, 437 core-years through
+`10¹²`, and `4.37·10⁸` core-years through `10¹⁶`.  These figures explain
+why the proved fallback is valuable as a trust bridge and shard oracle but
+does not replace the segmented sieve for the cited production ranges.
+
+Kernel `#eval` is specifically not the execution route: a combined
+`safeCheck`/`Program.denote`/`fullValue` probe at only 24 rounds was stopped
+after 150 CPU-seconds.  The rolled native artifact completed immediately.
+
+The memory incident that motivated the cap was also reproduced and
+diagnosed: two compiler children orphaned by the earlier crashed run were
+still outside any cgroup at roughly 5.5 GiB RSS each.  They were terminated.
+The compositional proof initially attempted in this run briefly reached
+4.8 GiB before being replaced by an opaque append lemma; the final source
+build is below 600 MiB.  The full-build peak belongs to the pre-existing
+`LeanCompCertTests.Attest` kernel string/hash test, not this port; that single
+target took 738 seconds under memory reclaim.  All measurements above used
+`MemorySwapMax=0`.
