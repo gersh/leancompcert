@@ -1197,3 +1197,14 @@ depends on division-by-zero semantics.  The initializer target checked in
 0.33 s wall at 533,388 KiB peak RSS, and rebuilding the represented-table,
 cell-fold, and root-schedule consumer chain completed in 1.43 s wall at
 613,304 KiB peak RSS, both with zero swap under the 2 GiB hard cap.
+
+`ArraySegMobiusCursorModel.lean` is the runnable finite induction target for
+the complete root-mark schedule.  Its `scheduleRun` is an ordinary finite
+`Nat.rec` fold over a compact cursor and selected cell.  Separate composition
+theorems prove that the actual complete production body realizes its window
+start, live, exhausted-prime advance, and guarded terminal steps, without
+unfolding the 111-instruction body.  A fresh direct source check completed in
+0.36 s wall at 570,036 KiB peak RSS with zero swap under the 2 GiB hard cap.
+The remaining proof is the finite iteration of these one-step simulations
+using the production `rR` progress theorem, followed by the outer window
+induction.
