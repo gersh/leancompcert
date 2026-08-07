@@ -4,6 +4,7 @@ import LeanCompCert.Verified.Rolled
 /-! Emit production and rejecting-control artifacts for the 99,999 window. -/
 
 open LeanCompCert.Ports.Section413Window99999Certificate
+open LeanCompCert.Ports.Section413WindowRuntime
 
 def driver (name : String) : String :=
   "\n#include <stdio.h>\n" ++
@@ -20,9 +21,9 @@ def main (args : List String) : IO UInt32 := do
   if mode != "positive" && !control then
     IO.eprintln "mode must be positive or control"
     return 1
-  let p := if control then
-      LeanCompCert.Ports.ClosedBoolCarrier.program false
-    else windowCarrier
+  let words := if control then commonBound + 1 :: windowWords.tail else windowWords
+  let lp := LeanCompCert.Ports.TotalWordBounds.boundsProgram commonBound words
+  let p := lp.flatten
   let name := if control then "S413Window99999Control" else "S413Window99999"
   match LeanCompCert.Verified.Reflect.emitRolled p name with
   | .error errs =>
@@ -30,5 +31,5 @@ def main (args : List String) : IO UInt32 := do
       return 1
   | .ok src =>
       IO.FS.writeFile out (src ++ driver name)
-      IO.println s!"mode={mode} result={p.denote} out={out}"
+      IO.println s!"mode={mode} words={words.length} result={lp.denote} out={out}"
       return 0

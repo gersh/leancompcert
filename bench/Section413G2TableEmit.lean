@@ -1,6 +1,6 @@
-import LeanCompCert.Ports.Section413G2Head10000Certificate
+import LeanCompCert.Ports.Section413G2Full99999Certificate
 
-/-! Emit the verified Section 4.1.3 10,000-cell table checker.
+/-! Emit the verified complete Section 4.1.3 99,999-cell table checker.
 
 `positive` uses the proved generated table.  `control` changes its first
 expected cell to zero, so the same machine computation must reject it.
@@ -10,8 +10,8 @@ open LeanCompCert
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Ports.Section413Sweep
 open LeanCompCert.Ports.Section413G2TableProgram
-open LeanCompCert.Ports.Section413G2Generated10000Chunks
-open LeanCompCert.Ports.Section413G2Head10000Certificate
+open LeanCompCert.Ports.Section413G2Generated99999Chunks
+open LeanCompCert.Ports.Section413G2Full99999Certificate
 
 def driver (name : String) (cells : Nat) : String :=
   "\n#include <stdio.h>\n" ++
@@ -26,15 +26,15 @@ def main (args : List String) : IO UInt32 := do
     IO.eprintln "usage: positive|control OUT.c"
     return 1
   let some expected :=
-      if mode = "positive" then some expected10000
-      else if mode = "control" then some (expected10000.set! 1 czero)
+      if mode = "positive" then some expected99999
+      else if mode = "control" then some (expected99999.set! 1 czero)
       else none
     | do
       IO.eprintln "mode must be positive or control"
       return 1
-  let p := tableProgram headCfg expected
-  let name := if mode = "positive" then "S413G2Table10000" else
-    "S413G2Table10000Control"
+  let p := tableProgram fullCfg expected
+  let name := if mode = "positive" then "S413G2Table99999" else
+    "S413G2Table99999Control"
   match p.emitRolled name with
   | .error errs =>
       for e in errs do IO.eprintln e
