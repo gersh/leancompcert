@@ -1046,3 +1046,27 @@ both consumed banks are zero for the next window.
 These checks again used `MemoryHigh=1G`, `MemoryMax=2G`, one Lake job, and
 zero swap.  The remaining machine-level work is the root prime-table
 construction and the final cross-iteration `CellRepresents` induction.
+
+The root collection store is now verified through the actual production
+suffix.  An unmarked root candidate with `2 <= n <= rootCap` sets the
+collection gate, selects the live table address, stores `n`, and advances the
+write cursor exactly once.  The theorem deliberately stops at this machine
+boundary: proving that precisely those unmarked candidates are primes is the
+remaining number-theoretic invariant.
+
+This slice found another eager-literal regression.  Keeping `primeSink`
+folded inside a combined gate/address proof reached about 1.5 GiB before the
+check was stopped.  Passing the exact sink through equality and word-range
+premises, and importing each semantic slice opaquely, restored the usual
+half-gigabyte checks:
+
+| root-table source target | wall | peak RSS |
+| --- | ---: | ---: |
+| `ArraySegMobiusRootStore.lean` | 0.25 s | 529,832 KiB |
+| `ArraySegMobiusRootAddress.lean` | 0.21 s | 542,124 KiB |
+| `ArraySegMobiusRootCompose.lean` | 0.19 s | 538,996 KiB |
+| `ArraySegMobiusRootWrite.lean` | 0.23 s | 528,348 KiB |
+
+All successful checks used the 2 GiB hard cap and zero swap.  The remaining
+work is the prime/unmarked equivalence, table-order induction, and the final
+cross-iteration `CellRepresents` proof.
