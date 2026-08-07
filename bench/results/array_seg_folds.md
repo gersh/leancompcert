@@ -903,3 +903,15 @@ two marked cells.  The remaining algorithmic obligation is therefore the
 marking invariant itself, not selector or decoder behavior.  A capped source
 check completed in 0.91 s wall with 629,960 KiB peak RSS under
 `MemoryHigh=3G`, `MemoryMax=4G`, and zero swap.
+
+The next refinement splits the 59-instruction marking prefix at its two
+stores.  `markBeforeProd_main_addresses` proves an accumulation iteration
+redirects them to the product and flag sinks;
+`arun_markPrefix_main_cells` and `signalInput_main_cells` prove the live
+window cells are unchanged.  The resulting
+`readSig_arun_coreBody_eq_muSig_of_input_cell` states the whole production
+core theorem against `CellRepresents` at ordinary loop entry, with no hidden
+post-prefix machine state.  This is the boundary needed by a future induction
+over the preceding marking rounds.  Its capped source check completed in
+1.50 s wall with 672,960 KiB peak RSS under `MemoryHigh=3G`,
+`MemoryMax=4G`, and zero swap.

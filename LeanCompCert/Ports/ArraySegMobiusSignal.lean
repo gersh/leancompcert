@@ -39,6 +39,16 @@ def selectorBlock (c : Cfg) : List AInstr := c.coreBody.take 7
 
 def markPrefix (c : Cfg) : List AInstr := (preSignal c).drop 7
 
+/-- The store-free prefix of the marking code. -/
+def markBeforeProd (c : Cfg) : List AInstr := (markPrefix c).take 23
+
+/-- The store-free instructions between the product and flag stores. -/
+def markBetweenStores (c : Cfg) : List AInstr :=
+  ((markPrefix c).drop 24).take 8
+
+/-- The store-free remainder after the flag store. -/
+def markAfterFlag (c : Cfg) : List AInstr := (markPrefix c).drop 33
+
 def signalInput (c : Cfg) (idx : Nat) (s : AState) : AState :=
   arun idx s (preSignal c)
 
@@ -51,6 +61,12 @@ theorem coreBody_eq_signalSlices (c : Cfg) :
 
 theorem preSignal_eq_selector_mark (c : Cfg) :
     preSignal c = selectorBlock c ++ markPrefix c := by
+  rfl
+
+theorem markPrefix_eq_storeSlices (c : Cfg) :
+    markPrefix c =
+      markBeforeProd c ++ [.store 25 30] ++
+      markBetweenStores c ++ [.store 26 38] ++ markAfterFlag c := by
   rfl
 
 /-- Register-frame predicate for an array instruction. -/
@@ -87,6 +103,101 @@ theorem arun_reg_frame (k r : Nat) : ∀ (l : List AInstr) (s : AState),
           simp [astep, AState.writeReg, Ne.symm h.1]
       | store a v => rfl
 
+/-- Store-free instruction blocks preserve the entire array. -/
+def avoidsStore : AInstr → Bool
+  | .store _ _ => false
+  | _ => true
+
+theorem arun_arr_frame (k : Nat) : ∀ (l : List AInstr) (s : AState),
+    l.all avoidsStore = true → (arun k s l).arr = s.arr := by
+  intro l
+  induction l with
+  | nil => intro s _; rfl
+  | cons i rest ih =>
+      intro s h
+      rw [List.all_cons, Bool.and_eq_true] at h
+      rw [arun_cons, ih _ h.2]
+      cases i with
+      | scalar instr => exact AState.writeReg_arr _ _ _
+      | load d a => exact AState.writeReg_arr _ _ _
+      | store a v => simp [avoidsStore] at h
+
+/-- With marking disabled, both store addresses computed by the prefix are
+the two dedicated sink cells. -/
+theorem markBeforeProd_main_addresses (c : Cfg) (idx : Nat) (s : AState)
+    (hgate : s.regs 8 = 0)
+    (hA : c.arrayLen < M) :
+    (arun idx s (markBeforeProd c)).regs 25 = c.sinkProd ∧
+      (arun idx s (markBeforeProd c)).regs 26 = c.sinkProd + c.segLen := by
+  have hL : c.segLen < M := by
+    simp only [Cfg.arrayLen, Cfg.resultBase] at hA
+    omega
+  have h2L : c.sinkProd < M := by
+    simp only [Cfg.arrayLen, Cfg.resultBase, Cfg.sinkProd] at hA ⊢
+    omega
+  have h3L : c.sinkProd + c.segLen < M := by
+    simp only [Cfg.arrayLen, Cfg.resultBase, Cfg.sinkProd] at hA ⊢
+    omega
+  have hLM : c.segLen % M = c.segLen := Nat.mod_eq_of_lt hL
+  have h2LM : c.sinkProd % M = c.sinkProd := Nat.mod_eq_of_lt h2L
+  have h3LM : (c.sinkProd + c.segLen) % M = c.sinkProd + c.segLen :=
+    Nat.mod_eq_of_lt h3L
+  set_option maxRecDepth 10000 in
+    simp [markBeforeProd, markPrefix, preSignal, Cfg.coreBody, arun, astep,
+      LeanCompCert.Verified.InstrBlock.sdest,
+      LeanCompCert.Verified.InstrBlock.sval,
+      denoteOperand, denoteOp, AState.writeReg,
+      rR, rW, rP, rJ, rPi, rLimit, hgate, hLM, h2LM, h3LM]
+
+/-- On an accumulation iteration, the marking prefix redirects both stores
+to its sinks and therefore preserves every product/flag cell in the live
+window. -/
+theorem arun_markPrefix_main_cells (c : Cfg) (idx : Nat) (s : AState)
+    (hgate : s.regs 8 = 0)
+    (hA : c.arrayLen < M) (i : Nat) (hi : i < c.segLen) :
+    (arun idx s (markPrefix c)).arr i = s.arr i ∧
+      (arun idx s (markPrefix c)).arr (i + c.segLen) =
+        s.arr (i + c.segLen) := by
+  let s0 := arun idx s (markBeforeProd c)
+  let s1 := astep idx s0 (.store 25 30)
+  let s2 := arun idx s1 (markBetweenStores c)
+  let s3 := astep idx s2 (.store 26 38)
+  have haddrs := markBeforeProd_main_addresses c idx s hgate hA
+  have h25 : s0.regs 25 = c.sinkProd := by exact haddrs.1
+  have h26 : s0.regs 26 = c.sinkProd + c.segLen := by exact haddrs.2
+  have hs0arr : s0.arr = s.arr :=
+    arun_arr_frame idx (markBeforeProd c) s (by rfl)
+  have hs2arr : s2.arr = s1.arr :=
+    arun_arr_frame idx (markBetweenStores c) s1 (by rfl)
+  have hs2r26 : s2.regs 26 = c.sinkProd + c.segLen := by
+    rw [arun_reg_frame idx 26 (markBetweenStores c) s1 (by rfl)]
+    exact h26
+  have hdecomp : arun idx s (markPrefix c) =
+      arun idx s3 (markAfterFlag c) := by
+    rw [markPrefix_eq_storeSlices, arun_append, arun_append, arun_append,
+      arun_append]
+    rfl
+  have preserve (x : Nat) (hprod : x ≠ c.sinkProd)
+      (hflag : x ≠ c.sinkProd + c.segLen) :
+      (arun idx s (markPrefix c)).arr x = s.arr x := by
+    rw [hdecomp]
+    rw [congrFun (arun_arr_frame idx (markAfterFlag c) s3 (by rfl)) x]
+    change s3.arr x = s.arr x
+    rw [show s3.arr x = s2.arr x by
+      simp [s3, astep, AState.writeArr, hs2r26, hflag]]
+    rw [congrFun hs2arr x]
+    change s1.arr x = s.arr x
+    rw [show s1.arr x = s0.arr x by
+      simp [s1, astep, AState.writeArr, h25, hprod]]
+    exact congrFun hs0arr x
+  constructor
+  · apply preserve
+    · simp only [Cfg.sinkProd]; omega
+    · simp only [Cfg.sinkProd]; omega
+  · apply preserve
+    · simp only [Cfg.sinkProd]; omega
+    · simp only [Cfg.sinkProd]; omega
+
 /-- On a main-phase iteration the seven selector instructions set both the
 accumulation and main gates to one. -/
 theorem selectorBlock_main (c : Cfg) (idx : Nat) (s : AState)
@@ -114,6 +225,20 @@ theorem selectorBlock_main (c : Cfg) (idx : Nat) (s : AState)
     denoteOperand, denoteOp, AState.writeReg,
     rR, rLimit, hTmod, hImod, hRootmod, h1mod, hT', hRoot', hOne]
 
+/-- On an accumulation iteration the selector disables the marking stores. -/
+theorem selectorBlock_main_markGate (c : Cfg) (idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hTM : c.markSteps < M) :
+    (arun idx s (selectorBlock c)).regs 8 = 0 := by
+  have hTmod : c.markSteps % M = c.markSteps := Nat.mod_eq_of_lt hTM
+  have hT' : ¬ s.regs 5 < c.markSteps := by
+    have : c.markSteps ≤ s.regs 5 := by simpa [rR] using hT
+    omega
+  simp [selectorBlock, Cfg.coreBody, arun, astep,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval,
+    denoteOperand, denoteOp, AState.writeReg, rR, rLimit, hTmod, hT']
+
 /-- The mark prefix does not change either selector output or the window
 coordinates used by the decoder. -/
 theorem signalInput_main_controls (c : Cfg) (idx : Nat) (s : AState)
@@ -136,6 +261,26 @@ theorem signalInput_main_controls (c : Cfg) (idx : Nat) (s : AState)
     exact hsel.1
   · rw [arun_reg_frame idx 133 (markPrefix c) _ (by rfl)]
     exact hsel.2
+
+/-- The two live cells read by the decoder are already present at loop entry;
+the disabled marking stage only touches its sinks. -/
+theorem signalInput_main_cells (c : Cfg) (idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hTM : c.markSteps < M)
+    (hA : c.arrayLen < M) (i : Nat) (hi : i < c.segLen) :
+    (signalInput c idx s).arr i = s.arr i ∧
+      (signalInput c idx s).arr (i + c.segLen) =
+        s.arr (i + c.segLen) := by
+  let q := arun idx s (selectorBlock c)
+  have hgate : q.regs 8 = 0 :=
+    selectorBlock_main_markGate c idx s hT hTM
+  have hqarr : q.arr = s.arr :=
+    arun_arr_frame idx (selectorBlock c) s (by rfl)
+  have hp := arun_markPrefix_main_cells c idx q hgate hA i hi
+  rw [signalInput, preSignal_eq_selector_mark, arun_append]
+  constructor
+  · rw [hp.1]; exact congrFun hqarr i
+  · rw [hp.2]; exact congrFun hqarr (i + c.segLen)
 
 /-- The tail clears cells, bootstraps primes, and advances cursors, but does
 not overwrite any of the four registers observed by a Möbius residue. -/
@@ -409,6 +554,35 @@ theorem readSig_arun_coreBody_eq_muSig (c : Cfg) (idx : Nat) (s : AState)
       muSig mu (s.regs rW + (s.regs rR - c.markSteps)) := by
   rw [readSig_arun_coreBody_main c idx s hT hi hRoot hRM hTM hidxM
     hrootM h2LM hWM]
+  exact hcell
+
+/-- Loop-entry form of the production correctness theorem.  The internal
+marking prefix is eliminated: the only remaining sieve obligation is the
+`CellRepresents` invariant carried into the accumulation iteration. -/
+theorem readSig_arun_coreBody_eq_muSig_of_input_cell
+    (c : Cfg) (idx : Nat) (s : AState) (mu : Nat → Int)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hi : s.regs rR - c.markSteps < c.segLen)
+    (hRoot : c.rootSpan ≤ idx)
+    (hRM : s.regs rR < M)
+    (hTM : c.markSteps < M)
+    (hidxM : idx < M)
+    (hrootM : c.rootSpan < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (hWM : s.regs rW + (s.regs rR - c.markSteps) < M)
+    (hA : c.arrayLen < M)
+    (hcell : CellRepresents mu
+      (s.regs rW + (s.regs rR - c.markSteps))
+      (s.arr (s.regs rR - c.markSteps))
+      (s.arr (s.regs rR - c.markSteps + c.segLen))) :
+    readSig (arun idx s c.coreBody) =
+      muSig mu (s.regs rW + (s.regs rR - c.markSteps)) := by
+  apply readSig_arun_coreBody_eq_muSig c idx s mu hT hi hRoot hRM hTM
+    hidxM hrootM h2LM hWM
+  have hc := signalInput_main_cells c idx s hT hTM hA
+    (s.regs rR - c.markSteps) hi
+  unfold CellRepresents at hcell ⊢
+  rw [hc.1, hc.2]
   exact hcell
 
 end LeanCompCert.Ports.ArraySegMobiusSignal
