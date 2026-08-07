@@ -1157,3 +1157,14 @@ After importing the cursor composition modules, a fresh capped source build
 completed in 0.53 s wall at 607,656 KiB peak RSS with zero swap.  The next
 induction can therefore use one theorem for cell semantics and one for the
 persistent cursor without expanding the core body.
+
+The cursor bridge now covers all production schedule branches.  Window start
+resets to the first prime, an exhausted ordinary prime advances to the next
+verified table entry, and reaching the selected limit is proved to be a fixed
+point that reloads the terminal table cell and reinstalls `segLen + 1` through
+the complete body.  An initial monolithic terminal-clamp simplification was
+stopped safely near the 2 GiB cgroup ceiling; exposing the exact six-instruction
+clamp slice and framing the four untouched registers reduced the final direct
+source check to 0.60 s wall at 579,268 KiB peak RSS with zero swap.  This
+removes the terminal-slack edge case from the pending finite schedule
+induction.

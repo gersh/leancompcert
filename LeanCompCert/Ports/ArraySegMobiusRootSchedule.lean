@@ -157,7 +157,8 @@ theorem arun_coreBody_cursor_live_nonstart_of_limit (c : Cfg) (idx : Nat)
     (hnextM : j + p < M)
     (hA : c.arrayLen < M) :
     let out := arun idx s c.coreBody
-    out.regs rPi = pi ∧ out.regs rP = p ∧ out.regs rJ = j + p := by
+    out.regs rPi = pi ∧ out.regs rP = p ∧ out.regs rJ = j + p ∧
+      out.regs rLimit = limit := by
   let q := signalInput c idx s
   let t := arun idx q (signalBlock c)
   have hs := signalInput_cursor_live_nonstart_of_limit c idx s pi p j w
@@ -169,17 +170,174 @@ theorem arun_coreBody_cursor_live_nonstart_of_limit (c : Cfg) (idx : Nat)
     arun_reg_frame idx rP (signalBlock c) q (by rfl)
   have htJ : t.regs rJ = q.regs rJ :=
     arun_reg_frame idx rJ (signalBlock c) q (by rfl)
+  have htLimit : t.regs rLimit = q.regs rLimit :=
+    arun_reg_frame idx rLimit (signalBlock c) q (by rfl)
   have hcore : arun idx s c.coreBody = arun idx t (postSignal c) := by
     rw [coreBody_eq_signalSlices, arun_append, arun_append]
     rfl
   rw [hcore]
-  refine ⟨?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_⟩
   · rw [arun_reg_frame idx rPi (postSignal c) t (by rfl), htPi]
     exact hs.1
   · rw [arun_reg_frame idx rP (postSignal c) t (by rfl), htP]
     exact hs.2.1
   · rw [arun_reg_frame idx rJ (postSignal c) t (by rfl), htJ]
     exact hs.2.2.1
+  · rw [arun_reg_frame idx rLimit (postSignal c) t (by rfl), htLimit]
+    exact hs.2.2.2.2
+
+/-- At a window boundary, the complete body resets the production cursor,
+marks the first translated multiple of the first bootstrap prime, and leaves
+the cursor at its following multiple. -/
+theorem arun_coreBody_cursor_live_start_of_limit (c : Cfg) (idx : Nat)
+    (s : AState) (w limit : Nat)
+    (hR : s.regs rR = 0)
+    (hw : s.regs rW = w)
+    (hselectorLimit :
+      (arun idx s (selectorBlock c)).regs rLimit = limit)
+    (hlimitLe : limit ≤ c.tableLen)
+    (hlimitM : limit < M)
+    (hTPos : 0 < c.markSteps)
+    (hTM : c.markSteps < M)
+    (hpPos : 0 < c.firstPrime)
+    (hpLeL : c.firstPrime ≤ c.segLen)
+    (hpM : c.firstPrime < M)
+    (hA : c.arrayLen < M) :
+    let j := firstOffset w c.firstPrime
+    let out := arun idx s c.coreBody
+    out.regs rPi = 0 ∧ out.regs rP = c.firstPrime ∧
+      out.regs rJ = j + c.firstPrime ∧ out.regs rLimit = limit := by
+  let q := signalInput c idx s
+  let t := arun idx q (signalBlock c)
+  have hs := signalInput_cursor_live_start_of_limit c idx s w limit hR hw
+    hselectorLimit hlimitLe hlimitM hTPos hTM hpPos hpLeL hpM hA
+  have htPi : t.regs rPi = q.regs rPi :=
+    arun_reg_frame idx rPi (signalBlock c) q (by rfl)
+  have htP : t.regs rP = q.regs rP :=
+    arun_reg_frame idx rP (signalBlock c) q (by rfl)
+  have htJ : t.regs rJ = q.regs rJ :=
+    arun_reg_frame idx rJ (signalBlock c) q (by rfl)
+  have htLimit : t.regs rLimit = q.regs rLimit :=
+    arun_reg_frame idx rLimit (signalBlock c) q (by rfl)
+  have hcore : arun idx s c.coreBody = arun idx t (postSignal c) := by
+    rw [coreBody_eq_signalSlices, arun_append, arun_append]
+    rfl
+  rw [hcore]
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [arun_reg_frame idx rPi (postSignal c) t (by rfl), htPi]
+    exact hs.1
+  · rw [arun_reg_frame idx rP (postSignal c) t (by rfl), htP]
+    exact hs.2.1
+  · rw [arun_reg_frame idx rJ (postSignal c) t (by rfl), htJ]
+    exact hs.2.2.1
+  · rw [arun_reg_frame idx rLimit (postSignal c) t (by rfl), htLimit]
+    exact hs.2.2.2.2
+
+/-- When the current prime has exhausted the window, the complete body
+advances to the following verified table entry and installs its first
+translated multiple, or the terminal sentinel at the selected limit. -/
+theorem arun_coreBody_cursor_advance_nonstart_of_limit (c : Cfg) (idx : Nat)
+    (s : AState) (pi p w limit : Nat)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hpi : s.regs rPi = pi)
+    (hj : c.segLen ≤ s.regs rJ)
+    (hw : s.regs rW = w)
+    (hselectorLimit :
+      (arun idx s (selectorBlock c)).regs rLimit = limit)
+    (hpiLt : pi < limit)
+    (hlimitLe : limit ≤ c.tableLen)
+    (hlimitM : limit < M)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hcurPM : s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (htable : s.arr (c.primeBase + (pi + 1)) = p)
+    (hpPos : 0 < p)
+    (hpM : p < M)
+    (hA : c.arrayLen < M) :
+    let out := arun idx s c.coreBody
+    out.regs rPi = pi + 1 ∧ out.regs rP = p ∧
+      out.regs rJ = (if pi + 1 = limit then c.segLen + 1
+        else firstOffset w p) ∧ out.regs rLimit = limit := by
+  let q := signalInput c idx s
+  let t := arun idx q (signalBlock c)
+  have hs := signalInput_cursor_advance_nonstart_of_limit c idx s pi p w
+    limit hmark hR hpi hj hw hselectorLimit hpiLt hlimitLe hlimitM hTM
+    hp1Pos hp1M hcurPM hjM htable hpPos hpM hA
+  have htPi : t.regs rPi = q.regs rPi :=
+    arun_reg_frame idx rPi (signalBlock c) q (by rfl)
+  have htP : t.regs rP = q.regs rP :=
+    arun_reg_frame idx rP (signalBlock c) q (by rfl)
+  have htJ : t.regs rJ = q.regs rJ :=
+    arun_reg_frame idx rJ (signalBlock c) q (by rfl)
+  have htLimit : t.regs rLimit = q.regs rLimit :=
+    arun_reg_frame idx rLimit (signalBlock c) q (by rfl)
+  have hcore : arun idx s c.coreBody = arun idx t (postSignal c) := by
+    rw [coreBody_eq_signalSlices, arun_append, arun_append]
+    rfl
+  rw [hcore]
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [arun_reg_frame idx rPi (postSignal c) t (by rfl), htPi]
+    exact hs.1
+  · rw [arun_reg_frame idx rP (postSignal c) t (by rfl), htP]
+    exact hs.2.1
+  · rw [arun_reg_frame idx rJ (postSignal c) t (by rfl), htJ]
+    exact hs.2.2.1
+  · rw [arun_reg_frame idx rLimit (postSignal c) t (by rfl), htLimit]
+    exact hs.2.2.2.2
+
+/-- Terminal slack iterations of the complete body keep the selected table
+limit and its out-of-window sentinel. -/
+theorem arun_coreBody_cursor_terminal_nonstart_of_limit (c : Cfg) (idx : Nat)
+    (s : AState) (p w limit : Nat)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hpi : s.regs rPi = limit)
+    (hj : c.segLen ≤ s.regs rJ)
+    (hw : s.regs rW = w)
+    (hselectorLimit :
+      (arun idx s (selectorBlock c)).regs rLimit = limit)
+    (hlimitLe : limit ≤ c.tableLen)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hcurPM : s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (htable : s.arr (c.primeBase + limit) = p)
+    (hpPos : 0 < p)
+    (hpM : p < M)
+    (hA : c.arrayLen < M) :
+    let out := arun idx s c.coreBody
+    out.regs rPi = limit ∧ out.regs rP = p ∧
+      out.regs rJ = c.segLen + 1 ∧ out.regs rLimit = limit := by
+  let q := signalInput c idx s
+  let t := arun idx q (signalBlock c)
+  have hs := signalInput_cursor_terminal_nonstart_of_limit c idx s p w
+    limit hmark hR hpi hj hw hselectorLimit hlimitLe hTM hp1Pos hp1M
+    hcurPM hjM htable hpPos hpM hA
+  have htPi : t.regs rPi = q.regs rPi :=
+    arun_reg_frame idx rPi (signalBlock c) q (by rfl)
+  have htP : t.regs rP = q.regs rP :=
+    arun_reg_frame idx rP (signalBlock c) q (by rfl)
+  have htJ : t.regs rJ = q.regs rJ :=
+    arun_reg_frame idx rJ (signalBlock c) q (by rfl)
+  have htLimit : t.regs rLimit = q.regs rLimit :=
+    arun_reg_frame idx rLimit (signalBlock c) q (by rfl)
+  have hcore : arun idx s c.coreBody = arun idx t (postSignal c) := by
+    rw [coreBody_eq_signalSlices, arun_append, arun_append]
+    rfl
+  rw [hcore]
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [arun_reg_frame idx rPi (postSignal c) t (by rfl), htPi]
+    exact hs.1
+  · rw [arun_reg_frame idx rP (postSignal c) t (by rfl), htP]
+    exact hs.2.1
+  · rw [arun_reg_frame idx rJ (postSignal c) t (by rfl), htJ]
+    exact hs.2.2.1
+  · rw [arun_reg_frame idx rLimit (postSignal c) t (by rfl), htLimit]
+    exact hs.2.2.2.2
 
 /-- The same point-event theorem for the first live mark at a window
 boundary. -/

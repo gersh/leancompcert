@@ -142,6 +142,51 @@ theorem arun_markPrefix_cursor_advance_nonstart (c : Cfg) (idx : Nat)
   rw [markPrefix_eq_setup_round, arun_append]
   exact ⟨hoPi, hoP, hoJ, hoW, hoLimit⟩
 
+/-- The full nonstart prefix preserves a terminal exhausted cursor. -/
+theorem arun_markPrefix_cursor_terminal_nonstart (c : Cfg) (idx : Nat)
+    (s : AState) (p w limit : Nat)
+    (hgate : s.regs 8 = 1)
+    (hR : s.regs rR ≠ 0)
+    (hpi : s.regs rPi = limit)
+    (hj : c.segLen ≤ s.regs rJ)
+    (hw : s.regs rW = w)
+    (hlimit : s.regs rLimit = limit)
+    (hlimitLe : limit ≤ c.tableLen)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hcurPM : s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (htable : s.arr (c.primeBase + limit) = p)
+    (hpPos : 0 < p)
+    (hpM : p < M)
+    (hA : c.arrayLen < M) :
+    let out := arun idx s (markPrefix c)
+    out.regs rPi = limit ∧ out.regs rP = p ∧
+      out.regs rJ = c.segLen + 1 ∧ out.regs rW = w ∧
+      out.regs rLimit = limit := by
+  let q := arun idx s (markSetup c)
+  have hpiM : s.regs rPi < M := by
+    rw [hpi]
+    simp only [Cfg.arrayLen, Cfg.resultBase] at hA
+    omega
+  rcases arun_markSetup_nonstart c idx s hR hp1Pos hp1M hpiM hcurPM hjM with
+    ⟨hqPi, _hqP, hqJ, hqW, hqLimit, hqGate, hqArr⟩
+  change q.regs rPi = s.regs rPi at hqPi
+  change q.regs rJ = s.regs rJ at hqJ
+  change q.regs rW = s.regs rW at hqW
+  change q.regs rLimit = s.regs rLimit at hqLimit
+  change q.regs 8 = s.regs 8 at hqGate
+  change q.arr = s.arr at hqArr
+  have htableQ : q.arr (c.primeBase + limit) = p := by
+    rw [congrFun hqArr, htable]
+  rcases arun_markRound_cursor_terminal c idx q p w limit
+      (hqGate.trans hgate) (hqPi.trans hpi)
+      (by rw [hqJ]; exact hj) (hqW.trans hw) (hqLimit.trans hlimit)
+      hlimitLe htableQ hpPos hpM hA with
+    ⟨hoPi, hoP, hoJ, hoW, hoLimit⟩
+  rw [markPrefix_eq_setup_round, arun_append]
+  exact ⟨hoPi, hoP, hoJ, hoW, hoLimit⟩
+
 /-- At a window boundary, the full prefix resets to the first prime, marks
 its first multiple, and leaves the cursor ready at the following multiple. -/
 theorem arun_markPrefix_cursor_live_start (c : Cfg) (idx : Nat)

@@ -117,6 +117,55 @@ theorem signalInput_cursor_advance_nonstart_of_limit (c : Cfg) (idx : Nat)
   rw [signalInput, preSignal_eq_selector_mark, arun_append]
   exact ⟨hoPi, hoP, hoJ, hoW, hoLimit⟩
 
+/-- Actual `preSignal` fixed point for a terminal exhausted cursor. -/
+theorem signalInput_cursor_terminal_nonstart_of_limit (c : Cfg) (idx : Nat)
+    (s : AState) (p w limit : Nat)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hpi : s.regs rPi = limit)
+    (hj : c.segLen ≤ s.regs rJ)
+    (hw : s.regs rW = w)
+    (hselectorLimit :
+      (arun idx s (selectorBlock c)).regs rLimit = limit)
+    (hlimitLe : limit ≤ c.tableLen)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hcurPM : s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (htable : s.arr (c.primeBase + limit) = p)
+    (hpPos : 0 < p)
+    (hpM : p < M)
+    (hA : c.arrayLen < M) :
+    let out := signalInput c idx s
+    out.regs rPi = limit ∧ out.regs rP = p ∧
+      out.regs rJ = c.segLen + 1 ∧ out.regs rW = w ∧
+      out.regs rLimit = limit := by
+  let q := arun idx s (selectorBlock c)
+  have hgate : q.regs 8 = 1 := selectorBlock_markGate c idx s hmark hTM
+  have hqR : q.regs rR = s.regs rR :=
+    arun_reg_frame idx rR (selectorBlock c) s (by rfl)
+  have hqPi : q.regs rPi = s.regs rPi :=
+    arun_reg_frame idx rPi (selectorBlock c) s (by rfl)
+  have hqP : q.regs rP = s.regs rP :=
+    arun_reg_frame idx rP (selectorBlock c) s (by rfl)
+  have hqJ : q.regs rJ = s.regs rJ :=
+    arun_reg_frame idx rJ (selectorBlock c) s (by rfl)
+  have hqW : q.regs rW = s.regs rW :=
+    arun_reg_frame idx rW (selectorBlock c) s (by rfl)
+  have hqArr : q.arr = s.arr :=
+    arun_arr_frame idx (selectorBlock c) s (by rfl)
+  have htableQ : q.arr (c.primeBase + limit) = p := by
+    rw [congrFun hqArr, htable]
+  rcases arun_markPrefix_cursor_terminal_nonstart c idx q p w limit hgate
+      (by rw [hqR]; exact hR) (hqPi.trans hpi)
+      (by rw [hqJ]; exact hj) (hqW.trans hw) hselectorLimit hlimitLe
+      hp1Pos hp1M (by rw [hqP]; exact hcurPM)
+      (by rw [hqJ]; exact hjM) htableQ hpPos hpM hA with
+    ⟨hoPi, hoP, hoJ, hoW, hoLimit⟩
+  rw [signalInput, preSignal_eq_selector_mark, arun_append]
+  exact ⟨hoPi, hoP, hoJ, hoW, hoLimit⟩
+
 /-- Actual `preSignal` cursor transition at a window start. -/
 theorem signalInput_cursor_live_start_of_limit (c : Cfg) (idx : Nat)
     (s : AState) (w limit : Nat)
