@@ -21,6 +21,77 @@ open LeanCompCert.Ports.ArraySegMobiusSignal
 open LeanCompCert.Ports.ArraySegMobiusMark
 open LeanCompCert.Ports.ArraySegMobiusRootCellFold
 
+/-- Every marking event frames the represented prime table.  This is the
+cross-event fact that lets the executable schedule use one fixed table rather
+than a different array projection at each induction step. -/
+theorem arun_coreBody_mark_tableCell (c : Cfg) (idx : Nat) (s : AState)
+    (k : Nat)
+    (hmark : s.regs rR < c.markSteps)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1M : c.firstPrime < M)
+    (hp1SqM : c.firstPrime * c.firstPrime < M)
+    (hpiM : s.regs rPi < M)
+    (hpPos : 0 < s.regs rP)
+    (hpM : s.regs rP < M)
+    (hpSqM : s.regs rP * s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (hnStartM : s.regs rW + firstOffset (s.regs rW) c.firstPrime < M)
+    (hnM : s.regs rW + s.regs rJ < M)
+    (hA : c.arrayLen < M)
+    (hk : k ≤ c.tableLen) :
+    (arun idx s c.coreBody).arr (c.primeBase + k) =
+      s.arr (c.primeBase + k) := by
+  let x := c.primeBase + k
+  let q := signalInput c idx s
+  let t := arun idx q (signalBlock c)
+  have hLPos : 0 < c.segLen := by omega
+  have hxProd : x ≠ c.sinkProd := by
+    simp only [x, Cfg.primeBase, Cfg.sinkProd]
+    omega
+  have hxFlag : x ≠ c.sinkProd + c.segLen := by
+    simp only [x, Cfg.primeBase, Cfg.sinkProd]
+    omega
+  have hxPrime : x ≠ c.primeSink := by
+    simp only [x, Cfg.primeBase, Cfg.primeSink, Cfg.resultBase]
+    omega
+  have hqArr : q.arr x = s.arr x := by
+    by_cases hR0 : s.regs rR = 0
+    · have hm := signalInput_mark_live_start c idx s hR0 (by omega)
+        hp1Pos hp1LeL hp1M hp1SqM hnStartM hTM hA
+      apply hm.2.2 x
+      · simp only [x, Cfg.primeBase]
+        have hj : firstOffset (s.regs rW) c.firstPrime < c.firstPrime :=
+          Nat.mod_lt _ hp1Pos
+        omega
+      · simp only [x, Cfg.primeBase]
+        have hj : firstOffset (s.regs rW) c.firstPrime < c.firstPrime :=
+          Nat.mod_lt _ hp1Pos
+        omega
+    · by_cases hj : s.regs rJ < c.segLen
+      · have hm := signalInput_mark_live_nonstart c idx s hmark hR0 hj
+          hpPos hpM hpSqM hnM hTM hA
+        apply hm.2.2 x
+        · simp only [x, Cfg.primeBase]
+          omega
+        · simp only [x, Cfg.primeBase]
+          omega
+      · exact signalInput_exhausted_cell_nonstart c idx s hmark hR0
+          (Nat.le_of_not_gt hj) hTM hp1Pos hp1M hpiM hpM hjM hA x
+          hxProd hxFlag
+  have hc := signalInput_mark_controls c idx s hmark hTM
+  have ht := signalBlock_mark_controls c idx q hc.1 hc.2
+  have htarr : t.arr = q.arr :=
+    arun_arr_frame idx (signalBlock c) q (by rfl)
+  have hpost := arun_postSignal_mark_frame c idx t ht.1 ht.2.1 ht.2.2
+    hA x hxProd hxFlag hxPrime
+  have hcore : arun idx s c.coreBody = arun idx t (postSignal c) := by
+    rw [coreBody_eq_signalSlices, arun_append, arun_append]
+    rfl
+  rw [hcore]
+  exact hpost.trans ((congrFun htarr x).trans hqArr)
+
 /-- The two production cells representing one integer in the current
 window. -/
 def machineCell (c : Cfg) (s : AState) (i : Nat) : RootCellState :=

@@ -75,6 +75,24 @@ theorem TablePrefix.frame_below {arr arr' : Nat → Nat} {base : Nat}
           (base + 1) + ps.length by simp; omega]
         exact hx
 
+/-- Pointwise framing at the represented cells is sufficient; unlike
+`frame_below`, this form does not ask for unrelated cells below `base`. -/
+theorem TablePrefix.frame_cells {arr arr' : Nat → Nat} {base : Nat}
+    {ps : List Nat}
+    (hPrefix : TablePrefix arr base ps)
+    (hFrame : ∀ k, k < ps.length →
+      arr' (base + k) = arr (base + k)) :
+    TablePrefix arr' base ps := by
+  induction ps generalizing base with
+  | nil => trivial
+  | cons p ps ih =>
+      constructor
+      · simpa using (hFrame 0 (by simp)).trans hPrefix.1
+      · apply ih hPrefix.2
+        intro k hk
+        have h := hFrame (k + 1) (by simp; omega)
+        simpa [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using h
+
 /-- The concrete array prefix and live write cursor represent `ps`. -/
 structure MachineTableRep (c : Cfg) (s : AState) (ps : List Nat) : Prop where
   table : TablePrefix s.arr c.primeBase ps

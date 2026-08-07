@@ -1208,3 +1208,20 @@ unfolding the 111-instruction body.  A fresh direct source check completed in
 The remaining proof is the finite iteration of these one-step simulations
 using the production `rR` progress theorem, followed by the outer window
 induction.
+
+The finite runner is now compiled as well.  `bodyRun_mark_position` proves by
+induction that every prefix inside `markSteps` has `rR = fuel` while retaining
+the window base and table-write cursor, and
+`bodyRun_simulates_scheduleRun` performs the corresponding model simulation
+induction from per-event branch proofs.  The previously implicit table-frame
+obligation is explicit and discharged: the complete body frames every prime
+table cell, preserves the exact `MachineTableRep` and positive terminal guard
+for one step and every finite prefix, and keeps every selected table cell
+constant throughout the run.  Dynamic word bounds remain an explicit
+`MarkTableReady` invariant rather than being hidden in the iteration theorem.
+After rebuilding the changed dependency chain, the expanded cursor-model
+source check completed in 0.51 s wall at 569,880 KiB peak RSS with zero swap
+under the 2 GiB hard cap; the expanded root-schedule source check completed in
+0.79 s at 613,116 KiB.  The next proof is preservation of `MarkTableReady`
+from the represented ordered prime table and cursor bounds, which will
+discharge the per-event premise of the finite simulation.

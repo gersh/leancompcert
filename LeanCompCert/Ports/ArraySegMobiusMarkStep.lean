@@ -17,15 +17,17 @@ open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusSignal
 
 /-- In a marking round, the tail's clear stores and root-table store are all
-redirected to dedicated sinks, so every live product/flag cell is preserved. -/
-theorem arun_postSignal_mark_cells (c : Cfg) (idx : Nat) (s : AState)
+redirected to dedicated sinks, so every cell apart from those sinks is
+preserved. -/
+theorem arun_postSignal_mark_frame (c : Cfg) (idx : Nat) (s : AState)
     (h9 : s.regs 9 = 0)
     (h63 : s.regs 63 = 0)
     (h132 : s.regs 132 = 0)
-    (hA : c.arrayLen < M) (i : Nat) (hi : i < c.segLen) :
-    (arun idx s (postSignal c)).arr i = s.arr i ∧
-      (arun idx s (postSignal c)).arr (i + c.segLen) =
-        s.arr (i + c.segLen) := by
+    (hA : c.arrayLen < M) (x : Nat)
+    (hprod : x ≠ c.sinkProd)
+    (hflag : x ≠ c.sinkProd + c.segLen)
+    (hprime : x ≠ c.primeSink) :
+    (arun idx s (postSignal c)).arr x = s.arr x := by
   let s0 := arun idx s (postBeforeClear c)
   let s1 := astep idx s0 (.store 84 rZero)
   let s2 := astep idx s1 (.store 85 rZero)
@@ -72,12 +74,24 @@ theorem arun_postSignal_mark_cells (c : Cfg) (idx : Nat) (s : AState)
     change (s0.writeArr (s0.regs 84) (s0.regs rZero)).arr x = s.arr x
     rw [AState.writeArr_arr_ne s0 _ hpr]
     exact congrFun hs0arr x
+  exact preserve x hprod hflag hprime
+
+/-- In particular, the two live product/flag banks are framed by the marking
+tail. -/
+theorem arun_postSignal_mark_cells (c : Cfg) (idx : Nat) (s : AState)
+    (h9 : s.regs 9 = 0)
+    (h63 : s.regs 63 = 0)
+    (h132 : s.regs 132 = 0)
+    (hA : c.arrayLen < M) (i : Nat) (hi : i < c.segLen) :
+    (arun idx s (postSignal c)).arr i = s.arr i ∧
+      (arun idx s (postSignal c)).arr (i + c.segLen) =
+        s.arr (i + c.segLen) := by
   constructor
-  · apply preserve
+  · apply arun_postSignal_mark_frame c idx s h9 h63 h132 hA
     · simp only [Cfg.sinkProd]; omega
     · simp only [Cfg.sinkProd]; omega
     · simp only [Cfg.primeSink, Cfg.resultBase]; omega
-  · apply preserve
+  · apply arun_postSignal_mark_frame c idx s h9 h63 h132 hA
     · simp only [Cfg.sinkProd]; omega
     · simp only [Cfg.sinkProd]; omega
     · simp only [Cfg.primeSink, Cfg.resultBase]; omega
