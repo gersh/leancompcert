@@ -116,6 +116,22 @@ theorem TablePrefix.cell_property {arr : Nat → Nat} {base : Nat}
           rw [show base + (k + 1) = (base + 1) + k by omega]
           exact h
 
+/-- Two arrays representing the same list agree at every represented cell. -/
+theorem TablePrefix.cell_eq {arr arr' : Nat → Nat} {base : Nat}
+    {ps : List Nat}
+    (hPrefix : TablePrefix arr base ps)
+    (hPrefix' : TablePrefix arr' base ps)
+    (k : Nat) (hk : k < ps.length) :
+    arr (base + k) = arr' (base + k) := by
+  induction ps generalizing base k with
+  | nil => simp at hk
+  | cons p ps ih =>
+      cases k with
+      | zero => simpa using hPrefix.1.trans hPrefix'.1.symm
+      | succ k =>
+          rw [show base + (k + 1) = (base + 1) + k by omega]
+          exact ih hPrefix.2 hPrefix'.2 k (by simpa using hk)
+
 /-- A represented append contains its represented left prefix. -/
 theorem TablePrefix.of_append_left {arr : Nat → Nat} {base : Nat}
     {ps qs : List Nat}
@@ -166,6 +182,21 @@ theorem MachineTableRep.cell_bounds {c : Cfg} {s : AState} {ps : List Nat}
     TablePrefix.cell_property hRep.table hInv.upper k hk
   refine ⟨by have := hp.1; omega, by omega, ?_⟩
   exact Nat.lt_of_le_of_lt (Nat.mul_le_mul hupper hupper) hboundSqM
+
+/-- Two states representing a full main table agree at every prime cell and
+at the terminal guard. -/
+theorem MachineTableRep.same_main_cell {c : Cfg} {s t : AState}
+    {ps : List Nat}
+    (hs : MachineTableRep c s ps)
+    (ht : MachineTableRep c t ps)
+    (hpsLen : ps.length = c.tableLen)
+    (k : Nat) (hk : k ≤ c.tableLen) :
+    s.arr (c.primeBase + k) = t.arr (c.primeBase + k) := by
+  by_cases hprime : k < c.tableLen
+  · apply TablePrefix.cell_eq hs.table ht.table k
+    rwa [hpsLen]
+  · have heq : k = c.tableLen := by omega
+    rw [heq, hs.guard, ht.guard]
 
 /-- The verified collection suffix turns a represented prefix into its exact
 append and advances the represented cursor. -/

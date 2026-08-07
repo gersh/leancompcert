@@ -33,6 +33,12 @@ structure ScheduleState where
   cell : RootCellState
   deriving Repr, DecidableEq
 
+@[ext] theorem ScheduleState.ext {a b : ScheduleState}
+    (hcursor : a.cursor = b.cursor) (hcell : a.cell = b.cell) : a = b := by
+  cases a
+  cases b
+  simp_all
+
 /-- The production cursor branch, with the terminal clamp made explicit. -/
 def cursorStep (segLen w limit : Nat) (table : Nat → Nat)
     (cur : Cursor) : Cursor :=
@@ -51,6 +57,27 @@ def scheduleStep (segLen w limit i : Nat) (table : Nat → Nat)
     cell := if st.cursor.j < segLen then
       scheduledCellStep w st.cursor.j st.cursor.p i st.cell
     else st.cell }
+
+/-- A cursor step only observes table cells at indices at most its selected
+limit. -/
+theorem cursorStep_table_congr (segLen w limit : Nat)
+    (table table' : Nat → Nat) (cur : Cursor)
+    (htable : ∀ k, k ≤ limit → table k = table' k) :
+    cursorStep segLen w limit table cur =
+      cursorStep segLen w limit table' cur := by
+  by_cases hj : cur.j < segLen
+  · simp [cursorStep, hj]
+  · simp [cursorStep, hj, htable _ (Nat.min_le_right _ _)]
+
+/-- Consequently a full selected-cell schedule event is insensitive to all
+table cells beyond its selected limit. -/
+theorem scheduleStep_table_congr (segLen w limit i : Nat)
+    (table table' : Nat → Nat) (st : ScheduleState)
+    (htable : ∀ k, k ≤ limit → table k = table' k) :
+    scheduleStep segLen w limit i table st =
+      scheduleStep segLen w limit i table' st := by
+  simp only [scheduleStep]
+  rw [cursorStep_table_congr segLen w limit table table' st.cursor htable]
 
 /-- The first event of a window resets the production cursor before applying
 the first bootstrap prime. -/
@@ -435,6 +462,115 @@ theorem arun_coreBody_simulates_advance_nonstart (c : Cfg) (idx : Nat)
     exact ⟨hcur.1, hcur.2.1, hcur.2.2.1⟩,
     hcell⟩
 
+/-- For a nonterminal represented table cell, the loaded divisor and all of
+its word bounds come from the mathematical prime-table invariant.  Thus the
+advance simulation does not trust an unrelated hypothesis about array
+contents. -/
+theorem arun_coreBody_simulates_advance_nonstart_of_tableRep (c : Cfg)
+    (idx : Nat) (s : AState) (ps : List Nat) (bound pi p0 j w limit : Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s ps)
+    (hInv :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTable.PrimeTableInv ps bound)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hpi : s.regs rPi = pi)
+    (hp0 : s.regs rP = p0)
+    (hjEq : s.regs rJ = j)
+    (hw : s.regs rW = w)
+    (hselectorLimit :
+      (arun idx s (selectorBlock c)).regs rLimit = limit)
+    (hjL : c.segLen ≤ j)
+    (hpiLt : pi < limit)
+    (hnextCell : pi + 1 < ps.length)
+    (hlimitLe : limit ≤ c.tableLen)
+    (hlimitM : limit < M)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hp0M : p0 < M)
+    (hjM : j < M)
+    (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hA : c.arrayLen < M)
+    (i : Nat) (hi : i < c.segLen) :
+    let table := fun k => s.arr (c.primeBase + k)
+    let before : ScheduleState :=
+      ⟨⟨pi, p0, j⟩, machineCell c s i⟩
+    let after := scheduleStep c.segLen w limit i table before
+    machineCursor (arun idx s c.coreBody) = after.cursor ∧
+      machineCell c (arun idx s c.coreBody) i = after.cell := by
+  have hb := hRep.cell_bounds hInv hnextCell hboundM hboundSqM
+  exact arun_coreBody_simulates_advance_nonstart c idx s pi p0
+    (s.arr (c.primeBase + (pi + 1))) j w limit hmark hR hpi hp0 hjEq hw
+    hselectorLimit hjL hpiLt hlimitLe hlimitM hTM hp1Pos hp1M hp0M hjM
+    rfl hb.1 hb.2.1 hA i hi
+
+/-- Every exhausted nonterminal main-phase event advances safely.  Interior
+cells are justified by `PrimeTableInv`; the last advance loads the positive
+represented guard.  These two cases exhaust `pi < tableLen`. -/
+theorem arun_coreBody_simulates_advance_main_of_tableRep (c : Cfg)
+    (idx : Nat) (s : AState) (ps : List Nat) (bound pi p0 j w : Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s ps)
+    (hInv :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTable.PrimeTableInv ps bound)
+    (hpsLen : ps.length = c.tableLen)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hpi : s.regs rPi = pi)
+    (hp0 : s.regs rP = p0)
+    (hjEq : s.regs rJ = j)
+    (hw : s.regs rW = w)
+    (hselectorLimit :
+      (arun idx s (selectorBlock c)).regs rLimit = c.tableLen)
+    (hjL : c.segLen ≤ j)
+    (hpiLt : pi < c.tableLen)
+    (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hp0M : p0 < M)
+    (hjM : j < M)
+    (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hA : c.arrayLen < M)
+    (i : Nat) (hi : i < c.segLen) :
+    let table := fun k => s.arr (c.primeBase + k)
+    let before : ScheduleState :=
+      ⟨⟨pi, p0, j⟩, machineCell c s i⟩
+    let after := scheduleStep c.segLen w c.tableLen i table before
+    machineCursor (arun idx s c.coreBody) = after.cursor ∧
+      machineCell c (arun idx s c.coreBody) i = after.cell := by
+  by_cases hnext : pi + 1 < c.tableLen
+  · apply arun_coreBody_simulates_advance_nonstart_of_tableRep c idx s ps
+      bound pi p0 j w c.tableLen hRep hInv hmark hR hpi hp0 hjEq hw
+      hselectorLimit hjL hpiLt
+    · rwa [hpsLen]
+    · exact Nat.le_refl _
+    · exact htableLenM
+    · exact hTM
+    · exact hp1Pos
+    · exact hp1M
+    · exact hp0M
+    · exact hjM
+    · exact hboundM
+    · exact hboundSqM
+    · exact hA
+    · exact hi
+  · have heq : pi + 1 = c.tableLen := by omega
+    have hsentM : c.sentinel < M := by
+      simp only [Cfg.sentinel, Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+      omega
+    apply arun_coreBody_simulates_advance_nonstart c idx s pi p0
+      c.sentinel j w c.tableLen hmark hR hpi hp0 hjEq hw hselectorLimit
+      hjL hpiLt (Nat.le_refl _) htableLenM hTM hp1Pos hp1M hp0M hjM
+    · simpa [heq] using hRep.guard
+    · simp [Cfg.sentinel]
+    · exact hsentM
+    · exact hA
+    · exact hi
+
 /-- Terminal slack realizes the clamped executable step.  The table guard is
 obtained from `MachineTableRep`, so this statement never permits a zero
 terminal divisor. -/
@@ -483,6 +619,234 @@ theorem arun_coreBody_simulates_terminal_nonstart (c : Cfg) (idx : Nat)
     rw [Cursor.mk.injEq]
     exact ⟨hcur.1, hcur.2.1, hcur.2.2.1⟩,
     hcell⟩
+
+/-- Branch-sensitive safety invariant for an ordinary main-phase event.
+The terminal guard need not satisfy a prime-square bound: square, next-offset,
+and divisibility facts are required exactly when the current cursor is live. -/
+structure MainNonstartReady (c : Cfg) (s : AState) : Prop where
+  nonstart : s.regs rR ≠ 0
+  cursor_le : s.regs rPi ≤ c.tableLen
+  prime_pos : 0 < s.regs rP
+  prime_lt_modulus : s.regs rP < M
+  offset_lt_modulus : s.regs rJ < M
+  live_prime_sq_lt_modulus : s.regs rJ < c.segLen →
+    s.regs rP * s.regs rP < M
+  live_next_offset_lt_modulus : s.regs rJ < c.segLen →
+    s.regs rJ + s.regs rP < M
+  live_value_lt_modulus : s.regs rJ < c.segLen →
+    s.regs rW + s.regs rJ < M
+  live_divides : s.regs rJ < c.segLen →
+    s.regs rP ∣ s.regs rW + s.regs rJ
+
+/-- One branch-safe ordinary event preserves the exact represented prime
+list, its write cursor, and the main terminal guard. -/
+theorem arun_coreBody_mark_preserves_tableRep_nonstart (c : Cfg)
+    (idx : Nat) (s : AState) (ps : List Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s ps)
+    (hpsLen : ps.length ≤ c.tableLen)
+    (hready : MainNonstartReady c s)
+    (hmark : s.regs rR < c.markSteps)
+    (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M)
+    (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hLPos : 0 < c.segLen)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hwM : s.regs rW < M)
+    (hA : c.arrayLen < M) :
+    LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c
+      (arun idx s c.coreBody) ps := by
+  have hwriteM : s.regs rWrite < M := by
+    rw [hRep.cursor]
+    have hend : c.primeBase + c.tableLen < c.arrayLen := by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+      omega
+    omega
+  have hpiM : s.regs rPi < M :=
+    Nat.lt_of_le_of_lt hready.cursor_le htableLenM
+  have hprogress :=
+    LeanCompCert.Ports.ArraySegMobiusMark.arun_coreBody_mark_nowrap c idx s
+      (s.regs rR) (s.regs rW) (s.regs rWrite) hmark rfl rfl rfl
+      hLPos hTM hPM hidxM hspanM hidxNe hwriteM hwM
+  constructor
+  · apply LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.TablePrefix.frame_cells
+      hRep.table
+    intro k hk
+    exact arun_coreBody_mark_tableCell_nonstart c idx s k hmark
+      hready.nonstart hTM hp1Pos hp1M hpiM hready.prime_pos
+      hready.prime_lt_modulus hready.offset_lt_modulus
+      hready.live_prime_sq_lt_modulus hready.live_value_lt_modulus hA
+      (by omega)
+  · exact hprogress.1.trans hRep.cursor
+  · exact (arun_coreBody_mark_tableCell_nonstart c idx s c.tableLen hmark
+      hready.nonstart hTM hp1Pos hp1M hpiM hready.prime_pos
+      hready.prime_lt_modulus hready.offset_lt_modulus
+      hready.live_prime_sq_lt_modulus hready.live_value_lt_modulus hA
+      (Nat.le_refl _)).trans hRep.guard
+
+/-- The exact represented main table survives any finite ordinary prefix
+whose states satisfy the branch-sensitive cursor invariant. -/
+theorem bodyRun_mark_preserves_tableRep_nonstart (c : Cfg)
+    (idx fuel : Nat) (s : AState) (ps : List Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s ps)
+    (hpsLen : ps.length ≤ c.tableLen)
+    (hready : ∀ k, k < fuel →
+      MainNonstartReady c (bodyRun idx c k s))
+    (hmark : ∀ k, k < fuel →
+      (bodyRun idx c k s).regs rR < c.markSteps)
+    (hwM : ∀ k, k < fuel → (bodyRun idx c k s).regs rW < M)
+    (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M)
+    (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hLPos : 0 < c.segLen)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hA : c.arrayLen < M) :
+    LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c
+      (bodyRun idx c fuel s) ps := by
+  induction fuel with
+  | zero => simpa using hRep
+  | succ k ih =>
+      have hk : k < k + 1 := Nat.lt_succ_self k
+      rw [bodyRun_succ]
+      exact arun_coreBody_mark_preserves_tableRep_nonstart c idx
+        (bodyRun idx c k s) ps
+        (ih (fun n hn => hready n (Nat.lt_trans hn hk))
+          (fun n hn => hmark n (Nat.lt_trans hn hk))
+          (fun n hn => hwM n (Nat.lt_trans hn hk)))
+        hpsLen (hready k hk) (hmark k hk) htableLenM hTM hPM hidxM
+        hspanM hidxNe hLPos hp1Pos hp1M (hwM k hk) hA
+
+/-- The four low-level cursor cases collapse to one exhaustive ordinary
+main-phase simulation theorem.  Its table facts are all inherited from the
+represented prime list and terminal guard. -/
+theorem arun_coreBody_simulates_main_nonstart (c : Cfg) (idx : Nat)
+    (s : AState) (ps : List Nat) (bound w : Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s ps)
+    (hInv :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTable.PrimeTableInv ps bound)
+    (hpsLen : ps.length = c.tableLen)
+    (hready : MainNonstartReady c s)
+    (hmark : s.regs rR < c.markSteps)
+    (hw : s.regs rW = w)
+    (hselectorLimit :
+      (arun idx s (selectorBlock c)).regs rLimit = c.tableLen)
+    (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hA : c.arrayLen < M)
+    (i : Nat) (hi : i < c.segLen) :
+    let table := fun k => s.arr (c.primeBase + k)
+    let before := machineScheduleState c i s
+    let after := scheduleStep c.segLen w c.tableLen i table before
+    machineScheduleState c i (arun idx s c.coreBody) = after := by
+  by_cases hj : s.regs rJ < c.segLen
+  · have h := arun_coreBody_simulates_live_nonstart c idx s
+      (s.regs rPi) (s.regs rP) (s.regs rJ) w c.tableLen hmark
+      hready.nonstart rfl rfl rfl hw hselectorLimit hj hready.cursor_le
+      (Nat.le_refl _) htableLenM hTM hp1Pos hp1M hready.prime_pos
+      hready.prime_lt_modulus (hready.live_prime_sq_lt_modulus hj)
+      (hready.live_next_offset_lt_modulus hj)
+      (by rw [← hw]; exact hready.live_value_lt_modulus hj) hA
+      (by rw [← hw]; exact hready.live_divides hj) i hi
+    exact ScheduleState.ext h.1 h.2
+  · have hjL : c.segLen ≤ s.regs rJ := Nat.le_of_not_gt hj
+    by_cases hpi : s.regs rPi < c.tableLen
+    · have h := arun_coreBody_simulates_advance_main_of_tableRep c idx s ps
+        bound (s.regs rPi) (s.regs rP) (s.regs rJ) w hRep hInv hpsLen
+        hmark hready.nonstart rfl rfl rfl hw hselectorLimit hjL hpi
+        htableLenM hTM hp1Pos hp1M hready.prime_lt_modulus
+        hready.offset_lt_modulus hboundM hboundSqM hA i hi
+      exact ScheduleState.ext h.1 h.2
+    · have hpiEq : s.regs rPi = c.tableLen :=
+        Nat.le_antisymm hready.cursor_le (Nat.le_of_not_gt hpi)
+      have h := arun_coreBody_simulates_terminal_nonstart c idx s ps
+        (s.regs rP) (s.regs rJ) w hRep hmark hready.nonstart hpiEq rfl
+        rfl hw hselectorLimit hjL htableLenM hTM hp1Pos hp1M
+        hready.prime_lt_modulus hready.offset_lt_modulus hA i hi
+      apply ScheduleState.ext
+      · simpa [machineScheduleState, machineCursor, hpiEq] using h.1
+      · simpa [machineScheduleState, machineCursor, hpiEq] using h.2
+
+/-- Any finite ordinary main-phase prefix of the production body simulates
+the executable cursor/cell schedule over one fixed represented prime table. -/
+theorem bodyRun_simulates_main_nonstart (c : Cfg) (idx fuel : Nat)
+    (s : AState) (ps : List Nat) (bound w i : Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s ps)
+    (hInv :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTable.PrimeTableInv ps bound)
+    (hpsLen : ps.length = c.tableLen)
+    (hready : ∀ k, k < fuel →
+      MainNonstartReady c (bodyRun idx c k s))
+    (hmark : ∀ k, k < fuel →
+      (bodyRun idx c k s).regs rR < c.markSteps)
+    (hw : ∀ k, k < fuel → (bodyRun idx c k s).regs rW = w)
+    (hselectorLimit : ∀ k, k < fuel →
+      (arun idx (bodyRun idx c k s) (selectorBlock c)).regs rLimit =
+        c.tableLen)
+    (hwM : ∀ k, k < fuel → (bodyRun idx c k s).regs rW < M)
+    (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M)
+    (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hLPos : 0 < c.segLen)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hA : c.arrayLen < M)
+    (hi : i < c.segLen) :
+    machineScheduleState c i (bodyRun idx c fuel s) =
+      scheduleRun fuel c.segLen w c.tableLen i
+        (fun k => s.arr (c.primeBase + k))
+        (machineScheduleState c i s) := by
+  apply bodyRun_simulates_scheduleRun c idx fuel w c.tableLen i
+    (fun k => s.arr (c.primeBase + k)) s (machineScheduleState c i s) rfl
+  intro k hk hsim
+  have hRepK := bodyRun_mark_preserves_tableRep_nonstart c idx k s ps hRep
+    (by omega) (fun n hn => hready n (Nat.lt_trans hn hk))
+    (fun n hn => hmark n (Nat.lt_trans hn hk))
+    (fun n hn => hwM n (Nat.lt_trans hn hk)) htableLenM hTM hPM hidxM
+    hspanM hidxNe hLPos hp1Pos hp1M hA
+  have hone := arun_coreBody_simulates_main_nonstart c idx
+    (bodyRun idx c k s) ps bound w hRepK hInv hpsLen (hready k hk)
+    (hmark k hk) (hw k hk) (hselectorLimit k hk) htableLenM hTM
+    hp1Pos hp1M hboundM hboundSqM hA i hi
+  have htable : ∀ q, q ≤ c.tableLen →
+      (bodyRun idx c k s).arr (c.primeBase + q) =
+        s.arr (c.primeBase + q) := by
+    intro q hq
+    exact hRepK.same_main_cell hRep hpsLen q hq
+  calc
+    machineScheduleState c i
+        (arun idx (bodyRun idx c k s) c.coreBody) =
+        scheduleStep c.segLen w c.tableLen i
+          (fun q => (bodyRun idx c k s).arr (c.primeBase + q))
+          (machineScheduleState c i (bodyRun idx c k s)) := hone
+    _ = scheduleStep c.segLen w c.tableLen i
+          (fun q => s.arr (c.primeBase + q))
+          (machineScheduleState c i (bodyRun idx c k s)) :=
+      scheduleStep_table_congr c.segLen w c.tableLen i _ _ _ htable
+    _ = scheduleStep c.segLen w c.tableLen i
+          (fun q => s.arr (c.primeBase + q))
+          (scheduleRun k c.segLen w c.tableLen i
+            (fun q => s.arr (c.primeBase + q))
+            (machineScheduleState c i s)) := by rw [hsim]
 
 /-- The first production event of a window realizes the executable reset
 step and its first live cell update. -/

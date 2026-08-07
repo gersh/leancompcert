@@ -92,6 +92,64 @@ theorem arun_coreBody_mark_tableCell (c : Cfg) (idx : Nat) (s : AState)
   rw [hcore]
   exact hpost.trans ((congrFun htarr x).trans hqArr)
 
+/-- A noninitial marking event frames every represented table cell with only
+branch-relevant arithmetic bounds.  In particular an exhausted or terminal
+cursor does not need the current divisor's square to fit in one word. -/
+theorem arun_coreBody_mark_tableCell_nonstart (c : Cfg) (idx : Nat)
+    (s : AState) (k : Nat)
+    (hmark : s.regs rR < c.markSteps)
+    (hR : s.regs rR ≠ 0)
+    (hTM : c.markSteps < M)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hpiM : s.regs rPi < M)
+    (hpPos : 0 < s.regs rP)
+    (hpM : s.regs rP < M)
+    (hjM : s.regs rJ < M)
+    (hpSqM : s.regs rJ < c.segLen →
+      s.regs rP * s.regs rP < M)
+    (hnM : s.regs rJ < c.segLen →
+      s.regs rW + s.regs rJ < M)
+    (hA : c.arrayLen < M)
+    (hk : k ≤ c.tableLen) :
+    (arun idx s c.coreBody).arr (c.primeBase + k) =
+      s.arr (c.primeBase + k) := by
+  let x := c.primeBase + k
+  let q := signalInput c idx s
+  let t := arun idx q (signalBlock c)
+  have hxProd : x ≠ c.sinkProd := by
+    simp only [x, Cfg.primeBase, Cfg.sinkProd]
+    omega
+  have hxFlag : x ≠ c.sinkProd + c.segLen := by
+    simp only [x, Cfg.primeBase, Cfg.sinkProd]
+    omega
+  have hxPrime : x ≠ c.primeSink := by
+    simp only [x, Cfg.primeBase, Cfg.primeSink, Cfg.resultBase]
+    omega
+  have hqArr : q.arr x = s.arr x := by
+    by_cases hj : s.regs rJ < c.segLen
+    · have hm := signalInput_mark_live_nonstart c idx s hmark hR hj
+        hpPos hpM (hpSqM hj) (hnM hj) hTM hA
+      apply hm.2.2 x
+      · simp only [x, Cfg.primeBase]
+        omega
+      · simp only [x, Cfg.primeBase]
+        omega
+    · exact signalInput_exhausted_cell_nonstart c idx s hmark hR
+        (Nat.le_of_not_gt hj) hTM hp1Pos hp1M hpiM hpM hjM hA x
+        hxProd hxFlag
+  have hc := signalInput_mark_controls c idx s hmark hTM
+  have ht := signalBlock_mark_controls c idx q hc.1 hc.2
+  have htarr : t.arr = q.arr :=
+    arun_arr_frame idx (signalBlock c) q (by rfl)
+  have hpost := arun_postSignal_mark_frame c idx t ht.1 ht.2.1 ht.2.2
+    hA x hxProd hxFlag hxPrime
+  have hcore : arun idx s c.coreBody = arun idx t (postSignal c) := by
+    rw [coreBody_eq_signalSlices, arun_append, arun_append]
+    rfl
+  rw [hcore]
+  exact hpost.trans ((congrFun htarr x).trans hqArr)
+
 /-- The two production cells representing one integer in the current
 window. -/
 def machineCell (c : Cfg) (s : AState) (i : Nat) : RootCellState :=
