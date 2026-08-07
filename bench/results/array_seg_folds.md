@@ -770,6 +770,20 @@ producer-to-residue machine arrow without assuming the segmented sieve:
   split at any list boundary, with the first shard's concrete carry-out as
   the second shard's seed.
 
+`Ports/MobiusResidueTrialWindow.lean` closes the next fold layer:
+`fullBlock_spec` collapses every candidate's divisor rounds to one transparent
+residue step, and `fullValue_eq_trialResAt` identifies the complete flat output
+with the final trial-residue violation counter.  A fresh capped source build
+completed in 0.31 s with 575,216 KiB peak RSS.  The downstream consumer then
+identifies both emitted trial bits with Mathlib's Möbius function and proves
+zero-result-to-source soundness from a proved canonical initial residue.  The
+downstream root now supplies the exact paper-faithful stronger-range
+configuration and proves its word admissibility.  A finite accepting receipt
+and compiled checker for the remaining explicit arithmetic side conditions
+are still required before that literature atom can be retired.  The `(2.11)`
+row needs a distinct looser residue predicate; this stronger predicate is
+known to fail beyond the stronger-range endpoint.
+
 This is a semantics-complete fallback, not the production algorithm.  Its
 work is `Θ(N·√N)` trial rounds for `[1,N]`, whereas the segmented route is
 near-linear.  On the current aarch64 host, single core, `gcc -O2`:
@@ -785,8 +799,10 @@ near-linear.  On the current aarch64 host, single core, `gcc -O2`:
 | native 100 million rounds | 1.38 s user |
 | fitted rate | about **13.8 ns/trial round** |
 
-At that measured rate, a single complete trial-division pass would cost
-approximately 109 core-days through `7.727·10⁹`, 437 core-years through
+The exact stronger-range configuration has 679,224,782,846,572 flat rounds.
+At the measured rate, a single complete trial-division pass would cost
+approximately 109 core-days through `7.727·10⁹`; using the same signal
+producer with a future `(2.11)` predicate would cost 437 core-years through
 `10¹²`, and `4.37·10⁸` core-years through `10¹⁶`.  These figures explain
 why the proved fallback is valuable as a trust bridge and shard oracle but
 does not replace the segmented sieve for the cited production ranges.
