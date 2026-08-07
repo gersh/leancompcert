@@ -104,6 +104,7 @@ import LeanCompCert.Ports.RamareWM217
 import LeanCompCert.Ports.RamareMStar140M
 import LeanCompCert.Ports.RamareCombined100MModel
 import LeanCompCert.Ports.RamareCombined100MSegModel
+import LeanCompCert.Ports.RamareCombined100MQuotient
 import LeanCompCert.Ports.SigmaPrincipalHead
 import LeanCompCert.Ports.MoebiusSawtooth
 import LeanCompCert.Ports.RamareMStar140MCore
