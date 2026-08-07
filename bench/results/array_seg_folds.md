@@ -882,3 +882,12 @@ in bounds in the two-bank layout, and `denote_signalBlock_readSig` composes
 that fact with the generic array bridge.  Thus this slice now covers the
 partial machine denotation, not merely the total helper evaluator.  Its capped
 source rebuild completed in 0.83 s wall with 602,204 KiB peak RSS and no swap.
+
+The complete 111-instruction core is now definitionally split into its
+66-instruction prefix, the verified decoder, and its 25-instruction tail.
+`readSig_arun_postSignal` proves the tail preserves all four observed
+registers, and `readSig_arun_coreBody` lifts the decoder equation to the whole
+core.  A first monolithic simplification of the tail climbed past the 3 GiB
+soft limit and was stopped; replacing it by the reusable structural
+`arun_reg_frame` proof brought the full source check back to 0.85 s wall and
+601,168 KiB peak RSS under the unchanged 4 GiB hard cap, with no swap.

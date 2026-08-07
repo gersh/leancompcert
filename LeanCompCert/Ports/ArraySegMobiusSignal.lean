@@ -31,8 +31,63 @@ open LeanCompCert.Ports.MobiusResidueRealisation
 def signalBlock (c : Cfg) : List AInstr :=
   (c.coreBody.drop 66).take 20
 
+def preSignal (c : Cfg) : List AInstr := c.coreBody.take 66
+
+def postSignal (c : Cfg) : List AInstr := c.coreBody.drop 86
+
+def signalInput (c : Cfg) (idx : Nat) (s : AState) : AState :=
+  arun idx s (preSignal c)
+
 theorem signalBlock_length (c : Cfg) : (signalBlock c).length = 20 := by
   rfl
+
+theorem coreBody_eq_signalSlices (c : Cfg) :
+    c.coreBody = preSignal c ++ signalBlock c ++ postSignal c := by
+  rfl
+
+/-- Register-frame predicate for an array instruction. -/
+def avoidsReg (r : Nat) : AInstr → Bool
+  | .scalar (.mov d _) => d != r
+  | .scalar (.binop d _ _ _) => d != r
+  | .load d _ => d != r
+  | .store _ _ => true
+
+theorem arun_reg_frame (k r : Nat) : ∀ (l : List AInstr) (s : AState),
+    l.all (avoidsReg r) = true → (arun k s l).regs r = s.regs r := by
+  intro l
+  induction l with
+  | nil => intro s _; rfl
+  | cons i rest ih =>
+      intro s h
+      rw [List.all_cons, Bool.and_eq_true] at h
+      rw [arun_cons, ih _ h.2]
+      cases i with
+      | scalar instr =>
+          cases instr with
+          | mov d src =>
+              simp only [avoidsReg, bne_iff_ne] at h
+              simp [astep, LeanCompCert.Verified.InstrBlock.sdest,
+                LeanCompCert.Verified.InstrBlock.sval,
+                AState.writeReg, Ne.symm h.1]
+          | binop d op lhs rhs =>
+              simp only [avoidsReg, bne_iff_ne] at h
+              simp [astep, LeanCompCert.Verified.InstrBlock.sdest,
+                LeanCompCert.Verified.InstrBlock.sval,
+                AState.writeReg, Ne.symm h.1]
+      | load d a =>
+          simp only [avoidsReg, bne_iff_ne] at h
+          simp [astep, AState.writeReg, Ne.symm h.1]
+      | store a v => rfl
+
+/-- The tail clears cells, bootstraps primes, and advances cursors, but does
+not overwrite any of the four registers observed by a Möbius residue. -/
+theorem readSig_arun_postSignal (c : Cfg) (idx : Nat) (s : AState) :
+    readSig (arun idx s (postSignal c)) = readSig s := by
+  have h65 := arun_reg_frame idx 65 (postSignal c) s (by rfl)
+  have h79 := arun_reg_frame idx 79 (postSignal c) s (by rfl)
+  have h80 := arun_reg_frame idx 80 (postSignal c) s (by rfl)
+  have h133 := arun_reg_frame idx 133 (postSignal c) s (by rfl)
+  simp only [readSig, h65, h79, h80, h133]
 
 /-- Transparent decoding of the product/parity cells read by the extracted
 block.  The `% M` operations are exactly the word reductions performed by the
@@ -215,5 +270,32 @@ theorem denote_signalBlock_readSig (arrayLen : Nat) (c : Cfg)
     (signalBlock_defined arrayLen c idx s hT hi hmain hRM hTM h2LM harray)]
   simp only [Option.map_some]
   rw [readSig_arun_signalBlock c idx s hT hi hgate hmain hRM hTM h2LM hWM]
+
+/-- Observable meaning of the complete 111-instruction core, factored through
+the state immediately before its decoder slice.  The sole remaining
+algorithmic obligation is to establish the hypotheses (and ultimately
+`CellRepresents`) for `signalInput`. -/
+theorem readSig_arun_coreBody (c : Cfg) (idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ (signalInput c idx s).regs rR)
+    (hi : (signalInput c idx s).regs rR - c.markSteps < c.segLen)
+    (hgate : (signalInput c idx s).regs 133 = 1)
+    (hmain : (signalInput c idx s).regs 9 = 1)
+    (hRM : (signalInput c idx s).regs rR < M)
+    (hTM : c.markSteps < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (hWM : (signalInput c idx s).regs rW +
+      ((signalInput c idx s).regs rR - c.markSteps) < M) :
+    readSig (arun idx s c.coreBody) =
+      decodeCell
+        ((signalInput c idx s).regs rW +
+          ((signalInput c idx s).regs rR - c.markSteps))
+        ((signalInput c idx s).arr
+          ((signalInput c idx s).regs rR - c.markSteps))
+        ((signalInput c idx s).arr
+          ((signalInput c idx s).regs rR - c.markSteps + c.segLen)) := by
+  rw [coreBody_eq_signalSlices, arun_append, arun_append,
+    readSig_arun_postSignal]
+  exact readSig_arun_signalBlock c idx (signalInput c idx s)
+    hT hi hgate hmain hRM hTM h2LM hWM
 
 end LeanCompCert.Ports.ArraySegMobiusSignal
