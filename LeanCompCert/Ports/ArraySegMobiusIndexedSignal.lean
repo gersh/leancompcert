@@ -371,6 +371,101 @@ theorem readRes_combinedIndexedRun_root_acc_prefix_eq
       rw [combinedIndexedRun_succ]
       exact hstep.trans hprev
 
+/-- Position-driven form of the root-accumulation identity.  The indexed root
+prefix proofs expose exactly this counter/base pair, so their arithmetic state
+can be transported without repeating the literal residue argument. -/
+theorem readRes_combinedIndexedRun_root_acc_prefix_eq_of_position
+    (c : Cfg) (idx k len fuel : Nat) (combined core : AState) (w : Nat)
+    (hagree : CoreAgree combined core)
+    (hfuel : fuel ≤ c.segLen)
+    (hposition : ∀ j, j < fuel →
+      let before := indexedBodyRun idx c j core
+      before.regs rR = c.markSteps + j ∧ before.regs rW = w)
+    (hidxRoot : idx + fuel ≤ c.rootSpan)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hwFuelM : w + fuel < M) (hwPos : 0 < w)
+    (hcel : 1 ≤ (readRes combined).cel)
+    (hcelM : (readRes combined).cel < M)
+    (hw : ResWord (readRes combined)) :
+    readRes (combinedIndexedRun idx c k fuel combined) =
+      readRes combined := by
+  apply readRes_combinedIndexedRun_root_acc_prefix_eq c idx k len fuel
+    combined core hagree
+  · intro j hj
+    have hp := hposition j hj
+    dsimp only at hp ⊢
+    have hjSeg : j < c.segLen := by omega
+    have hcounterM : c.markSteps + j < M := by
+      have hperiod : c.markSteps + j < c.period := by
+        simp only [Cfg.period]
+        omega
+      omega
+    rw [hp.1, hp.2]
+    exact ⟨by omega, by omega, hcounterM, by omega, by omega⟩
+  · exact hTM
+  · exact hspanM
+  · exact hcel
+  · exact hcelM
+  · exact hw
+
+set_option maxRecDepth 10000 in
+/-- One complete production root window is transparent to the five-field
+residue.  The first half uses the verified marking position; the second half
+uses the root-prefix counter/base invariant supplied by any of the bootstrap,
+crossing, or later-root schedule proofs. -/
+theorem readRes_combinedIndexedRun_root_window_eq
+    (c : Cfg) (idx k len : Nat) (combined core : AState)
+    (w write : Nat)
+    (hagree : CoreAgree combined core)
+    (hR : core.regs rR = 0) (hW : core.regs rW = w)
+    (hWrite : core.regs rWrite = write)
+    (haccPosition : ∀ j, j < c.segLen →
+      let markedCore := indexedBodyRun idx c c.markSteps core
+      let before := indexedBodyRun (idx + c.markSteps) c j markedCore
+      before.regs rR = c.markSteps + j ∧ before.regs rW = w)
+    (hrootWindow : idx + c.period ≤ c.rootSpan)
+    (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hwriteM : write < M) (hwPos : 0 < w)
+    (hwSegM : w + c.segLen < M)
+    (hcel : 1 ≤ (readRes combined).cel)
+    (hcelM : (readRes combined).cel < M)
+    (hw : ResWord (readRes combined)) :
+    readRes (combinedIndexedRun idx c k c.period combined) =
+      readRes combined := by
+  let markedCombined := combinedIndexedRun idx c k c.markSteps combined
+  let markedCore := indexedBodyRun idx c c.markSteps core
+  have hidxMarkM : idx + c.markSteps < M := by
+    simp only [Cfg.period] at hrootWindow
+    omega
+  have hwM : w < M := by omega
+  have hmarkRes := readRes_combinedIndexedRun_mark_prefix_eq c idx k len
+    c.markSteps combined core w write hagree (Nat.le_refl _) hR hW hWrite
+    hLPos hTM hPM hidxMarkM hspanM (fun j hj => by
+      simp only [Cfg.period] at hrootWindow
+      omega) hwriteM hwPos hwM hcel hcelM hw
+  have hagreeMarked : CoreAgree markedCombined markedCore :=
+    combinedIndexedRun_core idx c k c.markSteps hagree
+  have hmarkedWord : ResWord (readRes markedCombined) := by
+    rw [hmarkRes]
+    exact hw
+  have haccRes :=
+    readRes_combinedIndexedRun_root_acc_prefix_eq_of_position c
+      (idx + c.markSteps) k len c.segLen markedCombined markedCore w
+      hagreeMarked (Nat.le_refl _) (by
+        intro j hj
+        exact haccPosition j hj) (by
+          simp only [Cfg.period] at hrootWindow ⊢
+          omega) hTM hPM hspanM hwSegM hwPos (by
+            rw [hmarkRes]
+            exact hcel) (by
+              rw [hmarkRes]
+              exact hcelM) hmarkedWord
+  rw [Cfg.period, combinedIndexedRun_add]
+  exact haccRes.trans hmarkRes
+
 /-- At changing-index accumulation position `i`, the selected cell is still
 the finite root fold established by the compiled marking phase. -/
 theorem indexedBodyRun_main_acc_current_cellRepresents
