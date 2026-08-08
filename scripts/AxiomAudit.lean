@@ -658,6 +658,8 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusIdleSignal.readSig_arun_coreBody_root_acc_idle
 #print axioms LeanCompCert.Ports.ArraySegMobiusIdleSignal.resStep_readSig_arun_coreBody_mark
 #print axioms LeanCompCert.Ports.ArraySegMobiusIdleSignal.resStep_readSig_arun_coreBody_root_acc
+#print axioms LeanCompCert.Ports.ArraySegMobiusIdleSignal.mark_event_divisors_ready
+#print axioms LeanCompCert.Ports.ArraySegMobiusIdleSignal.root_acc_event_divisors_ready
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_bits
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_eq_muSig_decodedValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootCellFold_cellRepresents
