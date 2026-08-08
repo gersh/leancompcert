@@ -233,6 +233,147 @@ private theorem sq_step (n cel t D : Nat) (hsq : n + 1 ≤ cel * cel)
     Nat.mul_le_mul (Nat.mul_le_mul_left 4 hsq) (Nat.le_refl _)
   omega
 
+/-! ## Root-free squared test
+
+The ceiling-root test above is a useful sufficient condition, but is too
+strong at small exact ties (notably `n = 4` for Platt's stronger range).  The
+paper-faithful finite predicate squares the same rounding majorant instead.
+The next two theorems prove that predicate directly, without a square root or
+division in the runtime check. -/
+
+/-- After shifting the two-limb accumulator down to scale `2^62`, the
+rounding majorant `absV + ceil(n / 2^(k+2)) + 1` bounds the exact numerator.
+This is the unsquared arithmetic core of the root-free test. -/
+private theorem squared_key_nat (k n absV a t X D : Nat)
+    (hn : 1 ≤ n) (hD : 0 < D)
+    (hV : a < (absV + 1) * 2 ^ (k + 1))
+    (happ : 2 * X ≤ n * D)
+    (htri : 2 ^ (63 + k) * t ≤ X + a * D) :
+    2 ^ 62 * t <
+      (absV + (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1) * D := by
+  let E := (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2)
+  let U := absV + E + 1
+  have hnE : n ≤ 2 ^ (k + 2) * E := by
+    dsimp only [E]
+    exact ceil_mul_ge _ n (Nat.two_pow_pos _) hn
+  have hp : (2 : Nat) ^ (k + 2) = 2 ^ (k + 1) * 2 := by
+    rw [Nat.pow_succ]
+  have h2a : 2 * a < (absV + 1) * 2 ^ (k + 2) := by
+    calc
+      2 * a < 2 * ((absV + 1) * 2 ^ (k + 1)) :=
+        (Nat.mul_lt_mul_left (by decide : 0 < 2)).mpr hV
+      _ = (absV + 1) * 2 ^ (k + 2) := by rw [hp]; grind
+  have hsum : n + 2 * a < U * 2 ^ (k + 2) := by
+    calc
+      n + 2 * a < 2 ^ (k + 2) * E +
+          (absV + 1) * 2 ^ (k + 2) :=
+        Nat.add_lt_add_of_le_of_lt hnE h2a
+      _ = U * 2 ^ (k + 2) := by dsimp only [U]; grind
+  have hnum : 2 * (2 ^ (63 + k) * t) ≤ (n + 2 * a) * D := by
+    calc
+      2 * (2 ^ (63 + k) * t)
+          ≤ 2 * (X + a * D) := Nat.mul_le_mul_left 2 htri
+      _ = 2 * X + 2 * (a * D) := by grind
+      _ ≤ n * D + 2 * (a * D) := Nat.add_le_add_right happ _
+      _ = (n + 2 * a) * D := by grind
+  have hnumLt : 2 * (2 ^ (63 + k) * t) <
+      (U * 2 ^ (k + 2)) * D :=
+    Nat.lt_of_le_of_lt hnum ((Nat.mul_lt_mul_right hD).mpr hsum)
+  have hleft : 2 * (2 ^ (63 + k) * t) =
+      2 ^ (k + 2) * (2 ^ 62 * t) := by
+    have hpow : 2 * 2 ^ (63 + k) = 2 ^ (k + 2) * 2 ^ 62 := by
+      rw [Nat.mul_comm 2 (2 ^ (63 + k)), ← Nat.pow_succ]
+      have he : (63 + k).succ = (k + 2) + 62 := by omega
+      rw [he, Nat.pow_add]
+    rw [← Nat.mul_assoc, hpow]
+    grind
+  have hright : (U * 2 ^ (k + 2)) * D =
+      2 ^ (k + 2) * (U * D) := by grind
+  rw [hleft, hright] at hnumLt
+  simpa only [U] using Nat.lt_of_mul_lt_mul_left hnumLt
+
+/-- **The paper-faithful root-free test is sound.**
+
+`absV` is the absolute shifted accumulator at scale `2^62`; the quotient in
+`U` is the accumulated half-ulp allowance rounded upward.  Thus the entirely
+integer predicate `(n+1) * U^2 ≤ 2^122` implies the exact cross-multiplied
+Platt family bound.  This is the contract for the multiprecision compiled
+test; unlike the ceiling-root sufficient condition, it is satisfiable at the
+known `n = 4` tie. -/
+theorem sound_of_squared_test (k n absV : Nat) (A T : Int) (D : Nat)
+    (hn : 1 ≤ n) (hD : 0 < D)
+    (hV : A.natAbs < (absV + 1) * 2 ^ (k + 1))
+    (happ : 2 * (A * D - 2 ^ (63 + k) * T).natAbs ≤ n * D)
+    (htest :
+      (n + 1) *
+        (absV + (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1) ^ 2 ≤
+          2 ^ 122) :
+    4 * ((n : Int) + 1) * T ^ 2 ≤ (D : Int) ^ 2 := by
+  let U := absV + (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1
+  let X := (A * D - 2 ^ (63 + k) * T).natAbs
+  have hZ : ((2 : Int) ^ (63 + k) * T).natAbs =
+      2 ^ (63 + k) * T.natAbs := by
+    rw [Int.natAbs_mul, two_pow_natAbs]
+  have hW : ((A : Int) * (D : Nat)).natAbs = A.natAbs * D := by
+    rw [Int.natAbs_mul, Int.natAbs_natCast]
+  have htri0 : ∀ W Z : Int, Z.natAbs ≤ (W - Z).natAbs + W.natAbs := by
+    intro W Z
+    omega
+  have htri : 2 ^ (63 + k) * T.natAbs ≤ X + A.natAbs * D := by
+    have h := htri0 ((A : Int) * (D : Nat))
+      ((2 : Int) ^ (63 + k) * T)
+    rw [hZ, hW] at h
+    exact h
+  have hkey : 2 ^ 62 * T.natAbs < U * D := by
+    apply squared_key_nat k n absV A.natAbs T.natAbs X D hn hD hV
+    · simpa only [X] using happ
+    · exact htri
+  have hkeyLe : 2 ^ 62 * T.natAbs ≤ U * D := Nat.le_of_lt hkey
+  have hsq := Nat.mul_le_mul hkeyLe hkeyLe
+  have hsqN := Nat.mul_le_mul_left (n + 1) hsq
+  have htestD := Nat.mul_le_mul_right (D * D) (by
+    simpa only [U, Nat.pow_two] using htest)
+  have hchain :
+      (n + 1) * ((2 ^ 62 * T.natAbs) * (2 ^ 62 * T.natAbs)) ≤
+        2 ^ 122 * (D * D) := by
+    calc
+      (n + 1) * ((2 ^ 62 * T.natAbs) * (2 ^ 62 * T.natAbs))
+          ≤ (n + 1) * ((U * D) * (U * D)) := hsqN
+      _ = ((n + 1) * (U * U)) * (D * D) := by grind
+      _ ≤ 2 ^ 122 * (D * D) := htestD
+  have hleft :
+      (n + 1) * ((2 ^ 62 * T.natAbs) * (2 ^ 62 * T.natAbs)) =
+        2 ^ 122 * (4 * (n + 1) * (T.natAbs * T.natAbs)) := by
+    have hpowers : (2 : Nat) ^ 62 * 2 ^ 62 = 2 ^ 122 * 4 := by
+      decide
+    calc
+      (n + 1) * ((2 ^ 62 * T.natAbs) * (2 ^ 62 * T.natAbs))
+          = (2 ^ 62 * 2 ^ 62) *
+              ((n + 1) * (T.natAbs * T.natAbs)) := by grind
+      _ = (2 ^ 122 * 4) * ((n + 1) * (T.natAbs * T.natAbs)) := by
+        rw [hpowers]
+      _ = 2 ^ 122 * (4 * (n + 1) *
+            (T.natAbs * T.natAbs)) := by grind
+  rw [hleft] at hchain
+  have hnat : 4 * (n + 1) * (T.natAbs * T.natAbs) ≤ D * D :=
+    Nat.le_of_mul_le_mul_left hchain (Nat.two_pow_pos 122)
+  have hcast : ((4 * (n + 1) : Nat) : Int) *
+      ((T.natAbs * T.natAbs : Nat) : Int) ≤
+        ((D : Nat) : Int) * ((D : Nat) : Int) := by
+    rw [← Int.natCast_mul, ← Int.natCast_mul]
+    exact Int.ofNat_le.mpr hnat
+  rw [Int.natAbs_mul_self] at hcast
+  have e2 : ((4 * (n + 1) : Nat) : Int) =
+      4 * ((n : Int) + 1) := by
+    push_cast
+    grind
+  rw [e2] at hcast
+  have hT2 : T ^ 2 = T * T := by grind
+  have hD2 : ((D : Nat) : Int) ^ 2 =
+      ((D : Nat) : Int) * ((D : Nat) : Int) := by grind
+  rw [hT2, hD2]
+  exact hcast
+
 /-- **A passing test is the family bound**, cross-multiplied. -/
 theorem sound_of_test (k n cel absV : Nat) (A T : Int) (D : Nat)
     (hn : 1 ≤ n) (hD : 0 < D) (hcel : 1 ≤ cel)
