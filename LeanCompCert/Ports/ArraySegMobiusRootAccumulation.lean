@@ -1598,6 +1598,57 @@ theorem arun_coreBody_root_acc_next_table_cells_room
 /-- A later sequential candidate at an ordinary root-window endpoint performs
 the same finite table/cell step and the production wrap to the next root
 base. -/
+theorem arun_coreBody_root_acc_next_wrap_room
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot ps : List Nat) (bound r w write i n : Nat)
+    (hInv : RootTableInv c s ps bound)
+    (hFit : ps.length ≤ c.tableLen)
+    (hAppend : unmarkedBool ps n = true → ps.length < c.tableLen)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i)
+    (hn : n = w + i) (hnext : n = bound + 1)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hwrap : r + 1 = c.period) (hwNextM : w + c.segLen < M)
+    (hn2 : 2 ≤ n) (hnCap : n ≤ c.rootCap)
+    (hcapM : c.rootCap < M) (hA : c.arrayLen < M)
+    (hzero : s.regs rZero = 0)
+    (hcell : machineCell c s i = rootCellFold boot n)
+    (bootBound : Nat) (hBoot : PrimeTableInv boot bootBound)
+    (hbootLt : bootBound < n)
+    (hcover : n < (bootBound + 1) * (bootBound + 1)) :
+    RootTableInv c (arun idx s c.coreBody) (rootTableStep ps n) n ∧
+      machineCell c (arun idx s c.coreBody) i = ⟨0, 0⟩ ∧
+      (∀ j, j < c.segLen → j ≠ i →
+        machineCell c (arun idx s c.coreBody) j = machineCell c s j) ∧
+      (arun idx s c.coreBody).regs rR = 0 ∧
+      (arun idx s c.coreBody).regs rW = w + c.segLen ∧
+      (arun idx s c.coreBody).regs rZero = 0 := by
+  have hc := arun_coreBody_root_acc_next_table_cells_room c idx s boot ps bound
+    r w write i n hInv hFit hAppend hR hW hWrite hT hiEq hn hnext hroot hRM hTM
+    hidxM hspanM hi hwM hn2 hnCap hcapM hA hzero hcell bootBound hBoot
+    hbootLt hcover
+  have hwriteEq : write = c.primeBase + ps.length := by
+    rw [← hInv.cursor, hWrite]
+  have hwriteNextM : write + 1 < M := by
+    have hend : c.primeBase + c.tableLen < c.arrayLen := by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+      omega
+    rw [hwriteEq]
+    omega
+  have hp := arun_coreBody_root_acc_wrap c idx s ps n r w write i hR hW
+    hWrite hT hiEq hn hroot hRM hTM hPM hidxM hspanM hidxNe hi hwM
+    hn2 hnCap hcapM hwrap hwriteNextM hwNextM hc.2.2.2.1
+  exact ⟨hc.1, hc.2.1, hc.2.2.1, hp.2.1, hp.2.2, hc.2.2.2.2⟩
+
+/-- Backwards-compatible strict-capacity specialization at an ordinary root
+window endpoint. -/
 theorem arun_coreBody_root_acc_next_wrap
     (c : Cfg) (idx : Nat) (s : AState)
     (boot ps : List Nat) (bound r w write i n : Nat)
@@ -1628,9 +1679,51 @@ theorem arun_coreBody_root_acc_next_wrap
         machineCell c (arun idx s c.coreBody) j = machineCell c s j) ∧
       (arun idx s c.coreBody).regs rR = 0 ∧
       (arun idx s c.coreBody).regs rW = w + c.segLen ∧
+      (arun idx s c.coreBody).regs rZero = 0 :=
+  arun_coreBody_root_acc_next_wrap_room c idx s boot ps bound r w write i n
+    hInv (Nat.le_of_lt hFit) (fun _ => hFit) hR hW hWrite hT hiEq hn
+    hnext hroot hRM hTM hPM hidxM hspanM hidxNe hi hwM hwrap hwNextM
+    hn2 hnCap hcapM hA hzero hcell bootBound hBoot hbootLt hcover
+
+/-- A later sequential candidate on the final root body performs the same
+finite table/cell step and the production modular retargeting into the main
+range. -/
+theorem arun_coreBody_root_acc_next_transition_room
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot ps : List Nat) (bound r w write i n delta : Nat)
+    (hInv : RootTableInv c s ps bound)
+    (hFit : ps.length ≤ c.tableLen)
+    (hAppend : unmarkedBool ps n = true → ps.length < c.tableLen)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i)
+    (hn : n = w + i) (hnext : n = bound + 1)
+    (hRM : r < M) (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M) (hspanPos : 0 < c.rootSpan)
+    (hspanM : c.rootSpan < M) (hidx : idx = c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hwrap : r + 1 = c.period)
+    (hn2 : 2 ≤ n) (hnCap : n ≤ c.rootCap)
+    (hcapM : c.rootCap < M) (hA : c.arrayLen < M)
+    (hzero : s.regs rZero = 0)
+    (hcell : machineCell c s i = rootCellFold boot n)
+    (bootBound : Nat) (hBoot : PrimeTableInv boot bootBound)
+    (hbootLt : bootBound < n)
+    (hcover : n < (bootBound + 1) * (bootBound + 1))
+    (hDelta : c.wDelta = delta) (hDeltaM : delta < M) :
+    RootTableInv c (arun idx s c.coreBody) (rootTableStep ps n) n ∧
+      machineCell c (arun idx s c.coreBody) i = ⟨0, 0⟩ ∧
+      (∀ j, j < c.segLen → j ≠ i →
+        machineCell c (arun idx s c.coreBody) j = machineCell c s j) ∧
+      (arun idx s c.coreBody).regs rR = 0 ∧
+      (arun idx s c.coreBody).regs rW =
+        (w + ((c.segLen + delta) % M)) % M ∧
       (arun idx s c.coreBody).regs rZero = 0 := by
+  have hroot : idx < c.rootSpan := by omega
   have hc := arun_coreBody_root_acc_next_table_cells_room c idx s boot ps bound
-    r w write i n hInv (Nat.le_of_lt hFit) (fun _ => hFit) hR hW hWrite hT hiEq hn hnext hroot hRM hTM
+    r w write i n hInv hFit hAppend hR hW hWrite hT hiEq hn hnext hroot hRM hTM
     hidxM hspanM hi hwM hn2 hnCap hcapM hA hzero hcell bootBound hBoot
     hbootLt hcover
   have hwriteEq : write = c.primeBase + ps.length := by
@@ -1641,14 +1734,14 @@ theorem arun_coreBody_root_acc_next_wrap
       omega
     rw [hwriteEq]
     omega
-  have hp := arun_coreBody_root_acc_wrap c idx s ps n r w write i hR hW
-    hWrite hT hiEq hn hroot hRM hTM hPM hidxM hspanM hidxNe hi hwM
-    hn2 hnCap hcapM hwrap hwriteNextM hwNextM hc.2.2.2.1
+  have hp := arun_coreBody_root_acc_transition c idx s ps n r w write i
+    delta hR hW hWrite hT hiEq hn hRM hTM hPM hidxM hspanPos hspanM hidx
+    hi hwM hn2 hnCap hcapM hwrap hwriteNextM hDelta hDeltaM
+    hc.2.2.2.1
   exact ⟨hc.1, hc.2.1, hc.2.2.1, hp.2.1, hp.2.2, hc.2.2.2.2⟩
 
-/-- A later sequential candidate on the final root body performs the same
-finite table/cell step and the production modular retargeting into the main
-range. -/
+/-- Backwards-compatible strict-capacity specialization at the root-to-main
+transition. -/
 theorem arun_coreBody_root_acc_next_transition
     (c : Cfg) (idx : Nat) (s : AState)
     (boot ps : List Nat) (bound r w write i n delta : Nat)
@@ -1680,34 +1773,22 @@ theorem arun_coreBody_root_acc_next_transition
       (arun idx s c.coreBody).regs rR = 0 ∧
       (arun idx s c.coreBody).regs rW =
         (w + ((c.segLen + delta) % M)) % M ∧
-      (arun idx s c.coreBody).regs rZero = 0 := by
-  have hroot : idx < c.rootSpan := by omega
-  have hc := arun_coreBody_root_acc_next_table_cells_room c idx s boot ps bound
-    r w write i n hInv (Nat.le_of_lt hFit) (fun _ => hFit) hR hW hWrite hT hiEq hn hnext hroot hRM hTM
-    hidxM hspanM hi hwM hn2 hnCap hcapM hA hzero hcell bootBound hBoot
-    hbootLt hcover
-  have hwriteEq : write = c.primeBase + ps.length := by
-    rw [← hInv.cursor, hWrite]
-  have hwriteNextM : write + 1 < M := by
-    have hend : c.primeBase + c.tableLen < c.arrayLen := by
-      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
-      omega
-    rw [hwriteEq]
-    omega
-  have hp := arun_coreBody_root_acc_transition c idx s ps n r w write i
-    delta hR hW hWrite hT hiEq hn hRM hTM hPM hidxM hspanPos hspanM hidx
-    hi hwM hn2 hnCap hcapM hwrap hwriteNextM hDelta hDeltaM
-    hc.2.2.2.1
-  exact ⟨hc.1, hc.2.1, hc.2.2.1, hp.2.1, hp.2.2, hc.2.2.2.2⟩
+      (arun idx s c.coreBody).regs rZero = 0 :=
+  arun_coreBody_root_acc_next_transition_room c idx s boot ps bound r w
+    write i n delta hInv (Nat.le_of_lt hFit) (fun _ => hFit) hR hW hWrite
+    hT hiEq hn hnext hRM hTM hPM hidxM hspanPos hspanM hidx hi hwM hwrap
+    hn2 hnCap hcapM hA hzero hcell bootBound hBoot hbootLt hcover hDelta
+    hDeltaM
 
 /-- A complete production root-accumulation iteration performs one runnable
 finite prime-table step.  The explicit strict-square premise is the
 paper-faithful bootstrap coverage condition. -/
-theorem arun_coreBody_root_acc_next_eq_rootTableStep
+theorem arun_coreBody_root_acc_next_eq_rootTableStep_room
     (c : Cfg) (idx : Nat) (s : AState)
     (boot ps : List Nat) (bound r w write i n : Nat)
     (hInv : RootTableInv c s ps bound)
-    (hFit : ps.length < c.tableLen)
+    (hFit : ps.length ≤ c.tableLen)
+    (hAppend : unmarkedBool ps n = true → ps.length < c.tableLen)
     (hR : s.regs rR = r) (hW : s.regs rW = w)
     (hWrite : s.regs rWrite = write)
     (hT : c.markSteps ≤ s.regs rR)
@@ -1745,7 +1826,7 @@ theorem arun_coreBody_root_acc_next_eq_rootTableStep
   have hqprod : q.arr i = prod := by
     simpa [machineCell, prod] using congrArg RootCellState.prod hqcell
   have huInv := rootStoreInput_rootTableInv c idx s ps bound r w write i
-    hInv (Nat.le_of_lt hFit) hR hW hWrite hT hiEq hroot hRM hTM hidxM
+    hInv hFit hR hW hWrite hT hiEq hroot hRM hTM hidxM
     hspanM hi hwM hA
   have hu := rootStoreInput_controls c idx s r w write i prod hR hW hWrite
     hT hiEq hroot hRM hTM hidxM hspanM hi hwM hqprod
@@ -1788,8 +1869,8 @@ theorem arun_coreBody_root_acc_next_eq_rootTableStep
     hwM hn2 hnCap hcapM hnextPeriod hnextM hbit
   rw [arun_coreBody_eq_rootStoreInput]
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact rootWriteSuffix_next_eq_rootTableStep c idx
-      (rootStoreInput c idx s) ps bound n huInv hFit hnext
+  · exact rootWriteSuffix_next_eq_rootTableStep_room c idx
+      (rootStoreInput c idx s) ps bound n huInv hFit hAppend hnext
       (by rw [hu.2.2.2.2.2.2.1, ← hn]) hu.2.2.2.2.1 hn2 hnCap
       (by rw [hn]; exact hwM) hcapM hA hbit
   · apply rootCellState_ext
@@ -1831,6 +1912,45 @@ theorem arun_coreBody_root_acc_next_eq_rootTableStep
   · rw [← arun_coreBody_eq_rootStoreInput]
     rw [arun_reg_frame idx rZero c.coreBody s (by rfl)]
     exact hzero
+
+/-- Backwards-compatible strict-capacity specialization of the complete
+non-wrapping root candidate theorem. -/
+theorem arun_coreBody_root_acc_next_eq_rootTableStep
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot ps : List Nat) (bound r w write i n : Nat)
+    (hInv : RootTableInv c s ps bound)
+    (hFit : ps.length < c.tableLen)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i)
+    (hn : n = w + i) (hnext : n = bound + 1)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hnextPeriod : r + 1 < c.period)
+    (hn2 : 2 ≤ n) (hnCap : n ≤ c.rootCap)
+    (hcapM : c.rootCap < M) (hA : c.arrayLen < M)
+    (hzero : s.regs rZero = 0)
+    (hcell : machineCell c s i = rootCellFold boot n)
+    (bootBound : Nat) (hBoot : PrimeTableInv boot bootBound)
+    (hbootLt : bootBound < n)
+    (hcover : n < (bootBound + 1) * (bootBound + 1)) :
+    RootTableInv c (arun idx s c.coreBody) (rootTableStep ps n) n ∧
+      machineCell c (arun idx s c.coreBody) i = ⟨0, 0⟩ ∧
+      (∀ j, j < c.segLen → j ≠ i →
+        machineCell c (arun idx s c.coreBody) j = machineCell c s j) ∧
+      (arun idx s c.coreBody).regs rR = r + 1 ∧
+      (arun idx s c.coreBody).regs rW = w ∧
+      (arun idx s c.coreBody).regs rZero = 0 :=
+  arun_coreBody_root_acc_next_eq_rootTableStep_room c idx s boot ps bound
+    r w write i n hInv (Nat.le_of_lt hFit) (fun _ => hFit) hR hW hWrite
+    hT hiEq hn hnext hroot hRM hTM hPM hidxM hspanM hidxNe hi hwM
+    hnextPeriod hn2 hnCap hcapM hA hzero hcell bootBound hBoot hbootLt
+    hcover
 
 /-- For a cell produced by the finite bootstrap-prime fold, the compiled
 candidate bit is exactly the runnable `UnmarkedBy` predicate. -/

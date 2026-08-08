@@ -346,7 +346,7 @@ structure LaterRootPrefixInv (c : Cfg) (s : AState)
 /-- Every strict accumulation prefix of a later root window performs the
 runnable sequential table fold, clears exactly its consumed cells, and
 preserves all pending bootstrap-fold cells. -/
-theorem bodyRun_later_root_acc_prefix
+theorem bodyRun_later_root_acc_prefix_room
     (c : Cfg) (idx fuel : Nat) (s : AState)
     (boot ps : List Nat) (bootBound w : Nat)
     (hInv : RootTableInv c s ps (w - 1))
@@ -362,7 +362,9 @@ theorem bodyRun_later_root_acc_prefix
     (hfuelCap : w + fuel ≤ c.rootCap)
     (hcover : w + fuel < (bootBound + 1) * (bootBound + 1))
     (hfit : ∀ k, k < fuel →
-      (rootScanFrom ps w k).length < c.tableLen)
+      (rootScanFrom ps w k).length ≤ c.tableLen ∧
+        (unmarkedBool (rootScanFrom ps w k) (w + k) = true →
+          (rootScanFrom ps w k).length < c.tableLen))
     (hroot : idx < c.rootSpan)
     (hTM : c.markSteps < M)
     (hPM : c.period < M)
@@ -412,9 +414,10 @@ theorem bodyRun_later_root_acc_prefix
       have hnextPeriod : c.markSteps + k + 1 < c.period := by
         simp only [Cfg.period]
         omega
-      have hstep := arun_coreBody_root_acc_next_eq_rootTableStep c idx prev
+      have hstep := arun_coreBody_root_acc_next_eq_rootTableStep_room c idx prev
         boot cur (n - 1) (c.markSteps + k) w
-        (c.primeBase + cur.length) k n hprevInv (hfit k (by omega))
+        (c.primeBase + cur.length) k n hprevInv (hfit k (by omega)).1
+        (by simpa only [cur, n] using (hfit k (by omega)).2)
         hprevR hprevW hprevWrite (by omega) (by omega) rfl hnext hroot hRM
         hTM hPM hidxM hspanM hidxNe hkSeg hnM hnextPeriod (by omega)
         (by omega) hcapM hA hkPrefix.zero hprevCell bootBound hBoot
@@ -442,8 +445,131 @@ theorem bodyRun_later_root_acc_prefix
         base := hstep.2.2.2.2.1
         zero := hstep.2.2.2.2.2 }
 
+/-- Backwards-compatible strict-capacity specialization. -/
+theorem bodyRun_later_root_acc_prefix
+    (c : Cfg) (idx fuel : Nat) (s : AState)
+    (boot ps : List Nat) (bootBound w : Nat)
+    (hInv : RootTableInv c s ps (w - 1))
+    (hBoot : PrimeTableInv boot bootBound)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen →
+      machineCell c s j = rootCellFold boot (w + j))
+    (hfuel : fuel < c.segLen)
+    (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < w)
+    (hfuelCap : w + fuel ≤ c.rootCap)
+    (hcover : w + fuel < (bootBound + 1) * (bootBound + 1))
+    (hfit : ∀ k, k < fuel →
+      (rootScanFrom ps w k).length < c.tableLen)
+    (hroot : idx < c.rootSpan)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M) :
+    LaterRootPrefixInv c (bodyRun idx c fuel s) boot ps w fuel :=
+  bodyRun_later_root_acc_prefix_room c idx fuel s boot ps bootBound w hInv
+    hBoot hR hW hzero hcells hfuel hboot2 hbootLt hfuelCap hcover
+    (fun k hk => ⟨Nat.le_of_lt (hfit k hk), fun _ => hfit k hk⟩)
+    hroot hTM hPM hidxM hspanM hidxNe hcapM hA
+
 /-- A later root accumulation window closes with the ordinary production
 wrap, ready for the next window's marking phase. -/
+theorem bodyRun_later_root_acc_complete_wrap_room
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot ps : List Nat) (bootBound w : Nat)
+    (hInv : RootTableInv c s ps (w - 1))
+    (hBoot : PrimeTableInv boot bootBound)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen →
+      machineCell c s j = rootCellFold boot (w + j))
+    (hLPos : 0 < c.segLen)
+    (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < w)
+    (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
+    (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
+    (hfit : ∀ k, k < c.segLen →
+      (rootScanFrom ps w k).length ≤ c.tableLen ∧
+        (unmarkedBool (rootScanFrom ps w k) (w + k) = true →
+          (rootScanFrom ps w k).length < c.tableLen))
+    (hroot : idx < c.rootSpan)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M)
+    (hwNextM : w + c.segLen < M) :
+    RootTableInv c (bodyRun idx c c.segLen s)
+        (rootScanFrom ps w c.segLen) (w + c.segLen - 1) ∧
+      (∀ j, j < c.segLen →
+        machineCell c (bodyRun idx c c.segLen s) j = ⟨0, 0⟩) ∧
+      (bodyRun idx c c.segLen s).regs rR = 0 ∧
+      (bodyRun idx c c.segLen s).regs rW = w + c.segLen ∧
+      (bodyRun idx c c.segLen s).regs rZero = 0 := by
+  let k := c.segLen - 1
+  let n := w + k
+  have hkSeg : k < c.segLen := by omega
+  have hkSucc : k + 1 = c.segLen := by omega
+  have hpref := bodyRun_later_root_acc_prefix_room c idx k s boot ps bootBound w
+    hInv hBoot hR hW hzero hcells hkSeg hboot2 hbootLt (by omega)
+    (by omega) (fun q hq => hfit q (by omega)) hroot hTM hPM hidxM
+    hspanM hidxNe hcapM hA
+  let prev := bodyRun idx c k s
+  let cur := rootScanFrom ps w k
+  have hprevInv : RootTableInv c prev cur (n - 1) := by
+    simpa only [prev, cur, n] using hpref.table
+  have hprevR : prev.regs rR = c.markSteps + k := hpref.position
+  have hprevW : prev.regs rW = w := hpref.base
+  have hprevWrite : prev.regs rWrite = c.primeBase + cur.length :=
+    hprevInv.cursor
+  have hprevCell : machineCell c prev k = rootCellFold boot n := by
+    simpa only [prev, n] using hpref.pending k (Nat.le_refl _) hkSeg
+  have hwrap : c.markSteps + k + 1 = c.period := by
+    simp only [Cfg.period]
+    omega
+  have hRM : c.markSteps + k < M := by
+    have : c.markSteps + k < c.period := by
+      simp only [Cfg.period]
+      omega
+    omega
+  have hnCap : n ≤ c.rootCap := by
+    dsimp only [n, k]
+    omega
+  have hboundNext : w + c.segLen - 1 = n := by
+    dsimp only [n, k]
+    omega
+  have hboundK : w + (k + 1) - 1 = n := by
+    dsimp only [n]
+    omega
+  have hstep := arun_coreBody_root_acc_next_wrap_room c idx prev boot cur
+    (n - 1) (c.markSteps + k) w (c.primeBase + cur.length) k n hprevInv
+    (hfit k hkSeg).1 (by simpa only [cur, n] using (hfit k hkSeg).2)
+    hprevR hprevW hprevWrite (by omega) (by omega) rfl
+    (by omega) hroot hRM hTM hPM hidxM hspanM hidxNe hkSeg (by omega)
+    hwrap hwNextM (by omega) hnCap hcapM hA hpref.zero hprevCell
+    bootBound hBoot (by omega) (by omega)
+  have hrun : bodyRun idx c c.segLen s = arun idx prev c.coreBody := by
+    rw [← hkSucc, bodyRun_succ]
+  rw [hrun]
+  refine ⟨?_, ?_, hstep.2.2.2.1, hstep.2.2.2.2.1,
+    hstep.2.2.2.2.2⟩
+  · simpa only [rootScanFrom_succ, cur, n, ← hkSucc, hboundNext,
+      hboundK]
+      using hstep.1
+  · intro j hj
+    by_cases hjk : j = k
+    · simpa [hjk] using hstep.2.1
+    · exact (hstep.2.2.1 j hj hjk).trans
+        (hpref.cleared j (by omega))
+
+/-- Backwards-compatible strict-capacity specialization of an ordinary later
+root window. -/
 theorem bodyRun_later_root_acc_complete_wrap
     (c : Cfg) (idx : Nat) (s : AState)
     (boot ps : List Nat) (bootBound w : Nat)
@@ -475,60 +601,10 @@ theorem bodyRun_later_root_acc_complete_wrap
         machineCell c (bodyRun idx c c.segLen s) j = ⟨0, 0⟩) ∧
       (bodyRun idx c c.segLen s).regs rR = 0 ∧
       (bodyRun idx c c.segLen s).regs rW = w + c.segLen ∧
-      (bodyRun idx c c.segLen s).regs rZero = 0 := by
-  let k := c.segLen - 1
-  let n := w + k
-  have hkSeg : k < c.segLen := by omega
-  have hkSucc : k + 1 = c.segLen := by omega
-  have hpref := bodyRun_later_root_acc_prefix c idx k s boot ps bootBound w
-    hInv hBoot hR hW hzero hcells hkSeg hboot2 hbootLt (by omega)
-    (by omega) (fun q hq => hfit q (by omega)) hroot hTM hPM hidxM
-    hspanM hidxNe hcapM hA
-  let prev := bodyRun idx c k s
-  let cur := rootScanFrom ps w k
-  have hprevInv : RootTableInv c prev cur (n - 1) := by
-    simpa only [prev, cur, n] using hpref.table
-  have hprevR : prev.regs rR = c.markSteps + k := hpref.position
-  have hprevW : prev.regs rW = w := hpref.base
-  have hprevWrite : prev.regs rWrite = c.primeBase + cur.length :=
-    hprevInv.cursor
-  have hprevCell : machineCell c prev k = rootCellFold boot n := by
-    simpa only [prev, n] using hpref.pending k (Nat.le_refl _) hkSeg
-  have hwrap : c.markSteps + k + 1 = c.period := by
-    simp only [Cfg.period]
-    omega
-  have hRM : c.markSteps + k < M := by
-    have : c.markSteps + k < c.period := by
-      simp only [Cfg.period]
-      omega
-    omega
-  have hnCap : n ≤ c.rootCap := by
-    dsimp only [n, k]
-    omega
-  have hboundNext : w + c.segLen - 1 = n := by
-    dsimp only [n, k]
-    omega
-  have hboundK : w + (k + 1) - 1 = n := by
-    dsimp only [n]
-    omega
-  have hstep := arun_coreBody_root_acc_next_wrap c idx prev boot cur
-    (n - 1) (c.markSteps + k) w (c.primeBase + cur.length) k n hprevInv
-    (hfit k hkSeg) hprevR hprevW hprevWrite (by omega) (by omega) rfl
-    (by omega) hroot hRM hTM hPM hidxM hspanM hidxNe hkSeg (by omega)
-    hwrap hwNextM (by omega) hnCap hcapM hA hpref.zero hprevCell
-    bootBound hBoot (by omega) (by omega)
-  have hrun : bodyRun idx c c.segLen s = arun idx prev c.coreBody := by
-    rw [← hkSucc, bodyRun_succ]
-  rw [hrun]
-  refine ⟨?_, ?_, hstep.2.2.2.1, hstep.2.2.2.2.1,
-    hstep.2.2.2.2.2⟩
-  · simpa only [rootScanFrom_succ, cur, n, ← hkSucc, hboundNext,
-      hboundK]
-      using hstep.1
-  · intro j hj
-    by_cases hjk : j = k
-    · simpa [hjk] using hstep.2.1
-    · exact (hstep.2.2.1 j hj hjk).trans
-        (hpref.cleared j (by omega))
+      (bodyRun idx c c.segLen s).regs rZero = 0 :=
+  bodyRun_later_root_acc_complete_wrap_room c idx s boot ps bootBound w
+    hInv hBoot hR hW hzero hcells hLPos hboot2 hbootLt hsegCap hcover
+    (fun k hk => ⟨Nat.le_of_lt (hfit k hk), fun _ => hfit k hk⟩)
+    hroot hTM hPM hidxM hspanM hidxNe hcapM hA hwNextM
 
 end LeanCompCert.Ports.ArraySegMobiusRootPrefix

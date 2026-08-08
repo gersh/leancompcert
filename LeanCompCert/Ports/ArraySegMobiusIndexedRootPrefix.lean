@@ -359,7 +359,7 @@ theorem indexedBodyRun_first_root_acc_complete_transition
 
 /-- A later sequential root accumulation prefix at actual production
 indices. -/
-theorem indexedBodyRun_later_root_acc_prefix
+theorem indexedBodyRun_later_root_acc_prefix_room
     (c : Cfg) (idx fuel : Nat) (s : AState)
     (boot ps : List Nat) (bootBound w : Nat)
     (hInv : RootTableInv c s ps (w - 1))
@@ -376,7 +376,9 @@ theorem indexedBodyRun_later_root_acc_prefix
     (hfuelCap : w + fuel ≤ c.rootCap)
     (hcover : w + fuel < (bootBound + 1) * (bootBound + 1))
     (hfit : ∀ k, k < fuel →
-      (rootScanFrom ps w k).length < c.tableLen)
+      (rootScanFrom ps w k).length ≤ c.tableLen ∧
+        (unmarkedBool (rootScanFrom ps w k) (w + k) = true →
+          (rootScanFrom ps w k).length < c.tableLen))
     (hTM : c.markSteps < M)
     (hPM : c.period < M)
     (hspanM : c.rootSpan < M)
@@ -433,10 +435,12 @@ theorem indexedBodyRun_later_root_acc_prefix
       have hnextPeriod : c.markSteps + k + 1 < c.period := by
         simp only [Cfg.period]
         omega
-      have hstep := arun_coreBody_root_acc_next_eq_rootTableStep c curIdx
+      have hstep := arun_coreBody_root_acc_next_eq_rootTableStep_room c curIdx
         prev boot cur (n - 1) (c.markSteps + k) w
         (c.primeBase + cur.length) k n hprevInv
-        (hfit k (Nat.lt_succ_self k)) hprevR hprevW hprevWrite
+        (hfit k (Nat.lt_succ_self k)).1
+        (by simpa only [cur, n] using (hfit k (Nat.lt_succ_self k)).2)
+        hprevR hprevW hprevWrite
         (by omega) (by omega) rfl hnext hcurRoot hRM hTM hPM hcurM
         hspanM hcurNe hkSeg hnM hnextPeriod (by omega) (by omega) hcapM
         hA hkPrefix.zero hprevCell bootBound hBoot (by omega) (by omega)
@@ -463,8 +467,38 @@ theorem indexedBodyRun_later_root_acc_prefix
         base := hstep.2.2.2.2.1
         zero := hstep.2.2.2.2.2 }
 
+/-- Backwards-compatible strict-capacity specialization. -/
+theorem indexedBodyRun_later_root_acc_prefix
+    (c : Cfg) (idx fuel : Nat) (s : AState)
+    (boot ps : List Nat) (bootBound w : Nat)
+    (hInv : RootTableInv c s ps (w - 1))
+    (hBoot : PrimeTableInv boot bootBound)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen →
+      machineCell c s j = rootCellFold boot (w + j))
+    (hfuel : fuel < c.segLen)
+    (hidxRange : idx + fuel ≤ c.rootSpan - 1)
+    (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < w)
+    (hfuelCap : w + fuel ≤ c.rootCap)
+    (hcover : w + fuel < (bootBound + 1) * (bootBound + 1))
+    (hfit : ∀ k, k < fuel →
+      (rootScanFrom ps w k).length < c.tableLen)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M) :
+    LaterRootPrefixInv c (indexedBodyRun idx c fuel s) boot ps w fuel :=
+  indexedBodyRun_later_root_acc_prefix_room c idx fuel s boot ps bootBound w
+    hInv hBoot hR hW hzero hcells hfuel hidxRange hboot2 hbootLt hfuelCap
+    hcover (fun k hk => ⟨Nat.le_of_lt (hfit k hk), fun _ => hfit k hk⟩)
+    hTM hPM hspanM hcapM hA
+
 /-- A nonfinal later root window closes with the ordinary indexed wrap. -/
-theorem indexedBodyRun_later_root_acc_complete_wrap
+theorem indexedBodyRun_later_root_acc_complete_wrap_room
     (c : Cfg) (idx : Nat) (s : AState)
     (boot ps : List Nat) (bootBound w : Nat)
     (hInv : RootTableInv c s ps (w - 1))
@@ -481,7 +515,9 @@ theorem indexedBodyRun_later_root_acc_complete_wrap
     (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
     (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
     (hfit : ∀ k, k < c.segLen →
-      (rootScanFrom ps w k).length < c.tableLen)
+      (rootScanFrom ps w k).length ≤ c.tableLen ∧
+        (unmarkedBool (rootScanFrom ps w k) (w + k) = true →
+          (rootScanFrom ps w k).length < c.tableLen))
     (hTM : c.markSteps < M)
     (hPM : c.period < M)
     (hspanM : c.rootSpan < M)
@@ -499,7 +535,7 @@ theorem indexedBodyRun_later_root_acc_complete_wrap
   let n := w + k
   have hkSeg : k < c.segLen := by omega
   have hkSucc : k + 1 = c.segLen := by omega
-  have hpref := indexedBodyRun_later_root_acc_prefix c idx k s boot ps
+  have hpref := indexedBodyRun_later_root_acc_prefix_room c idx k s boot ps
     bootBound w hInv hBoot hR hW hzero hcells hkSeg (by omega) hboot2
     hbootLt (by omega) (by omega) (fun q hq => hfit q (by omega)) hTM
     hPM hspanM hcapM hA
@@ -538,9 +574,10 @@ theorem indexedBodyRun_later_root_acc_complete_wrap
   have hboundK : w + (k + 1) - 1 = n := by
     dsimp only [n]
     omega
-  have hstep := arun_coreBody_root_acc_next_wrap c curIdx prev boot cur
+  have hstep := arun_coreBody_root_acc_next_wrap_room c curIdx prev boot cur
     (n - 1) (c.markSteps + k) w (c.primeBase + cur.length) k n hprevInv
-    (hfit k hkSeg) hprevR hprevW hprevWrite (by omega) (by omega) rfl
+    (hfit k hkSeg).1 (by simpa only [cur, n] using (hfit k hkSeg).2)
+    hprevR hprevW hprevWrite (by omega) (by omega) rfl
     (by omega) hcurRoot hRM hTM hPM hcurM hspanM hcurNe hkSeg
     (by omega) hwrap hwNextM (by omega) hnCap hcapM hA hpref.zero
     hprevCell bootBound hBoot (by omega) (by omega)
@@ -558,9 +595,47 @@ theorem indexedBodyRun_later_root_acc_complete_wrap
     · exact (hstep.2.2.1 j hj hjk).trans
         (hpref.cleared j (by omega))
 
+/-- Backwards-compatible strict-capacity specialization of an ordinary
+indexed later root window. -/
+theorem indexedBodyRun_later_root_acc_complete_wrap
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot ps : List Nat) (bootBound w : Nat)
+    (hInv : RootTableInv c s ps (w - 1))
+    (hBoot : PrimeTableInv boot bootBound)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen →
+      machineCell c s j = rootCellFold boot (w + j))
+    (hLPos : 0 < c.segLen)
+    (hidxWindow : idx + c.segLen ≤ c.rootSpan - 1)
+    (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < w)
+    (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
+    (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
+    (hfit : ∀ k, k < c.segLen →
+      (rootScanFrom ps w k).length < c.tableLen)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M)
+    (hwNextM : w + c.segLen < M) :
+    RootTableInv c (indexedBodyRun idx c c.segLen s)
+        (rootScanFrom ps w c.segLen) (w + c.segLen - 1) ∧
+      (∀ j, j < c.segLen →
+        machineCell c (indexedBodyRun idx c c.segLen s) j = ⟨0, 0⟩) ∧
+      (indexedBodyRun idx c c.segLen s).regs rR = 0 ∧
+      (indexedBodyRun idx c c.segLen s).regs rW = w + c.segLen ∧
+      (indexedBodyRun idx c c.segLen s).regs rZero = 0 :=
+  indexedBodyRun_later_root_acc_complete_wrap_room c idx s boot ps bootBound w
+    hInv hBoot hR hW hzero hcells hLPos hidxWindow hboot2 hbootLt hsegCap
+    hcover (fun k hk => ⟨Nat.le_of_lt (hfit k hk), fun _ => hfit k hk⟩)
+    hTM hPM hspanM hcapM hA hwNextM
+
 /-- The final later root window closes at `rootSpan - 1` and performs the
 verified modular retarget into the main range. -/
-theorem indexedBodyRun_later_root_acc_complete_transition
+theorem indexedBodyRun_later_root_acc_complete_transition_room
     (c : Cfg) (idx : Nat) (s : AState)
     (boot ps : List Nat) (bootBound w delta : Nat)
     (hInv : RootTableInv c s ps (w - 1))
@@ -577,7 +652,9 @@ theorem indexedBodyRun_later_root_acc_complete_transition
     (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
     (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
     (hfit : ∀ k, k < c.segLen →
-      (rootScanFrom ps w k).length < c.tableLen)
+      (rootScanFrom ps w k).length ≤ c.tableLen ∧
+        (unmarkedBool (rootScanFrom ps w k) (w + k) = true →
+          (rootScanFrom ps w k).length < c.tableLen))
     (hTM : c.markSteps < M)
     (hPM : c.period < M)
     (hspanM : c.rootSpan < M)
@@ -597,7 +674,7 @@ theorem indexedBodyRun_later_root_acc_complete_transition
   let n := w + k
   have hkSeg : k < c.segLen := by omega
   have hkSucc : k + 1 = c.segLen := by omega
-  have hpref := indexedBodyRun_later_root_acc_prefix c idx k s boot ps
+  have hpref := indexedBodyRun_later_root_acc_prefix_room c idx k s boot ps
     bootBound w hInv hBoot hR hW hzero hcells hkSeg (by omega) hboot2
     hbootLt (by omega) (by omega) (fun q hq => hfit q (by omega)) hTM
     hPM hspanM hcapM hA
@@ -634,9 +711,11 @@ theorem indexedBodyRun_later_root_acc_complete_transition
   have hboundK : w + (k + 1) - 1 = n := by
     dsimp only [n]
     omega
-  have hstep := arun_coreBody_root_acc_next_transition c curIdx prev boot
+  have hstep := arun_coreBody_root_acc_next_transition_room c curIdx prev boot
     cur (n - 1) (c.markSteps + k) w (c.primeBase + cur.length) k n delta
-    hprevInv (hfit k hkSeg) hprevR hprevW hprevWrite (by omega)
+    hprevInv (hfit k hkSeg).1
+    (by simpa only [cur, n] using (hfit k hkSeg).2)
+    hprevR hprevW hprevWrite (by omega)
     (by omega) rfl (by omega) hRM hTM hPM hcurM hspanPos hspanM hcurEq
     hkSeg (by omega) hwrap (by omega) hnCap hcapM hA hpref.zero
     hprevCell bootBound hBoot (by omega) (by omega) hDelta hDeltaM
@@ -653,5 +732,46 @@ theorem indexedBodyRun_later_root_acc_complete_transition
     · simpa [hjk] using hstep.2.1
     · exact (hstep.2.2.1 j hj hjk).trans
         (hpref.cleared j (by omega))
+
+/-- Backwards-compatible strict-capacity specialization of the indexed
+root-to-main transition. -/
+theorem indexedBodyRun_later_root_acc_complete_transition
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot ps : List Nat) (bootBound w delta : Nat)
+    (hInv : RootTableInv c s ps (w - 1))
+    (hBoot : PrimeTableInv boot bootBound)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen →
+      machineCell c s j = rootCellFold boot (w + j))
+    (hLPos : 0 < c.segLen)
+    (hidxWindow : idx + c.segLen = c.rootSpan)
+    (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < w)
+    (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
+    (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
+    (hfit : ∀ k, k < c.segLen →
+      (rootScanFrom ps w k).length < c.tableLen)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M)
+    (hDelta : c.wDelta = delta)
+    (hDeltaM : delta < M) :
+    RootTableInv c (indexedBodyRun idx c c.segLen s)
+        (rootScanFrom ps w c.segLen) (w + c.segLen - 1) ∧
+      (∀ j, j < c.segLen →
+        machineCell c (indexedBodyRun idx c c.segLen s) j = ⟨0, 0⟩) ∧
+      (indexedBodyRun idx c c.segLen s).regs rR = 0 ∧
+      (indexedBodyRun idx c c.segLen s).regs rW =
+        (w + ((c.segLen + delta) % M)) % M ∧
+      (indexedBodyRun idx c c.segLen s).regs rZero = 0 :=
+  indexedBodyRun_later_root_acc_complete_transition_room c idx s boot ps
+    bootBound w delta hInv hBoot hR hW hzero hcells hLPos hidxWindow
+    hboot2 hbootLt hsegCap hcover
+    (fun k hk => ⟨Nat.le_of_lt (hfit k hk), fun _ => hfit k hk⟩)
+    hTM hPM hspanM hcapM hA hDelta hDeltaM
 
 end LeanCompCert.Ports.ArraySegMobiusIndexedRootPrefix

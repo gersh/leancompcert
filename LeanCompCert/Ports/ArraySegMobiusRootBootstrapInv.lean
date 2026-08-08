@@ -391,7 +391,7 @@ theorem indexedBodyRun_first_root_bootstrap_view
 
 /-- Every sequential later-root prefix preserves the selector-facing
 bootstrap guard while the complete table continues to grow after it. -/
-theorem indexedBodyRun_later_root_bootstrap_view
+theorem indexedBodyRun_later_root_bootstrap_view_room
     (c : Cfg) (idx fuel : Nat) (s : AState)
     (boot ps : List Nat) (bootBound w : Nat)
     (hView : BootstrapTableView c s boot)
@@ -410,7 +410,9 @@ theorem indexedBodyRun_later_root_bootstrap_view
     (hfuelCap : w + fuel - 1 ≤ c.rootCap)
     (hcover : w + fuel - 1 < (bootBound + 1) * (bootBound + 1))
     (hfit : ∀ k, k < fuel →
-      (rootScanFrom ps w k).length < c.tableLen)
+      (rootScanFrom ps w k).length ≤ c.tableLen ∧
+        (unmarkedBool (rootScanFrom ps w k) (w + k) = true →
+          (rootScanFrom ps w k).length < c.tableLen))
     (hbootLen : boot.length ≤ c.tableLen)
     (hTM : c.markSteps < M)
     (hPM : c.period < M)
@@ -427,7 +429,7 @@ theorem indexedBodyRun_later_root_bootstrap_view
           (indexedBodyRun idx c k s) boot :=
         ih (by omega) (by omega) (by omega) (by omega)
           (fun n hn => hfit n (by omega))
-      have hkPrefix := indexedBodyRun_later_root_acc_prefix c idx k s
+      have hkPrefix := indexedBodyRun_later_root_acc_prefix_room c idx k s
         boot ps bootBound w hInv hBoot hR hW hzero hcells hkSeg
         (by omega) hboot2 hbootLt (by omega) (by omega)
         (fun n hn => hfit n (by omega)) hTM hPM hspanM hcapM hA
@@ -455,7 +457,7 @@ theorem indexedBodyRun_later_root_bootstrap_view
           omega
         omega
       have hnM : n < M := by dsimp [n]; omega
-      have hcurFit : cur.length < c.tableLen := hfit k (by omega)
+      have hcurFit : cur.length ≤ c.tableLen := (hfit k (by omega)).1
       have hwriteM : c.primeBase + cur.length < M := by
         have : c.primeBase + cur.length < c.arrayLen := by
           simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase,
@@ -464,8 +466,8 @@ theorem indexedBodyRun_later_root_bootstrap_view
         omega
       have hc := arun_coreBody_root_acc_next_table_cells_room c curIdx prev
         boot cur (n - 1) (c.markSteps + k) w
-        (c.primeBase + cur.length) k n hprevInv (Nat.le_of_lt hcurFit)
-        (fun _ => hcurFit) hprevR hprevW
+        (c.primeBase + cur.length) k n hprevInv hcurFit
+        (by simpa only [cur, n] using (hfit k (by omega)).2) hprevR hprevW
         hprevWrite hT hiEq rfl hnext hcurRoot hRM hTM hcurM hspanM
         hkSeg hnM (by dsimp [n]; omega) (by dsimp [n]; omega) hcapM hA
         hkPrefix.zero hprevCell bootBound hBoot (by dsimp [n]; omega)
@@ -479,5 +481,39 @@ theorem indexedBodyRun_later_root_bootstrap_view
         hcurPrefix hc.1 hnM hbootLen hprevR hprevW hprevWrite hT hiEq
         hcurRoot hRM hTM hcurM hspanM hkSeg hnM hwriteM hA
         hc.2.2.2.1
+
+/-- Backwards-compatible strict-capacity specialization. -/
+theorem indexedBodyRun_later_root_bootstrap_view
+    (c : Cfg) (idx fuel : Nat) (s : AState)
+    (boot ps : List Nat) (bootBound w : Nat)
+    (hView : BootstrapTableView c s boot)
+    (hps : ∃ tail, ps = boot ++ tail)
+    (hInv : RootTableInv c s ps (w - 1))
+    (hBoot : PrimeTableInv boot bootBound)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen →
+      machineCell c s j = rootCellFold boot (w + j))
+    (hfuel : fuel ≤ c.segLen)
+    (hidxRange : idx + fuel ≤ c.rootSpan - 1)
+    (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < w)
+    (hfuelCap : w + fuel - 1 ≤ c.rootCap)
+    (hcover : w + fuel - 1 < (bootBound + 1) * (bootBound + 1))
+    (hfit : ∀ k, k < fuel →
+      (rootScanFrom ps w k).length < c.tableLen)
+    (hbootLen : boot.length ≤ c.tableLen)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M) :
+    BootstrapTableView c (indexedBodyRun idx c fuel s) boot :=
+  indexedBodyRun_later_root_bootstrap_view_room c idx fuel s boot ps
+    bootBound w hView hps hInv hBoot hR hW hzero hcells hfuel hidxRange
+    hboot2 hbootLt hfuelCap hcover
+    (fun k hk => ⟨Nat.le_of_lt (hfit k hk), fun _ => hfit k hk⟩)
+    hbootLen hTM hPM hspanM hcapM hA
 
 end LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv

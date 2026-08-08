@@ -341,6 +341,106 @@ theorem indexedRootWindow_later_complete
 
 /-- The final complete root window, ending at `rootSpan`, performs the
 verified modular retarget into the main-window base. -/
+theorem indexedRootWindow_later_transition_room
+    (c : Cfg) (idx : Nat) (s : AState) (tail full : List Nat)
+    (bootBound w delta : Nat)
+    (hInv : RootTableInv c s full (w - 1))
+    (hBoot : PrimeTableInv (c.firstPrime :: tail) bootBound)
+    (hView : BootstrapTableView c s (c.firstPrime :: tail))
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hclear : ∀ j, j < c.segLen → machineCell c s j = ⟨0, 0⟩)
+    (hbootLen : (c.firstPrime :: tail).length = c.bootCount)
+    (hrootWindow : idx + c.period = c.rootSpan)
+    (hbootPos : 0 < c.bootCount)
+    (hbootLe : c.bootCount ≤ c.tableLen)
+    (htableLenM : c.tableLen < M)
+    (hTPos : 0 < c.markSteps)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bootBound) (hboundM : bootBound < M)
+    (hboundSqM : bootBound * bootBound < M)
+    (hsegBoundM : c.segLen + bootBound < M)
+    (hwSegM : w + c.segLen < M)
+    (hnStartM : w + firstOffset w c.firstPrime < M)
+    (hA : c.arrayLen < M)
+    (hbudget :
+      ((c.firstPrime :: tail).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hLPos : 0 < c.segLen)
+    (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < w)
+    (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
+    (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
+    (hfullFit : full.length ≤ c.tableLen)
+    (hfit : ∀ k, k < c.segLen →
+      (rootScanFrom full w k).length ≤ c.tableLen ∧
+        (unmarkedBool (rootScanFrom full w k) (w + k) = true →
+          (rootScanFrom full w k).length < c.tableLen))
+    (hcapM : c.rootCap < M)
+    (hDelta : c.wDelta = delta) (hDeltaM : delta < M) :
+    RootTableInv c (indexedBodyRun idx c c.period s)
+        (rootScanFrom full w c.segLen) (w + c.segLen - 1) ∧
+      (∀ j, j < c.segLen →
+        machineCell c (indexedBodyRun idx c c.period s) j = ⟨0, 0⟩) ∧
+      (indexedBodyRun idx c c.period s).regs rR = 0 ∧
+      (indexedBodyRun idx c c.period s).regs rW =
+        (w + ((c.segLen + delta) % M)) % M ∧
+      (indexedBodyRun idx c c.period s).regs rZero = 0 := by
+  obtain ⟨guard, hLimit⟩ := hView
+  let marked := indexedBodyRun idx c c.markSteps s
+  have hwriteM : s.regs rWrite < M := by
+    rw [hInv.cursor]
+    have : c.primeBase + full.length < c.arrayLen := by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase,
+        Cfg.tableLen] at hfullFit ⊢
+      omega
+    omega
+  have hsteps : c.markSteps - 1 + 1 = c.markSteps := by omega
+  have hmarkRange : idx + c.markSteps ≤ c.rootSpan - 1 := by
+    simp only [Cfg.period] at hrootWindow
+    omega
+  have hidxMarkM : idx + c.markSteps < M := by omega
+  have hmarkPair := indexedBodyRun_root_mark_preserves_full_table c idx
+    (c.markSteps - 1) s full (c.firstPrime :: tail) guard bootBound w 0
+    hInv.toMachineTableRep hfullFit hLimit hBoot hbootLen
+    hR hW (by omega) (by simpa [hsteps] using hmarkRange) hbootPos
+    hbootLe htableLenM hTM hPM hspanM hwriteM hp1Pos hp1LeL
+    hp1LeBound hboundM hboundSqM hsegBoundM hwSegM hnStartM hA
+    (by omega)
+  rw [hsteps] at hmarkPair
+  have hmarkedInv : RootTableInv c marked full (w - 1) :=
+    ⟨hmarkPair.1, hInv.primeTable⟩
+  have hpos := indexedBodyRun_mark_position c idx c.markSteps s w
+    (s.regs rWrite) (Nat.le_refl _) hR hW rfl hLPos hTM hPM
+    hidxMarkM hspanM (fun k hk => by omega) hwriteM (by omega)
+  have hmarkedR : marked.regs rR = c.markSteps := hpos.2.1
+  have hmarkedW : marked.regs rW = w := hpos.2.2
+  have hmarkedZero : marked.regs rZero = 0 :=
+    indexedBodyRun_rZero idx c c.markSteps s hzero
+  have hmarkedCells : ∀ j, j < c.segLen →
+      machineCell c marked j =
+        rootCellFold (c.firstPrime :: tail) (w + j) := by
+    intro j hj
+    exact indexedBodyRun_root_cell_eq_rootCellFold c idx s tail guard
+      bootBound w j hLimit hBoot hbootLen hR hW hmarkRange hbootLe
+      htableLenM hTM hPM hspanM hwriteM hp1Pos hp1LeL hp1LeBound
+      hboundM hboundSqM hsegBoundM hwSegM hnStartM hA hbudget hj
+      (hclear j hj)
+  have hacc := indexedBodyRun_later_root_acc_complete_transition_room c
+    (idx + c.markSteps) marked (c.firstPrime :: tail) full bootBound w
+    delta hmarkedInv hBoot hmarkedR hmarkedW hmarkedZero hmarkedCells
+    hLPos (by simp only [Cfg.period] at hrootWindow ⊢; omega) hboot2
+    hbootLt hsegCap hcover hfit hTM hPM hspanM hcapM hA hDelta hDeltaM
+  have hrun : indexedBodyRun idx c c.period s =
+      indexedBodyRun (idx + c.markSteps) c c.segLen marked := by
+    rw [Cfg.period, indexedBodyRun_add]
+  rw [hrun]
+  exact hacc
+
+/-- Backwards-compatible strict-capacity specialization of the final
+complete root window. -/
 theorem indexedRootWindow_later_transition
     (c : Cfg) (idx : Nat) (s : AState) (tail full : List Nat)
     (bootBound w delta : Nat)
@@ -385,56 +485,13 @@ theorem indexedRootWindow_later_transition
       (indexedBodyRun idx c c.period s).regs rR = 0 ∧
       (indexedBodyRun idx c c.period s).regs rW =
         (w + ((c.segLen + delta) % M)) % M ∧
-      (indexedBodyRun idx c c.period s).regs rZero = 0 := by
-  obtain ⟨guard, hLimit⟩ := hView
-  let marked := indexedBodyRun idx c c.markSteps s
-  have hwriteM : s.regs rWrite < M := by
-    rw [hInv.cursor]
-    have : c.primeBase + full.length < c.arrayLen := by
-      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase,
-        Cfg.tableLen] at hfullFit ⊢
-      omega
-    omega
-  have hsteps : c.markSteps - 1 + 1 = c.markSteps := by omega
-  have hmarkRange : idx + c.markSteps ≤ c.rootSpan - 1 := by
-    simp only [Cfg.period] at hrootWindow
-    omega
-  have hidxMarkM : idx + c.markSteps < M := by omega
-  have hmarkPair := indexedBodyRun_root_mark_preserves_full_table c idx
-    (c.markSteps - 1) s full (c.firstPrime :: tail) guard bootBound w 0
-    hInv.toMachineTableRep (Nat.le_of_lt hfullFit) hLimit hBoot hbootLen
-    hR hW (by omega) (by simpa [hsteps] using hmarkRange) hbootPos
-    hbootLe htableLenM hTM hPM hspanM hwriteM hp1Pos hp1LeL
-    hp1LeBound hboundM hboundSqM hsegBoundM hwSegM hnStartM hA
-    (by omega)
-  rw [hsteps] at hmarkPair
-  have hmarkedInv : RootTableInv c marked full (w - 1) :=
-    ⟨hmarkPair.1, hInv.primeTable⟩
-  have hpos := indexedBodyRun_mark_position c idx c.markSteps s w
-    (s.regs rWrite) (Nat.le_refl _) hR hW rfl hLPos hTM hPM
-    hidxMarkM hspanM (fun k hk => by omega) hwriteM (by omega)
-  have hmarkedR : marked.regs rR = c.markSteps := hpos.2.1
-  have hmarkedW : marked.regs rW = w := hpos.2.2
-  have hmarkedZero : marked.regs rZero = 0 :=
-    indexedBodyRun_rZero idx c c.markSteps s hzero
-  have hmarkedCells : ∀ j, j < c.segLen →
-      machineCell c marked j =
-        rootCellFold (c.firstPrime :: tail) (w + j) := by
-    intro j hj
-    exact indexedBodyRun_root_cell_eq_rootCellFold c idx s tail guard
-      bootBound w j hLimit hBoot hbootLen hR hW hmarkRange hbootLe
-      htableLenM hTM hPM hspanM hwriteM hp1Pos hp1LeL hp1LeBound
-      hboundM hboundSqM hsegBoundM hwSegM hnStartM hA hbudget hj
-      (hclear j hj)
-  have hacc := indexedBodyRun_later_root_acc_complete_transition c
-    (idx + c.markSteps) marked (c.firstPrime :: tail) full bootBound w
-    delta hmarkedInv hBoot hmarkedR hmarkedW hmarkedZero hmarkedCells
-    hLPos (by simp only [Cfg.period] at hrootWindow ⊢; omega) hboot2
-    hbootLt hsegCap hcover hfit hTM hPM hspanM hcapM hA hDelta hDeltaM
-  have hrun : indexedBodyRun idx c c.period s =
-      indexedBodyRun (idx + c.markSteps) c c.segLen marked := by
-    rw [Cfg.period, indexedBodyRun_add]
-  rw [hrun]
-  exact hacc
+      (indexedBodyRun idx c c.period s).regs rZero = 0 :=
+  indexedRootWindow_later_transition_room c idx s tail full bootBound w
+    delta hInv hBoot hView hR hW hzero hclear hbootLen hrootWindow
+    hbootPos hbootLe htableLenM hTPos hTM hPM hspanM hp1Pos hp1LeL
+    hp1LeBound hboundM hboundSqM hsegBoundM hwSegM hnStartM hA hbudget
+    hLPos hboot2 hbootLt hsegCap hcover (Nat.le_of_lt hfullFit)
+    (fun k hk => ⟨Nat.le_of_lt (hfit k hk), fun _ => hfit k hk⟩)
+    hcapM hDelta hDeltaM
 
 end LeanCompCert.Ports.ArraySegMobiusIndexedRootWindows
