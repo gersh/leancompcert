@@ -1620,3 +1620,25 @@ composition theorems passed in 0.17 s at 559,304 KiB and reported only
 need choice).  With the high-memory leaves already isolated and cached, the
 226-job `LeanCompCert` aggregate passed in 0.66 s at 1,720,556 KiB under an
 8 GiB hard cgroup.
+
+The finite candidate proof now spans the complete production campaign.
+`ArraySegMobiusProductionBounds` reconstructs every bootstrap, crossing,
+later-root, final-transition, and main-window boundary from
+`ProductionCoreSchedule`.  Main prefixes reuse
+`indexedProductionCore_complete` at the requested finite prefix length, while
+the root proof reuses the existing three outer root runners.  The combined
+piecewise theorem covers every compiled event despite the intentional `rW`
+retarget at the root/main boundary.  Consequently
+`readRes_squaredCombinedProduction_eq_combinedSignals_fold` identifies the
+entire literal squared trace with `squaredResFold` over the verified production
+signal sequence.  The positive main base and both phase endpoints remain
+explicit finite guards.
+
+Direct source elaboration of the production-bound module passed in 0.50 s at
+590,324 KiB; its generated target passed at 596,888 KiB.  The complete squared
+consumer passed in 0.46 s at 610,884 KiB.  A fresh eight-theorem axiom audit
+passed in 0.17 s at 580,432 KiB and reported only `propext`,
+`Classical.choice`, and `Quot.sound` (the two word-preservation lemmas require
+only `propext`).  All checks used the 2/3 GiB one-worker profile with zero
+swap.  With the isolated high-memory leaves cached, the 227-job aggregate
+passed in 0.66 s at 1,721,596 KiB under the 8 GiB hard profile.

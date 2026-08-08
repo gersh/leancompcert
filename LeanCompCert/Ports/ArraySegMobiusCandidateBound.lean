@@ -165,6 +165,51 @@ theorem indexedBodyRun_windows_bounds
   rw [hp.1, hp.2]
   exact ⟨hr, by omega, hwEnd⟩
 
+/-- The changing-index core runner preserves the machine-word invariant. -/
+theorem indexedBodyRun_word
+    (idx : Nat) (c : Cfg) (fuel : Nat) (s : AState)
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M) :
+    (∀ j, (indexedBodyRun idx c fuel s).regs j < M) ∧
+      ∀ j, (indexedBodyRun idx c fuel s).arr j < M := by
+  induction fuel with
+  | zero => exact ⟨hregs, harr⟩
+  | succ n ih =>
+      rw [indexedBodyRun_succ]
+      exact arun_word (idx + n) c.coreBody (indexedBodyRun idx c n s)
+        ih.1 ih.2
+
+/-- Word-bounded entry states let callers omit the write-cursor bound from
+each window boundary; the literal runner supplies it automatically. -/
+theorem indexedBodyRun_windows_bounds_of_word
+    (c : Cfg) (idx windowFuel : Nat) (s : AState) (w : Nat)
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M)
+    (hperiodPos : 0 < c.period) (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxFuelM : idx + windowFuel * c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hA : c.arrayLen < M)
+    (hwPos : 0 < w)
+    (hend : w + windowFuel * c.segLen < 2 ^ 62)
+    (hstarts : ∀ q, q < windowFuel →
+      let start := indexedWindowRun idx c q s
+      start.regs rR = 0 ∧
+        start.regs rW = w + q * c.segLen ∧ start.regs rZero = 0)
+    (hphases : ∀ q, q < windowFuel →
+      idx + (q + 1) * c.period ≤ c.rootSpan ∨
+        c.rootSpan ≤ idx + q * c.period) :
+    ∀ j, j < windowFuel * c.period →
+      let before := indexedBodyRun idx c j s
+      before.regs rR < c.period ∧
+        0 < before.regs rW ∧ before.regs rW + c.segLen < 2 ^ 62 := by
+  apply indexedBodyRun_windows_bounds c idx windowFuel s w hperiodPos hLPos
+    hTM hPM hidxFuelM hspanM hspanPos hA hwPos hend
+  · intro q hq
+    have hs := hstarts q hq
+    exact ⟨hs.1, hs.2.1,
+      (indexedBodyRun_word idx c (q * c.period) s hregs harr).1 rWrite,
+      hs.2.2⟩
+  · exact hphases
+
 set_option maxRecDepth 10000 in
 /-- The verified main-window schedule discharges the whole finite candidate
 bound needed by the squared residue.  In particular, no per-event arithmetic

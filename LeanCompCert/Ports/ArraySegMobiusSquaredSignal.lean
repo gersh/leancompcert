@@ -1,6 +1,7 @@
 import LeanCompCert.Ports.ArraySegMobiusSquaredFold
 import LeanCompCert.Ports.ArraySegMobiusIndexedSignal
 import LeanCompCert.Ports.ArraySegMobiusCandidateBound
+import LeanCompCert.Ports.ArraySegMobiusProductionBounds
 
 /-!
 # Reusing the production Möbius signal schedule for the squared residue
@@ -20,6 +21,8 @@ open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusIndexedRun
 open LeanCompCert.Ports.ArraySegMobiusIndexedMain
+open LeanCompCert.Ports.ArraySegMobiusIndexedProgram
+open LeanCompCert.Ports.ArraySegMobiusIndexedFull
 open LeanCompCert.Ports.ArraySegMobiusPrimeTable
 open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
@@ -28,6 +31,7 @@ open LeanCompCert.Ports.ArraySegMobiusResidueFold
 open LeanCompCert.Ports.ArraySegMobiusIndexedSignal
 open LeanCompCert.Ports.ArraySegMobiusSquaredFold
 open LeanCompCert.Ports.ArraySegMobiusCandidateBound
+open LeanCompCert.Ports.ArraySegMobiusProductionBounds
 open LeanCompCert.Ports.MobiusResidueRealisation
 
 /-- At every event, the squared combined trace emits the signal of the same
@@ -230,5 +234,65 @@ theorem readRes_squaredCombinedMainWindows_eq_combinedSignals_fold
     hInv hpsLen hR hW hzero hclear hmain htableLenPos htableLenM hTPos
     hTM hPM hidxFuelM hspanM hspanPos hp1Pos hp1LeL hp1LeBound hboundM
     hboundSqM hsegBoundM hwFuelM hA hwPos hend
+
+set_option maxRecDepth 10000 in
+/-- The squared checker composed with every root event of the verified
+production schedule, including the final root-to-main transition window. -/
+theorem readRes_squaredCombinedProductionRoot_eq_combinedSignals_fold
+    (c : Cfg) (k len : Nat)
+    (bootBound bootFuel laterFuel mainFuel delta : Nat)
+    (h : ProductionCoreSchedule c bootBound bootFuel laterFuel mainFuel delta)
+    (hk : k ≤ 15)
+    (hend : 1 + (bootFuel + 1 + (laterFuel + 1)) * c.segLen < 2 ^ 62) :
+    let rootFuel := bootFuel + 1 + (laterFuel + 1)
+    readRes (squaredCombinedIndexedRun 0 c k (rootFuel * c.period)
+        (coreEntry c)) =
+      squaredResFold k
+        (combinedSignals 0 c k (rootFuel * c.period) (coreEntry c))
+        (readRes (coreEntry c)) := by
+  let rootFuel := bootFuel + 1 + (laterFuel + 1)
+  have hrootEq : rootFuel * c.period = c.rootSpan := by
+    dsimp only [rootFuel]
+    simpa only [Nat.add_mul, Nat.one_mul, Nat.add_assoc] using h.finalIndex
+  have hword := coreEntry_word c
+  apply readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold_of_window_bounds
+    0 c k len (rootFuel * c.period) (coreEntry c) hword.1 hword.2 hk
+    h.markM h.periodM (by simpa only [Nat.zero_add, hrootEq] using h.spanM)
+    h.spanM
+  simpa only [rootFuel] using indexedProductionRoot_windows_bounds c
+    bootBound bootFuel laterFuel mainFuel delta h hend
+
+set_option maxRecDepth 10000 in
+/-- Complete finite production campaign: the literal squared checker is the
+transparent squared fold over the verified production signal trace, across
+both the root and main phases. -/
+theorem readRes_squaredCombinedProduction_eq_combinedSignals_fold
+    (c : Cfg) (k len : Nat)
+    (bootBound bootFuel laterFuel mainFuel delta : Nat)
+    (h : ProductionCoreSchedule c bootBound bootFuel laterFuel mainFuel delta)
+    (hk : k ≤ 15)
+    (hrootEnd : 1 + (bootFuel + 1 + (laterFuel + 1)) * c.segLen < 2 ^ 62)
+    (hmainPos : 0 < mainBase c bootFuel laterFuel delta)
+    (hmainEnd : mainBase c bootFuel laterFuel delta +
+      mainFuel * c.segLen < 2 ^ 62) :
+    let rootFuel := bootFuel + 1 + (laterFuel + 1)
+    let fuel := (rootFuel + mainFuel) * c.period
+    readRes (squaredCombinedIndexedRun 0 c k fuel (coreEntry c)) =
+      squaredResFold k (combinedSignals 0 c k fuel (coreEntry c))
+        (readRes (coreEntry c)) := by
+  let rootFuel := bootFuel + 1 + (laterFuel + 1)
+  let fuel := (rootFuel + mainFuel) * c.period
+  have hrootEq : rootFuel * c.period = c.rootSpan := by
+    dsimp only [rootFuel]
+    simpa only [Nat.add_mul, Nat.one_mul, Nat.add_assoc] using h.finalIndex
+  have hfuelEq : fuel = c.rootSpan + mainFuel * c.period := by
+    dsimp only [fuel]
+    rw [Nat.add_mul, hrootEq]
+  have hword := coreEntry_word c
+  apply readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold_of_window_bounds
+    0 c k len fuel (coreEntry c) hword.1 hword.2 hk h.markM h.periodM
+    (by simpa only [Nat.zero_add, hfuelEq] using h.mainIndexM) h.spanM
+  simpa only [fuel, rootFuel] using indexedProduction_windows_bounds c
+    bootBound bootFuel laterFuel mainFuel delta h hrootEnd hmainPos hmainEnd
 
 end LeanCompCert.Ports.ArraySegMobiusSquaredSignal
