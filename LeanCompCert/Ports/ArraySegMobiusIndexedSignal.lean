@@ -466,6 +466,24 @@ theorem readRes_combinedIndexedRun_root_window_eq
   rw [Cfg.period, combinedIndexedRun_add]
   exact haccRes.trans hmarkRes
 
+/-- Outer finite iteration for root-window residue identities.  Its step is
+the complete literal window theorem above instantiated by the corresponding
+bootstrap, crossing, later, or final schedule invariant. -/
+theorem readRes_combinedWindowRun_root_eq_of_step
+    (c : Cfg) (idx k fuel : Nat) (combined : AState)
+    (hstep : ∀ q, q < fuel →
+      let mid := combinedWindowRun idx c k q combined
+      readRes (combinedIndexedRun (idx + q * c.period) c k c.period mid) =
+        readRes mid) :
+    readRes (combinedWindowRun idx c k fuel combined) =
+      readRes combined := by
+  induction fuel with
+  | zero => simp [combinedWindowRun]
+  | succ n ih =>
+      have hprev := ih (fun q hq => hstep q (by omega))
+      rw [combinedWindowRun_succ]
+      exact (hstep n (Nat.lt_succ_self n)).trans hprev
+
 /-- At changing-index accumulation position `i`, the selected cell is still
 the finite root fold established by the compiled marking phase. -/
 theorem indexedBodyRun_main_acc_current_cellRepresents
