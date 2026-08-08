@@ -169,6 +169,136 @@ theorem denoteAInstrs_eq_arun (len k : Nat) :
       rw [denoteAInstr_eq_astep hd]
       exact ih (astep k s i) hrest
 
+/-- A successful partial instruction execution necessarily agrees with its
+total `astep` interpretation.  This converse is useful when definedness is
+supplied by an accepting run rather than proved as a separate precondition. -/
+theorem eq_astep_of_denoteAInstr_eq_some {len k : Nat} {s out : AState}
+    {i : AInstr} (h : denoteAInstr len k s i = some out) :
+    out = astep k s i := by
+  cases i with
+  | scalar instr =>
+      cases instr with
+      | mov d src =>
+          simp only [denoteAInstr, denoteInstr, astep,
+            InstrBlock.sdest, InstrBlock.sval] at h ⊢
+          exact Option.some.inj h.symm
+      | binop d op lhs rhs =>
+          cases hop : denoteOp op (denoteOperand k s.regs lhs)
+              (denoteOperand k s.regs rhs) with
+          | none => simp [denoteAInstr, denoteInstr, hop] at h
+          | some v =>
+              simp only [denoteAInstr, denoteInstr, hop,
+                astep, InstrBlock.sdest, InstrBlock.sval,
+                Option.getD_some] at h ⊢
+              exact Option.some.inj h.symm
+  | load dest idxReg =>
+      by_cases hidx : s.regs idxReg < len
+      · simp only [denoteAInstr, if_pos hidx, astep] at h ⊢
+        exact Option.some.inj h.symm
+      · simp [denoteAInstr, if_neg hidx] at h
+  | store idxReg srcReg =>
+      by_cases hidx : s.regs idxReg < len
+      · simp only [denoteAInstr, if_pos hidx, astep] at h ⊢
+        exact Option.some.inj h.symm
+      · simp [denoteAInstr, if_neg hidx] at h
+
+/-- A successful partial straight-line block ends in exactly `arun`, without
+requiring its definedness proof to be reconstructed separately. -/
+theorem eq_arun_of_denoteAInstrs_eq_some (len k : Nat) :
+    ∀ (l : List AInstr) (s out : AState),
+      denoteAInstrs len k s l = some out → out = arun k s l := by
+  intro l
+  induction l with
+  | nil =>
+      intro s out h
+      simpa [denoteAInstrs, arun] using Option.some.inj h.symm
+  | cons i rest ih =>
+      intro s out h
+      cases hi : denoteAInstr len k s i with
+      | none => simp [denoteAInstrs, hi] at h
+      | some mid =>
+          have hmid : mid = astep k s i :=
+            eq_astep_of_denoteAInstr_eq_some hi
+          simp only [denoteAInstrs, hi] at h
+          rw [arun_cons, ← hmid]
+          exact ih mid out h
+
+/-- Successful monadic iteration of an array block has the same terminal
+state as the pure fold of `arun` at those changing indices. -/
+theorem eq_foldl_arun_of_foldlM_denote_eq_some
+    (len : Nat) (body : List AInstr) :
+    ∀ (indices : List Nat) (s out : AState),
+      indices.foldlM
+          (fun s index => denoteAInstrs len index s body) s = some out →
+      out = indices.foldl (fun s index => arun index s body) s := by
+  intro indices
+  induction indices with
+  | nil =>
+      intro s out h
+      simpa using Option.some.inj h.symm
+  | cons index rest ih =>
+      intro s out h
+      cases hbody : denoteAInstrs len index s body with
+      | none => simp [hbody] at h
+      | some mid =>
+          have hmid : mid = arun index s body :=
+            eq_arun_of_denoteAInstrs_eq_some len index body s mid hbody
+          simp only [List.foldlM_cons, hbody] at h
+          rw [List.foldl_cons, ← hmid]
+          exact ih mid out h
+
+/-- Any successful `AProgram` execution has exactly the total-state trace
+obtained by running `arun` through its initializer, changing-index body fold,
+and epilogue.  This extracts a trace from partial-semantics success without
+requiring callers to reconstruct a separate `AllDefined` proof. -/
+theorem AProgram.output_eq_arun_of_denote_eq_some (p : AProgram) {n : Nat}
+    (h : p.denote = some n) :
+    let entry := arun 0 initialAState p.init
+    let loopOut := (List.range p.loopCount).foldl
+      (fun s index => arun index s p.body) entry
+    n = (arun 0 loopOut p.epilogue).regs p.output := by
+  unfold AProgram.denote at h
+  cases hinit : denoteAInstrs p.arrayLen 0 initialAState p.init with
+  | none => simp [hinit] at h
+  | some entry =>
+      have hentry : entry = arun 0 initialAState p.init :=
+        eq_arun_of_denoteAInstrs_eq_some p.arrayLen 0 p.init
+          initialAState entry hinit
+      rw [hinit] at h
+      change ((List.range p.loopCount).foldlM
+          (fun s index => denoteAInstrs p.arrayLen index s p.body) entry).bind
+          (fun s => (denoteAInstrs p.arrayLen 0 s p.epilogue).bind
+            (fun s => some (s.regs p.output))) = some n at h
+      cases hloop : (List.range p.loopCount).foldlM
+          (fun s index => denoteAInstrs p.arrayLen index s p.body) entry with
+      | none => simp [hloop] at h
+      | some loopOut =>
+          have hloopOut : loopOut = (List.range p.loopCount).foldl
+              (fun s index => arun index s p.body) entry :=
+            eq_foldl_arun_of_foldlM_denote_eq_some p.arrayLen p.body
+              (List.range p.loopCount) entry loopOut hloop
+          rw [hloop] at h
+          change (denoteAInstrs p.arrayLen 0 loopOut p.epilogue).bind
+            (fun s => some (s.regs p.output)) = some n at h
+          cases hepi : denoteAInstrs p.arrayLen 0 loopOut p.epilogue with
+          | none => rw [hepi] at h; contradiction
+          | some final =>
+              have hfinal : final = arun 0 loopOut p.epilogue :=
+                eq_arun_of_denoteAInstrs_eq_some p.arrayLen 0 p.epilogue
+                  loopOut final hepi
+              rw [hepi] at h
+              simp only [Option.bind_some, Option.some.injEq] at h
+              change final.regs p.output = n at h
+              change n = (arun 0
+                ((List.range p.loopCount).foldl
+                  (fun s index => arun index s p.body)
+                  (arun 0 initialAState p.init))
+                p.epilogue).regs p.output
+              calc
+                n = final.regs p.output := h.symm
+                _ = (arun 0 loopOut p.epilogue).regs p.output := by rw [hfinal]
+                _ = _ := by rw [hloopOut, hentry]
+
 /-! ## Layer 1 — the monadic loop is a pure fold -/
 
 /--

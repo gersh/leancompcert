@@ -74,6 +74,7 @@ import LeanCompCert.Ports.ArraySegMobiusIndexedMain
 import LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter
 import LeanCompCert.Ports.ArraySegMobiusIndexedProgram
 import LeanCompCert.Ports.ArraySegMobiusIndexedFull
+import LeanCompCert.Ports.ArraySegMobiusResidueFrame
 import LeanCompCert.Ports.ArraySegMobiusMarkProgress
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
@@ -173,6 +174,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Verified.ArrayState.sieveSweep_cell
 -- M9: the array fold bridge, and the first array port with a proved denotation
 #print axioms LeanCompCert.Verified.ArrayFoldBridge.denoteAInstrs_eq_arun
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.eq_astep_of_denoteAInstr_eq_some
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.eq_arun_of_denoteAInstrs_eq_some
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.eq_foldl_arun_of_foldlM_denote_eq_some
+#print axioms LeanCompCert.Verified.ArrayFoldBridge.AProgram.output_eq_arun_of_denote_eq_some
 #print axioms LeanCompCert.Verified.ArrayFoldBridge.AProgram.denote_eq_foldl_mem
 #print axioms LeanCompCert.Verified.ArrayFoldBridge.AProgram.denote_eq_obs_foldl_mem
 #print axioms LeanCompCert.Verified.ArrayFoldBridge.foldl_count_mod
@@ -631,6 +636,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedProgram.coreEntry_root_position
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedProgram.coreEntry_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedFull.indexedProductionCore_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusResidueFrame.arun_coreBody_congr
+#print axioms LeanCompCert.Ports.ArraySegMobiusResidueFrame.arun_residue_core_frame
+#print axioms LeanCompCert.Ports.ArraySegMobiusResidueFrame.combinedRun_core
+#print axioms LeanCompCert.Ports.ArraySegMobiusResidueFrame.combinedProductionCore_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_bits
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_eq_muSig_decodedValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootCellFold_cellRepresents

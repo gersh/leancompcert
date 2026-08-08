@@ -68,6 +68,30 @@ theorem indexedBodyRun_add (idx : Nat) (c : Cfg) (a b : Nat)
       have heq : idx + (a + b) = idx + a + b := by omega
       rw [heq]
 
+/-- The recursive changing-index runner is exactly the ordinary pure fold
+over its local event numbers.  This is the representation used by the
+`AProgram.denote` trace extractor. -/
+theorem foldl_range_arun_eq_indexedBodyRun (idx : Nat) (c : Cfg)
+    (fuel : Nat) (s : AState) :
+    (List.range fuel).foldl
+      (fun q k => arun (idx + k) q c.coreBody) s =
+      indexedBodyRun idx c fuel s := by
+  induction fuel with
+  | zero => rfl
+  | succ n ih =>
+      rw [List.range_succ, List.foldl_append]
+      rw [ih, indexedBodyRun_succ]
+      rfl
+
+/-- At production index zero, the `AProgram` fold and the indexed core runner
+are literally the same total-state trace. -/
+theorem foldl_range_coreBody_eq_indexedBodyRun (c : Cfg)
+    (fuel : Nat) (s : AState) :
+    (List.range fuel).foldl (fun q k => arun k q c.coreBody) s =
+      indexedBodyRun 0 c fuel s := by
+  simpa only [Nat.zero_add] using
+    foldl_range_arun_eq_indexedBodyRun 0 c fuel s
+
 /-- The production body never writes the distinguished zero register, at
 changing indices as well as fixed ones. -/
 theorem indexedBodyRun_rZero (idx : Nat) (c : Cfg) (fuel : Nat)
