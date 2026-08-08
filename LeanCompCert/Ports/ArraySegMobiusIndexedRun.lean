@@ -1,5 +1,6 @@
 import LeanCompCert.Ports.ArraySegMobiusRootMarkFold
 import LeanCompCert.Ports.ArraySegMobiusRootPrefix
+import LeanCompCert.Ports.ArraySegMobiusRootAccumulation
 
 /-!
 # Production-indexed segmented Möbius runs
@@ -25,6 +26,7 @@ open LeanCompCert.Ports.ArraySegMobiusScheduleFold
 open LeanCompCert.Ports.ArraySegMobiusPrimeTable
 open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 open LeanCompCert.Ports.ArraySegMobiusRootMarkFold
+open LeanCompCert.Ports.ArraySegMobiusRootAccumulation
 
 /-- Actual finite core-body iteration: event `k` sees production index
 `idx + k`. -/
@@ -139,6 +141,131 @@ theorem indexedBodyRun_mark_position (c : Cfg) (idx fuel : Nat)
           (hidxNe k (Nat.lt_succ_self k)) hwriteM hwM
       rw [indexedBodyRun_succ]
       exact hone
+
+/-- Position-only form of the indexed marking prefix. -/
+theorem indexedBodyRun_mark_position_only
+    (c : Cfg) (idx fuel : Nat) (s : AState) (w : Nat)
+    (hfuel : fuel ≤ c.markSteps)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hLPos : 0 < c.segLen) (hTM : c.markSteps < M)
+    (hPM : c.period < M) (hidxFuelM : idx + fuel < M)
+    (hspanM : c.rootSpan < M)
+    (hidxNe : ∀ k, k < fuel → idx + k ≠ c.rootSpan - 1)
+    (hwM : w < M) :
+    let out := indexedBodyRun idx c fuel s
+    out.regs rR = fuel ∧ out.regs rW = w := by
+  induction fuel with
+  | zero => simpa using And.intro hR hW
+  | succ k ih =>
+      have hkLe : k ≤ c.markSteps := by omega
+      have hprev := ih hkLe (by omega)
+        (fun n hn => hidxNe n (Nat.lt_trans hn (Nat.lt_succ_self k)))
+      have hkMark : (indexedBodyRun idx c k s).regs rR < c.markSteps := by
+        rw [hprev.1]
+        omega
+      have hone := arun_coreBody_mark_nowrap_position c (idx + k)
+        (indexedBodyRun idx c k s) k w hkMark hprev.1 hprev.2 hLPos
+        hTM hPM (by omega) hspanM (hidxNe k (Nat.lt_succ_self k)) hwM
+      rw [indexedBodyRun_succ]
+      exact hone
+
+/-- Every strict prefix of a production root-accumulation half has the exact
+counter and window-base position.  The proof uses only the compiled control
+path, so it does not evaluate candidate collection or table writes. -/
+theorem indexedBodyRun_root_acc_position
+    (c : Cfg) (idx fuel : Nat) (s : AState) (w : Nat)
+    (hfuel : fuel < c.segLen)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hrootWindow : idx + c.segLen ≤ c.rootSpan)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hwSegM : w + c.segLen < M) :
+    let out := indexedBodyRun idx c fuel s
+    out.regs rR = c.markSteps + fuel ∧ out.regs rW = w := by
+  induction fuel with
+  | zero => simpa using And.intro hR hW
+  | succ k ih =>
+      have hkSeg : k < c.segLen := by omega
+      have hprev := ih (by omega)
+      rw [indexedBodyRun_succ]
+      apply arun_coreBody_root_acc_position_nowrap c (idx + k)
+        (indexedBodyRun idx c k s) (c.markSteps + k) w k
+      · exact hprev.1
+      · exact hprev.2
+      · rw [hprev.1]
+        omega
+      · omega
+      · omega
+      · simp only [Cfg.period] at hPM
+        omega
+      · exact hTM
+      · exact hPM
+      · omega
+      · exact hspanM
+      · omega
+      · exact hkSeg
+      · omega
+      · simp only [Cfg.period]
+        omega
+
+/-- A complete ordinary accumulation half performs the compiled window wrap,
+again using only counter/base control flow. -/
+theorem indexedBodyRun_root_acc_complete_wrap_position
+    (c : Cfg) (idx : Nat) (s : AState) (w : Nat)
+    (hLPos : 0 < c.segLen)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hrootWindow : idx + c.segLen ≤ c.rootSpan - 1)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hwNextM : w + c.segLen < M) :
+    let out := indexedBodyRun idx c c.segLen s
+    out.regs rR = 0 ∧ out.regs rW = w + c.segLen := by
+  have hpred : c.segLen = (c.segLen - 1) + 1 := by omega
+  have hp := indexedBodyRun_root_acc_position c idx (c.segLen - 1) s w
+    (by omega) hR hW (by omega) hTM hPM hspanM hwNextM
+  have hRM : c.markSteps + (c.segLen - 1) < M := by
+    have hperiod := hPM
+    simp only [Cfg.period] at hperiod
+    omega
+  have hlast := arun_coreBody_root_acc_position_wrap c
+    (idx + (c.segLen - 1)) (indexedBodyRun idx c (c.segLen - 1) s)
+    (c.markSteps + (c.segLen - 1)) w (c.segLen - 1) hp.1 hp.2 (by
+      rw [hp.1]
+      omega) (by omega) (by omega) hRM hTM hPM (by omega) hspanM
+      (by omega) (by omega) (by omega) (by
+        simp only [Cfg.period]
+        omega) hwNextM
+  rw [hpred, indexedBodyRun_succ]
+  simpa only [← hpred] using hlast
+
+/-- One complete nonfinal root window resets the counter and advances the
+root base by one segment. -/
+theorem indexedBodyRun_root_window_wrap_position
+    (c : Cfg) (idx : Nat) (s : AState) (w : Nat)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hrootWindow : idx + c.period ≤ c.rootSpan - 1)
+    (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hwNextM : w + c.segLen < M) :
+    let out := indexedBodyRun idx c c.period s
+    out.regs rR = 0 ∧ out.regs rW = w + c.segLen := by
+  let marked := indexedBodyRun idx c c.markSteps s
+  have hmark := indexedBodyRun_mark_position_only c idx c.markSteps s w
+    (Nat.le_refl _) hR hW hLPos hTM hPM (by
+      simp only [Cfg.period] at hrootWindow
+      omega) hspanM (by
+      intro j hj
+      simp only [Cfg.period] at hrootWindow
+      omega) (by omega)
+  have hacc := indexedBodyRun_root_acc_complete_wrap_position c
+    (idx + c.markSteps) marked w hLPos hmark.1 hmark.2 (by
+      simp only [Cfg.period] at hrootWindow
+      omega) hTM hPM hspanM hwNextM
+  rw [Cfg.period, indexedBodyRun_add]
+  exact hacc
 
 /-- Full growing-table representation is framed across an indexed ordinary
 marking prefix while the selected-limit cursor supplies branch safety. -/

@@ -436,6 +436,33 @@ theorem rootStoreInput_controls (c : Cfg) (idx : Nat) (s : AState)
     (frame 65 (by rfl)).trans ht65,
     (frame 67 (by rfl)).trans ht67⟩
 
+/-- The root-store prefix preserves the two schedule coordinates without
+requiring a description of the candidate bit or table write cursor. -/
+theorem rootCursorInput_position (c : Cfg) (idx : Nat) (s : AState)
+    (r w i : Nat)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hi : i < c.segLen) (hwM : w + i < M) :
+    let t := rootCursorInput c idx s
+    t.regs rR = r ∧ t.regs rW = w := by
+  let q := signalInput c idx s
+  let u := rootStoreInput c idx s
+  let g := arun idx u (postBeforeRootStore c)
+  let t := astep idx g (.store 141 65)
+  have hu := rootStoreInput_controls c idx s r w (s.regs rWrite) i
+    (q.arr i) hR hW rfl hT hiEq hroot hRM hTM hidxM hspanM hi hwM rfl
+  have hgR : g.regs rR = r := by
+    rw [arun_reg_frame idx rR (postBeforeRootStore c) u (by rfl)]
+    exact hu.1
+  have hgW : g.regs rW = w := by
+    rw [arun_reg_frame idx rW (postBeforeRootStore c) u (by rfl)]
+    exact hu.2.1
+  exact ⟨hgR, hgW⟩
+
 /-- The state just before the final cursor suffix carries the exact finite
 collection bit selected by the root candidate test. -/
 theorem rootCursorInput_controls (c : Cfg) (idx : Nat) (s : AState)
@@ -569,6 +596,53 @@ theorem arun_coreBody_root_acc_one_nowrap
   simpa using postAfterRootStore_nowrap c idx t r w write 0 ht.1 ht.2.1
     ht.2.2.1 ht.2.2.2 hnext hPM hidxM hspanM hidxNe (by simpa)
     (by omega)
+
+/-- An interior root-accumulation body advances the schedule position without
+evaluating or specifying its candidate-table update. -/
+theorem arun_coreBody_root_acc_position_nowrap
+    (c : Cfg) (idx : Nat) (s : AState) (r w i : Nat)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hnext : r + 1 < c.period) :
+    let out := arun idx s c.coreBody
+    out.regs rR = r + 1 ∧ out.regs rW = w := by
+  let t := rootCursorInput c idx s
+  have ht := rootCursorInput_position c idx s r w i hR hW hT hiEq
+    hroot hRM hTM hidxM hspanM hi hwM
+  rw [arun_coreBody_eq_rootCursorInput]
+  exact postAfterRootStore_nowrap_position c idx t r w ht.1 ht.2 hnext
+    hPM hidxM hspanM hidxNe (by omega)
+
+/-- The last body of an ordinary root window resets the counter and advances
+the base, without evaluating its candidate-table update. -/
+theorem arun_coreBody_root_acc_position_wrap
+    (c : Cfg) (idx : Nat) (s : AState) (r w i : Nat)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hnext : r + 1 = c.period)
+    (hwNextM : w + c.segLen < M) :
+    let out := arun idx s c.coreBody
+    out.regs rR = 0 ∧ out.regs rW = w + c.segLen := by
+  let t := rootCursorInput c idx s
+  have ht := rootCursorInput_position c idx s r w i hR hW hT hiEq
+    hroot hRM hTM hidxM hspanM hi hwM
+  rw [arun_coreBody_eq_rootCursorInput]
+  exact postAfterRootStore_wrap_position c idx t r w ht.1 ht.2 hnext
+    hPM hidxM hspanM hidxNe hwNextM
 
 /-- An interior root-accumulation body advances one position and keeps the
 window base fixed, with the write cursor increased by its finite table bit. -/

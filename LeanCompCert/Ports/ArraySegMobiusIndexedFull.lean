@@ -220,4 +220,32 @@ theorem indexedProductionCore_complete
   simpa [finalRootTable, finalRootBound, mainBase, laterW, laterBase,
     crossW, crossingBase, crossed, crossingTable] using hsuffix
 
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 1000000 in
+/-- The production schedule stopped exactly at the root-to-main boundary.
+This reuses the complete schedule proof with a zero-length main suffix. -/
+theorem indexedProductionRoot_complete
+    (c : Cfg) (bootBound bootFuel laterFuel mainFuel delta : Nat)
+    (h : ProductionCoreSchedule c bootBound bootFuel laterFuel mainFuel delta) :
+    let rootFuel := bootFuel + 1 + (laterFuel + 1)
+    let out := indexedWindowRun 0 c rootFuel (coreEntry c)
+    let ps := finalRootTable c bootBound bootFuel laterFuel
+    (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      MachineTableRep c out ps ∧ out.regs rR = 0 ∧
+      out.regs rW = mainBase c bootFuel laterFuel delta ∧
+      out.regs rZero = 0 := by
+  let hroot : ProductionCoreSchedule c bootBound bootFuel laterFuel 0 delta :=
+    { h with
+      mainIndexM := by
+        have hm := h.mainIndexM
+        simp only [Nat.zero_mul, Nat.add_zero]
+        omega
+      mainBaseM := by
+        have hm := h.mainBaseM
+        simp only [Nat.zero_mul, Nat.add_zero]
+        omega }
+  have hcomplete := indexedProductionCore_complete c bootBound bootFuel
+    laterFuel 0 delta hroot
+  simpa only [Nat.add_zero, Nat.zero_mul] using hcomplete
+
 end LeanCompCert.Ports.ArraySegMobiusIndexedFull

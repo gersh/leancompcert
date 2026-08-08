@@ -27,6 +27,7 @@ open LeanCompCert.Ports.ArraySegMobiusCellRep
 open LeanCompCert.Ports.ArraySegMobiusIndexedRun
 open LeanCompCert.Ports.ArraySegMobiusIndexedMain
 open LeanCompCert.Ports.ArraySegMobiusIndexedProgram
+open LeanCompCert.Ports.ArraySegMobiusIndexedFull
 open LeanCompCert.Ports.ArraySegMobiusIdleSignal
 open LeanCompCert.Ports.ArraySegMobiusResidueFrame
 open LeanCompCert.Ports.ArraySegMobiusResidueFold
@@ -409,21 +410,46 @@ theorem readRes_combinedIndexedRun_root_acc_prefix_eq_of_position
   · exact hcelM
   · exact hw
 
+/-- Before the final root window, the literal compiled windows alone determine
+the counter and linearly advancing root base. -/
+theorem indexedWindowRun_root_prefix_position
+    (c : Cfg) (idx fuel : Nat) (s : AState) (w : Nat)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hrootPrefix : idx + fuel * c.period ≤ c.rootSpan - 1)
+    (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hwFuelM : w + fuel * c.segLen < M) :
+    let out := indexedWindowRun idx c fuel s
+    out.regs rR = 0 ∧ out.regs rW = w + fuel * c.segLen := by
+  induction fuel with
+  | zero => simpa using And.intro hR hW
+  | succ n ih =>
+      have hp := ih (by
+        simp only [Nat.add_mul] at hrootPrefix
+        omega) (by
+          simp only [Nat.add_mul] at hwFuelM
+          omega)
+      let mid := indexedWindowRun idx c n s
+      have hstep := indexedBodyRun_root_window_wrap_position c
+        (idx + n * c.period) mid (w + n * c.segLen) hp.1 hp.2 (by
+          simp only [Nat.add_mul] at hrootPrefix
+          omega) hLPos hTM hPM hspanM (by
+            simp only [Nat.add_mul] at hwFuelM
+            omega)
+      rw [indexedWindowRun_succ]
+      simpa only [mid, Nat.add_mul, Nat.one_mul, Nat.add_assoc] using hstep
+
 set_option maxRecDepth 10000 in
 /-- One complete production root window is transparent to the five-field
-residue.  The first half uses the verified marking position; the second half
-uses the root-prefix counter/base invariant supplied by any of the bootstrap,
-crossing, or later-root schedule proofs. -/
+residue.  Both its marking and root-accumulation positions are derived from
+the literal compiled body, independently of candidate-table evaluation. -/
 theorem readRes_combinedIndexedRun_root_window_eq
     (c : Cfg) (idx k len : Nat) (combined core : AState)
     (w write : Nat)
     (hagree : CoreAgree combined core)
     (hR : core.regs rR = 0) (hW : core.regs rW = w)
     (hWrite : core.regs rWrite = write)
-    (haccPosition : ∀ j, j < c.segLen →
-      let markedCore := indexedBodyRun idx c c.markSteps core
-      let before := indexedBodyRun (idx + c.markSteps) c j markedCore
-      before.regs rR = c.markSteps + j ∧ before.regs rW = w)
     (hrootWindow : idx + c.period ≤ c.rootSpan)
     (hLPos : 0 < c.segLen)
     (hTM : c.markSteps < M) (hPM : c.period < M)
@@ -446,6 +472,11 @@ theorem readRes_combinedIndexedRun_root_window_eq
     hLPos hTM hPM hidxMarkM hspanM (fun j hj => by
       simp only [Cfg.period] at hrootWindow
       omega) hwriteM hwPos hwM hcel hcelM hw
+  have hmarkPosition := indexedBodyRun_mark_position c idx c.markSteps
+    core w write (Nat.le_refl _) hR hW hWrite hLPos hTM hPM hidxMarkM
+    hspanM (fun j hj => by
+      simp only [Cfg.period] at hrootWindow
+      omega) hwriteM hwM
   have hagreeMarked : CoreAgree markedCombined markedCore :=
     combinedIndexedRun_core idx c k c.markSteps hagree
   have hmarkedWord : ResWord (readRes markedCombined) := by
@@ -456,7 +487,10 @@ theorem readRes_combinedIndexedRun_root_window_eq
       (idx + c.markSteps) k len c.segLen markedCombined markedCore w
       hagreeMarked (Nat.le_refl _) (by
         intro j hj
-        exact haccPosition j hj) (by
+        exact indexedBodyRun_root_acc_position c (idx + c.markSteps) j
+          markedCore w hj hmarkPosition.2.1 hmarkPosition.2.2 (by
+            simp only [Cfg.period] at hrootWindow
+            omega) hTM hPM hspanM hwSegM) (by
           simp only [Cfg.period] at hrootWindow ⊢
           omega) hTM hPM hspanM hwSegM hwPos (by
             rw [hmarkRes]
@@ -483,6 +517,133 @@ theorem readRes_combinedWindowRun_root_eq_of_step
       have hprev := ih (fun q hq => hstep q (by omega))
       rw [combinedWindowRun_succ]
       exact (hstep n (Nat.lt_succ_self n)).trans hprev
+
+set_option maxRecDepth 10000 in
+/-- The complete finite root prefix of the real combined program is residue
+transparent.  All per-window positions come from the compiled control path;
+word bounds come from execution of the same combined program. -/
+theorem readRes_combinedWindowRun_root_eq
+    (c : Cfg) (idx k len fuel : Nat) (combined core : AState) (w : Nat)
+    (hagree : CoreAgree combined core)
+    (hR : core.regs rR = 0) (hW : core.regs rW = w)
+    (hrootTotal : idx + fuel * c.period ≤ c.rootSpan)
+    (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hwPos : 0 < w) (hwFuelM : w + fuel * c.segLen < M)
+    (hregs : ∀ j, combined.regs j < M)
+    (harr : ∀ j, combined.arr j < M)
+    (hcel : 1 ≤ (readRes combined).cel)
+    (hcelM : (readRes combined).cel < M)
+    (hw : ResWord (readRes combined)) :
+    readRes (combinedWindowRun idx c k fuel combined) =
+      readRes combined := by
+  induction fuel with
+  | zero => simp [combinedWindowRun]
+  | succ n ih =>
+      have hperiodPos : 0 < c.period := by
+        simp only [Cfg.period]
+        omega
+      have hprev := ih (by
+        simp only [Nat.add_mul] at hrootTotal
+        omega) (by
+          simp only [Nat.add_mul] at hwFuelM
+          omega)
+      let mid := combinedWindowRun idx c k n combined
+      let midCore := indexedWindowRun idx c n core
+      have hcorePosition := indexedWindowRun_root_prefix_position c idx n
+        core w hR hW (by
+          simp only [Nat.add_mul] at hrootTotal
+          omega) hLPos hTM hPM hspanM (by
+            simp only [Nat.add_mul] at hwFuelM
+            omega)
+      have hframe : CoreAgree mid midCore :=
+        combinedWindowRun_core idx c k n hagree
+      have hword := combinedWindowRun_word idx c k n combined hregs harr
+      have hwriteM : midCore.regs rWrite < M := by
+        rw [← hframe.2 rWrite (by decide)]
+        exact hword.1 rWrite
+      have hstep := readRes_combinedIndexedRun_root_window_eq c
+        (idx + n * c.period) k len mid midCore
+        (w + n * c.segLen) (midCore.regs rWrite) hframe hcorePosition.1
+        hcorePosition.2 rfl (by
+          simp only [Nat.add_mul] at hrootTotal
+          omega) hLPos hTM hPM hspanM hwriteM (by omega) (by
+            simp only [Nat.add_mul] at hwFuelM
+            omega) (by
+              rw [hprev]
+              exact hcel) (by
+                rw [hprev]
+                exact hcelM) (by
+                  rw [hprev]
+                  exact hw)
+      rw [combinedWindowRun_succ]
+      exact hstep.trans hprev
+
+/-- Production-schedule specialization: the standard compiled entry reaches
+the main-phase boundary with exactly its initialized residue. -/
+theorem readRes_combinedEntry_root_eq
+    (c : Cfg) (k bootBound bootFuel laterFuel mainFuel delta : Nat)
+    (mu : Nat → Int) (hk15 : k ≤ 15)
+    (h : ProductionCoreSchedule c bootBound bootFuel laterFuel mainFuel delta) :
+    let rootFuel := bootFuel + 1 + (laterFuel + 1)
+    let entry := combinedEntry c (mobLiveSeedStart k)
+    readRes (combinedWindowRun 0 c k rootFuel entry) = readRes entry := by
+  let rootFuel := bootFuel + 1 + (laterFuel + 1)
+  let entry := combinedEntry c (mobLiveSeedStart k)
+  have hbootM : ∀ p, p ∈ c.bootPrimes → p < M := by
+    intro p hp
+    exact Nat.lt_of_le_of_lt (h.bootPrime.upper p hp) h.bootBoundM
+  have hpos := coreEntry_root_position c h.bootLe hbootM h.arrayM
+  have hrootEq : rootFuel * c.period = c.rootSpan := by
+    have hfinal := h.finalIndex
+    dsimp only [rootFuel]
+    simp only [Nat.add_mul, Nat.one_mul] at hfinal ⊢
+    omega
+  have hwRootM : 1 + rootFuel * c.segLen < M := by
+    have hfinal := h.finalBaseM
+    dsimp only [finalRootBound, laterBase, crossingBase] at hfinal
+    dsimp only [rootFuel]
+    simp only [Nat.add_mul, Nat.one_mul]
+    omega
+  have hentryWord := combinedEntry_word c (mobLiveSeedStart k)
+  have hstart := readRes_combinedEntry_start_inv c k mu hk15
+  apply readRes_combinedWindowRun_root_eq c 0 k c.segLen rootFuel entry
+    (coreEntry c) 1 (combinedEntry_core c (mobLiveSeedStart k)) hpos.1
+    hpos.2.1
+  · rw [Nat.zero_add, hrootEq]
+    exact Nat.le_refl _
+  · exact h.segLenPos
+  · exact h.markM
+  · exact h.periodM
+  · exact h.spanM
+  · omega
+  · exact hwRootM
+  · exact hentryWord.1
+  · exact hentryWord.2
+  · exact hstart.cel.1
+  · exact hentryWord.1 rCeil
+  · exact ⟨hentryWord.1 rTLo, hentryWord.1 rTHi,
+      hentryWord.1 rCeil, hentryWord.1 rCeilSq,
+      hentryWord.1 rMViol⟩
+
+/-- When the compiled root-to-main transition retargets to one, the verified
+root trace supplies exactly the empty-prefix invariant consumed by the main
+window theorem. -/
+theorem readRes_combinedEntry_root_start_inv
+    (c : Cfg) (k bootBound bootFuel laterFuel mainFuel delta : Nat)
+    (mu : Nat → Int) (hk15 : k ≤ 15)
+    (h : ProductionCoreSchedule c bootBound bootFuel laterFuel mainFuel delta)
+    (hmainBase : mainBase c bootFuel laterFuel delta = 1) :
+    let rootFuel := bootFuel + 1 + (laterFuel + 1)
+    let entry := combinedEntry c (mobLiveSeedStart k)
+    ResInv k mu (mainBase c bootFuel laterFuel delta - 1)
+      (readRes (combinedWindowRun 0 c k rootFuel entry)) := by
+  have heq := readRes_combinedEntry_root_eq c k bootBound bootFuel
+    laterFuel mainFuel delta mu hk15 h
+  dsimp only at heq ⊢
+  rw [heq, hmainBase]
+  simpa using readRes_combinedEntry_start_inv c k mu hk15
 
 /-- At changing-index accumulation position `i`, the selected cell is still
 the finite root fold established by the compiled marking phase. -/
