@@ -263,6 +263,30 @@ theorem selectorBlock_main (c : Cfg) (idx : Nat) (s : AState)
     denoteOperand, denoteOp, AState.writeReg,
     rR, rLimit, hTmod, hImod, hRootmod, h1mod, hT', hRoot', hOne]
 
+/-- The final selector instruction defines the main gate as `inAcc -
+inAccRoot`, independently of the active phase. -/
+theorem selectorBlock_gate_eq (c : Cfg) (idx : Nat) (s : AState) :
+    let q := arun idx s (selectorBlock c)
+    q.regs 133 = (q.regs 9 + (M - q.regs 132)) % M := by
+  simp [selectorBlock, Cfg.coreBody, arun, astep,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval,
+    denoteOperand, denoteOp, AState.writeReg, rR, rLimit]
+
+/-- The marking prefix frames all three selector outputs, so the same gate
+equation holds at decoder entry. -/
+theorem signalInput_gate_eq (c : Cfg) (idx : Nat) (s : AState) :
+    let q := signalInput c idx s
+    q.regs 133 = (q.regs 9 + (M - q.regs 132)) % M := by
+  let q := arun idx s (selectorBlock c)
+  have h := selectorBlock_gate_eq c idx s
+  rw [signalInput, preSignal_eq_selector_mark, arun_append]
+  dsimp only
+  rw [arun_reg_frame idx 133 (markPrefix c) q (by rfl),
+    arun_reg_frame idx 9 (markPrefix c) q (by rfl),
+    arun_reg_frame idx 132 (markPrefix c) q (by rfl)]
+  exact h
+
 /-- On an accumulation iteration the selector disables the marking stores. -/
 theorem selectorBlock_main_markGate (c : Cfg) (idx : Nat) (s : AState)
     (hT : c.markSteps ≤ s.regs rR)
@@ -362,6 +386,19 @@ def decodeCell (n prod flag : Nat) : Sig :=
     (squarefree * parity) % M,
     1⟩
 
+/-- Apply the selector gate to a decoded signal exactly as the last two
+instructions of `signalBlock` do. -/
+def gateSig (gate : Nat) (g : Sig) : Sig :=
+  ⟨g.n, gate * g.pos % M, gate * g.neg % M, gate⟩
+
+/-- Exact word-level cell selected by the decoder before ordinary-arithmetic
+range hypotheses simplify its coordinates. -/
+def machineDecodeCell (c : Cfg) (s : AState) : Sig :=
+  let i := (s.regs rR + (M - c.markSteps % M)) % M
+  let gatedI := s.regs 9 * i % M
+  decodeCell ((gatedI + s.regs rW) % M)
+    (s.arr gatedI) (s.arr ((gatedI + c.segLen) % M))
+
 /-- The pure cell property the segmented-sieve mathematics must establish. -/
 def CellRepresents (mu : Nat → Int) (n prod flag : Nat) : Prop :=
   decodeCell n prod flag = muSig mu n
@@ -413,8 +450,33 @@ theorem denote_signalBlock (arrayLen : Nat) (c : Cfg) (idx : Nat) (s : AState)
       some (arun idx s (signalBlock c)) :=
   denoteAInstrs_eq_arun arrayLen idx (signalBlock c) s hdef
 
-/-- Exact meaning of the extracted twenty instructions during a main-phase
-accumulation iteration. -/
+/-- Exact meaning of the extracted twenty instructions with an arbitrary
+selector gate. -/
+theorem readSig_arun_signalBlock_gated (c : Cfg) (idx : Nat) (s : AState)
+    : readSig (arun idx s (signalBlock c)) =
+      gateSig (s.regs 133) (machineDecodeCell c s) := by
+  have h1mod : (1 : Nat) % M = 1 := by decide
+  have hmod2 (n : Nat) : n % 2 % M = n % 2 := by
+    apply Nat.mod_eq_of_lt
+    exact Nat.lt_of_lt_of_le (Nat.mod_lt _ (by decide)) (by decide)
+  set_option maxRecDepth 10000 in
+  simp [signalBlock, Cfg.coreBody, machineDecodeCell, decodeCell, gateSig,
+    readSig, arun, astep,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval,
+    denoteOperand, denoteOp, AState.writeReg, rR, rW, h1mod, hmod2]
+
+/-- Whole-core form of the exact gated decoder theorem. -/
+theorem readSig_arun_coreBody_gated (c : Cfg) (idx : Nat) (s : AState) :
+    readSig (arun idx s c.coreBody) =
+      gateSig ((signalInput c idx s).regs 133)
+        (machineDecodeCell c (signalInput c idx s)) := by
+  rw [coreBody_eq_signalSlices, arun_append, arun_append,
+    readSig_arun_postSignal]
+  simpa [signalInput] using
+    readSig_arun_signalBlock_gated c idx (signalInput c idx s)
+
+/-- Main-phase specialization of the gated decoder theorem. -/
 theorem readSig_arun_signalBlock (c : Cfg) (idx : Nat) (s : AState)
     (hT : c.markSteps ≤ s.regs rR)
     (hi : s.regs rR - c.markSteps < c.segLen)
@@ -429,42 +491,19 @@ theorem readSig_arun_signalBlock (c : Cfg) (idx : Nat) (s : AState)
         (s.arr (s.regs rR - c.markSteps))
         (s.arr (s.regs rR - c.markSteps + c.segLen)) := by
   have hsub :
-      (s.regs rR + (M - c.markSteps)) % M = s.regs rR - c.markSteps := by
+      (s.regs rR + (M - c.markSteps)) % M =
+        s.regs rR - c.markSteps := by
     have heq : s.regs rR + (M - c.markSteps) =
         M + (s.regs rR - c.markSteps) := by omega
     rw [heq, Nat.add_mod_left, Nat.mod_eq_of_lt]
     omega
   have hiM : s.regs rR - c.markSteps < M := by omega
-  have hiLM : s.regs rR - c.markSteps + c.segLen < M := by
-    omega
+  have hiLM : s.regs rR - c.markSteps + c.segLen < M := by omega
   have hTmod : c.markSteps % M = c.markSteps := Nat.mod_eq_of_lt hTM
-  have hLmod : c.segLen % M = c.segLen := by
-    apply Nat.mod_eq_of_lt
-    omega
-  have hWmod : s.regs rW % M = s.regs rW := by
-    apply Nat.mod_eq_of_lt
-    omega
-  have hidxL :
-      (s.regs rR + (M - c.markSteps) + c.segLen) % M =
-        s.regs rR - c.markSteps + c.segLen := by
-    rw [Nat.add_mod, hsub, hLmod, Nat.mod_eq_of_lt hiLM]
-  have hn :
-      (s.regs rR + (M - c.markSteps) + s.regs rW) % M =
-        s.regs rW + (s.regs rR - c.markSteps) := by
-    rw [Nat.add_mod, hsub, hWmod]
-    rw [Nat.add_comm, Nat.mod_eq_of_lt hWM]
   have hsub' :
-      (s.regs 5 + (M - c.markSteps)) % M = s.regs 5 - c.markSteps := by
+      (s.regs 5 + (M - c.markSteps)) % M =
+        s.regs 5 - c.markSteps := by
     simpa [rR] using hsub
-  have hidxL' :
-      (s.regs 5 + (M - c.markSteps) + c.segLen) % M =
-        s.regs 5 - c.markSteps + c.segLen := by
-    simpa [rR] using hidxL
-  have hn' :
-      (s.regs 5 + (M - c.markSteps) + s.regs 6) % M =
-        s.regs 6 + (s.regs 5 - c.markSteps) := by
-    simpa [rR, rW] using hn
-  have h1mod : (1 : Nat) % M = 1 := by decide
   have hiM' : s.regs 5 - c.markSteps < M := by simpa [rR] using hiM
   have hiLM' : s.regs 5 - c.markSteps + c.segLen < M := by
     simpa [rR] using hiLM
@@ -476,15 +515,11 @@ theorem readSig_arun_signalBlock (c : Cfg) (idx : Nat) (s : AState)
     rw [Nat.add_comm, Nat.mod_eq_of_lt hWM']
   have hmod2 (n : Nat) : n % 2 % M = n % 2 := by
     apply Nat.mod_eq_of_lt
-    have : n % 2 < 2 := Nat.mod_lt _ (by decide)
-    omega
-  set_option maxRecDepth 10000 in
-  simp [signalBlock, Cfg.coreBody, decodeCell, readSig, arun, astep,
-    LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval,
-    denoteOperand, denoteOp, AState.writeReg,
-    rR, rW, hmain, hTmod, hsub', Nat.mod_eq_of_lt hiM',
-    Nat.mod_eq_of_lt hiLM', hni, hmod2, h1mod, hgate]
+    exact Nat.lt_of_lt_of_le (Nat.mod_lt _ (by decide)) (by decide)
+  rw [readSig_arun_signalBlock_gated]
+  simp [machineDecodeCell, gateSig, decodeCell, rR, rW, hTmod, hsub',
+    Nat.mod_eq_of_lt hiM', Nat.mod_eq_of_lt hiLM', hni, hmain, hgate,
+    hmod2]
   constructor <;> rfl
 
 /-- Once the two cells have their mathematical Möbius meaning, the extracted
