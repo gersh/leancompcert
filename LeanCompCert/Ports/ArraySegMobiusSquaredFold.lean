@@ -178,6 +178,20 @@ residue models.  The violation counters are intentionally independent. -/
 def ResPrefixEq (a b : Res) : Prop :=
   a.tLo = b.tLo ∧ a.tHi = b.tHi ∧ a.cel = b.cel ∧ a.celSq = b.celSq
 
+/-- The Möbius accumulator invariant depends only on the four persistent
+fields shared by the historical and squared checkers. -/
+theorem ResPrefixEq.resInv {k n : Nat} {mu : Nat → Int} {a b : Res}
+    (hab : ResPrefixEq a b) (hb : ResInv k mu n b) : ResInv k mu n a := by
+  rcases hab with ⟨hlo, hhi, hcel, hcelSq⟩
+  exact
+    { loLt := by simpa only [hlo] using hb.loLt
+      hiLt := by simpa only [hhi] using hb.hiLt
+      acc := by simpa only [hlo, hhi] using hb.acc
+      bnd := hb.bnd
+      cel := by simpa only [hcel] using hb.cel
+      celSq := by simpa only [hcel, hcelSq] using hb.celSq
+      celLt := by simpa only [hcel] using hb.celLt }
+
 theorem squaredResStep_resStep_prefix_eq (k : Nat) (g : Sig) (a b : Res)
     (h : ResPrefixEq a b) :
     ResPrefixEq (squaredResStep k g a) (resStep k g b) := by
