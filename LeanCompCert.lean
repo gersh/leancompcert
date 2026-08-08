@@ -105,6 +105,7 @@ import LeanCompCert.Ports.ArraySegMobiusIndexedFull
 import LeanCompCert.Ports.ArraySegMobiusResidueFrame
 import LeanCompCert.Ports.ArraySegMobiusResidueFold
 import LeanCompCert.Ports.ArraySegMobiusIndexedSignal
+import LeanCompCert.Ports.ArraySegMobiusCandidateBound
 import LeanCompCert.Ports.ArraySegMobiusSquaredSignal
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Ports.BlockedFold

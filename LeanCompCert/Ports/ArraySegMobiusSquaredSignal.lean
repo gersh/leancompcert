@@ -1,5 +1,6 @@
 import LeanCompCert.Ports.ArraySegMobiusSquaredFold
 import LeanCompCert.Ports.ArraySegMobiusIndexedSignal
+import LeanCompCert.Ports.ArraySegMobiusCandidateBound
 
 /-!
 # Reusing the production Möbius signal schedule for the squared residue
@@ -22,6 +23,7 @@ open LeanCompCert.Ports.ArraySegMobiusResidueFrame
 open LeanCompCert.Ports.ArraySegMobiusResidueFold
 open LeanCompCert.Ports.ArraySegMobiusIndexedSignal
 open LeanCompCert.Ports.ArraySegMobiusSquaredFold
+open LeanCompCert.Ports.ArraySegMobiusCandidateBound
 open LeanCompCert.Ports.MobiusResidueRealisation
 
 /-- At every event, the squared combined trace emits the signal of the same
@@ -91,6 +93,29 @@ theorem squaredCombined_ready_of_indexedBodyRun
   rw [h65]
   exact hr
 
+/-- The finite schedule need only expose the ordinary window-position
+invariant.  The compiled-core candidate theorem converts it to the exact
+nonzero and endpoint premise consumed by the squared trace. -/
+theorem squaredCombined_ready_of_window_bounds
+    (idx : Nat) (c : Cfg) (k fuel : Nat) (s : AState)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxFuelM : idx + fuel < M) (hspanM : c.rootSpan < M)
+    (hwindow : ∀ j, j < fuel →
+      let before := indexedBodyRun idx c j s
+      before.regs rR < c.period ∧
+        0 < before.regs rW ∧ before.regs rW + c.segLen < 2 ^ 62) :
+    ∀ j, j < fuel →
+      let before := squaredCombinedIndexedRun idx c k j s
+      let core := arun (idx + j) before c.coreBody
+      core.regs 65 ≠ 0 ∧ core.regs 65 < 2 ^ 62 := by
+  apply squaredCombined_ready_of_indexedBodyRun idx c k fuel s
+  intro j hj
+  have hw := hwindow j hj
+  dsimp only at hw ⊢
+  exact arun_coreBody_candidate_ready c (idx + j)
+    (indexedBodyRun idx c j s) hw.1 hTM hPM (by omega) hspanM
+    hw.2.1 hw.2.2
+
 set_option maxRecDepth 10000 in
 /-- Campaign-facing composition: once the standalone production schedule
 proves each emitted candidate is positive and below `2^62`, the literal
@@ -108,5 +133,26 @@ theorem readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold
   exact readRes_squaredCombinedIndexedRun_eq_fold_of_n_lt idx c k len fuel s
     hregs harr hk
     (squaredCombined_ready_of_indexedBodyRun idx c k fuel s hready)
+
+set_option maxRecDepth 10000 in
+/-- Campaign-facing form driven by finite window positions rather than a
+per-event candidate assumption. -/
+theorem readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold_of_window_bounds
+    (idx : Nat) (c : Cfg) (k len fuel : Nat) (s : AState)
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M)
+    (hk : k ≤ 15)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxFuelM : idx + fuel < M) (hspanM : c.rootSpan < M)
+    (hwindow : ∀ j, j < fuel →
+      let before := indexedBodyRun idx c j s
+      before.regs rR < c.period ∧
+        0 < before.regs rW ∧ before.regs rW + c.segLen < 2 ^ 62) :
+    readRes (squaredCombinedIndexedRun idx c k fuel s) =
+      squaredResFold k (combinedSignals idx c k fuel s) (readRes s) := by
+  exact readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold
+    idx c k len fuel s hregs harr hk
+    (fun j hj => arun_coreBody_candidate_ready c (idx + j)
+      (indexedBodyRun idx c j s) (hwindow j hj).1 hTM hPM (by omega)
+      hspanM (hwindow j hj).2.1 (hwindow j hj).2.2)
 
 end LeanCompCert.Ports.ArraySegMobiusSquaredSignal

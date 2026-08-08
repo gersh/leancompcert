@@ -1576,3 +1576,28 @@ compiler process after about 58 seconds, with zero swap and no host failure.
 The new modules had already passed their source and live dependency checks at
 under 0.7 GiB.  The aggregate result therefore records `PsiSegSieve` as a
 split-required build target rather than weakening or bypassing the new proof.
+
+`ArraySegMobiusCandidateBound` now proves directly from the literal core that
+marking, root-accumulation, and main-accumulation events all retain a positive
+candidate below `2^62` whenever the finite window position has positive base
+and endpoint below `2^62`.  The squared trace adapter therefore consumes only
+the ordinary runnable window-position invariant, not a bespoke per-event
+candidate assumption.  Its two-target dependency cone built in 0.77 s at
+612,832 KiB under the 2/3 GiB profile with zero swap.
+
+The aggregate build-memory failure was reproduced and completed safely by
+serially prebuilding its high-memory leaves under an 8 GiB hard cgroup, then
+resuming the aggregate.  All runs used one Lean worker and zero swap:
+
+| isolated build leaf | wall | peak RSS | result |
+| --- | ---: | ---: | --- |
+| `PsiSegSieve` | 2 min 27.90 s | 7,744,580 KiB | pass |
+| `R2SegSieve` | 2 min 1.23 s | 6,445,132 KiB | pass |
+| `RamareCombined100MShapeSieve` | 1 min 20.11 s | 3,277,408 KiB | pass |
+| `RamareCombined100MLogSweep` | 47.57 s | 3,394,352 KiB | pass |
+| `RamareCombined100MLambdaPsiSweep` | 40.18 s | 3,096,948 KiB | pass |
+| cached `LeanCompCert` aggregate, 226 jobs | 35.36 s | 1,718,008 KiB | pass |
+
+The failed 3 GiB attempts were contained cgroup failures, not host crashes.
+This gives a reproducible shard order while the five elaboration-heavy files
+remain candidates for source splitting.
