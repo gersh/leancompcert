@@ -1372,3 +1372,26 @@ The next finite layer is the prefix iterator that chooses candidate one,
 bootstrap retention, or sequential `rootTableStep` from the candidate index.
 The existing wrap and last-root transition theorems remain the endpoints for
 the corresponding finite window cases.
+
+That finite selector is now composed in `ArraySegMobiusRootPrefix`.
+`rootScanTable` is a runnable reference fold for candidates `1, ..., fuel`,
+and `bodyRun_first_root_acc_prefix` proves every strict prefix of the first
+production root-accumulation window matches it.  Its invariant carries the
+exact `RootTableInv`, all consumed cells cleared, all pending cells equal to
+their bootstrap fold, and the exact position/base/zero registers.  The proof
+selects candidate one, bootstrap retention, or sequential `rootTableStep`
+using only decidable inequalities on the finite index.
+
+All checks used swap disabled and one Lake job:
+
+| check | memory scope | wall | peak RSS | result |
+| --- | --- | ---: | ---: | --- |
+| direct root-prefix source | 1 GiB high / 2 GiB max | 0.71 s | 609,992 KiB | pass |
+| live root-prefix target, 58 jobs | 1 GiB high / 2 GiB max | 0.75 s | 597,100 KiB | pass |
+| strict axiom audit, 664 declarations | 3 GiB high / 4 GiB max | 0.64 s | 1,598,952 KiB | standard foundations only |
+| full repository build, 435 jobs | 7 GiB high / 8 GiB max | 2.76 s | 1,712,180 KiB | pass |
+
+The prefix stops strictly before the wrap by construction.  Completing one
+root window now requires applying the already verified ordinary-wrap or
+last-root transition cursor theorem together with the same table/cell update,
+then supplying the marking-fold entry premise for the next window.

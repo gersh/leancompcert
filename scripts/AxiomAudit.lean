@@ -63,6 +63,7 @@ import LeanCompCert.Ports.ArraySegMobiusScheduleFold
 import LeanCompCert.Ports.ArraySegMobiusCellRep
 import LeanCompCert.Ports.ArraySegMobiusAccumulation
 import LeanCompCert.Ports.ArraySegMobiusRootAccumulation
+import LeanCompCert.Ports.ArraySegMobiusRootPrefix
 import LeanCompCert.Ports.ArraySegMobiusMarkProgress
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
@@ -592,6 +593,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_bootstrap_retain
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_eq_rootTableStep
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.signalBlock_root_candidate_unmarked
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.rootScanTable_zero
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.rootScanTable_succ
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.rootScanTable_eq_boot_of_le
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.bodyRun_first_root_acc_prefix
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap
