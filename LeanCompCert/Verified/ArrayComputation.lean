@@ -91,6 +91,33 @@ def sourceResult (a : AComputation) : Option Int :=
 def Returns (a : AComputation) (value : Int) : Prop :=
   a.sourceResult = some value
 
+/-- Repackage the identical compiled trace with a different final register
+selected for observation.  `AProgram.compile` does not depend on `output`, so
+this changes neither the body nor its memory effects. -/
+def withOutput (a : AComputation) (reg : Nat)
+    (hreg : reg < a.program.regCount) : AComputation :=
+  { program := { a.program with output := reg }
+    wellFormed := ⟨hreg, a.wellFormed.2⟩
+    base := a.base
+    baseOk := a.baseOk
+    name := a.name ++ s!"_r{reg}" }
+
+@[simp] theorem withOutput_compile (a : AComputation) (reg : Nat)
+    (hreg : reg < a.program.regCount) :
+    (a.withOutput reg hreg).program.compile = a.program.compile := rfl
+
+@[simp] theorem withOutput_initialMCC (a : AComputation) (reg : Nat)
+    (hreg : reg < a.program.regCount) :
+    (a.withOutput reg hreg).program.initialMCC a.base =
+      a.program.initialMCC a.base := rfl
+
+/-- A register observation from the same compiled execution.  This is the
+receipt shape needed by chained array programs: it can record accumulator
+carry fields without rerunning or changing the compiled body. -/
+def ObservesReg (a : AComputation) (reg : Nat)
+    (hreg : reg < a.program.regCount) (value : Int) : Prop :=
+  (a.withOutput reg hreg).Returns value
+
 /--
 **The honest run rule.**
 
@@ -103,6 +130,14 @@ theorem value_of_returns (a : AComputation) {n v : Nat}
     (hRun : a.Returns ((v : Nat) : Int)) : v = n :=
   Algorithm.trace_value_unique a.program a.wellFormed a.base a.baseOk n v
     hDenote hRun
+
+/-- Honest-run rule for an observed register, parallel to `value_of_returns`.
+The source denotation with that register selected must still be proved first. -/
+theorem value_of_observesReg (a : AComputation) (reg : Nat)
+    (hreg : reg < a.program.regCount) {n v : Nat}
+    (hDenote : (a.withOutput reg hreg).program.denote = some n)
+    (hRun : a.ObservesReg reg hreg ((v : Nat) : Int)) : v = n :=
+  value_of_returns (a.withOutput reg hreg) hDenote hRun
 
 /--
 **The generated-C leg.**  `AProgram.evalC_compile` for this packaging: any
@@ -121,6 +156,23 @@ theorem targetResult_eq (a : AComputation) (fn : CCIR.Function)
       = some ((n : Nat) : Int) :=
   AProgram.evalC_compile a.program a.wellFormed a.base a.baseOk fn statements
     hFrag hLower t hMRel n hDenote
+
+/-- Generated-C correctness for any observed register of the same trace. -/
+theorem targetRegResult_eq (a : AComputation) (reg : Nat)
+    (hreg : reg < a.program.regCount) (fn : CCIR.Function)
+    (statements : List C.CStmt)
+    (hFrag : ∀ mi ∈ a.program.compile, mi.WellFormed fn)
+    (hLower : lowerMSequence fn a.program.compile = .ok statements)
+    (t : MCState) (hMRel : MRel (a.program.initialMCC a.base) t)
+    (n : Nat)
+    (hDenote : (a.withOutput reg hreg).program.denote = some n) :
+    Option.bind (evalMCSequence t statements)
+        (fun t => t.env (ABI.localName (reg + 1))) = some ((n : Nat) : Int) := by
+  exact targetResult_eq (a.withOutput reg hreg) fn statements
+    (by simpa using hFrag) (by simpa using hLower) t (by
+      change MRel (a.program.initialMCC a.base) t
+      exact hMRel)
+    n hDenote
 
 end AComputation
 
