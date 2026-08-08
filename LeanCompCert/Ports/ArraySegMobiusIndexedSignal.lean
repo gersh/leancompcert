@@ -1058,9 +1058,8 @@ theorem readRes_combinedIndexedRun_main_acc_prefix_inv
     (hnlt : ∀ i, i < fuel → w + i < 2 ^ (64 - k))
     (hbnd : ∀ i, i < fuel →
       (accTrue k (rootFoldValue ps) (w + i)).natAbs ≤ 2 ^ (62 + k))
-    (hcelNext : ∀ i, i < fuel →
-      let before := readRes (combinedIndexedRun idx c k i combined)
-      (celStep (w + i) before.celSq before.cel 1).1 + 1 < 2 ^ 32)
+    (hcelBound :
+      w + fuel < (2 ^ 32 - 2) * (2 ^ 32 - 2))
     (hwPos : 0 < w)
     (h0 : ResInv k (rootFoldValue ps) (w - 1) (readRes combined)) :
     ResInv k (rootFoldValue ps) (w + fuel - 1)
@@ -1072,8 +1071,7 @@ theorem readRes_combinedIndexedRun_main_acc_prefix_inv
       have hprev := ih hnLe (by omega) (by omega)
         (fun i hi => hmarked i (by omega))
         (fun i hi => hnlt i (by omega))
-        (fun i hi => hbnd i (by omega))
-        (fun i hi => hcelNext i (by omega))
+        (fun i hi => hbnd i (by omega)) (by omega)
       let before := combinedIndexedRun idx c k n combined
       have hsig := readSig_combinedIndexedRun_main_acc_eq_rootFoldValue
         c idx k combined core ps n w write hagree hR hW hWrite (by omega)
@@ -1087,6 +1085,12 @@ theorem readRes_combinedIndexedRun_main_acc_prefix_inv
         combined hsig (by omega) hprev.cel.1 hcelHead
       have hmachine := readRes_arun_combined c k len (idx + n) before
         hguards.1 hguards.2
+      have hc :
+          (celStep (w + n) (readRes before).celSq
+            (readRes before).cel 1).1 + 1 < 2 ^ 32 := by
+        rw [hprev.celSq]
+        exact celStep_fst_add_one_lt_of_bound (w + n)
+          (readRes before).cel hprev.celLt (by omega)
       have hnext := ResInv.step k (rootFoldValue ps) (w + n - 1)
         (readRes before) hmu hk hk15 (by
           have := hnlt n (Nat.lt_succ_self n)
@@ -1095,8 +1099,6 @@ theorem readRes_combinedIndexedRun_main_acc_prefix_inv
           have heq : w + n - 1 + 1 = w + n := by omega
           rw [heq]
           exact this) (by
-          have hc := hcelNext n (Nat.lt_succ_self n)
-          dsimp only at hc
           have heq : w + n - 1 + 1 = w + n := by omega
           rw [heq]
           exact hc) hprev
@@ -1147,11 +1149,8 @@ theorem readRes_combinedIndexedRun_main_window_inv
     (hbnd : ∀ i, i < fuel →
       (accTrue k (rootFoldValue (c.firstPrime :: ps))
         (w + i)).natAbs ≤ 2 ^ (62 + k))
-    (hcelNext : ∀ i, i < fuel →
-      let marked := combinedIndexedRun idx c k c.markSteps combined
-      let before := readRes
-        (combinedIndexedRun (idx + c.markSteps) c k i marked)
-      (celStep (w + i) before.celSq before.cel 1).1 + 1 < 2 ^ 32)
+    (hcelBound :
+      w + fuel < (2 ^ 32 - 2) * (2 ^ 32 - 2))
     (hwPos : 0 < w)
     (hw : ResWord (readRes combined))
     (h0 : ResInv k (rootFoldValue (c.firstPrime :: ps)) (w - 1)
@@ -1200,9 +1199,7 @@ theorem readRes_combinedIndexedRun_main_window_inv
     hposition.2.2 hposition.1 (by omega) hmarkedZero hTM hPM (by
       simp only [Cfg.period] at hidxPeriodM
       omega) hspanM hspanPos hwriteM hwM h2LM hwFuelM hA hmarkedCells
-    hmu hk hk15 hnlt hbnd (by
-      intro i hi
-      exact hcelNext i hi) hwPos h0Marked
+    hmu hk hk15 hnlt hbnd hcelBound hwPos h0Marked
   rw [combinedIndexedRun_add]
   exact hacc
 
@@ -1246,14 +1243,8 @@ theorem readRes_combinedWindowRun_main_inv
     (hbnd : ∀ m, w ≤ m → m < w + fuel * c.segLen →
       (accTrue k (rootFoldValue (c.firstPrime :: ps)) m).natAbs ≤
         2 ^ (62 + k))
-    (hcelNext : ∀ q, q < fuel → ∀ i, i < c.segLen →
-      let mid := combinedWindowRun idx c k q combined
-      let marked := combinedIndexedRun (idx + q * c.period) c k
-        c.markSteps mid
-      let before := readRes (combinedIndexedRun
-        (idx + q * c.period + c.markSteps) c k i marked)
-      (celStep (w + q * c.segLen + i) before.celSq before.cel 1).1 + 1 <
-        2 ^ 32)
+    (hcelBound :
+      w + fuel * c.segLen < (2 ^ 32 - 2) * (2 ^ 32 - 2))
     (hregs : ∀ j, combined.regs j < M)
     (harr : ∀ j, combined.arr j < M)
     (hwPos : 0 < w)
@@ -1329,8 +1320,9 @@ theorem readRes_combinedWindowRun_main_inv
         dsimp only [wq]
         have := hq1SegLe
         omega))
-      (fun i hi => by
-        simpa only [midCombined, wq, Nat.add_assoc] using hcelNext q hq i hi)
+      (by
+        dsimp only [wq]
+        omega)
       (by dsimp only [wq]; omega)
       (readRes_combinedWindowRun_word idx c k q combined hregs harr) hqInv
     rw [← Cfg.period] at hone

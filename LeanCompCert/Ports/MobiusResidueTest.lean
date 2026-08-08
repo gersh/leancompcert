@@ -75,6 +75,29 @@ theorem celStep_invariant (n cel : Nat) (h : CeilInv cel n) (hcel : cel + 1 < 2 
     dsimp only
     exact ⟨⟨h1, by omega, by omega⟩, rfl⟩
 
+/-- A source endpoint below `(2^32 - 2)^2` discharges the next ceiling-word
+side condition without inspecting the machine trace.  This is the form used
+by production window inductions: if the recurrence bumps `cel`, then
+`cel^2 ≤ n`; the endpoint bound forces `cel < 2^32 - 2`, leaving room for
+both the bump and the invariant's extra `+1`. -/
+theorem celStep_fst_add_one_lt_of_bound (n cel : Nat)
+    (hcel : cel + 1 < 2 ^ 32)
+    (hn : n < (2 ^ 32 - 2) * (2 ^ 32 - 2)) :
+    (celStep n (cel * cel) cel 1).1 + 1 < 2 ^ 32 := by
+  by_cases hb : cel * cel ≤ n
+  · have hsquare : cel * cel < (2 ^ 32 - 2) * (2 ^ 32 - 2) :=
+      Nat.lt_of_le_of_lt hb hn
+    have hc : cel < 2 ^ 32 - 2 :=
+      Nat.mul_self_lt_mul_self_iff.mp hsquare
+    simp only [celStep, if_pos hb]
+    rw [show (2 : Nat) ^ 32 = 4294967296 by decide] at hc ⊢
+    simp only [M_num]
+    omega
+  · simp only [celStep, if_neg hb]
+    rw [show (2 : Nat) ^ 32 = 4294967296 by decide] at hcel ⊢
+    simp only [M_num]
+    omega
+
 /-! ## (F) the violation counter -/
 
 theorem violStep_spec (k n absV cel gate viol : Nat)
