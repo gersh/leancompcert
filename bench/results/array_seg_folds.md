@@ -1500,3 +1500,16 @@ that table; the second window grows it to 78 entries and returns
 an indexed preservation induction through the first window followed by this
 finite second-window handoff, not an assumption that the first window always
 finds a new prime.
+
+The first half of that composition is now proved:
+`indexedBodyRun_first_root_bootstrap_view` carries the selector guard through
+every actual changing-index body while the processed candidate remains within
+the bootstrap bound.  It reuses the complete indexed table/cell induction and
+the compiled disabled-gate frame lemmas; no fixed-index surrogate is used.
+Direct source elaboration took 0.57 s at 591,712 KiB under the 2 GiB hard cap
+with zero swap; the 63-job target took 0.64 s at 600,932 KiB.  The expanded
+712-declaration audit passed in 0.65 s at 1,616,700 KiB under 4 GiB, and the
+443-job full build passed in 2.13 s at 1,722,436 KiB under 8 GiB, all with zero
+swap.  The next step is the mixed second-window prefix through the first
+collected prime, after which `RootTableInv` alone reconstructs the selector
+view.

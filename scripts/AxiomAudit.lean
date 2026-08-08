@@ -584,6 +584,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv.BootstrapTableView.next_rootTableStep
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv.BootstrapTableView.one_retain
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv.BootstrapTableView.bootstrap_retain
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv.indexedBodyRun_first_root_bootstrap_view
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_bits
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_eq_muSig_decodedValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootCellFold_cellRepresents
