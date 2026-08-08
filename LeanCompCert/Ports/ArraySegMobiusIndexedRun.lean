@@ -68,6 +68,18 @@ theorem indexedBodyRun_add (idx : Nat) (c : Cfg) (a b : Nat)
       have heq : idx + (a + b) = idx + a + b := by omega
       rw [heq]
 
+/-- The production body never writes the distinguished zero register, at
+changing indices as well as fixed ones. -/
+theorem indexedBodyRun_rZero (idx : Nat) (c : Cfg) (fuel : Nat)
+    (s : AState) (hzero : s.regs rZero = 0) :
+    (indexedBodyRun idx c fuel s).regs rZero = 0 := by
+  induction fuel with
+  | zero => exact hzero
+  | succ k ih =>
+      rw [indexedBodyRun_succ,
+        arun_reg_frame (idx + k) rZero c.coreBody _ (by rfl)]
+      exact ih
+
 /-- The verified mark counter/window position theorem with the true changing
 production index. -/
 theorem indexedBodyRun_mark_position (c : Cfg) (idx fuel : Nat)
@@ -348,6 +360,146 @@ theorem indexedBodyRun_simulates_root_from_start (c : Cfg)
     hsegSuccM hwSegM hA hi
   rw [indexedBodyRun_succ_start]
   exact hsim.trans (by rw [hstartEq])
+
+/-- The same changing-index root marking run frames the complete growing
+prime table, even though its selector traverses only the bootstrap prefix. -/
+theorem indexedBodyRun_root_mark_preserves_full_table (c : Cfg)
+    (idx fuel : Nat) (s : AState) (full boot : List Nat)
+    (guard bound w i : Nat)
+    (hFull : MachineTableRep c s full)
+    (hfullLen : full.length ≤ c.tableLen)
+    (hRep : LimitTableRep c s boot guard)
+    (hInv : PrimeTableInv boot bound)
+    (hbootLen : boot.length = c.bootCount)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hfuel : fuel + 1 ≤ c.markSteps)
+    (hrootMark : idx + (fuel + 1) ≤ c.rootSpan - 1)
+    (hbootPos : 0 < c.bootCount)
+    (hbootLe : c.bootCount ≤ c.tableLen)
+    (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hwriteM : s.regs rWrite < M)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwSegM : w + c.segLen < M)
+    (hnStartM : w + firstOffset w c.firstPrime < M)
+    (hA : c.arrayLen < M) (hi : i < c.segLen) :
+    MachineTableRep c (indexedBodyRun idx c (fuel + 1) s) full ∧
+      LimitTableRep c (indexedBodyRun idx c (fuel + 1) s) boot guard := by
+  let first := arun idx s c.coreBody
+  have hTPos : 0 < c.markSteps := by omega
+  have hLPos : 0 < c.segLen := by omega
+  have hp1M : c.firstPrime < M := Nat.lt_of_le_of_lt hp1LeBound hboundM
+  have hp1SqM : c.firstPrime * c.firstPrime < M :=
+    Nat.lt_of_le_of_lt (Nat.mul_le_mul hp1LeBound hp1LeBound) hboundSqM
+  have hsegSuccM : c.segLen + 1 < M := by omega
+  have hwM : w < M := by omega
+  have hidxRoot : idx < c.rootSpan := by omega
+  have hidxM : idx < M := by omega
+  have hFullFirst : MachineTableRep c first full := by
+    dsimp only [first]
+    exact arun_coreBody_mark_preserves_tableRep_start c idx s full hFull
+      hfullLen hR hTPos hTM hPM hidxM hspanM (by omega) hLPos hp1Pos
+      hp1LeL hp1M hp1SqM (by rw [hW]; exact hnStartM)
+      (by rw [hW]; exact hwM) hA
+  have hRepFirst : LimitTableRep c first boot guard :=
+    arun_coreBody_mark_preserves_limitTableRep_start c idx s boot guard
+      c.bootCount hRep hbootLen hR hTPos hTM hp1Pos hp1LeL hp1M hp1SqM
+      (by rw [hW]; exact hnStartM) hA hbootLe
+  have hstartPair := arun_coreBody_simulates_start c idx s w c.bootCount
+    hR hW
+    (selectorBlock_limit_root c idx s hidxRoot hidxM hspanM hbootLe
+      htableLenM).1
+    hbootLe (by omega) hTPos hTM hp1Pos hp1LeL hp1M hp1SqM hnStartM
+    hA i hi
+  have hstartEq : machineScheduleState c i first =
+      scheduleStart c.segLen w c.firstPrime i (machineCell c s i) :=
+    ScheduleState.ext hstartPair.1 hstartPair.2
+  have hcursorFirst : CursorMainReady c.segLen w c.bootCount bound
+      (machineScheduleState c i first).cursor := by
+    rw [hstartEq]
+    exact scheduleStart_cursor_ready c.segLen w c.bootCount bound
+      c.firstPrime i (machineCell c s i) hbootPos hp1Pos hp1LeL
+      hp1LeBound hboundM hsegBoundM
+  have hposition (n : Nat) (hn : n ≤ fuel + 1) :
+      (indexedBodyRun idx c n s).regs rWrite = s.regs rWrite ∧
+        (indexedBodyRun idx c n s).regs rR = n ∧
+        (indexedBodyRun idx c n s).regs rW = w :=
+    indexedBodyRun_mark_position c idx n s w (s.regs rWrite) (by omega)
+      hR hW rfl hLPos hTM hPM (by omega) hspanM
+      (fun k hk => by omega) hwriteM hwM
+  have hpositionFirst (k : Nat) (hk : k ≤ fuel) :
+      (indexedBodyRun (idx + 1) c k first).regs rWrite = s.regs rWrite ∧
+        (indexedBodyRun (idx + 1) c k first).regs rR = k + 1 ∧
+        (indexedBodyRun (idx + 1) c k first).regs rW = w := by
+    have hp := hposition (k + 1) (by omega)
+    rw [indexedBodyRun_succ_start] at hp
+    simpa [first, Nat.add_comm] using hp
+  let table := fun q => first.arr (c.primeBase + q)
+  have htablePrime : ∀ q, q < c.bootCount →
+      0 < table q ∧ table q ≤ bound := by
+    intro q hq
+    exact hRepFirst.cell_prime_bounds hInv (by rwa [hbootLen])
+  have hguard : 0 < table c.bootCount ∧ table c.bootCount < M := by
+    have heq : table c.bootCount = guard := by
+      dsimp only [table]
+      simpa [hbootLen] using hRepFirst.guard_eq
+    rw [heq]
+    exact ⟨hRepFirst.guard_pos, hRepFirst.guard_lt_modulus⟩
+  have hready : ∀ k, k < fuel →
+      LimitNonstartReady c (indexedBodyRun (idx + 1) c k first)
+        c.bootCount bound w := by
+    intro k hk
+    have hsim := indexedBodyRun_simulates_limit_nonstart_of_cursor c
+      (idx + 1) k first boot guard bound w c.bootCount i hRepFirst hInv
+      hbootLen hcursorFirst
+      (fun n hn => by rw [(hpositionFirst n (by omega)).2.1]; omega)
+      (fun n hn => by rw [(hpositionFirst n (by omega)).2.1]; omega)
+      (fun n hn => (hpositionFirst n (by omega)).2.2)
+      (fun n hn =>
+        (selectorBlock_limit_root c (idx + 1 + n)
+          (indexedBodyRun (idx + 1) c n first) (by omega) (by omega)
+          hspanM hbootLe htableLenM).1)
+      hbootLe (by omega) hTM hp1Pos hp1M hboundM hboundSqM
+      hsegBoundM hsegSuccM hwSegM hA hi
+    have hmodelReady := scheduleRun_cursor_main_ready k c.segLen w
+      c.bootCount bound i table (machineScheduleState c i first)
+      hcursorFirst htablePrime hguard hboundM hsegBoundM hsegSuccM
+    have hmachineCursor : CursorMainReady c.segLen w c.bootCount bound
+        (machineCursor (indexedBodyRun (idx + 1) c k first)) := by
+      change CursorMainReady c.segLen w c.bootCount bound
+        (machineScheduleState c i
+          (indexedBodyRun (idx + 1) c k first)).cursor
+      rw [hsim]
+      exact hmodelReady
+    exact LimitNonstartReady.of_cursor c
+      (indexedBodyRun (idx + 1) c k first) c.bootCount bound w
+      hmachineCursor (by rw [(hpositionFirst k (by omega)).2.1]; omega)
+      (hpositionFirst k (by omega)).2.2 hboundSqM hsegBoundM hwSegM
+  have hrest := indexedBodyRun_mark_preserves_tableRep_nonstart c
+    (idx + 1) fuel first full c.bootCount bound w hFullFirst hfullLen
+    hready (fun k hk => by rw [(hpositionFirst k (by omega)).2.1]; omega)
+    hbootLe htableLenM hTM hPM (by omega) hspanM
+    (fun k hk => by omega) hLPos hp1Pos hp1M hwM hA
+  have hlimitGo : ∀ n, n ≤ fuel → LimitTableRep c
+      (indexedBodyRun (idx + 1) c n first) boot guard := by
+    intro n hn
+    induction n with
+    | zero => simpa using hRepFirst
+    | succ k ih =>
+        rw [indexedBodyRun_succ]
+        exact arun_coreBody_mark_preserves_limitTableRep_nonstart c
+          (idx + 1 + k) (indexedBodyRun (idx + 1) c k first) boot guard
+          c.bootCount bound w (ih (by omega)) hbootLen
+          (hready k (by omega))
+          (by rw [(hpositionFirst k (by omega)).2.1]; omega) hbootLe
+          (by omega) hTM hp1Pos hp1M hA
+  have hlimitRest := hlimitGo fuel (Nat.le_refl _)
+  rw [indexedBodyRun_succ_start]
+  exact ⟨hrest, hlimitRest⟩
 
 /-- Complete indexed root marking computes the finite bootstrap fold. -/
 theorem indexedBodyRun_root_cell_eq_rootCellFoldFrom

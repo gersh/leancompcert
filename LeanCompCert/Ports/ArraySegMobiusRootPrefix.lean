@@ -310,6 +310,27 @@ theorem rootScanFrom_succ (ps : List Nat) (w fuel : Nat) :
     rootScanFrom ps w (fuel + 1) =
       rootTableStep (rootScanFrom ps w fuel) (w + fuel) := rfl
 
+/-- A sequential table update preserves every existing list prefix. -/
+theorem rootTableStep_has_prefix {boot ps : List Nat} {n : Nat}
+    (hPrefix : ∃ tail, ps = boot ++ tail) :
+    ∃ tail, rootTableStep ps n = boot ++ tail := by
+  obtain ⟨tail, rfl⟩ := hPrefix
+  unfold rootTableStep
+  split
+  · refine ⟨tail ++ [n], ?_⟩
+    simp [List.append_assoc]
+  · exact ⟨tail, rfl⟩
+
+/-- Sequential root scanning never loses an existing table prefix. -/
+theorem rootScanFrom_has_prefix {boot ps : List Nat}
+    (hps : ∃ tail, ps = boot ++ tail) (w fuel : Nat) :
+    ∃ tail, rootScanFrom ps w fuel = boot ++ tail := by
+  induction fuel with
+  | zero => simpa using hps
+  | succ k ih =>
+      rw [rootScanFrom_succ]
+      exact rootTableStep_has_prefix ih
+
 /-- Induction state for a later root window whose candidates all follow the
 bootstrap bound and therefore use sequential `rootTableStep`. -/
 structure LaterRootPrefixInv (c : Cfg) (s : AState)

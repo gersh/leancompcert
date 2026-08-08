@@ -66,18 +66,6 @@ theorem BootstrapTableView.of_rootTable_append_cons
     exact Nat.lt_of_lt_of_le (by have := hp.two_le; omega) (Nat.le_refl q)
   · exact Nat.lt_of_le_of_lt (hInv.primeTable.upper q (by simp)) hboundM
 
-/-- Every finite sequential table update preserves an existing list prefix.
-The returned suffix is explicit so the lemma composes through a finite scan. -/
-theorem rootTableStep_has_prefix {boot ps : List Nat} {n : Nat}
-    (hPrefix : ∃ tail, ps = boot ++ tail) :
-    ∃ tail, rootTableStep ps n = boot ++ tail := by
-  obtain ⟨tail, rfl⟩ := hPrefix
-  unfold rootTableStep
-  split
-  · refine ⟨tail ++ [n], ?_⟩
-    simp [List.append_assoc]
-  · exact ⟨tail, rfl⟩
-
 /-- Runnable check that a growing table has acquired at least one cell beyond
 the fixed bootstrap prefix. -/
 def bootstrapExtendedBool (boot ps : List Nat) : Bool :=
@@ -400,5 +388,95 @@ theorem indexedBodyRun_first_root_bootstrap_view
           (k + 1) hkView hprevInv hOut (Nat.le_of_lt hlen) hprevR
           hprevW hprevWrite hT hiEq (by omega) hcurRoot hRM hTM hcurM
           hspanM hkSeg hwM hwriteM hA (by omega) (by omega) hprevCell
+
+/-- Every sequential later-root prefix preserves the selector-facing
+bootstrap guard while the complete table continues to grow after it. -/
+theorem indexedBodyRun_later_root_bootstrap_view
+    (c : Cfg) (idx fuel : Nat) (s : AState)
+    (boot ps : List Nat) (bootBound w : Nat)
+    (hView : BootstrapTableView c s boot)
+    (hps : ∃ tail, ps = boot ++ tail)
+    (hInv : RootTableInv c s ps (w - 1))
+    (hBoot : PrimeTableInv boot bootBound)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen →
+      machineCell c s j = rootCellFold boot (w + j))
+    (hfuel : fuel ≤ c.segLen)
+    (hidxRange : idx + fuel ≤ c.rootSpan - 1)
+    (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < w)
+    (hfuelCap : w + fuel - 1 ≤ c.rootCap)
+    (hcover : w + fuel - 1 < (bootBound + 1) * (bootBound + 1))
+    (hfit : ∀ k, k < fuel →
+      (rootScanFrom ps w k).length < c.tableLen)
+    (hbootLen : boot.length ≤ c.tableLen)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hspanM : c.rootSpan < M)
+    (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M) :
+    BootstrapTableView c (indexedBodyRun idx c fuel s) boot := by
+  set_option maxRecDepth 10000 in
+   induction fuel with
+  | zero => simpa using hView
+  | succ k ih =>
+      have hkSeg : k < c.segLen := by omega
+      have hkView : BootstrapTableView c
+          (indexedBodyRun idx c k s) boot :=
+        ih (by omega) (by omega) (by omega) (by omega)
+          (fun n hn => hfit n (by omega))
+      have hkPrefix := indexedBodyRun_later_root_acc_prefix c idx k s
+        boot ps bootBound w hInv hBoot hR hW hzero hcells hkSeg
+        (by omega) hboot2 hbootLt (by omega) (by omega)
+        (fun n hn => hfit n (by omega)) hTM hPM hspanM hcapM hA
+      let prev := indexedBodyRun idx c k s
+      let curIdx := idx + k
+      let cur := rootScanFrom ps w k
+      let n := w + k
+      have hcurRoot : curIdx < c.rootSpan := by dsimp [curIdx]; omega
+      have hcurM : curIdx < M := by dsimp [curIdx]; omega
+      have hprevInv : RootTableInv c prev cur (n - 1) := by
+        simpa only [cur, n] using hkPrefix.table
+      have hprevR : prev.regs rR = c.markSteps + k := hkPrefix.position
+      have hprevW : prev.regs rW = w := hkPrefix.base
+      have hprevWrite : prev.regs rWrite = c.primeBase + cur.length :=
+        hprevInv.cursor
+      have hprevCell : machineCell c prev k = rootCellFold boot n := by
+        simpa only [prev, n] using
+          hkPrefix.pending k (Nat.le_refl _) hkSeg
+      have hT : c.markSteps ≤ prev.regs rR := by rw [hprevR]; omega
+      have hiEq : (c.markSteps + k) - c.markSteps = k := by omega
+      have hnext : n = (n - 1) + 1 := by dsimp [n]; omega
+      have hRM : c.markSteps + k < M := by
+        have : c.markSteps + k < c.period := by
+          simp only [Cfg.period]
+          omega
+        omega
+      have hnM : n < M := by dsimp [n]; omega
+      have hcurFit : cur.length < c.tableLen := hfit k (by omega)
+      have hwriteM : c.primeBase + cur.length < M := by
+        have : c.primeBase + cur.length < c.arrayLen := by
+          simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase,
+            Cfg.tableLen] at hcurFit ⊢
+          omega
+        omega
+      have hc := arun_coreBody_root_acc_next_table_cells c curIdx prev
+        boot cur (n - 1) (c.markSteps + k) w
+        (c.primeBase + cur.length) k n hprevInv hcurFit hprevR hprevW
+        hprevWrite hT hiEq rfl hnext hcurRoot hRM hTM hcurM hspanM
+        hkSeg hnM (by dsimp [n]; omega) (by dsimp [n]; omega) hcapM hA
+        hkPrefix.zero hprevCell bootBound hBoot (by dsimp [n]; omega)
+        (by dsimp [n]; omega)
+      have hcurPrefix : ∃ tail, cur = boot ++ tail := by
+        dsimp only [cur]
+        exact rootScanFrom_has_prefix hps w k
+      rw [indexedBodyRun_succ]
+      exact BootstrapTableView.next_rootTableStep c curIdx prev boot cur
+        n n (c.markSteps + k) w (c.primeBase + cur.length) k hkView
+        hcurPrefix hc.1 hnM hbootLen hprevR hprevW hprevWrite hT hiEq
+        hcurRoot hRM hTM hcurM hspanM hkSeg hnM hwriteM hA
+        hc.2.2.2.1
 
 end LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv

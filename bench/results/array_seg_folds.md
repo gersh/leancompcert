@@ -1513,3 +1513,37 @@ with zero swap; the 63-job target took 0.64 s at 600,932 KiB.  The expanded
 swap.  The next step is the mixed second-window prefix through the first
 collected prime, after which `RootTableInv` alone reconstructs the selector
 view.
+
+`ArraySegMobiusIndexedRootMixed` now closes that mixed-window seam generally,
+not only for the measured candidate 307.  Its transparent `rootScanMixed`
+retains candidates covered by the bootstrap table and then applies the same
+finite `rootTableStep` used by later windows.  The changing-index prefix
+theorem carries `RootTableInv`, the selector guard, cleared/pending cells, and
+all production cursors through both regimes.  The complete endpoint proves
+the real nonfinal wrap and retains the guard for the following marking phase.
+Direct source elaboration passed in 1.93 s at 694,920 KiB under the 2 GiB hard
+cap; the 64-job target took 2.33 s at 751,892 KiB.  The expanded
+718-declaration audit passed in 0.61 s at 1,614,272 KiB under 4 GiB, and the
+444-job full build passed in 2.74 s at 1,723,492 KiB under 8 GiB.  Every run
+used one job and zero swap.
+
+`ArraySegMobiusIndexedRootWindows` now composes marking and accumulation for
+each production root-window regime.  The bootstrap-only first window retains
+the preloaded table, the mixed second window extends it with `rootScanMixed`,
+ordinary later windows extend it with `rootScanFrom`, and the final window
+uses the verified transition at `rootSpan - 1` to retarget `rW` into the main
+range.  Marking preserves both the complete growing `MachineTableRep` and the
+fixed `LimitTableRep`; the new finite later-window induction proves that every
+sequential `rootTableStep` also preserves the selector-facing
+`BootstrapTableView`.  Thus every following mark reads the same proved
+bootstrap prefix and guard while accumulation continues to grow the complete
+prime table.
+
+The complete 65-job window target passed in 1.14 s at 674,144 KiB under the
+2 GiB hard cap.  The expanded 729-declaration strict audit passed in 0.61 s
+at 1,621,272 KiB under 4 GiB with no non-allowlisted dependency.  The full
+447-job repository build passed in 2.84 s at 1,734,500 KiB under 8 GiB.  All
+runs used one Lake job, disabled swap, and completed without approaching the
+hard limit.  The existing transparent production-shape guard benchmark still
+exercises the finite bootstrap/mixed table computations; these theorems add
+the compiled state-transition proof around the same runnable folds.
