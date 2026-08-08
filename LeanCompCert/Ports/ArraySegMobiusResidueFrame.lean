@@ -28,7 +28,7 @@ open LeanCompCert.Ports.MobiusResidueRealisation
 
 /-- Registers outside the residue's private register ranges. -/
 def CoreReg (j : Nat) : Bool :=
-  decide (¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 171)))
+  decide (¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 191)))
 
 /-- Two states agree on the complete sieve-facing projection. -/
 def CoreAgree (s t : AState) : Prop :=
@@ -174,7 +174,7 @@ theorem arun_coreBody_congr (c : Cfg) (idx : Nat) {s t : AState}
 
 private theorem residue_avoids_core (k j : Nat) (hj : CoreReg j = true) :
     (mobiusLiveResidue k).all (avoidsReg j) = true := by
-  have hw : ¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 171)) :=
+  have hw : ¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 191)) :=
     of_decide_eq_true hj
   have h100 : j < 100 ∨ 104 < j := by
     by_cases h : j < 100
@@ -182,12 +182,12 @@ private theorem residue_avoids_core (k j : Nat) (hj : CoreReg j = true) :
     · refine Or.inr (Nat.lt_of_not_ge ?_)
       intro hj104
       exact hw (Or.inl ⟨Nat.le_of_not_gt h, hj104⟩)
-  have h150 : j < 150 ∨ 171 < j := by
+  have h150 : j < 150 ∨ 191 < j := by
     by_cases h : j < 150
     · exact Or.inl h
     · refine Or.inr (Nat.lt_of_not_ge ?_)
-      intro hj171
-      exact hw (Or.inr ⟨Nat.le_of_not_gt h, hj171⟩)
+      intro hj191
+      exact hw (Or.inr ⟨Nat.le_of_not_gt h, hj191⟩)
   simp [mobiusLiveResidue, avoidsReg, rTLo, rTHi, rCeil, rCeilSq, rMViol]
   rcases h100 with h100 | h100 <;>
     rcases h150 with h150 | h150 <;> omega
@@ -234,7 +234,7 @@ theorem foldl_combined_core (c : Cfg) (k fuel : Nat) {s t : AState}
 private theorem liveInit_avoids_core (seed : MobLiveSeed) (j : Nat)
     (hj : CoreReg j = true) :
     (mobiusLiveInit seed).all (avoidsReg j) = true := by
-  have hw : ¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 171)) :=
+  have hw : ¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 191)) :=
     of_decide_eq_true hj
   have h100 : j < 100 ∨ 104 < j := by
     by_cases h : j < 100
