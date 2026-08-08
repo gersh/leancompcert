@@ -16,6 +16,7 @@ open LeanCompCert
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusSignal
 open LeanCompCert.Ports.ArraySegMobiusSquaredSound
@@ -59,6 +60,66 @@ private theorem blockE_arun (len idx : Nat) (s : AState) :
   obtain ⟨out, hout⟩ := blkE_ok len idx s
   have heq := eq_arun_of_denoteAInstrs_eq_some len idx blkE s out hout
   simpa only [heq] using hout
+
+private theorem denoteAInstrs_append_intro (len idx : Nat) (s sm out : AState)
+    (xs ys : List AInstr)
+    (hx : denoteAInstrs len idx s xs = some sm)
+    (hy : denoteAInstrs len idx sm ys = some out) :
+    denoteAInstrs len idx s (xs ++ ys) = some out := by
+  rw [denoteAInstrs_append, hx]
+  exact hy
+
+set_option maxRecDepth 100000 in
+/-- The complete squared residue has a successful partial denotation whenever
+its candidate register is nonzero.  This is the source-definedness theorem
+needed by whole-program compiler certificates: the unchanged prefix contains
+the only divisions, all by register `65`, while the squared suffix is a
+division-free scalar block and therefore cannot fail or access the array. -/
+theorem mobiusLiveSquaredResidue_denote_arun (k len idx : Nat) (s : AState)
+    (hn : s.regs 65 ≠ 0) :
+    denoteAInstrs len idx s (mobiusLiveSquaredResidue k) =
+      some (arun idx s (mobiusLiveSquaredResidue k)) := by
+  let sA := arun idx s (blkA k)
+  let sB := arun idx sA blkB
+  let sC := arun idx sB (blkC k)
+  let sD := arun idx sC blkD
+  let sE := arun idx sD blkE
+  have hA := blockA_arun k len idx s hn
+  have hB := blockB_arun len idx sA
+  have hC := blockC_arun k len idx sB
+  have hD := blockD_arun len idx sC
+  have hE := blockE_arun len idx sD
+  have hDE : denoteAInstrs len idx sC (blkD ++ blkE) = some sE :=
+    denoteAInstrs_append_intro len idx sC sD sE blkD blkE hD hE
+  have hCDE : denoteAInstrs len idx sB
+      (blkC k ++ (blkD ++ blkE)) = some sE :=
+    denoteAInstrs_append_intro len idx sB sC sE (blkC k)
+      (blkD ++ blkE) hC hDE
+  have hBCDE : denoteAInstrs len idx sA
+      (blkB ++ (blkC k ++ (blkD ++ blkE))) = some sE :=
+    denoteAInstrs_append_intro len idx sA sB sE blkB
+      (blkC k ++ (blkD ++ blkE)) hB hCDE
+  have hprefix :
+      denoteAInstrs len idx s (squaredPrefix k) = some sE := by
+    rw [squaredPrefix]
+    exact denoteAInstrs_append_intro len idx s sA sE (blkA k)
+      (blkB ++ (blkC k ++ (blkD ++ blkE))) hA hBCDE
+  have hprefixArun : arun idx s (squaredPrefix k) = sE := by
+    simp only [squaredPrefix, arun_append]
+    rfl
+  have htestDef : AllDefined len idx sE (mobiusSquaredTestBody k) := by
+    rw [test_lift]
+    exact allDefined_lift_of_noDiv len idx (testG k) sE (by rfl)
+  have htest : denoteAInstrs len idx sE (mobiusSquaredTestBody k) =
+      some (arun idx sE (mobiusSquaredTestBody k)) :=
+    denoteAInstrs_eq_arun len idx (mobiusSquaredTestBody k) sE htestDef
+  have hrun : arun idx s (mobiusLiveSquaredResidue k) =
+      arun idx sE (mobiusSquaredTestBody k) := by
+    rw [mobiusLiveSquaredResidue_eq_prefix, arun_append, hprefixArun]
+  rw [hrun, mobiusLiveSquaredResidue_eq_prefix]
+  exact denoteAInstrs_append_intro len idx s sE
+    (arun idx sE (mobiusSquaredTestBody k)) (squaredPrefix k)
+    (mobiusSquaredTestBody k) hprefix htest
 
 /-- The unchanged prefix exposes exactly the inputs and persistent outputs
 needed by the squared suffix. -/

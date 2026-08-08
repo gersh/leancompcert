@@ -35,6 +35,59 @@ theorem bootInitFrom_cons (c : Cfg) (v : Nat) (xs : List Nat) (n : Nat) :
       , AInstr.store 90 91 ] ++ bootInitFrom c xs (n + 1) := by
   simp [bootInitFrom, List.zipIdx_cons]
 
+/-- One literal initializer triple is defined when its selected cell is in
+bounds.  The separate word bound identifies the literal address before the
+array-machine check; production configurations obtain it from
+`arrayLen < M`. -/
+theorem denote_initTriple_eq_arun (c : Cfg) (len idx : Nat) (s : AState)
+    (n v : Nat) (haddr : c.primeBase + n < len)
+    (haddrM : c.primeBase + n < M) :
+    denoteAInstrs len idx s
+      [ AInstr.scalar (.mov 90 (.lit (c.primeBase + n)))
+      , AInstr.scalar (.mov 91 (.lit v))
+      , AInstr.store 90 91 ] =
+      some (arun idx s
+        [ AInstr.scalar (.mov 90 (.lit (c.primeBase + n)))
+        , AInstr.scalar (.mov 91 (.lit v))
+        , AInstr.store 90 91 ]) := by
+  apply denoteAInstrs_eq_arun
+  simp [AllDefined, ADefined, astep,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, AState.writeReg,
+    Nat.mod_eq_of_lt haddrM, haddr]
+
+/-- The recursive bootstrap-table writer has a successful source denotation
+whenever its complete destination interval fits in the declared array. -/
+theorem denote_bootInitFrom_eq_arun (c : Cfg) (len idx : Nat) (s : AState)
+    (xs : List Nat) (n : Nat)
+    (hfit : c.primeBase + n + xs.length ≤ len)
+    (hlenM : len < M) :
+    denoteAInstrs len idx s (bootInitFrom c xs n) =
+      some (arun idx s (bootInitFrom c xs n)) := by
+  induction xs generalizing n s with
+  | nil => rfl
+  | cons v xs ih =>
+      let triple : List AInstr :=
+        [ AInstr.scalar (.mov 90 (.lit (c.primeBase + n)))
+        , AInstr.scalar (.mov 91 (.lit v))
+        , AInstr.store 90 91 ]
+      let mid := arun idx s triple
+      have haddr : c.primeBase + n < len := by
+        simp only [List.length_cons] at hfit
+        omega
+      have haddrM : c.primeBase + n < M := Nat.lt_trans haddr hlenM
+      have htriple : denoteAInstrs len idx s triple = some mid := by
+        exact denote_initTriple_eq_arun c len idx s n v haddr haddrM
+      have htailFit : c.primeBase + (n + 1) + xs.length ≤ len := by
+        simp only [List.length_cons] at hfit
+        omega
+      have htail := ih (s := mid) (n := n + 1) htailFit
+      rw [bootInitFrom_cons, denoteAInstrs_append, htriple]
+      change denoteAInstrs len idx mid (bootInitFrom c xs (n + 1)) =
+        some (arun idx s (triple ++ bootInitFrom c xs (n + 1)))
+      rw [arun_append]
+      exact htail
+
 /-- One literal initializer triple writes its selected cell and frames every
 other cell. -/
 theorem arun_initTriple (c : Cfg) (idx : Nat) (s : AState) (n v : Nat)
@@ -123,6 +176,53 @@ def initTail (c : Cfg) : List AInstr :=
 theorem coreInit_eq_boot_tail (c : Cfg) :
     c.coreInit = bootInit c ++ initTail c := by
   rfl
+
+/-- The fixed initializer tail is defined in the production array layout. -/
+theorem denote_initTail_eq_arun (c : Cfg) (idx : Nat) (s : AState)
+    (harrayM : c.arrayLen < M) :
+    denoteAInstrs c.arrayLen idx s (initTail c) =
+      some (arun idx s (initTail c)) := by
+  have haddr : c.primeBase + c.tableLen < c.arrayLen := by
+    simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+    calc
+      3 * c.segLen + 1 + c.tableLen =
+          (3 * c.segLen + c.tableLen) + 1 := by omega
+      _ < (3 * c.segLen + c.tableLen) + 18 := by omega
+      _ = 3 * c.segLen + c.tableLen + 2 + 16 := by omega
+  have haddrM : c.primeBase + c.tableLen < M :=
+    Nat.lt_trans haddr harrayM
+  apply denoteAInstrs_eq_arun
+  simp [initTail, AllDefined, ADefined, astep,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, AState.writeReg,
+    Nat.mod_eq_of_lt haddrM, haddr]
+
+/-- The complete production core initializer has a successful source
+denotation.  Its only partial operations are the literal table stores, whose
+fit follows from the schedule's bootstrap/table-length guard. -/
+theorem denote_coreInit_eq_arun (c : Cfg) (idx : Nat) (s : AState)
+    (hbootLe : c.bootCount ≤ c.tableLen)
+    (harrayM : c.arrayLen < M) :
+    denoteAInstrs c.arrayLen idx s c.coreInit =
+      some (arun idx s c.coreInit) := by
+  have hfit : c.primeBase + 0 + c.bootTable.length ≤ c.arrayLen := by
+    have hlen : c.bootTable.length = c.bootCount + 1 := by
+      simp [Cfg.bootTable, Cfg.bootCount]
+    rw [hlen]
+    simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+    omega
+  have hboot := denote_bootInitFrom_eq_arun c c.arrayLen idx s
+    c.bootTable 0 hfit harrayM
+  have hboot' : denoteAInstrs c.arrayLen idx s (bootInit c) =
+      some (arun idx s (bootInit c)) := by
+    simpa only [bootInit] using hboot
+  let mid := arun idx s (bootInit c)
+  have htail := denote_initTail_eq_arun c idx mid harrayM
+  rw [coreInit_eq_boot_tail, denoteAInstrs_append, hboot']
+  change denoteAInstrs c.arrayLen idx mid (initTail c) =
+    some (arun idx s (bootInit c ++ initTail c))
+  rw [arun_append]
+  exact htail
 
 /-- The production initializer writes a positive guard at the exact selected
 main-table limit and opens both persistent cursors at their intended values. -/

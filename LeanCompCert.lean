@@ -110,6 +110,7 @@ import LeanCompCert.Ports.ArraySegMobiusCandidateBound
 import LeanCompCert.Ports.ArraySegMobiusProductionBounds
 import LeanCompCert.Ports.ArraySegMobiusSquaredSignal
 import LeanCompCert.Ports.ArraySegMobiusSquaredSeed
+import LeanCompCert.Ports.ArraySegMobiusSquaredDenote
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Ports.BlockedFold
 import LeanCompCert.Ports.RS62LadderEncoding

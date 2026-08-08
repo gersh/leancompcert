@@ -146,6 +146,46 @@ theorem astep_core_congr {S : Nat → Bool} {s t : AState} (h : CoreAgree s t)
       · intro j hj
         exact h.2 j hj
 
+/-- Definedness of a core-only instruction depends only on the sieve-facing
+projection.  This covers both dynamic divisors and dynamic array addresses;
+it is the partial-semantics analogue of `astep_core_congr`. -/
+theorem aDefined_core_congr {S : Nat → Bool} {s t : AState}
+    (h : CoreAgree s t) {a : AInstr} (ha : AInstrIn S a = true)
+    (hS : ∀ j, S j = true → CoreReg j = true) (len idx : Nat) :
+    ADefined len idx s a ↔ ADefined len idx t a := by
+  cases a with
+  | scalar i =>
+      cases i with
+      | mov d src => rfl
+      | binop d op lhs rhs =>
+          simp only [AInstrIn, Bool.and_eq_true] at ha
+          simp only [ADefined]
+          rw [operand_eq h ha.1.2 hS idx, operand_eq h ha.2 hS idx]
+  | load d ir =>
+      simp only [AInstrIn, Bool.and_eq_true] at ha
+      simp only [ADefined, h.2 ir (hS ir ha.2)]
+  | store ir sr =>
+      simp only [AInstrIn, Bool.and_eq_true] at ha
+      simp only [ADefined, h.2 ir (hS ir ha.1)]
+
+/-- Whole-block definedness transfers across core agreement, instruction by
+instruction at the corresponding total states. -/
+theorem allDefined_core_congr (S : Nat → Bool) (len idx : Nat) :
+    ∀ (l : List AInstr), l.all (AInstrIn S) = true →
+      (∀ j, S j = true → CoreReg j = true) →
+      ∀ (s t : AState), CoreAgree s t →
+        (AllDefined len idx s l ↔ AllDefined len idx t l) := by
+  intro l
+  induction l with
+  | nil => intro _ _ s t h; exact Iff.rfl
+  | cons a rest ih =>
+      intro hall hS s t h
+      simp only [List.all_cons, Bool.and_eq_true] at hall
+      simp only [AllDefined]
+      rw [aDefined_core_congr h hall.1 hS len idx]
+      exact and_congr Iff.rfl
+        (ih hall.2 hS _ _ (astep_core_congr h hall.1 hS idx))
+
 /-- A core-only straight-line block preserves core agreement. -/
 theorem arun_core_congr (S : Nat → Bool) (idx : Nat) :
     ∀ (l : List AInstr), l.all (AInstrIn S) = true →
@@ -164,6 +204,14 @@ theorem arun_core_congr (S : Nat → Bool) (idx : Nat) :
 theorem coreBody_in_core (c : Cfg) :
     c.coreBody.all (AInstrIn CoreReg) = true := by
   rfl
+
+/-- Partial source safety of the literal core can therefore be proved on the
+standalone indexed sieve trace and reused unchanged by any framed residue. -/
+theorem allDefined_coreBody_congr (c : Cfg) (len idx : Nat) {s t : AState}
+    (h : CoreAgree s t) :
+    AllDefined len idx s c.coreBody ↔ AllDefined len idx t c.coreBody :=
+  allDefined_core_congr CoreReg len idx c.coreBody (coreBody_in_core c)
+    (fun _ h => h) s t h
 
 /-- Consequently the production core respects the sieve-facing projection. -/
 theorem arun_coreBody_congr (c : Cfg) (idx : Nat) {s t : AState}
