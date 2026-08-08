@@ -63,7 +63,24 @@ theorem step (p00 p01 p10 p11 : Nat)
     ∧ (p00 + (((p01 + p10) % B64) * B32) % B64) % B64 < B64 := by
   simp only [B32, B64] at h00 h01 h10 ⊢
   constructor
-  · split <;> split <;> omega
+  · by_cases hmid :
+        (p01 + p10) % 18446744073709551616 < p01
+    · by_cases hlo :
+          (p00 + (p01 + p10) % 18446744073709551616 *
+            4294967296 % 18446744073709551616) %
+              18446744073709551616 < p00
+      · simp only [hmid, hlo, if_true]
+        omega
+      · simp only [hmid, hlo, if_true, if_false]
+        omega
+    · by_cases hlo :
+          (p00 + (p01 + p10) % 18446744073709551616 *
+            4294967296 % 18446744073709551616) %
+              18446744073709551616 < p00
+      · simp only [hmid, hlo, if_true, if_false]
+        omega
+      · simp only [hmid, hlo, if_false]
+        omega
   · omega
 
 /-- Schoolbook expansion of a product through the half-limb decomposition:

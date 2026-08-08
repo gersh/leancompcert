@@ -134,7 +134,13 @@ theorem sq62_core (A Mm C : Nat) :
       = 4 * A + Mm / B29 + C / B62
         + (if B62 ≤ (Mm % B29) * 8589934592 + C % B62 then 1 else 0) := by
   simp only [B29, B62]
-  split <;> omega
+  by_cases hcarry :
+      4611686018427387904 ≤
+        Mm % 536870912 * 8589934592 + C % 4611686018427387904
+  · simp only [hcarry, if_true]
+    omega
+  · simp only [hcarry, if_false]
+    omega
 
 theorem sq62_eq (x : Nat) : sq62 x = x * x / B62 := by
   rw [sq_expand x]
@@ -151,7 +157,7 @@ def logBit (x : Nat) : Nat := if B63 ≤ sq62 x then 1 else 0
 def logMant (x : Nat) : Nat := sq62 x >>> logBit x
 
 theorem logBit_le_one (x : Nat) : logBit x ≤ 1 := by
-  simp only [logBit]; split <;> omega
+  by_cases h : B63 ≤ sq62 x <;> simp [logBit, h]
 
 /-- The renormalised mantissa stays in `[2⁶², 2⁶³)`: squaring a mantissa in
 that window lands in `[2⁶², 2⁶⁴)`, and the emitted bit is exactly the shift
@@ -172,7 +178,12 @@ theorem logMant_range {x : Nat} (h1 : B62 ≤ x) (h2 : x < B63) :
   revert hy1 hy2
   generalize sq62 x = y
   intro hy1 hy2
-  split <;> simp only [B62, B63] at * <;> omega
+  simp only [B62, B63] at hy1 hy2 ⊢
+  by_cases h : 9223372036854775808 ≤ y
+  · simp only [h, if_true]
+    omega
+  · simp only [h, if_false]
+    omega
 
 /-- Each round truncates downward: the renormalised mantissa, scaled back by
 the emitted bit and the mantissa unit, never exceeds the exact square. -/
@@ -196,8 +207,12 @@ theorem logMant_upper (x : Nat) : x * x ≤ (logMant x + 1) * 2 ^ logBit x * B62
     simp only [B62] at hd hm ⊢
     omega
   have hstep : sq62 x + 1 ≤ (logMant x + 1) * 2 ^ logBit x := by
-    simp only [logMant, logBit, Nat.shiftRight_eq_div_pow]
-    split <;> simp only [Nat.pow_one, Nat.pow_zero, Nat.div_one, Nat.mul_one] <;> omega
+    simp only [logMant, logBit, Nat.shiftRight_eq_div_pow, B63]
+    by_cases h : 9223372036854775808 ≤ sq62 x
+    · simp only [h, if_true, Nat.pow_one]
+      omega
+    · simp only [h, if_false, Nat.pow_zero, Nat.div_one, Nat.mul_one]
+      omega
   calc x * x ≤ (sq62 x + 1) * B62 := hmain
     _ ≤ (logMant x + 1) * 2 ^ logBit x * B62 := Nat.mul_le_mul_right B62 hstep
 
