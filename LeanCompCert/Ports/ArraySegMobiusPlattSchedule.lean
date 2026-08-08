@@ -6,10 +6,16 @@ import LeanCompCert.Ports.ArraySegMobiusPlattConfig
 
 `ProductionCoreSchedule` deliberately exposes every range guard used by the
 symbolic segmented-sieve proof.  For the two literal paper configurations,
-almost all of those fields are elementary numeral arithmetic.  This module
-isolates the genuinely computational fields (prime-table construction and
-finite list capacities) so a small LeanCompCert checker can supply exactly
-those fields without asking the kernel to normalize the large root scan.
+almost all of those fields are elementary numeral arithmetic.
+
+The historical schedule used a strict table-capacity premise on every root
+candidate.  That premise is stronger than the machine needs and is false once
+the last prime (`87887`) has filled the table: the remaining sixteen marked
+candidates through `87903` perform no store.  `ScheduleFiniteEvidence` below
+states the correct executable guard: the current table may be full, but an
+actual append must have spare capacity.  The legacy adapter is retained under
+an explicit name while the generic root-window proof is migrated to this
+weaker, faithful contract.
 -/
 
 namespace LeanCompCert.Ports.ArraySegMobiusPlattSchedule
@@ -17,6 +23,7 @@ namespace LeanCompCert.Ports.ArraySegMobiusPlattSchedule
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusPrimeTable
+open LeanCompCert.Ports.ArraySegMobiusRootCellFold
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusRootPrefix
 open LeanCompCert.Ports.ArraySegMobiusIndexedRootMixed
@@ -26,8 +33,44 @@ open LeanCompCert.Ports.ArraySegMobiusPlattConfig
 
 set_option maxRecDepth 10000
 
-/-- The finite, data-dependent remainder of a production schedule. -/
+/-- Capacity condition used by the executable root-table step. -/
+def RoomForStep (c : Cfg) (ps : List Nat) (n : Nat) : Prop :=
+  ps.length ≤ c.tableLen ∧
+    (unmarkedBool ps n = true → ps.length < c.tableLen)
+
+/-- Correct finite, data-dependent remainder of a production schedule. -/
 structure ScheduleFiniteEvidence (c : Cfg)
+    (bootBound bootFuel laterFuel : Nat) : Prop where
+  bootPrime : PrimeTableInv c.bootPrimes bootBound
+  markBudget :
+    (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps
+  bootstrapRoom : ∀ n, n < bootFuel → ∀ k, k < c.segLen →
+    RoomForStep c
+      (rootScanMixed c.bootPrimes bootBound (1 + n * c.segLen) k)
+      (1 + n * c.segLen + k)
+  crossingRoom : ∀ k, k < c.segLen →
+    RoomForStep c
+      (rootScanMixed c.bootPrimes bootBound (crossingBase c bootFuel) k)
+      (crossingBase c bootFuel + k)
+  laterRoom : ∀ n, n < laterFuel → ∀ k, k < c.segLen →
+    let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
+      (laterBase c bootFuel) n
+    RoomForStep c (rootScanFrom ps (laterBase c bootFuel + n * c.segLen) k)
+      (laterBase c bootFuel + n * c.segLen + k)
+  finalRoom : ∀ k, k < c.segLen →
+    let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
+      (laterBase c bootFuel) laterFuel
+    RoomForStep c
+      (rootScanFrom ps (laterBase c bootFuel + laterFuel * c.segLen) k)
+      (laterBase c bootFuel + laterFuel * c.segLen + k)
+  finalLen : (finalRootTable c bootBound bootFuel laterFuel).length =
+    c.tableLen
+
+/-- Obsolete strict-capacity contract, retained only to instantiate the
+current generic `ProductionCoreSchedule` during its migration.  It cannot be
+the final paper certificate because the table is legitimately full for the
+last sixteen composite candidates. -/
+structure LegacyScheduleFiniteEvidence (c : Cfg)
     (bootBound bootFuel laterFuel : Nat) : Prop where
   bootPrime : PrimeTableInv c.bootPrimes bootBound
   markBudget :
@@ -56,8 +99,8 @@ structure ScheduleFiniteEvidence (c : Cfg)
 
 /-- All non-computational fields of the opening schedule reduce to arithmetic
 once its finite evidence has been supplied. -/
-theorem plattAlignedFirst_schedule
-    (e : ScheduleFiniteEvidence plattAlignedFirst plattBootBound
+theorem plattAlignedFirst_legacySchedule
+    (e : LegacyScheduleFiniteEvidence plattAlignedFirst plattBootBound
       plattFirstBootFuel plattFirstLaterFuel) :
     ProductionCoreSchedule plattAlignedFirst plattBootBound
       plattFirstBootFuel plattFirstLaterFuel plattFirstMainFuel
@@ -83,8 +126,8 @@ theorem plattAlignedFirst_schedule
 /-- All non-computational fields of the tail schedule likewise reduce to
 arithmetic; the long sequence of three-cell root windows remains behind the
 finite compiled-evidence boundary. -/
-theorem plattAlignedTail_schedule
-    (e : ScheduleFiniteEvidence plattAlignedTail plattBootBound
+theorem plattAlignedTail_legacySchedule
+    (e : LegacyScheduleFiniteEvidence plattAlignedTail plattBootBound
       plattTailBootFuel plattTailLaterFuel) :
     ProductionCoreSchedule plattAlignedTail plattBootBound
       plattTailBootFuel plattTailLaterFuel plattTailMainFuel
