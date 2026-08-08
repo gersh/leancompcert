@@ -312,7 +312,7 @@ theorem readRes_combinedEntry_start_inv (c : Cfg) (k : Nat)
   · simp [accTrue]
   · simp [CeilInv]
   · rfl
-  · decide
+  · simpa using (by decide : 1 + 1 < 2 ^ 32)
 
 /-- Total-state changing-index trace of the combined program body. -/
 def combinedRun (c : Cfg) (k fuel : Nat) (seed : MobLiveSeed) : AState :=
