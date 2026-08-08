@@ -751,4 +751,104 @@ theorem readRes_combinedIndexedRun_main_acc_prefix_inv
       have houtIndex : w + (n + 1) - 1 = w + n := by omega
       simpa only [hstepIndex, houtIndex] using hnext
 
+set_option maxRecDepth 10000 in
+/-- One literal main window, split into its verified marking and accumulation
+halves, carries the full finite-fold residue invariant. -/
+theorem readRes_combinedIndexedRun_main_window_inv
+    (c : Cfg) (idx k len fuel : Nat) (combined core : AState)
+    (ps : List Nat) (bound w write : Nat)
+    (hagree : CoreAgree combined core)
+    (hRep : MachineTableRep c core (c.firstPrime :: ps))
+    (hInv : PrimeTableInv (c.firstPrime :: ps) bound)
+    (hpsLen : (c.firstPrime :: ps).length = c.tableLen)
+    (hfuel : fuel ≤ c.segLen)
+    (hR : core.regs rR = 0) (hW : core.regs rW = w)
+    (hWrite : core.regs rWrite = write)
+    (hzero : core.regs rZero = 0)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxPeriodM : idx + c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwSegM : w + c.segLen < M)
+    (hnStartM : w + firstOffset w c.firstPrime < M)
+    (hA : c.arrayLen < M)
+    (hbudget :
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hclear : ∀ i, i < fuel → machineCell c core i = ⟨0, 0⟩)
+    (hwriteM : write < M) (hwM : w < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (hwFuelM : w + fuel < M)
+    (hmu : ∀ m, rootFoldValue (c.firstPrime :: ps) m = 1 ∨
+      rootFoldValue (c.firstPrime :: ps) m = -1 ∨
+      rootFoldValue (c.firstPrime :: ps) m = 0)
+    (hk : 1 ≤ k) (hk15 : k ≤ 15)
+    (hnlt : ∀ i, i < fuel → w + i < 2 ^ (64 - k))
+    (hbnd : ∀ i, i < fuel →
+      (accTrue k (rootFoldValue (c.firstPrime :: ps))
+        (w + i)).natAbs ≤ 2 ^ (62 + k))
+    (hcelNext : ∀ i, i < fuel →
+      let marked := combinedIndexedRun idx c k c.markSteps combined
+      let before := readRes
+        (combinedIndexedRun (idx + c.markSteps) c k i marked)
+      (celStep (w + i) before.celSq before.cel 1).1 + 1 < 2 ^ 32)
+    (hwPos : 0 < w)
+    (hw : ResWord (readRes combined))
+    (h0 : ResInv k (rootFoldValue (c.firstPrime :: ps)) (w - 1)
+      (readRes combined)) :
+    ResInv k (rootFoldValue (c.firstPrime :: ps)) (w + fuel - 1)
+      (readRes (combinedIndexedRun idx c k
+        (c.markSteps + fuel) combined)) := by
+  let combinedMarked := combinedIndexedRun idx c k c.markSteps combined
+  let coreMarked := indexedBodyRun idx c c.markSteps core
+  have hLPos : 0 < c.segLen := by omega
+  have hidxMarkM : idx + c.markSteps < M := by
+    simp only [Cfg.period] at hidxPeriodM
+    omega
+  have hcelM : (readRes combined).cel < M := by
+    have hp32 : (2 : Nat) ^ 32 < M := by decide
+    have hcel32 : (readRes combined).cel < 2 ^ 32 :=
+      Nat.lt_trans (Nat.lt_succ_self _) h0.celLt
+    exact Nat.lt_trans hcel32 hp32
+  have hmarkRes := readRes_combinedIndexedRun_mark_prefix_eq c idx k len
+    c.markSteps combined core w write hagree (Nat.le_refl _) hR hW hWrite
+    hLPos hTM hPM hidxMarkM hspanM (fun m hm => by omega) hwriteM
+    hwPos hwM h0.cel.1 hcelM hw
+  have hagreeMarked : CoreAgree combinedMarked coreMarked :=
+    combinedIndexedRun_core idx c k c.markSteps hagree
+  have hposition := indexedBodyRun_mark_position c idx c.markSteps core
+    w write (Nat.le_refl _) hR hW hWrite hLPos hTM hPM hidxMarkM
+    hspanM (fun m hm => by omega) hwriteM hwM
+  have hmarkedZero : coreMarked.regs rZero = 0 :=
+    indexedBodyRun_rZero idx c c.markSteps core hzero
+  have hmarkedCells : ∀ i, i < fuel →
+      machineCell c coreMarked i =
+        rootCellFold (c.firstPrime :: ps) (w + i) := by
+    intro i hi
+    apply indexedBodyRun_main_cell_eq_rootCellFold c idx core ps bound w i
+      hRep hInv hpsLen hR hW hmain htableLenPos htableLenM hTM hPM
+      hidxMarkM hspanM hspanPos hp1Pos hp1LeL hp1LeBound hboundM
+      hboundSqM hsegBoundM hwSegM hnStartM hA hbudget (by omega)
+      (hclear i hi)
+  have h0Marked : ResInv k (rootFoldValue (c.firstPrime :: ps))
+      (w - 1) (readRes combinedMarked) := by
+    rw [hmarkRes]
+    exact h0
+  have hacc := readRes_combinedIndexedRun_main_acc_prefix_inv c
+    (idx + c.markSteps) k len fuel combinedMarked coreMarked
+    (c.firstPrime :: ps) w write hagreeMarked hfuel hposition.2.1
+    hposition.2.2 hposition.1 (by omega) hmarkedZero hTM hPM (by
+      simp only [Cfg.period] at hidxPeriodM
+      omega) hspanM hspanPos hwriteM hwM h2LM hwFuelM hA hmarkedCells
+    hmu hk hk15 hnlt hbnd (by
+      intro i hi
+      exact hcelNext i hi) hwPos h0Marked
+  rw [combinedIndexedRun_add]
+  exact hacc
+
 end LeanCompCert.Ports.ArraySegMobiusIndexedSignal
