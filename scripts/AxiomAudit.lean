@@ -600,6 +600,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.rootScanTable_eq_boot_of_le
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.bodyRun_first_root_acc_prefix
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.bodyRun_first_root_acc_complete_wrap
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.rootScanFrom_zero
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.rootScanFrom_succ
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.bodyRun_later_root_acc_prefix
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.bodyRun_later_root_acc_complete_wrap
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap

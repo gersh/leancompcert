@@ -1418,3 +1418,21 @@ All checks used swap disabled and one Lake job:
 
 The remaining root composition is subsequent-window entry/iteration and the
 last-root transition endpoint; both reuse the factored table/cell theorem.
+
+The accumulation half of every later ordinary root window is now composed.
+`rootScanFrom` is the runnable sequential table fold from an arbitrary root
+base; `bodyRun_later_root_acc_prefix` verifies every strict prefix, and
+`bodyRun_later_root_acc_complete_wrap` closes the window with exact table
+bound `w + segLen - 1`, all cells cleared, and base `w + segLen`.  These
+theorems take the marking-fold cell state as an explicit, satisfiable entry
+premise, so the remaining gap is localized to producing that premise and to
+the final root-to-main transition.
+
+All checks used swap disabled and one Lake job:
+
+| check | memory scope | wall | peak RSS | result |
+| --- | --- | ---: | ---: | --- |
+| direct root-prefix source | 1 GiB high / 2 GiB max | 1.68 s | 625,416 KiB | pass |
+| live root-prefix target, 58 jobs | 1 GiB high / 2 GiB max | 1.97 s | 710,232 KiB | pass |
+| strict axiom audit, 671 declarations | 3 GiB high / 4 GiB max | 0.67 s | 1,610,612 KiB | standard foundations only |
+| full repository build, 435 jobs | 7 GiB high / 8 GiB max | 2.86 s | 1,720,032 KiB | pass |
