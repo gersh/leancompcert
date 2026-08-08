@@ -1787,7 +1787,29 @@ hard limit.  This reproduces the memory-growth failure mode and confirms that
 the `87903`-candidate table computation must be a LeanCompCert receipt, not a
 `decide`/kernel-normalization leaf in ordinary builds.
 
-That experiment also exposed an obsolete strict guard in
+The same two aligned links were subsequently emitted through the fail-safe
+`plattstrongsquaredaudit` transformation.  Every dynamic unsigned divisor and
+array address was guarded, with failures accumulated in a fresh sticky audit
+register.  CompCert 3.17 `ccomp -O2` compiled each artifact in 0.10 seconds at
+22,160 KiB and 0.09 seconds at 21,372 KiB peak RSS, respectively.  Under the
+same 2/3 GiB hard, one-worker, zero-swap scope, the runs returned:
+
+```text
+3 7727054615 audit=0 majorant=0 1711921466838888838 32768 87904 7727113216
+7727054616 7727068586 audit=0 majorant=0 1719079213671136448 32768 87904 7727113216
+```
+
+The opening audit took 1,103.83 CPU seconds (18:23.98 wall) at 1,752 KiB peak
+RSS; the tail took 19.85 seconds at 1,260 KiB.  Both verdicts were `PASS`, the
+inter-link carry matched exactly, and the final carry matched all previous
+original-program campaigns.  The emitted-C SHA-256 values were
+`654b49aa5ce3fdbf6e690a5eb6d3dbc9ad211091af9820919de44de04ca76bcc`
+and `ca6f8307f99c650f466379dc52a07422d9cb1a73a142ca95cb539810912ce56b`.
+The literal receipt declarations and the theorem turning the audit/original
+receipt pair into `AProgram.denote = some 0` are in
+`ArraySegMobiusPlattAuditCertificate.lean`.
+
+The kernel experiment also exposed an obsolete strict guard in
 `ProductionCoreSchedule`: the last prime is `87887`, so the table is already
 full for the final sixteen composite candidates.  The machine correctly
 performs no store on those marked rows.  The replacement finite evidence

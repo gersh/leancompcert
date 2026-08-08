@@ -1,5 +1,6 @@
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Verified.ArrayBridge
+import LeanCompCert.Verified.ArrayComputation
 
 /-!
 # Fail-safe auditing for partial array programs
@@ -22,6 +23,7 @@ open LeanCompCert
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.ArrayComputation
 
 /-- Sticky audit register, immediately above the source register file. -/
 def auditReg (bound : Nat) : Nat := bound
@@ -302,6 +304,15 @@ theorem auditProgram_wf (p : AProgram) (hp : p.WF) :
   · exact auditBlock_wf p.arrayLen p.regCount p.init hinit
   · exact auditBlock_wf p.arrayLen p.regCount p.body hbody
   · exact auditBlock_wf p.arrayLen p.regCount p.epilogue hepi
+
+/-- Package the guarded version of a closed array computation.  It uses the
+identical array base and merely appends `_audit` to the emitted name. -/
+def auditComputation (a : AComputation) : AComputation where
+  program := auditProgram a.program
+  wellFormed := auditProgram_wf a.program a.wellFormed
+  base := a.base
+  baseOk := a.baseOk
+  name := a.name ++ "_audit"
 
 /-- All registers and cells are machine words. -/
 def WordState (s : AState) : Prop :=
@@ -1164,5 +1175,88 @@ theorem auditProgram_denote_zero_implies_source_denotes (p : AProgram)
     exact Option.some.inj this
   have hsound := auditProgram_zero_sound p hp hlen hlenM hfinal
   exact ⟨sFinal.regs p.output, hsound.1⟩
+
+/-- A physical zero receipt for the total audited computation establishes
+definedness of the original partial source program.  The compiler theorem is
+used only in its proved direction: `auditProgram_denote` first supplies the
+total source denotation, and `AComputation.value_of_returns` identifies its
+value with the observed zero. -/
+theorem source_denotes_of_audit_returns_zero (a : AComputation)
+    (hlen : 0 < a.program.arrayLen) (hlenM : a.program.arrayLen < M)
+    (hRun : (auditComputation a).Returns ((0 : Nat) : Int)) :
+    ∃ n, a.program.denote = some n := by
+  let aEntry := arun 0 initialAState
+    (auditBlock a.program.arrayLen a.program.regCount a.program.init)
+  let aLoop := (List.range a.program.loopCount).foldl (fun s idx =>
+    arun idx s
+      (auditBlock a.program.arrayLen a.program.regCount a.program.body)) aEntry
+  let aFinal := arun 0 aLoop
+    (auditBlock a.program.arrayLen a.program.regCount a.program.epilogue)
+  let n := aFinal.regs (auditReg a.program.regCount)
+  have hDenote : (auditComputation a).program.denote = some n := by
+    simpa only [auditComputation, n, aEntry, aLoop] using
+      auditProgram_denote a.program a.wellFormed hlen hlenM
+  have hn : 0 = n :=
+    AComputation.value_of_returns (auditComputation a) hDenote hRun
+  have hZero : (auditProgram a.program).denote = some 0 := by
+    simpa only [auditComputation, ← hn] using hDenote
+  exact auditProgram_denote_zero_implies_source_denotes a.program
+    a.wellFormed hlen hlenM hZero
+
+/-- Two independently checkable receipts close the former one-way gap: the
+audited run establishes that the partial source is defined, and the original
+run identifies its output.  Both artifacts are compiled by the ordinary
+array compiler route; neither receipt is used backwards through compiler
+correctness. -/
+theorem source_denotes_zero_of_audit_and_source_returns_zero
+    (a : AComputation)
+    (hlen : 0 < a.program.arrayLen) (hlenM : a.program.arrayLen < M)
+    (hAudit : (auditComputation a).Returns ((0 : Nat) : Int))
+    (hSource : a.Returns ((0 : Nat) : Int)) :
+    a.program.denote = some 0 := by
+  obtain ⟨n, hn⟩ :=
+    source_denotes_of_audit_returns_zero a hlen hlenM hAudit
+  have hzero : 0 = n := AComputation.value_of_returns a hn hSource
+  simpa only [← hzero] using hn
+
+/-- State-level companion to the two-receipt theorem.  Besides the partial
+denotation, downstream refinement proofs often need the ordinary total
+`arun` state.  This theorem exposes exactly its original output register. -/
+theorem source_total_output_zero_of_audit_and_source_returns_zero
+    (a : AComputation)
+    (hlen : 0 < a.program.arrayLen) (hlenM : a.program.arrayLen < M)
+    (hAudit : (auditComputation a).Returns ((0 : Nat) : Int))
+    (hSource : a.Returns ((0 : Nat) : Int)) :
+    let sEntry := arun 0 initialAState a.program.init
+    let sLoop := (List.range a.program.loopCount).foldl
+      (fun s idx => arun idx s a.program.body) sEntry
+    let sFinal := arun 0 sLoop a.program.epilogue
+    sFinal.regs a.program.output = 0 := by
+  let aEntry := arun 0 initialAState
+    (auditBlock a.program.arrayLen a.program.regCount a.program.init)
+  let aLoop := (List.range a.program.loopCount).foldl (fun s idx =>
+    arun idx s
+      (auditBlock a.program.arrayLen a.program.regCount a.program.body)) aEntry
+  let aFinal := arun 0 aLoop
+    (auditBlock a.program.arrayLen a.program.regCount a.program.epilogue)
+  let auditValue := aFinal.regs (auditReg a.program.regCount)
+  have hAuditDenote : (auditComputation a).program.denote =
+      some auditValue := by
+    simpa only [auditComputation, auditValue, aEntry, aLoop] using
+      auditProgram_denote a.program a.wellFormed hlen hlenM
+  have hauditZero : 0 = auditValue :=
+    AComputation.value_of_returns (auditComputation a) hAuditDenote hAudit
+  have hfinalZero : aFinal.regs (auditReg a.program.regCount) = 0 := by
+    simpa only [auditValue] using hauditZero.symm
+  have hSound := auditProgram_zero_sound a.program a.wellFormed
+    hlen hlenM hfinalZero
+  have hzero : 0 =
+      (arun 0
+        ((List.range a.program.loopCount).foldl
+          (fun s idx => arun idx s a.program.body)
+          (arun 0 initialAState a.program.init))
+        a.program.epilogue).regs a.program.output :=
+    AComputation.value_of_returns a hSound.1 hSource
+  exact hzero.symm
 
 end LeanCompCert.Verified.ArrayAudit

@@ -84,6 +84,31 @@ def squaredCombinedIndexedRun (idx : Nat) (c : Cfg) (k : Nat) :
       arun (idx + fuel) (squaredCombinedIndexedRun idx c k fuel s)
         (c.coreBody ++ mobiusLiveSquaredResidue k) := rfl
 
+/-- The changing-index runner is the `List.range` fold used by
+`AProgram.denote` and by the generic fail-safe audit bridge. -/
+theorem foldl_range_squaredCombined_eq_indexedRun (idx : Nat) (c : Cfg)
+    (k fuel : Nat) (s : AState) :
+    (List.range fuel).foldl
+      (fun q j => arun (idx + j) q
+        (c.coreBody ++ mobiusLiveSquaredResidue k)) s =
+      squaredCombinedIndexedRun idx c k fuel s := by
+  induction fuel with
+  | zero => rfl
+  | succ n ih =>
+      rw [List.range_succ, List.foldl_append, ih,
+        squaredCombinedIndexedRun_succ]
+      rfl
+
+/-- Index-zero form matching a closed `AProgram` body fold literally. -/
+theorem foldl_range_squaredCombined_eq_indexedRun_zero (c : Cfg)
+    (k fuel : Nat) (s : AState) :
+    (List.range fuel).foldl
+      (fun q j => arun j q
+        (c.coreBody ++ mobiusLiveSquaredResidue k)) s =
+      squaredCombinedIndexedRun 0 c k fuel s := by
+  simpa only [Nat.zero_add] using
+    foldl_range_squaredCombined_eq_indexedRun 0 c k fuel s
+
 theorem squaredCombinedIndexedRun_add (idx : Nat) (c : Cfg)
     (k a b : Nat) (s : AState) :
     squaredCombinedIndexedRun idx c k (a + b) s =

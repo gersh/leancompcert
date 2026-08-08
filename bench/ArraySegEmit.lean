@@ -1,5 +1,6 @@
 import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Ports.ArraySegMobiusSquared
+import LeanCompCert.Verified.ArrayAudit
 
 /-!
 Emission driver for the offset segmented sieve of `Ports.ArraySegSieve`.
@@ -32,6 +33,9 @@ lake env lean --run bench/ArraySegEmit.lean MODE LO SEGLEN SEGCOUNT OUT [EXPECTE
                `(n+1) * upper^2 ≤ 2^122`.  It has the same two accumulator
                seed/result limbs; the remaining result slots are retained for
                chain compatibility.
+* `plattstrongsquaredaudit` — the same program after the fail-safe audit
+               transformation.  Its return value is the sticky source-safety
+               bit; the original majorant verdict remains in result cell 8.
 
 ## The emitted `main` carries a verdict
 
@@ -60,6 +64,7 @@ Emission only; no proof obligation is discharged here.
 
 open LeanCompCert
 open LeanCompCert.Verified.ArrayState
+open LeanCompCert.Verified.ArrayAudit
 open LeanCompCert.Ports.ArraySegSieve
 
 namespace Bench.ArraySegEmit
@@ -146,7 +151,8 @@ def classesOf : String → List Class
       , ("cdem_upper", 2, 4), ("cdem_lower", 3, 5) ]
   | "platt211" | "plattstrong" =>
       [ ("mobius_upper", 0, 2), ("mobius_lower", 1, 3) ]
-  | "plattstronglive" | "plattstrongsquared" =>
+  | "plattstronglive" | "plattstrongsquared" |
+      "plattstrongsquaredaudit" =>
       [ ("mobius_majorant", 0, 2) ]
   | _ => []
 
@@ -199,7 +205,7 @@ def main (args : List String) : IO UInt32 := do
             let s : MobLiveSeed :=
               (mobLiveSeed lo (seeds[0]?.getD dflt.tLo) (seeds[1]?.getD dflt.tHi))
             pure (mobiusLiveProgram c k s)
-        | "plattstrongsquared" =>
+        | "plattstrongsquared" | "plattstrongsquaredaudit" =>
             -- The exact squared predicate uses the same accumulator carry as
             -- `plattstronglive`, so existing manifests can retain their four
             -- result-slot shape while new receipts use the exact test.
@@ -207,7 +213,9 @@ def main (args : List String) : IO UInt32 := do
             let dflt := mobLiveSeedStart k
             let s : MobLiveSeed :=
               (mobLiveSeed lo (seeds[0]?.getD dflt.tLo) (seeds[1]?.getD dflt.tHi))
-            pure (mobiusLiveSquaredProgram c k s)
+            let p := mobiusLiveSquaredProgram c k s
+            pure (if mode = "plattstrongsquaredaudit" then
+              auditProgram p else p)
         | _ => do IO.eprintln "bad MODE"; return 1
       let base := p.arrayLen - 16
       let driver :=
