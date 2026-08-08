@@ -80,6 +80,70 @@ theorem arun_append (k : Nat) :
   | nil => intro ys s; rfl
   | cons x xs ih => intro ys s; exact ih ys (astep k s x)
 
+/-- Every total array-machine instruction preserves the machine-word bound on
+all registers and array cells.  Failed partial scalar operations are read as
+zero by `astep`, which is a word too; definedness is a separate theorem. -/
+theorem arun_word (k : Nat) :
+    ∀ (l : List AInstr) (s : AState),
+      (∀ j, s.regs j < M) → (∀ j, s.arr j < M) →
+      (∀ j, (arun k s l).regs j < M) ∧
+        (∀ j, (arun k s l).arr j < M) := by
+  intro l
+  induction l with
+  | nil => intro s hr ha; exact ⟨hr, ha⟩
+  | cons i rest ih =>
+      intro s hr ha
+      refine ih (astep k s i) ?_ ?_
+      · intro j
+        cases i with
+        | scalar instr =>
+            by_cases hEq : j = InstrBlock.sdest instr
+            · subst hEq
+              simp only [astep, AState.writeReg]
+              cases instr with
+              | mov d src =>
+                  show denoteOperand k s.regs src < M
+                  cases src with
+                  | reg i' => exact hr i'
+                  | lit v => exact Nat.mod_lt _ M_pos
+                  | idx => exact Nat.mod_lt _ M_pos
+              | binop d op lhs rhs =>
+                  show (denoteOp op (denoteOperand k s.regs lhs)
+                    (denoteOperand k s.regs rhs)).getD 0 < M
+                  cases hv : denoteOp op (denoteOperand k s.regs lhs)
+                      (denoteOperand k s.regs rhs) with
+                  | none => simpa [hv] using M_pos
+                  | some v => exact denoteOp_lt op _ _ _ hv
+            · simp only [astep, AState.writeReg, if_neg hEq]
+              exact hr j
+        | load dest idxReg =>
+            by_cases hEq : j = dest
+            · subst hEq
+              simp only [astep, AState.writeReg]
+              exact ha _
+            · simp only [astep, AState.writeReg, if_neg hEq]
+              exact hr j
+        | store idxReg srcReg => exact hr j
+      · intro j
+        cases i with
+        | scalar instr => exact ha j
+        | load dest idxReg => exact ha j
+        | store idxReg srcReg =>
+            by_cases hEq : j = s.regs idxReg
+            · subst hEq
+              simp only [astep, AState.writeArr]
+              exact hr _
+            · simp only [astep, AState.writeArr, if_neg hEq]
+              exact ha j
+
+theorem arun_regs_word (k : Nat) (l : List AInstr) (s : AState)
+    (hr : ∀ j, s.regs j < M) (ha : ∀ j, s.arr j < M) :
+    ∀ j, (arun k s l).regs j < M := (arun_word k l s hr ha).1
+
+theorem arun_arr_word (k : Nat) (l : List AInstr) (s : AState)
+    (hr : ∀ j, s.regs j < M) (ha : ∀ j, s.arr j < M) :
+    ∀ j, (arun k s l).arr j < M := (arun_word k l s hr ha).2
+
 /-- "This instruction is defined in this state": the divisor of a `udiv` or
 `urem` is nonzero, and an array access is in bounds. -/
 def ADefined (len k : Nat) (s : AState) : AInstr → Prop

@@ -61,6 +61,37 @@ theorem combinedWindowRun_core (idx : Nat) (c : Cfg) (k fuel : Nat)
       (indexedWindowRun idx c fuel t) := by
   exact combinedIndexedRun_core idx c k (fuel * c.period) h
 
+/-- The actual combined runner preserves the global machine-word invariant.
+This includes the residue violation counter, independently of the arithmetic
+`ResInv` carried by selected main events. -/
+theorem combinedIndexedRun_word (idx : Nat) (c : Cfg) (k fuel : Nat)
+    (s : AState) (hregs : ∀ j, s.regs j < M)
+    (harr : ∀ j, s.arr j < M) :
+    (∀ j, (combinedIndexedRun idx c k fuel s).regs j < M) ∧
+      (∀ j, (combinedIndexedRun idx c k fuel s).arr j < M) := by
+  induction fuel with
+  | zero => exact ⟨hregs, harr⟩
+  | succ n ih =>
+      rw [combinedIndexedRun_succ]
+      exact arun_word (idx + n) _ _ ih.1 ih.2
+
+/-- Window-sized specialization of `combinedIndexedRun_word`. -/
+theorem combinedWindowRun_word (idx : Nat) (c : Cfg) (k fuel : Nat)
+    (s : AState) (hregs : ∀ j, s.regs j < M)
+    (harr : ∀ j, s.arr j < M) :
+    (∀ j, (combinedWindowRun idx c k fuel s).regs j < M) ∧
+      (∀ j, (combinedWindowRun idx c k fuel s).arr j < M) := by
+  exact combinedIndexedRun_word idx c k (fuel * c.period) s hregs harr
+
+/-- In particular every complete combined-window entry has word-sized
+persistent residue fields, including its violation counter. -/
+theorem readRes_combinedWindowRun_word (idx : Nat) (c : Cfg) (k fuel : Nat)
+    (s : AState) (hregs : ∀ j, s.regs j < M)
+    (harr : ∀ j, s.arr j < M) :
+    ResWord (readRes (combinedWindowRun idx c k fuel s)) := by
+  have h := combinedWindowRun_word idx c k fuel s hregs harr
+  exact ⟨h.1 rTLo, h.1 rTHi, h.1 rCeil, h.1 rCeilSq, h.1 rMViol⟩
+
 /-- Outer finite-window induction for a residue invariant.  The step premise
 is designed to be discharged by `readRes_combinedIndexedRun_main_window_inv`
 after the verified core window theorem supplies the next entry state. -/
@@ -880,9 +911,9 @@ theorem readRes_combinedIndexedRun_main_window_inv
 
 set_option maxRecDepth 10000 in
 /-- Arbitrarily many complete main windows carry the finite-fold residue
-invariant through the actual interleaved production trace.  The violation
-counter's word bound is explicit because `ResInv` deliberately records the
-mathematical accumulator/ceiling invariant but not the final counter range. -/
+invariant through the actual interleaved production trace.  The global
+machine-word invariant supplies the violation-counter bound that `ResInv`
+deliberately does not record. -/
 theorem readRes_combinedWindowRun_main_inv
     (c : Cfg) (idx k len fuel : Nat) (combined core : AState)
     (ps : List Nat) (bound w : Nat)
@@ -926,8 +957,8 @@ theorem readRes_combinedWindowRun_main_inv
         (idx + q * c.period + c.markSteps) c k i marked)
       (celStep (w + q * c.segLen + i) before.celSq before.cel 1).1 + 1 <
         2 ^ 32)
-    (hword : ∀ q, q < fuel →
-      ResWord (readRes (combinedWindowRun idx c k q combined)))
+    (hregs : ∀ j, combined.regs j < M)
+    (harr : ∀ j, combined.arr j < M)
     (hwPos : 0 < w)
     (h0 : ResInv k (rootFoldValue (c.firstPrime :: ps)) (w - 1)
       (readRes combined)) :
@@ -1003,7 +1034,8 @@ theorem readRes_combinedWindowRun_main_inv
         omega))
       (fun i hi => by
         simpa only [midCombined, wq, Nat.add_assoc] using hcelNext q hq i hi)
-      (by dsimp only [wq]; omega) (hword q hq) hqInv
+      (by dsimp only [wq]; omega)
+      (readRes_combinedWindowRun_word idx c k q combined hregs harr) hqInv
     rw [← Cfg.period] at hone
     rw [combinedWindowRun_succ]
     simpa only [wq, Nat.add_mul, Nat.one_mul, Nat.add_assoc] using hone
