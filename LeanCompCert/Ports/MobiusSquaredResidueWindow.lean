@@ -121,6 +121,66 @@ theorem squaredResRun_zero_all_pass (k : Nat) (mu : Nat → Int) (r0 : Res)
         exact hpass
       · exact hprev m (by omega)
 
+/-- The squared violation counter is monotone along every no-wrap prefix. -/
+theorem squaredResRun_viol_mono_to (k : Nat) (mu : Nat → Int) (r0 : Res)
+    (N : Nat)
+    (hviol : ∀ m, m < N → (squaredResRun k mu r0 m).viol + 1 < M) :
+    ∀ a, a ≤ N →
+      (squaredResRun k mu r0 a).viol ≤
+        (squaredResRun k mu r0 N).viol := by
+  induction N with
+  | zero =>
+      intro a ha
+      have : a = 0 := by omega
+      subst a
+      exact Nat.le_refl _
+  | succ n ih =>
+      intro a ha
+      by_cases han : a = n + 1
+      · subst a
+        exact Nat.le_refl _
+      · have haN : a ≤ n := by omega
+        have hprev := ih (fun m hm => hviol m (by omega)) a haN
+        have hstep := squaredResStep_viol_eq k mu (n + 1)
+          (squaredResRun k mu r0 n) (hviol n (by omega))
+        have hnext : (squaredResRun k mu r0 (n + 1)).viol =
+            (squaredResRun k mu r0 n).viol +
+              if SquaredPass k (n + 1)
+                (stepAbs k mu (n + 1) (squaredResRun k mu r0 n))
+              then 0 else 1 := by
+          simpa only [squaredResRun] using hstep
+        split at hnext <;> omega
+
+/-- If a no-wrap counter has the same value at a prefix and at the final
+endpoint, every predicate after that prefix passed.  This is the general form
+needed when a computation also audits known rows before the source domain. -/
+theorem squaredResRun_stable_all_pass (k : Nat) (mu : Nat → Int) (r0 : Res)
+    (lo N : Nat) (_hlo : lo ≤ N)
+    (hviol : ∀ m, m < N → (squaredResRun k mu r0 m).viol + 1 < M)
+    (hstable : (squaredResRun k mu r0 lo).viol =
+      (squaredResRun k mu r0 N).viol) :
+    ∀ m, lo ≤ m → m < N →
+      SquaredPass k (m + 1) (stepAbs k mu (m + 1)
+        (squaredResRun k mu r0 m)) := by
+  intro m hmlo hmN
+  have hloM := squaredResRun_viol_mono_to k mu r0 m
+    (fun j hj => hviol j (by omega)) lo hmlo
+  have hnextN := squaredResRun_viol_mono_to k mu r0 N hviol (m + 1)
+    (by omega)
+  have hstep := squaredResStep_viol_eq k mu (m + 1)
+    (squaredResRun k mu r0 m) (hviol m hmN)
+  have hnext : (squaredResRun k mu r0 (m + 1)).viol =
+      (squaredResRun k mu r0 m).viol +
+        if SquaredPass k (m + 1)
+          (stepAbs k mu (m + 1) (squaredResRun k mu r0 m))
+        then 0 else 1 := by
+    simpa only [squaredResRun] using hstep
+  by_cases hp : SquaredPass k (m + 1)
+      (stepAbs k mu (m + 1) (squaredResRun k mu r0 m))
+  · exact hp
+  · simp only [hp, if_false] at hnext
+    omega
+
 /-- A passing squared step proves the exact cross-multiplied source bound. -/
 theorem SquaredPass.sound (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
     (hmu : ∀ m, mu m = 1 ∨ mu m = -1 ∨ mu m = 0)
@@ -165,6 +225,44 @@ theorem squaredResRun_zero_sound (k : Nat) (mu : Nat → Int) (r0 : Res)
   | succ m =>
       have hmN : m < N := by omega
       have hpass := hpasses m hmN
+      have hinv := squaredResRun_inv k mu r0 (m + 1) hmu hk hk15
+        (Nat.lt_of_le_of_lt hnN hN)
+        (fun j hj => hbnd j (Nat.le_trans hj hnN))
+        (fun j hj => hcelInv j (by omega)) h0
+      have hnext : ResInv k mu (m + 1)
+          (squaredResStep k (muSig mu (m + 1))
+            (squaredResRun k mu r0 m)) := by
+        simpa only [squaredResRun] using hinv
+      exact hpass.sound k mu (m + 1) (squaredResRun k mu r0 m)
+        hmu hk15 (by omega) D hD hdvd hnext
+
+/-- Ranged soundness for a computation whose counter is stable after a known
+prefix.  Taking `lo = 2` yields exactly the paper domain beginning at `n = 3`,
+even when rows 1 and 2 were audited by the same compiled run. -/
+theorem squaredResRun_stable_sound_from (k : Nat) (mu : Nat → Int) (r0 : Res)
+    (lo N : Nat) (hlo : lo ≤ N)
+    (hmu : ∀ m, mu m = 1 ∨ mu m = -1 ∨ mu m = 0)
+    (hk : 1 ≤ k) (hk15 : k ≤ 15) (hN : N < 2 ^ (64 - k))
+    (hbnd : ∀ m, m ≤ N → (accTrue k mu m).natAbs ≤ 2 ^ (62 + k))
+    (hcelInv : ∀ m, m < N →
+      (celStep (m + 1) (squaredResRun k mu r0 m).celSq
+        (squaredResRun k mu r0 m).cel 1).1 + 1 < 2 ^ 32)
+    (h0 : ResInv k mu 0 r0)
+    (hviol : ∀ m, m < N → (squaredResRun k mu r0 m).viol + 1 < M)
+    (hstable : (squaredResRun k mu r0 lo).viol =
+      (squaredResRun k mu r0 N).viol) :
+    ∀ n, lo + 1 ≤ n → n ≤ N → ∀ D, 0 < D →
+      (∀ m, 1 ≤ m → m ≤ n → m ∣ D) →
+      4 * ((n : Int) + 1) * (numTrue mu D n) ^ 2 ≤ (D : Int) ^ 2 := by
+  have hpasses := squaredResRun_stable_all_pass k mu r0 lo N hlo hviol
+    hstable
+  intro n hnlo hnN D hD hdvd
+  cases n with
+  | zero => omega
+  | succ m =>
+      have hmlo : lo ≤ m := by omega
+      have hmN : m < N := by omega
+      have hpass := hpasses m hmlo hmN
       have hinv := squaredResRun_inv k mu r0 (m + 1) hmu hk hk15
         (Nat.lt_of_le_of_lt hnN hN)
         (fun j hj => hbnd j (Nat.le_trans hj hnN))
