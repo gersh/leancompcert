@@ -645,6 +645,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusResidueFrame.combinedProductionCore_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusResidueFold.readRes_arun_residue
 #print axioms LeanCompCert.Ports.ArraySegMobiusResidueFold.readRes_combinedIndexedRun_eq_resFold
+#print axioms LeanCompCert.Ports.ArraySegMobiusResidueFold.combinedIndexedRun_add
 #print axioms LeanCompCert.Ports.ArraySegMobiusResidueFold.readRes_arun_combined_mark
 #print axioms LeanCompCert.Ports.ArraySegMobiusResidueFold.readRes_arun_combined_root_acc
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedSignal.combinedIndexedRun_core
@@ -658,6 +659,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedSignal.readSig_indexedWindowRun_main_cell_eq_rootFoldValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedSignal.readSig_combinedIndexedWindowRun_main_cell_eq_rootFoldValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedSignal.combined_main_event_divisors_ready
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedSignal.readRes_combinedIndexedRun_main_acc_prefix_inv
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_signalBlock_gated
 #print axioms LeanCompCert.Ports.ArraySegMobiusSignal.readSig_arun_coreBody_gated
 #print axioms LeanCompCert.Ports.ArraySegMobiusIdleSignal.readSig_arun_coreBody_mark_idle

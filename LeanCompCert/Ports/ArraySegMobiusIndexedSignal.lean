@@ -671,4 +671,84 @@ theorem combined_main_event_divisors_ready
   · rw [hgateEq]
     decide
 
+set_option maxRecDepth 10000 in
+/-- A finite main-accumulation prefix of the literal combined trace carries
+the full mathematical residue invariant.  Each compiled event is first shown
+to emit the finite prime-fold signal, its two machine divisions are then
+proved defined from the incoming invariant, and only then is `ResInv.step`
+applied. -/
+theorem readRes_combinedIndexedRun_main_acc_prefix_inv
+    (c : Cfg) (idx k len fuel : Nat) (combined core : AState)
+    (ps : List Nat) (w write : Nat)
+    (hagree : CoreAgree combined core)
+    (hfuel : fuel ≤ c.segLen)
+    (hR : core.regs rR = c.markSteps)
+    (hW : core.regs rW = w)
+    (hWrite : core.regs rWrite = write)
+    (hRoot : c.rootSpan ≤ idx)
+    (hzero : core.regs rZero = 0)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxFuelM : idx + fuel < M)
+    (hrootM : c.rootSpan < M)
+    (hspanPos : 0 < c.rootSpan)
+    (hwriteM : write < M) (hwM : w < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (hwFuelM : w + fuel < M)
+    (hA : c.arrayLen < M)
+    (hmarked : ∀ i, i < fuel →
+      machineCell c core i = rootCellFold ps (w + i))
+    (hmu : ∀ m, rootFoldValue ps m = 1 ∨
+      rootFoldValue ps m = -1 ∨ rootFoldValue ps m = 0)
+    (hk : 1 ≤ k) (hk15 : k ≤ 15)
+    (hnlt : ∀ i, i < fuel → w + i < 2 ^ (64 - k))
+    (hbnd : ∀ i, i < fuel →
+      (accTrue k (rootFoldValue ps) (w + i)).natAbs ≤ 2 ^ (62 + k))
+    (hcelNext : ∀ i, i < fuel →
+      let before := readRes (combinedIndexedRun idx c k i combined)
+      (celStep (w + i) before.celSq before.cel 1).1 + 1 < 2 ^ 32)
+    (hwPos : 0 < w)
+    (h0 : ResInv k (rootFoldValue ps) (w - 1) (readRes combined)) :
+    ResInv k (rootFoldValue ps) (w + fuel - 1)
+      (readRes (combinedIndexedRun idx c k fuel combined)) := by
+  induction fuel with
+  | zero => simpa using h0
+  | succ n ih =>
+      have hnLe : n ≤ c.segLen := by omega
+      have hprev := ih hnLe (by omega) (by omega)
+        (fun i hi => hmarked i (by omega))
+        (fun i hi => hnlt i (by omega))
+        (fun i hi => hbnd i (by omega))
+        (fun i hi => hcelNext i (by omega))
+      let before := combinedIndexedRun idx c k n combined
+      have hsig := readSig_combinedIndexedRun_main_acc_eq_rootFoldValue
+        c idx k combined core ps n w write hagree hR hW hWrite (by omega)
+        hRoot hzero hTM hPM (by omega) hrootM hspanPos hwriteM hwM h2LM
+        (by omega) hA (hmarked n (Nat.lt_succ_self n))
+      have hcelHead : (readRes before).cel + 1 < M := by
+        have hsmall := hprev.celLt
+        have hp32 : (2 : Nat) ^ 32 < M := by decide
+        exact Nat.lt_trans hsmall hp32
+      have hguards := combined_main_event_divisors_ready idx c k n w n
+        combined hsig (by omega) hprev.cel.1 hcelHead
+      have hmachine := readRes_arun_combined c k len (idx + n) before
+        hguards.1 hguards.2
+      have hnext := ResInv.step k (rootFoldValue ps) (w + n - 1)
+        (readRes before) hmu hk hk15 (by
+          have := hnlt n (Nat.lt_succ_self n)
+          omega) (by
+          have := hbnd n (Nat.lt_succ_self n)
+          have heq : w + n - 1 + 1 = w + n := by omega
+          rw [heq]
+          exact this) (by
+          have hc := hcelNext n (Nat.lt_succ_self n)
+          dsimp only at hc
+          have heq : w + n - 1 + 1 = w + n := by omega
+          rw [heq]
+          exact hc) hprev
+      rw [combinedIndexedRun_succ]
+      rw [hmachine, hsig]
+      have hstepIndex : w + n - 1 + 1 = w + n := by omega
+      have houtIndex : w + (n + 1) - 1 = w + n := by omega
+      simpa only [hstepIndex, houtIndex] using hnext
+
 end LeanCompCert.Ports.ArraySegMobiusIndexedSignal

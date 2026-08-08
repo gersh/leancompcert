@@ -119,6 +119,20 @@ def combinedIndexedRun (idx : Nat) (c : Cfg) (k : Nat) :
       arun (idx + fuel) (combinedIndexedRun idx c k fuel s)
         (c.coreBody ++ mobiusLiveResidue k) := rfl
 
+/-- Split a combined changing-index trace at an arbitrary finite event
+boundary. -/
+theorem combinedIndexedRun_add (idx : Nat) (c : Cfg) (k a b : Nat)
+    (s : AState) :
+    combinedIndexedRun idx c k (a + b) s =
+      combinedIndexedRun (idx + a) c k b
+        (combinedIndexedRun idx c k a s) := by
+  induction b with
+  | zero => rfl
+  | succ b ih =>
+      rw [Nat.add_succ, combinedIndexedRun_succ, combinedIndexedRun_succ, ih]
+      have heq : idx + (a + b) = idx + a + b := by omega
+      rw [heq]
+
 /-- The exact signal sequence consumed by a finite production trace. -/
 def combinedSignals (idx : Nat) (c : Cfg) (k fuel : Nat) (s : AState) :
     List Sig :=
