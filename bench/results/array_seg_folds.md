@@ -1709,3 +1709,51 @@ KiB and reported only `propext`, `Classical.choice`, and `Quot.sound`; the
 fold-prefix theorem itself requires only `propext`.
 With the isolated high-memory leaves cached, the 228-job aggregate then passed
 in 0.63 s at 1,717,076 KiB under the 7/8 GiB profile with zero swap.
+
+The exact GCC production campaign subsequently completed through the faithful
+endpoint.  To keep the one-million-cell sieve memory while stopping exactly at
+`7,727,068,586`, the chain used one `7,727,000,000`-row link and a final
+`68,586`-row link.  The receipt rows were:
+
+```
+1 7727000000 2 1707971003056621773 32768 87904 7727113216
+7727000001 7727068586 0 1719079213671136448 32768 87904 7727113216
+```
+
+Thus the complete range had exactly the two expected pre-domain failures at
+`n = 1, 2`, zero failures in the second link, an exact final endpoint, and a
+literal chained accumulator carry.  Emission, both GCC `-O2` compilations, and
+both executions took 593.77 s total and peaked at 534,884 KiB under the 2/3
+GiB one-worker, zero-swap scope.  This machine-local manifest is a benchmark
+and falsification artifact, not by itself a trusted theorem or authenticated
+production receipt; the CompCert execution and Lean endpoint assembly remain
+separate checks.
+
+The same exact campaign was then compiled with CompCert 3.17 `ccomp -O2`.
+A 100,000,000-row calibration took 10.20 s at 533,796 KiB and reproduced all
+GCC slots.  The full two-link run likewise reproduced both receipt rows above
+bit for bit, completed in 850.29 s, and peaked at 536,744 KiB under the same
+2/3 GiB zero-swap scope.  Thus the verified compiler route has concrete
+full-range execution evidence; admitting that external receipt and completing
+the Lean zero-counter/source-family theorem remain logically distinct steps.
+
+For a literally accepting artifact, `moblive_chain.sh` also supports
+`MOBLIVE_START=3` in squared mode.  It starts from the canonical accumulator
+after rows 1 and 2, `(tLo,tHi) = (0,40960)`, but clears the failure counter at
+the paper's left endpoint.  A separate two-row artifact reproduces that carry;
+the accumulator is therefore continuous while the checked domain is exactly
+`3 ≤ n ≤ 7,727,068,586`.  A five-link smoke run through 100,000 returned zero
+in every link and the same final slots as the start-at-one run.
+
+The full CompCert accepting campaign returned:
+
+```
+3 7727000002 0 1707892775683813442 32768 87904 7727113216
+7727000003 7727068586 0 1719079213671136448 32768 87904 7727113216
+```
+
+Both links passed, the final state agrees with the start-at-one GCC and
+CompCert campaigns, and the exact-domain run took 816.70 s at 532,676 KiB
+under the 2/3 GiB zero-swap scope.  This is the preferred paper-faithful
+receipt shape: zero is the actual compiled result, not a post-hoc subtraction
+of two known pre-domain failures.

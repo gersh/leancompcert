@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Chain a per-integer `Σ μ(m)/m` artifact over [1, HI].
+# Chain a per-integer `Σ μ(m)/m` artifact over [START, HI].
 #
 #   bench/moblive_chain.sh HI SEGLEN LINKLEN [CC] [MANIFEST] [--corrupt K]
 #   MOBLIVE_MODE=plattstrongsquared bench/moblive_chain.sh ...
+#   MOBLIVE_START=3 MOBLIVE_MODE=plattstrongsquared bench/moblive_chain.sh ...
 #
 # SEGLEN  cells per sieve window -- a memory parameter only.
 # LINKLEN integers per artifact; must be a multiple of SEGLEN.  One link is one
@@ -10,10 +11,11 @@
 #
 # `plattstronglive` is the historical square-root relaxation and remains the
 # default.  `plattstrongsquared` is the paper-faithful exact squared predicate.
-# The chain always opens at n = 1, because that is the only carry-in that is
-# not a hand-computed number: the accumulator is the bare bias.  The first link
-# reports two genuine failures, at n = 1 and n = 2.  The relaxed mode also
-# reports the known spurious tie at n = 4:
+# By default the chain opens at n = 1 with the bare accumulator bias.  The
+# paper-faithful squared mode may instead open at n = 3 with the canonical
+# carry after rows 1 and 2 and a cleared counter, exactly matching the source
+# domain.  From n = 1 the squared mode reports two genuine failures; the
+# relaxed mode also reports the known spurious tie at n = 4:
 #
 #   n = 1  the family is false: the sum is 1, the majorant 1/(2√2) = 0.354;
 #   n = 2  the family is false: 1/2 against 1/(2√3) = 0.289;
@@ -25,17 +27,16 @@
 #          n = 4 is the ONLY integer in [3, 7.727·10⁹] where the relaxation
 #          costs anything -- see bench/results/array_seg_folds.md.
 #
-# The selected count is asserted.  A first link reporting 0 would mean the artifact
-# was not testing what it claims.
+# The mode/start-specific count is asserted.  A start-at-one first link
+# reporting 0 would mean the artifact was not testing what it claims.
 #
 # WHAT IS DIFFERENT FROM bench/seg_chain.sh, AND WHY IT MATTERS
 #
-# 1. No window schedule.  The artifact tests `|Σ_{m≤n} μ(m)/m| ≤ 1/(2√(n+1))`
-#    at every integer against `⌊2⁶¹/⌈√(n+1)⌉⌋`, so a window is a unit of memory
-#    and the `√(hi/lo) − 1` loss of a geometric schedule is gone.  The last
-#    link is clamped so the chain stops at exactly HI, which is the fourth
-#    hazard of seg_chain.sh -- overshooting past the range the family claims --
-#    made structurally impossible.
+# 1. No threshold window schedule.  Both modes test every integer; the squared
+#    mode uses the exact finite predicate `(n+1)*upper^2 <= 2^122`, while the
+#    historical mode uses `⌊2⁶¹/⌈√(n+1)⌉⌋`.  Thus a sieve window is only a unit
+#    of memory and the `√(hi/lo) − 1` loss is gone.  The last link is clamped so
+#    the chain stops at exactly HI, making overshoot structurally impossible.
 #
 # 2. The exit code is not the check.  seg_chain.sh accepts a window when the
 #    artifact reports zero violations.  That is not sound for a *chain*: a
@@ -66,13 +67,22 @@ LINKLEN=${3:-$HI}
 CC=${4:-gcc}
 MANIFEST=${5:-}
 MODE=${MOBLIVE_MODE:-plattstronglive}
+START=${MOBLIVE_START:-1}
 CORRUPT=-1
 if [ "${6:-}" = "--corrupt" ]; then CORRUPT=${7:-1}; fi
-case "$MODE" in
-  plattstronglive) FIRSTVIOL=3 ;;
-  plattstrongsquared) FIRSTVIOL=2 ;;
-  *) echo "unsupported MOBLIVE_MODE: $MODE"; exit 2 ;;
+case "$START:$MODE" in
+  1:plattstronglive) FIRSTVIOL=3; TLO=0; THI=32768 ;;
+  1:plattstrongsquared) FIRSTVIOL=2; TLO=0; THI=32768 ;;
+  # Canonical accumulator after rows 1 and 2, with the violation counter
+  # deliberately cleared because the paper's source domain begins at row 3.
+  # A separate two-row artifact reproduces this seed as (0, 40960).
+  3:plattstrongsquared) FIRSTVIOL=0; TLO=0; THI=40960 ;;
+  *) echo "unsupported MOBLIVE_START:MOBLIVE_MODE: $START:$MODE"; exit 2 ;;
 esac
+
+if [ "$HI" -lt "$START" ]; then
+  echo "HI ($HI) must be at least MOBLIVE_START ($START)"; exit 2
+fi
 
 if [ $((LINKLEN % SEGLEN)) -ne 0 ]; then
   echo "LINKLEN ($LINKLEN) must be a multiple of SEGLEN ($SEGLEN)"; exit 2
@@ -81,15 +91,10 @@ fi
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-# `mobWideBits = 15`, so the accumulator opens at the bare bias 2^(64+15):
-# low limb 0, high limb 2^15 = 32768.
-TLO=0
-THI=32768
-
 NEW=""
 if [ -n "$MANIFEST" ] && [ ! -f "$MANIFEST" ]; then NEW=yes; : > "$MANIFEST"; fi
 
-lo=1
+lo=$START
 link=0
 fail=0
 while [ "$lo" -le "$HI" ]; do
@@ -170,5 +175,11 @@ if [ "$fail" != "0" ]; then
   echo "chain REJECTED"
   exit 1
 fi
-if [ "$MODE" = "plattstrongsquared" ]; then failures="n = 1, 2"; else failures="n = 1, 2, 4"; fi
-echo "chain accepted: mode=$MODE [1, $HI], $link links, failures only at $failures, manifest reproduced"
+if [ "$START" = "3" ]; then
+  failures="none"
+elif [ "$MODE" = "plattstrongsquared" ]; then
+  failures="n = 1, 2"
+else
+  failures="n = 1, 2, 4"
+fi
+echo "chain accepted: mode=$MODE [$START, $HI], $link links, failures: $failures, manifest reproduced"
