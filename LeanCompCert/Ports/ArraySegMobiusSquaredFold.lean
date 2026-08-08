@@ -1,5 +1,6 @@
 import LeanCompCert.Ports.MobiusSquaredResidueWindow
 import LeanCompCert.Ports.ArraySegMobiusResidueFrame
+import LeanCompCert.Ports.MobiusResidueTrialWindow
 
 /-!
 # Folding the production squared residue trace
@@ -22,6 +23,7 @@ open LeanCompCert.Ports.ArraySegMobiusIndexedRun
 open LeanCompCert.Ports.ArraySegMobiusResidueFrame
 open LeanCompCert.Ports.MobiusResidueRealisation
 open LeanCompCert.Ports.MobiusSquaredResidueRealisation
+open LeanCompCert.Ports.MobiusResidueTrial
 
 private theorem squaredResidue_avoids_core (k j : Nat)
     (hj : CoreReg j = true) :
@@ -173,6 +175,24 @@ def squaredResFold (k : Nat) : List Sig → Res → Res
   | [], r => r
   | g :: gs, r => squaredResFold k gs (squaredResStep k g r)
 
+/-- A disabled production event is also transparent to the squared checker.
+In particular, root and marking events cannot create receipt failures. -/
+theorem squaredResStep_idle (k n : Nat) (r : Res)
+    (hlo : r.tLo < M) (hhi : r.tHi < M)
+    (hc : r.cel < M) (hcs : r.celSq < M) (hv : r.viol < M) :
+    squaredResStep k (idleSig n) r = r := by
+  simp [squaredResStep, idleSig, accStep, celStep, squaredViolStep,
+    Nat.mod_eq_of_lt hlo, Nat.mod_eq_of_lt hhi, Nat.mod_eq_of_lt hc,
+    Nat.mod_eq_of_lt hcs, Nat.mod_eq_of_lt hv]
+
+/-- Every transparent squared step preserves the five machine-word bounds. -/
+theorem squaredResStep_word (k : Nat) (g : Sig) (r : Res) :
+    ResWord (squaredResStep k g r) := by
+  unfold ResWord squaredResStep
+  dsimp only
+  exact ⟨accStep_fst_lt _ _ _ _ _ _, accStep_snd_lt _ _ _ _ _ _,
+    Nat.mod_lt _ M_pos, Nat.mod_lt _ M_pos, Nat.mod_lt _ M_pos⟩
+
 /-- Equality of the four persistent fields shared by the old and squared
 residue models.  The violation counters are intentionally independent. -/
 def ResPrefixEq (a b : Res) : Prop :=
@@ -215,6 +235,14 @@ theorem squaredResFold_resFold_prefix_eq_self (k : Nat) (xs : List Sig)
     (r : Res) :
     ResPrefixEq (squaredResFold k xs r) (resFold k xs r) := by
   exact squaredResFold_resFold_prefix_eq k xs r r ⟨rfl, rfl, rfl, rfl⟩
+
+/-- Any invariant established for the historical fold transfers directly to
+the paper-faithful squared fold over the identical finite signal trace. -/
+theorem squaredResFold_inv_of_resFold_inv (k n : Nat) (mu : Nat → Int)
+    (xs : List Sig) (r : Res)
+    (h : ResInv k mu n (resFold k xs r)) :
+    ResInv k mu n (squaredResFold k xs r) :=
+  (squaredResFold_resFold_prefix_eq_self k xs r).resInv h
 
 theorem squaredResFold_append (k : Nat) (xs ys : List Sig) (r : Res) :
     squaredResFold k (xs ++ ys) r =
