@@ -1,5 +1,6 @@
 import LeanCompCert.Ports.ArraySegMobiusResidueFold
 import LeanCompCert.Ports.ArraySegMobiusIndexedMain
+import LeanCompCert.Ports.ArraySegMobiusIdleSignal
 
 /-! # Production-indexed Möbius signals in the combined trace
 
@@ -25,9 +26,11 @@ open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 open LeanCompCert.Ports.ArraySegMobiusCellRep
 open LeanCompCert.Ports.ArraySegMobiusIndexedRun
 open LeanCompCert.Ports.ArraySegMobiusIndexedMain
+open LeanCompCert.Ports.ArraySegMobiusIdleSignal
 open LeanCompCert.Ports.ArraySegMobiusResidueFrame
 open LeanCompCert.Ports.ArraySegMobiusResidueFold
 open LeanCompCert.Ports.MobiusResidueRealisation
+open LeanCompCert.Ports.MobiusResidueTrial
 
 /-- `readSig` depends only on the sieve-facing projection. -/
 theorem CoreAgree.readSig_eq {s t : AState} (h : CoreAgree s t) :
@@ -62,6 +65,230 @@ theorem readSig_combinedIndexedRun_eq_indexedBodyRun
         c.coreBody) := by
   exact CoreAgree.readSig_eq (arun_coreBody_congr c (idx + fuel)
     (combinedIndexedRun_core idx c k fuel h))
+
+set_option maxRecDepth 10000 in
+/-- Every event of an actual combined marking prefix satisfies the literal
+residue division guards.  The proof places the local marking decoder theorem
+at its true changing production index and transports the verified window and
+counter position through the interleaved residue frame. -/
+theorem combinedIndexedRun_mark_event_divisors_ready
+    (c : Cfg) (idx k j : Nat) (combined core : AState)
+    (w write : Nat)
+    (hagree : CoreAgree combined core)
+    (hR : core.regs rR = 0)
+    (hW : core.regs rW = w)
+    (hWrite : core.regs rWrite = write)
+    (hj : j < c.markSteps)
+    (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxJM : idx + j < M)
+    (hspanM : c.rootSpan < M)
+    (hidxNe : ∀ m, m < j → idx + m ≠ c.rootSpan - 1)
+    (hwriteM : write < M)
+    (hwPos : 0 < w) (hwM : w < M)
+    (hcel : 1 ≤ (readRes
+      (combinedIndexedRun idx c k j combined)).cel)
+    (hcelM : (readRes
+      (combinedIndexedRun idx c k j combined)).cel < M) :
+    let eventCore := arun (idx + j)
+      (combinedIndexedRun idx c k j combined) c.coreBody
+    eventCore.regs 65 ≠ 0 ∧
+      (celStep (eventCore.regs 65) (eventCore.regs 103)
+        (eventCore.regs 102) (eventCore.regs 133)).1 ≠ 0 := by
+  let beforeCombined := combinedIndexedRun idx c k j combined
+  let beforeCore := indexedBodyRun idx c j core
+  have hposition := indexedBodyRun_mark_position c idx j core w write
+    (by omega) hR hW hWrite hLPos hTM hPM hidxJM hspanM hidxNe
+    hwriteM hwM
+  have hframe : CoreAgree beforeCombined beforeCore :=
+    combinedIndexedRun_core idx c k j hagree
+  have hmark : beforeCombined.regs rR < c.markSteps := by
+    rw [hframe.2 rR (by decide), hposition.2.1]
+    exact hj
+  have hwindow : beforeCombined.regs rW = w := by
+    exact (hframe.2 rW (by decide)).trans hposition.2.2
+  apply mark_event_divisors_ready c (idx + j) beforeCombined hmark hTM
+  · rw [hwindow]
+    exact hwPos
+  · rw [hwindow]
+    exact hwM
+  · simpa only [beforeCombined] using hcel
+  · simpa only [beforeCombined] using hcelM
+
+set_option maxRecDepth 10000 in
+/-- The literal interleaved residue is exactly unchanged across an arbitrary
+finite marking prefix at the true changing production indices.  Positivity
+and word-sizedness are required only at entry: every preceding marking event
+is proved to be a defined machine no-op before the next one is considered. -/
+theorem readRes_combinedIndexedRun_mark_prefix_eq
+    (c : Cfg) (idx k len fuel : Nat) (combined core : AState)
+    (w write : Nat)
+    (hagree : CoreAgree combined core)
+    (hfuel : fuel ≤ c.markSteps)
+    (hR : core.regs rR = 0)
+    (hW : core.regs rW = w)
+    (hWrite : core.regs rWrite = write)
+    (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxFuelM : idx + fuel < M)
+    (hspanM : c.rootSpan < M)
+    (hidxNe : ∀ m, m < fuel → idx + m ≠ c.rootSpan - 1)
+    (hwriteM : write < M)
+    (hwPos : 0 < w) (hwM : w < M)
+    (hcel : 1 ≤ (readRes combined).cel)
+    (hcelM : (readRes combined).cel < M)
+    (hw : ResWord (readRes combined)) :
+    readRes (combinedIndexedRun idx c k fuel combined) =
+      readRes combined := by
+  induction fuel with
+  | zero => rfl
+  | succ n ih =>
+      have hnLe : n ≤ c.markSteps := by omega
+      have hprev := ih hnLe (by omega)
+        (fun m hm => hidxNe m (by omega))
+      let beforeCombined := combinedIndexedRun idx c k n combined
+      let beforeCore := indexedBodyRun idx c n core
+      have hposition := indexedBodyRun_mark_position c idx n core w write
+        hnLe hR hW hWrite hLPos hTM hPM (by omega) hspanM
+        (fun m hm => hidxNe m (by omega)) hwriteM hwM
+      have hframe : CoreAgree beforeCombined beforeCore :=
+        combinedIndexedRun_core idx c k n hagree
+      have hmark : beforeCombined.regs rR < c.markSteps := by
+        rw [hframe.2 rR (by decide), hposition.2.1]
+        omega
+      have hwindow : beforeCombined.regs rW = w :=
+        (hframe.2 rW (by decide)).trans hposition.2.2
+      have hstep : readRes (arun (idx + n) beforeCombined
+          (c.coreBody ++ mobiusLiveResidue k)) = readRes beforeCombined := by
+        apply readRes_arun_combined_mark c k len (idx + n) beforeCombined
+          hmark hTM
+        · rw [hwindow]
+          exact hwPos
+        · rw [hwindow]
+          exact hwM
+        · rw [hprev]
+          exact hcel
+        · rw [hprev]
+          exact hcelM
+        · rw [hprev]
+          exact hw
+      rw [combinedIndexedRun_succ]
+      exact hstep.trans hprev
+
+set_option maxRecDepth 10000 in
+/-- A root-accumulation event in the actual combined trace satisfies both
+literal residue division guards whenever the already-verified standalone
+indexed trace places that event in the root phase.  This is the generic frame
+lemma used by each of the finite root-window schedule regimes. -/
+theorem combinedIndexedRun_root_acc_event_divisors_ready
+    (c : Cfg) (idx k fuel : Nat) (combined core : AState)
+    (hagree : CoreAgree combined core)
+    (hT : c.markSteps ≤
+      (indexedBodyRun idx c fuel core).regs rR)
+    (hroot : idx + fuel < c.rootSpan)
+    (hRM : (indexedBodyRun idx c fuel core).regs rR < M)
+    (hTM : c.markSteps < M)
+    (hidxM : idx + fuel < M)
+    (hspanM : c.rootSpan < M)
+    (hWM : (indexedBodyRun idx c fuel core).regs rW +
+      ((indexedBodyRun idx c fuel core).regs rR - c.markSteps) < M)
+    (hnPos : 0 < (indexedBodyRun idx c fuel core).regs rW +
+      ((indexedBodyRun idx c fuel core).regs rR - c.markSteps))
+    (hcel : 1 ≤ (readRes
+      (combinedIndexedRun idx c k fuel combined)).cel)
+    (hcelM : (readRes
+      (combinedIndexedRun idx c k fuel combined)).cel < M) :
+    let eventCore := arun (idx + fuel)
+      (combinedIndexedRun idx c k fuel combined) c.coreBody
+    eventCore.regs 65 ≠ 0 ∧
+      (celStep (eventCore.regs 65) (eventCore.regs 103)
+        (eventCore.regs 102) (eventCore.regs 133)).1 ≠ 0 := by
+  let beforeCombined := combinedIndexedRun idx c k fuel combined
+  let beforeCore := indexedBodyRun idx c fuel core
+  have hframe : CoreAgree beforeCombined beforeCore :=
+    combinedIndexedRun_core idx c k fuel hagree
+  have hcounter : beforeCombined.regs rR = beforeCore.regs rR :=
+    hframe.2 rR (by decide)
+  have hwindow : beforeCombined.regs rW = beforeCore.regs rW :=
+    hframe.2 rW (by decide)
+  apply root_acc_event_divisors_ready c (idx + fuel) beforeCombined
+  · rw [hcounter]
+    exact hT
+  · exact hroot
+  · rw [hcounter]
+    exact hRM
+  · exact hTM
+  · exact hidxM
+  · exact hspanM
+  · rw [hcounter, hwindow]
+    exact hWM
+  · rw [hcounter, hwindow]
+    exact hnPos
+  · simpa only [beforeCombined] using hcel
+  · simpa only [beforeCombined] using hcelM
+
+set_option maxRecDepth 10000 in
+/-- The literal residue is unchanged across any finite root-accumulation
+prefix whose standalone indexed schedule supplies the phase and candidate
+bounds at each position.  This factors the residue proof from the existing
+bootstrap/later-root schedule case split. -/
+theorem readRes_combinedIndexedRun_root_acc_prefix_eq
+    (c : Cfg) (idx k len fuel : Nat) (combined core : AState)
+    (hagree : CoreAgree combined core)
+    (hphase : ∀ j, j < fuel →
+      let before := indexedBodyRun idx c j core
+      c.markSteps ≤ before.regs rR ∧
+        idx + j < c.rootSpan ∧
+        before.regs rR < M ∧
+        before.regs rW + (before.regs rR - c.markSteps) < M ∧
+        0 < before.regs rW + (before.regs rR - c.markSteps))
+    (hTM : c.markSteps < M)
+    (hspanM : c.rootSpan < M)
+    (hcel : 1 ≤ (readRes combined).cel)
+    (hcelM : (readRes combined).cel < M)
+    (hw : ResWord (readRes combined)) :
+    readRes (combinedIndexedRun idx c k fuel combined) =
+      readRes combined := by
+  induction fuel with
+  | zero => rfl
+  | succ n ih =>
+      have hprev := ih (fun j hj => hphase j (by omega))
+      let beforeCombined := combinedIndexedRun idx c k n combined
+      let beforeCore := indexedBodyRun idx c n core
+      have hframe : CoreAgree beforeCombined beforeCore :=
+        combinedIndexedRun_core idx c k n hagree
+      have hp := hphase n (Nat.lt_succ_self n)
+      dsimp only at hp
+      have hcounter : beforeCombined.regs rR = beforeCore.regs rR :=
+        hframe.2 rR (by decide)
+      have hwindow : beforeCombined.regs rW = beforeCore.regs rW :=
+        hframe.2 rW (by decide)
+      have hstep : readRes (arun (idx + n) beforeCombined
+          (c.coreBody ++ mobiusLiveResidue k)) = readRes beforeCombined := by
+        apply readRes_arun_combined_root_acc c k len (idx + n)
+          beforeCombined
+        · rw [hcounter]
+          exact hp.1
+        · exact hp.2.1
+        · rw [hcounter]
+          exact hp.2.2.1
+        · exact hTM
+        · omega
+        · exact hspanM
+        · rw [hcounter, hwindow]
+          exact hp.2.2.2.1
+        · rw [hcounter, hwindow]
+          exact hp.2.2.2.2
+        · rw [hprev]
+          exact hcel
+        · rw [hprev]
+          exact hcelM
+        · rw [hprev]
+          exact hw
+      rw [combinedIndexedRun_succ]
+      exact hstep.trans hprev
 
 /-- At changing-index accumulation position `i`, the selected cell is still
 the finite root fold established by the compiled marking phase. -/

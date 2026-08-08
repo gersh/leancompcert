@@ -1,4 +1,5 @@
 import LeanCompCert.Ports.ArraySegMobiusResidueFrame
+import LeanCompCert.Ports.ArraySegMobiusIdleSignal
 
 /-! # Folding the production residue trace
 
@@ -16,7 +17,9 @@ open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Ports.ArraySegSieve
+open LeanCompCert.Ports.ArraySegMobiusIdleSignal
 open LeanCompCert.Ports.MobiusResidueRealisation
+open LeanCompCert.Ports.MobiusResidueTrial
 
 /-- The production core leaves all five persistent residue fields unchanged. -/
 theorem readRes_arun_coreBody (c : Cfg) (idx : Nat) (s : AState) :
@@ -54,6 +57,49 @@ theorem readRes_arun_combined (c : Cfg) (k len idx : Nat) (s : AState)
   rw [readRes_arun_coreBody]
   · exact hn
   · exact hc
+
+/-- One literal combined marking event preserves all five residue fields.
+Both machine divisions are proved defined from the positive window and
+carried ceiling; the conclusion is therefore about the actual 50-instruction
+suffix, not merely its transparent model. -/
+theorem readRes_arun_combined_mark
+    (c : Cfg) (k len idx : Nat) (s : AState)
+    (hmark : s.regs rR < c.markSteps)
+    (hTM : c.markSteps < M)
+    (hwPos : 0 < s.regs rW) (hwM : s.regs rW < M)
+    (hcel : 1 ≤ (readRes s).cel)
+    (hcelM : (readRes s).cel < M)
+    (hw : ResWord (readRes s)) :
+    readRes (arun idx s (c.coreBody ++ mobiusLiveResidue k)) =
+      readRes s := by
+  have hguards := mark_event_divisors_ready c idx s hmark hTM hwPos hwM
+    hcel hcelM
+  rw [readRes_arun_combined c k len idx s hguards.1 hguards.2]
+  exact resStep_readSig_arun_coreBody_mark c k idx s (readRes s) hmark
+    hTM hw
+
+/-- One literal combined root-accumulation event likewise preserves all five
+residue fields under its explicit production bounds. -/
+theorem readRes_arun_combined_root_acc
+    (c : Cfg) (k len idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hroot : idx < c.rootSpan)
+    (hRM : s.regs rR < M)
+    (hTM : c.markSteps < M)
+    (hidxM : idx < M)
+    (hspanM : c.rootSpan < M)
+    (hWM : s.regs rW + (s.regs rR - c.markSteps) < M)
+    (hnPos : 0 < s.regs rW + (s.regs rR - c.markSteps))
+    (hcel : 1 ≤ (readRes s).cel)
+    (hcelM : (readRes s).cel < M)
+    (hw : ResWord (readRes s)) :
+    readRes (arun idx s (c.coreBody ++ mobiusLiveResidue k)) =
+      readRes s := by
+  have hguards := root_acc_event_divisors_ready c idx s hT hroot hRM hTM
+    hidxM hspanM hWM hnPos hcel hcelM
+  rw [readRes_arun_combined c k len idx s hguards.1 hguards.2]
+  exact resStep_readSig_arun_coreBody_root_acc c k idx s (readRes s) hT
+    hroot hRM hTM hidxM hspanM hw
 
 /-- Actual combined body execution with the production index advanced at
 every event. -/
