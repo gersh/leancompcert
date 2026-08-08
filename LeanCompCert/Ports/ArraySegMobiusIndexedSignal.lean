@@ -878,4 +878,135 @@ theorem readRes_combinedIndexedRun_main_window_inv
   rw [combinedIndexedRun_add]
   exact hacc
 
+set_option maxRecDepth 10000 in
+/-- Arbitrarily many complete main windows carry the finite-fold residue
+invariant through the actual interleaved production trace.  The violation
+counter's word bound is explicit because `ResInv` deliberately records the
+mathematical accumulator/ceiling invariant but not the final counter range. -/
+theorem readRes_combinedWindowRun_main_inv
+    (c : Cfg) (idx k len fuel : Nat) (combined core : AState)
+    (ps : List Nat) (bound w : Nat)
+    (hagree : CoreAgree combined core)
+    (hRep : MachineTableRep c core (c.firstPrime :: ps))
+    (hInv : PrimeTableInv (c.firstPrime :: ps) bound)
+    (hpsLen : (c.firstPrime :: ps).length = c.tableLen)
+    (hR : core.regs rR = 0) (hW : core.regs rW = w)
+    (hzero : core.regs rZero = 0)
+    (hclear : ∀ i, i < c.segLen → machineCell c core i = ⟨0, 0⟩)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTPos : 0 < c.markSteps)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxFuelM : idx + fuel * c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwFuelM : w + fuel * c.segLen < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (hA : c.arrayLen < M)
+    (hbudget :
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hmu : ∀ m, rootFoldValue (c.firstPrime :: ps) m = 1 ∨
+      rootFoldValue (c.firstPrime :: ps) m = -1 ∨
+      rootFoldValue (c.firstPrime :: ps) m = 0)
+    (hk : 1 ≤ k) (hk15 : k ≤ 15)
+    (hnlt : ∀ m, w ≤ m → m < w + fuel * c.segLen →
+      m < 2 ^ (64 - k))
+    (hbnd : ∀ m, w ≤ m → m < w + fuel * c.segLen →
+      (accTrue k (rootFoldValue (c.firstPrime :: ps)) m).natAbs ≤
+        2 ^ (62 + k))
+    (hcelNext : ∀ q, q < fuel → ∀ i, i < c.segLen →
+      let mid := combinedWindowRun idx c k q combined
+      let marked := combinedIndexedRun (idx + q * c.period) c k
+        c.markSteps mid
+      let before := readRes (combinedIndexedRun
+        (idx + q * c.period + c.markSteps) c k i marked)
+      (celStep (w + q * c.segLen + i) before.celSq before.cel 1).1 + 1 <
+        2 ^ 32)
+    (hword : ∀ q, q < fuel →
+      ResWord (readRes (combinedWindowRun idx c k q combined)))
+    (hwPos : 0 < w)
+    (h0 : ResInv k (rootFoldValue (c.firstPrime :: ps)) (w - 1)
+      (readRes combined)) :
+    ResInv k (rootFoldValue (c.firstPrime :: ps))
+      (w + fuel * c.segLen - 1)
+      (readRes (combinedWindowRun idx c k fuel combined)) := by
+  apply readRes_combinedWindowRun_inv_of_step idx c k fuel w
+    (rootFoldValue (c.firstPrime :: ps)) combined
+  · intro q hq hqInv
+    let midCombined := combinedWindowRun idx c k q combined
+    let midCore := indexedWindowRun idx c q core
+    let wq := w + q * c.segLen
+    have hLPos : 0 < c.segLen := by omega
+    have hperiodPos : 0 < c.period := by
+      simp only [Cfg.period]
+      omega
+    have hqPeriodLt : q * c.period < fuel * c.period :=
+      (Nat.mul_lt_mul_right hperiodPos).mpr hq
+    have hqSegLt : q * c.segLen < fuel * c.segLen :=
+      (Nat.mul_lt_mul_right hLPos).mpr hq
+    have hq1 : q + 1 ≤ fuel := by omega
+    have hq1PeriodLe : (q + 1) * c.period ≤ fuel * c.period :=
+      Nat.mul_le_mul_right c.period hq1
+    have hq1SegLe : (q + 1) * c.segLen ≤ fuel * c.segLen :=
+      Nat.mul_le_mul_right c.segLen hq1
+    have hq1PeriodEq : (q + 1) * c.period = q * c.period + c.period := by
+      rw [Nat.add_mul]
+      simp
+    have hq1SegEq : (q + 1) * c.segLen = q * c.segLen + c.segLen := by
+      rw [Nat.add_mul]
+      simp
+    rw [hq1PeriodEq] at hq1PeriodLe
+    rw [hq1SegEq] at hq1SegLe
+    have hidxQ : idx + q * c.period < M := by omega
+    have hwQ : wq < M := by
+      dsimp only [wq]
+      omega
+    have hcore := indexedWindowRun_main_complete c idx core
+      (c.firstPrime :: ps) bound w q hRep hInv hpsLen hR hW hzero hclear
+      hmain htableLenPos htableLenM hTPos hTM hPM hidxQ hspanM hspanPos
+      hp1Pos hp1LeL hp1LeBound hboundM hboundSqM hsegBoundM hwQ hA
+    have hagreeQ : CoreAgree midCombined midCore :=
+      combinedWindowRun_core idx c k q hagree
+    have hidxPeriodQ : (idx + q * c.period) + c.period < M := by
+      omega
+    have hwSegQ : wq + c.segLen < M := by
+      dsimp only [wq]
+      omega
+    have hnStartQ : wq + firstOffset wq c.firstPrime < M := by
+      have hoff := Nat.mod_lt (c.firstPrime - wq % c.firstPrime) hp1Pos
+      unfold firstOffset
+      omega
+    have hwriteM : midCore.regs rWrite < M := by
+      rw [hcore.2.1.cursor]
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+      omega
+    have hone := readRes_combinedIndexedRun_main_window_inv c
+      (idx + q * c.period) k len c.segLen midCombined midCore ps bound wq
+      (midCore.regs rWrite) hagreeQ hcore.2.1 hInv hpsLen
+      (Nat.le_refl _) hcore.2.2.1 hcore.2.2.2.1 (by rfl)
+      hcore.2.2.2.2 (Nat.le_trans hmain (Nat.le_add_right _ _))
+      htableLenPos htableLenM hTM hPM
+      hidxPeriodQ hspanM hspanPos hp1Pos hp1LeL hp1LeBound hboundM
+      hboundSqM hsegBoundM hwSegQ hnStartQ hA hbudget hcore.1 hwriteM
+      hwQ h2LM hwSegQ hmu hk hk15
+      (fun i hi => hnlt (wq + i) (by dsimp only [wq]; omega) (by
+        dsimp only [wq]
+        have := hq1SegLe
+        omega))
+      (fun i hi => hbnd (wq + i) (by dsimp only [wq]; omega) (by
+        dsimp only [wq]
+        have := hq1SegLe
+        omega))
+      (fun i hi => by
+        simpa only [midCombined, wq, Nat.add_assoc] using hcelNext q hq i hi)
+      (by dsimp only [wq]; omega) (hword q hq) hqInv
+    rw [← Cfg.period] at hone
+    rw [combinedWindowRun_succ]
+    simpa only [wq, Nat.add_mul, Nat.one_mul, Nat.add_assoc] using hone
+  · exact h0
+
 end LeanCompCert.Ports.ArraySegMobiusIndexedSignal
