@@ -73,9 +73,43 @@ theorem squareMul_spec (u n : Nat) (hu : u < B) (hn : n < B) :
   simp only [Nat.pow_succ, Nat.pow_zero]
   grind
 
+/-- All three output limbs remain machine words.  In particular, the final
+high-word carry cannot wrap: the exact product is strictly below `B^3`. -/
+theorem squareMul_words (u n : Nat) (hu : u < B) (hn : n < B) :
+    (squareMul u n).lo < B ∧ (squareMul u n).mid < B ∧
+      (squareMul u n).hi < B := by
+  have hlo : (squareMul u n).lo < B := by
+    simp only [squareMul, mul128x64]
+    exact (MulWide.hl_spec (MulWide.hl u u).1 n
+      (MulWide.hl_spec u u hu hu).2 hn).2
+  have hmid : (squareMul u n).mid < B := by
+    simp only [squareMul, mul128x64]
+    exact Nat.mod_lt _ (by decide)
+  have hpair : (MulWide.hl u u).1 + B * (MulWide.hl u u).2 < B * B := by
+    have hsq := MulWide.hl_spec u u hu hu
+    rw [hsq.1]
+    exact MulWide.mul_lt_mul_of_lt_of_lt hu hu
+  have hprod : ((MulWide.hl u u).1 + B * (MulWide.hl u u).2) * n <
+      (B * B) * B := Nat.mul_lt_mul_of_lt_of_lt hpair hn
+  have hspec := mul128x64_spec (MulWide.hl u u).1 (MulWide.hl u u).2 n
+    (MulWide.hl_spec u u hu hu).2 (MulWide.hl_hi_lt u u hu hu) hn
+  change val (squareMul u n) = _ at hspec
+  have hhi : (squareMul u n).hi < B := by
+    by_cases h : (squareMul u n).hi < B
+    · exact h
+    · have hle : B ≤ (squareMul u n).hi := Nat.le_of_not_gt h
+      have hlower := Nat.mul_le_mul_left (B * B) hle
+      simp only [val] at hspec
+      omega
+  exact ⟨hlo, hmid, hhi⟩
+
 /-- Limb-wise comparison with `2^122 = 2^64 * 2^58`. -/
 def lePow122 (x : Limbs3) : Prop :=
   x.hi = 0 ∧ (x.mid < 2 ^ 58 ∨ x.mid = 2 ^ 58 ∧ x.lo = 0)
+
+instance (x : Limbs3) : Decidable (lePow122 x) := by
+  unfold lePow122
+  infer_instance
 
 theorem lePow122_iff (x : Limbs3) (hlo : x.lo < B) :
     lePow122 x ↔ val x ≤ 2 ^ 122 := by

@@ -58,12 +58,8 @@ def rBad : Nat := 25
 
 def regCount : Nat := 26
 
-/-- Three exact wide products followed by the `<= 2^122` comparison.
-The output is `0` on acceptance and `1` on failure. -/
-def body : List AInstr :=
-  mulWideBody rU rU rSqLo rSqHi s0 s1 s2 s3 s4 s5 s6 s7 ++
-  mulWideBody rSqLo rN rPLo rMid0 s0 s1 s2 s3 s4 s5 s6 s7 ++
-  mulWideBody rSqHi rN rMid1 rTop0 s0 s1 s2 s3 s4 s5 s6 s7 ++
+/-- The final word-wise `<= 2^122` comparison. -/
+def compareBody : List AInstr :=
   [ .scalar (.binop rMid .add (.reg rMid0) (.reg rMid1))
   , .scalar (.binop rCarry .lt (.reg rMid) (.reg rMid1))
   , .scalar (.binop rTop .add (.reg rTop0) (.reg rCarry))
@@ -75,6 +71,14 @@ def body : List AInstr :=
   , .scalar (.binop rBad0 .bor (.reg rTopNZ) (.reg rMidGT))
   , .scalar (.binop rBad .bor (.reg rBad0) (.reg rEqLoBad)) ]
 
+/-- Three exact wide products followed by the `<= 2^122` comparison.
+The output is `0` on acceptance and `1` on failure. -/
+def body : List AInstr :=
+  mulWideBody rU rU rSqLo rSqHi s0 s1 s2 s3 s4 s5 s6 s7 ++
+  mulWideBody rSqLo rN rPLo rMid0 s0 s1 s2 s3 s4 s5 s6 s7 ++
+  mulWideBody rSqHi rN rMid1 rTop0 s0 s1 s2 s3 s4 s5 s6 s7 ++
+  compareBody
+
 def program (u n : Nat) : AProgram :=
   { regCount := regCount
     arrayLen := 1
@@ -85,7 +89,8 @@ def program (u n : Nat) : AProgram :=
     output := rBad }
 
 theorem program_wf (u n : Nat) : (program u n).WF := by
-  simp +decide [program, AProgram.WF, body, mulWideBody, AInstr.WF, Instr.WF, Operand.WF,
+  simp +decide [program, AProgram.WF, body, compareBody, mulWideBody,
+    AInstr.WF, Instr.WF, Operand.WF,
     regCount, rU, rN, rSqLo, rSqHi, rPLo, rMid0, rMid1, rTop0, rMid,
     rCarry, rTop, s0, s1, s2, s3, s4, s5, s6, s7, rTopNZ, rMidGT,
     rMidEQ, rLoNZ, rEqLoBad, rBad0, rBad]
