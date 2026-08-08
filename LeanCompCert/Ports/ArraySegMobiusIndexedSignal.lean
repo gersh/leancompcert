@@ -17,6 +17,7 @@ open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusSignal
+open LeanCompCert.Ports.ArraySegMobiusMark
 open LeanCompCert.Ports.ArraySegMobiusRootCellFold
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusPrimeTable
@@ -184,6 +185,207 @@ theorem readSig_combinedIndexedRun_main_acc_eq_rootFoldValue
       readSig_indexedBodyRun_main_acc_eq_rootFoldValue c idx core ps
         i w write hR hW hWrite hi hRoot hzero hTM hPM hidxI hrootM
         hspanPos hwriteM hwM h2LM hwiM hA hmarked
+
+/-- One complete production-indexed main window stages its own marking
+prefix, then emits the finite-fold signal at any selected accumulation cell.
+Unlike the lower-level theorem above, callers need not supply the marked
+state or its cell invariant. -/
+theorem readSig_indexed_main_window_cell_eq_rootFoldValue
+    (c : Cfg) (idx : Nat) (s : AState) (ps : List Nat)
+    (bound w write i : Nat)
+    (hRep : MachineTableRep c s (c.firstPrime :: ps))
+    (hInv : PrimeTableInv (c.firstPrime :: ps) bound)
+    (hpsLen : (c.firstPrime :: ps).length = c.tableLen)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hzero : s.regs rZero = 0)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxPeriodM : idx + c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwSegM : w + c.segLen < M)
+    (hnStartM : w + firstOffset w c.firstPrime < M)
+    (hA : c.arrayLen < M)
+    (hbudget :
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hi : i < c.segLen)
+    (hclear : machineCell c s i = ⟨0, 0⟩)
+    (hwriteM : write < M) (hwM : w < M)
+    (h2LM : c.segLen + c.segLen < M)
+    (hwiM : w + i < M) :
+    let marked := indexedBodyRun idx c c.markSteps s
+    readSig (arun (idx + c.markSteps + i)
+      (indexedBodyRun (idx + c.markSteps) c i marked) c.coreBody) =
+      muSig (rootFoldValue (c.firstPrime :: ps)) (w + i) := by
+  let marked := indexedBodyRun idx c c.markSteps s
+  have hLPos : 0 < c.segLen := by omega
+  have hidxMarkM : idx + c.markSteps < M := by
+    simp only [Cfg.period] at hidxPeriodM
+    omega
+  have hpos := indexedBodyRun_mark_position c idx c.markSteps s w write
+    (Nat.le_refl _) hR hW hWrite hLPos hTM hPM hidxMarkM hspanM
+    (fun k hk => by omega) hwriteM hwM
+  have hmarkedR : marked.regs rR = c.markSteps := hpos.2.1
+  have hmarkedW : marked.regs rW = w := hpos.2.2
+  have hmarkedWrite : marked.regs rWrite = write := hpos.1
+  have hmarkedZero : marked.regs rZero = 0 :=
+    indexedBodyRun_rZero idx c c.markSteps s hzero
+  have hmarkedCell : machineCell c marked i =
+      rootCellFold (c.firstPrime :: ps) (w + i) :=
+    indexedBodyRun_main_cell_eq_rootCellFold c idx s ps bound w i hRep
+      hInv hpsLen hR hW hmain htableLenPos htableLenM hTM hPM
+      hidxMarkM hspanM hspanPos hp1Pos hp1LeL hp1LeBound hboundM
+      hboundSqM hsegBoundM hwSegM hnStartM hA hbudget hi hclear
+  exact readSig_indexedBodyRun_main_acc_eq_rootFoldValue c
+    (idx + c.markSteps) marked (c.firstPrime :: ps) i w write hmarkedR
+    hmarkedW hmarkedWrite hi (by omega) hmarkedZero hTM hPM (by
+      simp only [Cfg.period] at hidxPeriodM
+      omega) hspanM hspanPos hwriteM hwM h2LM hwiM hA hmarkedCell
+
+set_option maxRecDepth 10000 in
+/-- Pointwise whole-main-suffix theorem.  After any finite number `q` of
+complete production-indexed main windows, the selected accumulation event
+at offset `i` emits the runnable finite-fold signal for the exact consecutive
+integer `w + q * segLen + i`. -/
+theorem readSig_indexedWindowRun_main_cell_eq_rootFoldValue
+    (c : Cfg) (idx : Nat) (s : AState) (ps : List Nat)
+    (bound w q i : Nat)
+    (hRep : MachineTableRep c s (c.firstPrime :: ps))
+    (hInv : PrimeTableInv (c.firstPrime :: ps) bound)
+    (hpsLen : (c.firstPrime :: ps).length = c.tableLen)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hclear : ∀ j, j < c.segLen → machineCell c s j = ⟨0, 0⟩)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxNextM : idx + (q + 1) * c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hA : c.arrayLen < M)
+    (hbudget :
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hi : i < c.segLen)
+    (hqNextM : w + (q + 1) * c.segLen < M) :
+    let fuel := q * c.period + c.markSteps + i
+    readSig (arun (idx + fuel) (indexedBodyRun idx c fuel s)
+      c.coreBody) =
+      muSig (rootFoldValue (c.firstPrime :: ps))
+        ((w + q * c.segLen) + i) := by
+  let current := indexedWindowRun idx c q s
+  let idxq := idx + q * c.period
+  let wq := w + q * c.segLen
+  let write := c.primeBase + (c.firstPrime :: ps).length
+  let marked := indexedBodyRun idxq c c.markSteps current
+  have hsumPos : 0 <
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum := by
+    simp only [List.map_cons, List.sum_cons]
+    exact Nat.add_pos_left (Nat.add_pos_right _ (by decide : 0 < 2)) _
+  have hTPos : 0 < c.markSteps := Nat.lt_of_lt_of_le hsumPos hbudget
+  have hidxqM : idx + q * c.period < M := by
+    simp only [Nat.add_mul] at hidxNextM
+    omega
+  have hwqM : w + q * c.segLen < M := by
+    simp only [Nat.add_mul] at hqNextM
+    omega
+  have hp := indexedWindowRun_main_complete c idx s
+    (c.firstPrime :: ps) bound w q hRep hInv hpsLen hR hW hzero hclear
+    hmain htableLenPos htableLenM hTPos hTM hPM hidxqM hspanM
+    hspanPos hp1Pos hp1LeL hp1LeBound hboundM hboundSqM hsegBoundM
+    hwqM hA
+  have hidxqPeriodM : idxq + c.period < M := by
+    dsimp only [idxq]
+    simp only [Nat.add_mul] at hidxNextM
+    omega
+  have hwqSegM : wq + c.segLen < M := by
+    dsimp only [wq]
+    simp only [Nat.add_mul] at hqNextM
+    omega
+  have hnStartM : wq + firstOffset wq c.firstPrime < M := by
+    have hoff : firstOffset wq c.firstPrime < c.firstPrime :=
+      Nat.mod_lt _ hp1Pos
+    omega
+  have hwiM : wq + i < M := by omega
+  have hwriteM : write < M := by
+    dsimp only [write]
+    simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+    omega
+  have h2LM : c.segLen + c.segLen < M := by
+    simp only [Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+    omega
+  have hlocal := readSig_indexed_main_window_cell_eq_rootFoldValue c idxq
+    current ps bound wq write i hp.2.1 hInv hpsLen hp.2.2.1
+    hp.2.2.2.1 hp.2.1.cursor hp.2.2.2.2 (by dsimp only [idxq]; omega)
+    htableLenPos htableLenM hTM hPM hidxqPeriodM hspanM hspanPos
+    hp1Pos hp1LeL hp1LeBound hboundM hboundSqM hsegBoundM hwqSegM
+    hnStartM hA hbudget hi (hp.1 i hi) hwriteM (by omega) h2LM hwiM
+  have hstate : indexedBodyRun idx c
+      (q * c.period + c.markSteps + i) s =
+      indexedBodyRun (idxq + c.markSteps) c i marked := by
+    rw [show q * c.period + c.markSteps + i =
+      q * c.period + (c.markSteps + i) by omega]
+    rw [indexedBodyRun_add, indexedBodyRun_add]
+    rfl
+  dsimp only at hlocal ⊢
+  rw [hstate]
+  simpa only [idxq, wq, Nat.add_assoc] using hlocal
+
+/-- Combined-trace form of the pointwise whole-main-suffix theorem.  Residue
+interleaving cannot alter either the selected state or its emitted signal. -/
+theorem readSig_combinedIndexedWindowRun_main_cell_eq_rootFoldValue
+    (c : Cfg) (idx k : Nat) (combined core : AState) (ps : List Nat)
+    (bound w q i : Nat)
+    (hagree : CoreAgree combined core)
+    (hRep : MachineTableRep c core (c.firstPrime :: ps))
+    (hInv : PrimeTableInv (c.firstPrime :: ps) bound)
+    (hpsLen : (c.firstPrime :: ps).length = c.tableLen)
+    (hR : core.regs rR = 0) (hW : core.regs rW = w)
+    (hzero : core.regs rZero = 0)
+    (hclear : ∀ j, j < c.segLen → machineCell c core j = ⟨0, 0⟩)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxNextM : idx + (q + 1) * c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hA : c.arrayLen < M)
+    (hbudget :
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hi : i < c.segLen)
+    (hqNextM : w + (q + 1) * c.segLen < M) :
+    let fuel := q * c.period + c.markSteps + i
+    readSig (arun (idx + fuel)
+      (combinedIndexedRun idx c k fuel combined) c.coreBody) =
+      muSig (rootFoldValue (c.firstPrime :: ps))
+        ((w + q * c.segLen) + i) := by
+  let fuel := q * c.period + c.markSteps + i
+  calc
+    readSig (arun (idx + fuel)
+        (combinedIndexedRun idx c k fuel combined) c.coreBody) =
+      readSig (arun (idx + fuel)
+        (indexedBodyRun idx c fuel core) c.coreBody) :=
+      readSig_combinedIndexedRun_eq_indexedBodyRun idx c k fuel hagree
+    _ = muSig (rootFoldValue (c.firstPrime :: ps))
+        ((w + q * c.segLen) + i) :=
+      readSig_indexedWindowRun_main_cell_eq_rootFoldValue c idx core ps
+        bound w q i hRep hInv hpsLen hR hW hzero hclear hmain
+        htableLenPos htableLenM hTM hPM hidxNextM hspanM hspanPos
+        hp1Pos hp1LeL hp1LeBound hboundM hboundSqM hsegBoundM hA
+        hbudget hi hqNextM
 
 /-- The updated ceiling cannot be zero when its incoming value is positive
 and has one word of headroom. -/
