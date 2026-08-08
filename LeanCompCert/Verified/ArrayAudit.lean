@@ -1259,4 +1259,32 @@ theorem source_total_output_zero_of_audit_and_source_returns_zero
     AComputation.value_of_returns a hSound.1 hSource
   exact hzero.symm
 
+/-- A fail-safe zero receipt plus an observation of any original register
+identifies that register in the ordinary total source state.  This is the
+carry-link counterpart of `source_total_output_zero_of_audit_and_source_returns_zero`:
+the audit establishes source definedness first, then the ordinary compiler
+correctness theorem reads the observed value from the unchanged trace. -/
+theorem source_total_reg_eq_of_audit_and_observesReg
+    (a : AComputation) (reg : Nat) (hreg : reg < a.program.regCount)
+    (value : Nat)
+    (hlen : 0 < a.program.arrayLen) (hlenM : a.program.arrayLen < M)
+    (hAudit : (auditComputation a).Returns ((0 : Nat) : Int))
+    (hObserve : a.ObservesReg reg hreg ((value : Nat) : Int)) :
+    let sEntry := arun 0 initialAState a.program.init
+    let sLoop := (List.range a.program.loopCount).foldl
+      (fun s idx => arun idx s a.program.body) sEntry
+    let sFinal := arun 0 sLoop a.program.epilogue
+    sFinal.regs reg = value := by
+  obtain ⟨n, hDenote⟩ :=
+    source_denotes_of_audit_returns_zero a hlen hlenM hAudit
+  obtain ⟨observed, hObservedDenote⟩ :=
+    AComputation.withOutput_denotes_of_denotes a reg hreg hDenote
+  have hValue : value = observed :=
+    AComputation.value_of_observesReg a reg hreg hObservedDenote hObserve
+  have hSource := AProgram.output_eq_arun_of_denote_eq_some
+    (a.withOutput reg hreg).program hObservedDenote
+  dsimp only [AComputation.withOutput] at hSource
+  dsimp only
+  exact hSource.symm.trans hValue.symm
+
 end LeanCompCert.Verified.ArrayAudit

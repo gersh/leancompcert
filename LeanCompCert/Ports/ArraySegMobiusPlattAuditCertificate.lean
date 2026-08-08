@@ -23,6 +23,7 @@ namespace LeanCompCert.Ports.ArraySegMobiusPlattAuditCertificate
 
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
+open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Verified.ArrayComputation
 open LeanCompCert.Verified.ArrayAudit
 open LeanCompCert.Ports.ArraySegSieve
@@ -72,6 +73,17 @@ division/address guard failures. -/
 axiom plattFirstAudit_compcert_run :
   (auditComputation plattFirstComputation).Returns ((0 : Nat) : Int)
 
+/-- The same compiled opening trace, with only its returned local changed,
+reproduced the low accumulator carry stored for the tail link. -/
+axiom plattFirst_tLo_compcert_run :
+  plattFirstComputation.ObservesReg rTLo (by decide)
+    ((1711921466838888838 : Nat) : Int)
+
+/-- The matching high-limb observation of the identical compiled trace. -/
+axiom plattFirst_tHi_compcert_run :
+  plattFirstComputation.ObservesReg rTHi (by decide)
+    ((32768 : Nat) : Int)
+
 /-- CompCert execution of the original tail link returned zero
 paper-majorant violations. -/
 axiom plattTail_compcert_run :
@@ -99,5 +111,95 @@ theorem plattTail_denote : plattTailComputation.program.denote = some 0 := by
   · decide
   · exact plattTailAudit_compcert_run
   · exact plattTail_compcert_run
+
+/-- Opaque state-level form of the opening receipt.  Keeping the computation
+projections in the statement prevents downstream modules from unfolding the
+large literal configuration while this proof is elaborated. -/
+theorem plattFirst_total_output_zero :
+    let sEntry := arun 0 initialAState plattFirstComputation.program.init
+    let sLoop := (List.range plattFirstComputation.program.loopCount).foldl
+      (fun s idx => arun idx s plattFirstComputation.program.body) sEntry
+    let sFinal := arun 0 sLoop plattFirstComputation.program.epilogue
+    sFinal.regs plattFirstComputation.program.output = 0 :=
+  source_total_output_zero_of_audit_and_source_returns_zero
+    plattFirstComputation (by decide) (by decide)
+    plattFirstAudit_compcert_run plattFirst_compcert_run
+
+/-- Opaque state-level form of the tail receipt. -/
+theorem plattTail_total_output_zero :
+    let sEntry := arun 0 initialAState plattTailComputation.program.init
+    let sLoop := (List.range plattTailComputation.program.loopCount).foldl
+      (fun s idx => arun idx s plattTailComputation.program.body) sEntry
+    let sFinal := arun 0 sLoop plattTailComputation.program.epilogue
+    sFinal.regs plattTailComputation.program.output = 0 :=
+  source_total_output_zero_of_audit_and_source_returns_zero
+    plattTailComputation (by decide) (by decide)
+    plattTailAudit_compcert_run plattTail_compcert_run
+
+/-- Exact low accumulator carry in the ordinary opening source state. -/
+theorem plattFirst_total_tLo :
+    let sEntry := arun 0 initialAState plattFirstComputation.program.init
+    let sLoop := (List.range plattFirstComputation.program.loopCount).foldl
+      (fun s idx => arun idx s plattFirstComputation.program.body) sEntry
+    let sFinal := arun 0 sLoop plattFirstComputation.program.epilogue
+    sFinal.regs rTLo = 1711921466838888838 :=
+  source_total_reg_eq_of_audit_and_observesReg plattFirstComputation
+    rTLo (by decide) 1711921466838888838 (by decide) (by decide)
+    plattFirstAudit_compcert_run plattFirst_tLo_compcert_run
+
+/-- Exact high accumulator carry in the ordinary opening source state. -/
+theorem plattFirst_total_tHi :
+    let sEntry := arun 0 initialAState plattFirstComputation.program.init
+    let sLoop := (List.range plattFirstComputation.program.loopCount).foldl
+      (fun s idx => arun idx s plattFirstComputation.program.body) sEntry
+    let sFinal := arun 0 sLoop plattFirstComputation.program.epilogue
+    sFinal.regs rTHi = 32768 :=
+  source_total_reg_eq_of_audit_and_observesReg plattFirstComputation
+    rTHi (by decide) 32768 (by decide) (by decide)
+    plattFirstAudit_compcert_run plattFirst_tHi_compcert_run
+
+/-! Projection equations used by the separate trace-composition module.  They
+are deliberately small opaque rewrite boundaries: downstream proofs should
+rewrite these fields instead of simplifying the entire computation record. -/
+
+theorem plattFirst_program : plattFirstComputation.program =
+    mobiusLiveSquaredProgram plattAlignedFirst mobWideBits plattFirstSeed :=
+  rfl
+
+theorem plattTail_program : plattTailComputation.program =
+    mobiusLiveSquaredProgram plattAlignedTail mobWideBits plattTailSeed :=
+  rfl
+
+theorem plattFirst_init : plattFirstComputation.program.init =
+    plattAlignedFirst.coreInit ++ mobiusLiveInit plattFirstSeed := rfl
+
+theorem plattFirst_body : plattFirstComputation.program.body =
+    plattAlignedFirst.coreBody ++ mobiusLiveSquaredResidue mobWideBits := rfl
+
+theorem plattFirst_loopCount : plattFirstComputation.program.loopCount =
+    plattAlignedFirst.period *
+      (plattAlignedFirst.rootCount + plattAlignedFirst.segCount) := rfl
+
+theorem plattFirst_epilogue : plattFirstComputation.program.epilogue =
+    mobiusLiveEpilogue plattAlignedFirst := rfl
+
+theorem plattFirst_output : plattFirstComputation.program.output =
+    outputReg := rfl
+
+theorem plattTail_init : plattTailComputation.program.init =
+    plattAlignedTail.coreInit ++ mobiusLiveInit plattTailSeed := rfl
+
+theorem plattTail_body : plattTailComputation.program.body =
+    plattAlignedTail.coreBody ++ mobiusLiveSquaredResidue mobWideBits := rfl
+
+theorem plattTail_loopCount : plattTailComputation.program.loopCount =
+    plattAlignedTail.period *
+      (plattAlignedTail.rootCount + plattAlignedTail.segCount) := rfl
+
+theorem plattTail_epilogue : plattTailComputation.program.epilogue =
+    mobiusLiveEpilogue plattAlignedTail := rfl
+
+theorem plattTail_output : plattTailComputation.program.output = outputReg :=
+  rfl
 
 end LeanCompCert.Ports.ArraySegMobiusPlattAuditCertificate

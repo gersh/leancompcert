@@ -139,6 +139,30 @@ theorem value_of_observesReg (a : AComputation) (reg : Nat)
     (hRun : a.ObservesReg reg hreg ((v : Nat) : Int)) : v = n :=
   value_of_returns (a.withOutput reg hreg) hDenote hRun
 
+/-- Changing only the observed output register preserves source definedness.
+The source instruction trace and all partial operations are identical; only
+the final projection from the successfully computed state changes. -/
+theorem withOutput_denotes_of_denotes (a : AComputation) (reg : Nat)
+    (hreg : reg < a.program.regCount) {n : Nat}
+    (hDenote : a.program.denote = some n) :
+    ∃ v, (a.withOutput reg hreg).program.denote = some v := by
+  cases hinit : denoteAInstrs a.program.arrayLen 0 initialAState
+      a.program.init with
+  | none => simp_all [AProgram.denote]
+  | some entry =>
+      cases hloop : (List.range a.program.loopCount).foldlM
+          (fun s index =>
+            denoteAInstrs a.program.arrayLen index s a.program.body)
+          entry with
+      | none => simp_all [AProgram.denote]
+      | some loopOut =>
+          cases hepi : denoteAInstrs a.program.arrayLen 0 loopOut
+              a.program.epilogue with
+          | none => simp_all [AProgram.denote]
+          | some final =>
+              refine ⟨final.regs reg, ?_⟩
+              simp_all [AProgram.denote, withOutput]
+
 /--
 **The generated-C leg.**  `AProgram.evalC_compile` for this packaging: any
 lowering of the compiled trace, run from any related C state, leaves the

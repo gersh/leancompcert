@@ -36,6 +36,9 @@ lake env lean --run bench/ArraySegEmit.lean MODE LO SEGLEN SEGCOUNT OUT [EXPECTE
 * `plattstrongsquaredaudit` — the same program after the fail-safe audit
                transformation.  Its return value is the sticky source-safety
                bit; the original majorant verdict remains in result cell 8.
+* `plattstrongsquaredtlo`, `plattstrongsquaredthi` — observation-only builds
+               of the identical squared trace, returning one accumulator
+               carry limb for a chained receipt.
 
 ## The emitted `main` carries a verdict
 
@@ -137,6 +140,14 @@ def exitDriver (name : String) (cells expected : Nat) : String :=
   "    if (r != UINT64_C(" ++ toString expected ++ ")) return 1;\n" ++
   "    return r == UINT64_C(0) ? 0 : 2;\n}\n"
 
+/-- Observation-only driver.  A carry limb is data, not an acceptance
+counter, so reproducing its exact named value is the complete verdict. -/
+def exactDriver (name : String) (cells expected : Nat) : String :=
+  "\nstatic uint64_t cells[" ++ toString cells ++ "];\n" ++
+  "int main(void)\n{\n" ++
+  "    uint64_t r = l_" ++ name ++ "(cells);\n" ++
+  "    return r == UINT64_C(" ++ toString expected ++ ") ? 0 : 1;\n}\n"
+
 /-- The classes each mode's residue keeps, in scan order.
 
 Every one of them is a **clause**: this file's residues carry no budgets and no
@@ -152,7 +163,8 @@ def classesOf : String → List Class
   | "platt211" | "plattstrong" =>
       [ ("mobius_upper", 0, 2), ("mobius_lower", 1, 3) ]
   | "plattstronglive" | "plattstrongsquared" |
-      "plattstrongsquaredaudit" =>
+      "plattstrongsquaredaudit" | "plattstrongsquaredtlo" |
+      "plattstrongsquaredthi" =>
       [ ("mobius_majorant", 0, 2) ]
   | _ => []
 
@@ -205,7 +217,8 @@ def main (args : List String) : IO UInt32 := do
             let s : MobLiveSeed :=
               (mobLiveSeed lo (seeds[0]?.getD dflt.tLo) (seeds[1]?.getD dflt.tHi))
             pure (mobiusLiveProgram c k s)
-        | "plattstrongsquared" | "plattstrongsquaredaudit" =>
+        | "plattstrongsquared" | "plattstrongsquaredaudit" |
+            "plattstrongsquaredtlo" | "plattstrongsquaredthi" =>
             -- The exact squared predicate uses the same accumulator carry as
             -- `plattstronglive`, so existing manifests can retain their four
             -- result-slot shape while new receipts use the exact test.
@@ -215,12 +228,18 @@ def main (args : List String) : IO UInt32 := do
               (mobLiveSeed lo (seeds[0]?.getD dflt.tLo) (seeds[1]?.getD dflt.tHi))
             let p := mobiusLiveSquaredProgram c k s
             pure (if mode = "plattstrongsquaredaudit" then
-              auditProgram p else p)
+              auditProgram p else if mode = "plattstrongsquaredtlo" then
+              { p with output := rTLo } else if mode = "plattstrongsquaredthi" then
+              { p with output := rTHi } else p)
         | _ => do IO.eprintln "bad MODE"; return 1
       let base := p.arrayLen - 16
       let driver :=
         match expected.bind String.toNat? with
-        | some n => exitDriver name p.arrayLen n
+        | some n =>
+            if mode = "plattstrongsquaredtlo" ||
+                mode = "plattstrongsquaredthi" then
+              exactDriver name p.arrayLen n
+            else exitDriver name p.arrayLen n
         | none =>
             verdictDriver name p.arrayLen base (slotsOf mode) 8
               (classesOf mode) [] true

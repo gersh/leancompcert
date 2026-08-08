@@ -23,6 +23,7 @@ import LeanCompCert.Verified.ArrayBridge
 import LeanCompCert.Verified.ArrayRolled
 import LeanCompCert.Verified.Packed
 import LeanCompCert.Verified.PackedTransfer
+import LeanCompCert.Ports.ArraySegMobiusPlattAuditFold
 import LeanCompCert.Verified.ListFold
 import LeanCompCert.Verified.PackedSieve
 import LeanCompCert.Verified.Segment
@@ -612,7 +613,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootMixed.indexedBodyRun_mixed_root_acc_complete_bootstrap_wrap
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootWindows.indexedRootWindow_bootstrap_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootWindows.indexedRootWindow_mixed_complete
-#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootWindows.indexedRootWindow_later_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootWindows.indexedRootWindow_later_complete_room
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootWindows.indexedRootWindow_later_transition
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedMain.indexedBodyRun_main_acc_prefix
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedMain.indexedBodyRun_main_acc_complete
@@ -632,9 +633,9 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.rootLaterWindows_succ
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedWindowRun_bootstrap_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedBootstrapWindows_mixed_complete
-#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedWindowRun_later_root_complete
-#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedLaterWindows_final_transition
-#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedLaterWindows_then_main_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedWindowRun_later_root_complete_room
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedLaterWindows_final_transition_room
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedLaterWindows_then_main_complete_room
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedProgram.coreEntry_rootTableInv
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedProgram.coreEntry_bootstrap_view
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedProgram.coreEntry_root_position
@@ -727,7 +728,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_bootstrap_retain
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_bootstrap_table_cells
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_bootstrap_wrap
-#print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_table_cells
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_table_cells_room
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_wrap
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_transition
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_eq_rootTableStep
@@ -906,6 +907,21 @@ fails elaboration, so an entry cannot silently audit nothing.
 -- an `AProgramRefinement`.  Neither evaluates the production fold.
 #print axioms LeanCompCert.Ports.RamareMStar140M.msProgram_denote
 #print axioms LeanCompCert.Ports.RamareMStar140M.msEncoding
+
+-- The paper-faithful aligned Platt campaign.  The generic audit and
+-- observation bridges must stay axiom-free; the closed fold receipts expose
+-- only their explicitly named physical CompCert runs.
+#print axioms LeanCompCert.Verified.ArrayComputation.AComputation.withOutput_denotes_of_denotes
+#print axioms LeanCompCert.Verified.ArrayAudit.source_total_reg_eq_of_audit_and_observesReg
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditTraceGeneric.squaredComputation_total_output_to_indexed_viol_zero
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditTraceGeneric.squaredComputation_total_tLo_to_indexed
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditTraceGeneric.squaredComputation_total_tHi_to_indexed
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditTrace.plattFirst_indexed_viol_zero
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditTrace.plattFirst_indexed_tLo
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditTrace.plattFirst_indexed_tHi
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditTrace.plattTail_indexed_viol_zero
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditFold.plattFirst_fold_viol_zero
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditFold.plattTail_fold_viol_zero
 
 -- The run-receipt standard (`LeanCompCert/Attest/`).  It is in the axiom-free
 -- library on purpose: `RunAdmission` is a HYPOTHESIS here, discharged only by

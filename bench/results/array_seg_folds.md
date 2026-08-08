@@ -1815,3 +1815,48 @@ full for the final sixteen composite candidates.  The machine correctly
 performs no store on those marked rows.  The replacement finite evidence
 therefore permits `length = tableLen` and requires strict spare capacity only
 when `unmarkedBool` says the current row will append.
+
+The compiled receipts now reach the transparent paper-facing fold without
+kernel reduction of the multi-billion-event trace.  The reusable theorem in
+`ArraySegMobiusPlattAuditTraceGeneric.lean` is quantified over an opaque
+`AComputation`; the two closed configurations are specialized only after that
+theorem has compiled.  The resulting `plattFirst_indexed_viol_zero` and
+`plattTail_indexed_viol_zero` source checks took 0.25 seconds at 598 MiB peak
+RSS.  `ArraySegMobiusPlattAuditFold.lean` then composes those trace results
+with the already verified production schedules to prove
+`plattFirst_fold_viol_zero` and `plattTail_fold_viol_zero`, whose conclusions
+are stated entirely as the transparent `squaredResFold`.  Its source check
+took 0.22 seconds at 588 MiB.  The 237-job aggregate `LeanCompCert` build
+passed with one worker under `MemoryHigh=2G`, `MemoryMax=3G`, and zero swap.
+
+The first link's nonzero accumulator carry is also admitted through compiled
+observations, rather than by reducing the closed trace or silently treating a
+data register as a zero verdict.  Emitter modes `plattstrongsquaredtlo` and
+`plattstrongsquaredthi` emit the same opening computation with only the
+observed output local changed.  `AComputation.withOutput_denotes_of_denotes`
+and `source_total_reg_eq_of_audit_and_observesReg` combine each observation
+with the existing zero-audit receipt to identify the corresponding ordinary
+source register.  The two CompCert 3.17 `-O2` observations returned exit zero:
+
+| observation | exact value | wall | user | peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| `rTLo` | `1711921466838888838` | 15:06.82 | 906.73 s | 1,372 KiB |
+| `rTHi` | `32768` | 15:04.03 | 904.01 s | 1,408 KiB |
+
+Both used the aligned opening shape `rootCount = 3`, `rootLen = rootCap =
+87903`, `loopCount = 31905680260`, array length `96455`, and body length
+`224`.  CompCert compiled the observations in 0.05 seconds at 19,196 KiB and
+0.06 seconds at 19,988 KiB.  Reproducible artifact identities are:
+
+| observation | emitted C SHA-256 | CompCert assembly SHA-256 |
+| --- | --- | --- |
+| `rTLo` | `09cffe074bc8c07041ee871b561008d7e5e6e10357474733d19f0edd7edcafe6` | `704f9cfcab746ff2b586d3a1937f8c66db870c5360a3c87d48034f45158a83af` |
+| `rTHi` | `d4074db8f98a3fea8a79cd08d668508be1229a727ed19936daa0482501e9fcc2` | `768c4744f7644a5c8ba906b6ed410a032d72d1b512ba64aceeaa99ea030964c4` |
+
+The derived Lean theorems `plattFirst_total_tLo`,
+`plattFirst_total_tHi`, `plattFirst_indexed_tLo`, and
+`plattFirst_indexed_tHi` expose that exact carry in the source and indexed
+trace models.  Together with the zero-violation fold receipts, this closes the
+compiled-evidence portion of the two-link chain.  Relating the retained
+accumulator prefix to the Mathlib Möbius/fixed-point sweep remains a separate
+paper-level theorem obligation.
