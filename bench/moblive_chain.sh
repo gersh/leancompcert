@@ -8,6 +8,9 @@
 # SEGLEN  cells per sieve window -- a memory parameter only.
 # LINKLEN integers per artifact; must be a multiple of SEGLEN.  One link is one
 #         emitted, compiled, executed C program.
+# MOBLIVE_TAIL_SEGLEN optionally selects a divisor of the final short span.
+#         This is useful when a proof requires root windows to end exactly at
+#         the finite square-root cap instead of using one arbitrary tail cell.
 #
 # `plattstronglive` is the historical square-root relaxation and remains the
 # default.  `plattstrongsquared` is the paper-faithful exact squared predicate.
@@ -68,6 +71,7 @@ CC=${4:-gcc}
 MANIFEST=${5:-}
 MODE=${MOBLIVE_MODE:-plattstronglive}
 START=${MOBLIVE_START:-1}
+TAIL_SEGLEN=${MOBLIVE_TAIL_SEGLEN:-}
 CORRUPT=-1
 if [ "${6:-}" = "--corrupt" ]; then CORRUPT=${7:-1}; fi
 case "$START:$MODE" in
@@ -87,6 +91,9 @@ fi
 if [ $((LINKLEN % SEGLEN)) -ne 0 ]; then
   echo "LINKLEN ($LINKLEN) must be a multiple of SEGLEN ($SEGLEN)"; exit 2
 fi
+if [ -n "$TAIL_SEGLEN" ] && [ "$TAIL_SEGLEN" -le 0 ]; then
+  echo "MOBLIVE_TAIL_SEGLEN must be positive"; exit 2
+fi
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -104,6 +111,8 @@ while [ "$lo" -le "$HI" ]; do
     len=$SEGLEN; cnt=$((LINKLEN / SEGLEN))
   elif [ $((span % SEGLEN)) -eq 0 ]; then
     len=$SEGLEN; cnt=$((span / SEGLEN))
+  elif [ -n "$TAIL_SEGLEN" ] && [ $((span % TAIL_SEGLEN)) -eq 0 ]; then
+    len=$TAIL_SEGLEN; cnt=$((span / TAIL_SEGLEN))
   else
     len=$span; cnt=1
   fi

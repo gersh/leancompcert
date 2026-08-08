@@ -580,6 +580,54 @@ theorem readRes_combinedWindowRun_root_eq
       rw [combinedWindowRun_succ]
       exact hstep.trans hprev
 
+/-- Production-schedule specialization for an arbitrary live carry seed.  The
+root phase has gate zero, so it preserves all residue fields; only positivity
+of the seed's ceiling is needed by the compiled unsigned division. -/
+theorem readRes_combinedEntry_root_eq_seed
+    (c : Cfg) (k bootBound bootFuel laterFuel mainFuel delta : Nat)
+    (seed : MobLiveSeed)
+    (hseedCel : 1 ≤ seed.c % M)
+    (h : ProductionCoreSchedule c bootBound bootFuel laterFuel mainFuel delta) :
+    let rootFuel := bootFuel + 1 + (laterFuel + 1)
+    let entry := combinedEntry c seed
+    readRes (combinedWindowRun 0 c k rootFuel entry) = readRes entry := by
+  let rootFuel := bootFuel + 1 + (laterFuel + 1)
+  let entry := combinedEntry c seed
+  have hbootM : ∀ p, p ∈ c.bootPrimes → p < M := by
+    intro p hp
+    exact Nat.lt_of_le_of_lt (h.bootPrime.upper p hp) h.bootBoundM
+  have hpos := coreEntry_root_position c h.bootLe hbootM h.arrayM
+  have hrootEq : rootFuel * c.period = c.rootSpan := by
+    have hfinal := h.finalIndex
+    dsimp only [rootFuel]
+    simp only [Nat.add_mul, Nat.one_mul] at hfinal ⊢
+    omega
+  have hwRootM : 1 + rootFuel * c.segLen < M := by
+    have hfinal := h.finalBaseM
+    dsimp only [finalRootBound, laterBase, crossingBase] at hfinal
+    dsimp only [rootFuel]
+    simp only [Nat.add_mul, Nat.one_mul]
+    omega
+  have hentryWord := combinedEntry_word c seed
+  apply readRes_combinedWindowRun_root_eq c 0 k c.segLen rootFuel entry
+    (coreEntry c) 1 (combinedEntry_core c seed) hpos.1 hpos.2.1
+  · rw [Nat.zero_add, hrootEq]
+    exact Nat.le_refl _
+  · exact h.segLenPos
+  · exact h.markM
+  · exact h.periodM
+  · exact h.spanM
+  · omega
+  · exact hwRootM
+  · exact hentryWord.1
+  · exact hentryWord.2
+  · rw [readRes_combinedEntry]
+    exact hseedCel
+  · exact hentryWord.1 rCeil
+  · exact ⟨hentryWord.1 rTLo, hentryWord.1 rTHi,
+      hentryWord.1 rCeil, hentryWord.1 rCeilSq,
+      hentryWord.1 rMViol⟩
+
 /-- Production-schedule specialization: the standard compiled entry reaches
 the main-phase boundary with exactly its initialized residue. -/
 theorem readRes_combinedEntry_root_eq
