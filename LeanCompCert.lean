@@ -89,6 +89,7 @@ import LeanCompCert.Ports.MobiusResidueTest
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.ArraySegMobiusCellRep
 import LeanCompCert.Ports.ArraySegMobiusAccumulation
+import LeanCompCert.Ports.ArraySegMobiusRootAccumulation
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Ports.BlockedFold
 import LeanCompCert.Ports.RS62LadderEncoding

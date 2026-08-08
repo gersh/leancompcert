@@ -1318,3 +1318,30 @@ cap.  The 618-declaration strict audit passed at 1,602,432 KiB under 4 GiB;
 the serialized 431-job full build passed at 1,736,700 KiB under 8 GiB.  The
 Mathlib consumer source check, measured separately in the downstream project,
 passed in 1.51 s at 1,938,208 KiB with zero swap under a 4 GiB hard cap.
+
+The compiled root-collection seam now reaches one complete production body
+iteration.  `rootStoreInput` is an exact slice of the 111-instruction body
+immediately after its decoder and two clear stores.  The new proofs show that
+this prefix preserves the represented prime table, exposes the sequential
+candidate and its finite divisibility bit, and that the actual root-store
+suffix performs `rootTableStep`.  The final one-step theorem updates
+`RootTableInv` under the explicit paper-standard condition
+`n < (bootBound + 1)^2`; a separate theorem proves this square coverage makes
+the fixed bootstrap table and growing exact table return the same runnable
+`unmarkedBool` result.  No primality oracle or unbounded analytic premise is
+introduced.
+
+All measurements used swap disabled and one Lake job:
+
+| check | memory scope | wall | peak RSS | result |
+| --- | --- | ---: | ---: | --- |
+| direct root-accumulation source | 1 GiB high / 2 GiB max | 1.16 s | 651,008 KiB | pass |
+| live root-accumulation target, 55 jobs | 1 GiB high / 2 GiB max | 1.35 s | 687,808 KiB | pass |
+| strict axiom audit, 631 declarations | 3 GiB high / 4 GiB max | 0.65 s | 1,607,028 KiB | standard foundations only |
+| full repository build, 433 jobs | 7 GiB high / 8 GiB max | 2.86 s | 1,714,776 KiB | pass |
+
+The remaining root-phase work is finite iteration: prove the compiled marking
+half produces the bootstrap fold for every candidate, thread this one-step
+table theorem across each accumulation suffix, handle the already isolated
+last-root modular window transition, and compose the resulting exact main
+entry state with `windowRun_main_complete`.
