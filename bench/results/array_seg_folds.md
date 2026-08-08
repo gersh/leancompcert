@@ -1238,3 +1238,27 @@ also derive primality, positivity, modulus bounds, and square bounds from
 Fresh direct source checks completed at 555,588 KiB peak RSS for the expanded
 initializer and 582,148 KiB for the expanded table representation, both with
 zero swap under the 2 GiB hard cap.
+
+`ArraySegMobiusAccumulation.lean` now closes the finite main-window
+accumulation half.  For every strict prefix, the actual production
+`bodyRun` has cleared exactly the consumed product/flag pairs and frames the
+remaining marked suffix.  The final iteration clears the last pair, resets
+`rR`, and advances `rW` by `segLen`.  The selected-cell theorem composes the
+compiled `markSteps` schedule, the preceding accumulation bodies, and the
+next actual 111-instruction body; its observable result is exactly
+`muSig (rootFoldValue ps) (w + i)`.  This names the runnable finite fold and
+does not yet identify it with the paper's Möbius function.
+
+All checks below used swap disabled and one Lake job where Lake was involved:
+
+| check | memory scope | wall | peak RSS | result |
+| --- | --- | ---: | ---: | --- |
+| direct source elaboration | 1 GiB high / 2 GiB max | 1.36 s | 651,268 KiB | pass |
+| live module target, 59 jobs | 1 GiB high / 2 GiB max | 1.64 s | 679,504 KiB | pass |
+| strict axiom audit, 601 declarations | 3 GiB high / 4 GiB max | 0.60 s | 1,607,188 KiB | standard foundations only |
+| full repository build, 431 jobs | 7 GiB high / 8 GiB max | 2.74 s | 1,715,960 KiB | pass |
+
+The benchmarked implementation is commit `247e2ba`.  The next outer-window
+step must preserve the represented prime table across accumulation and prove
+the finite prime fold agrees with the library/paper Möbius function under the
+explicit prime-completeness range; neither fact is hidden in the result above.
