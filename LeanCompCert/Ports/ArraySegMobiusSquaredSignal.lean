@@ -19,6 +19,10 @@ open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusIndexedRun
+open LeanCompCert.Ports.ArraySegMobiusIndexedMain
+open LeanCompCert.Ports.ArraySegMobiusPrimeTable
+open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
+open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusResidueFrame
 open LeanCompCert.Ports.ArraySegMobiusResidueFold
 open LeanCompCert.Ports.ArraySegMobiusIndexedSignal
@@ -154,5 +158,77 @@ theorem readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold_of_window_boun
     (fun j hj => arun_coreBody_candidate_ready c (idx + j)
       (indexedBodyRun idx c j s) (hwindow j hj).1 hTM hPM (by omega)
       hspanM (hwindow j hj).2.1 (hwindow j hj).2.2)
+
+set_option maxRecDepth 10000 in
+/-- Whole-window campaign form.  Per-event readiness is reconstructed from
+the finite boundary invariant of each root or main window. -/
+theorem readRes_squaredCombinedWindows_eq_combinedSignals_fold
+    (idx : Nat) (c : Cfg) (k len windowFuel : Nat) (s : AState) (w : Nat)
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M)
+    (hk : k ≤ 15)
+    (hperiodPos : 0 < c.period) (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxFuelM : idx + windowFuel * c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hA : c.arrayLen < M) (hwPos : 0 < w)
+    (hend : w + windowFuel * c.segLen < 2 ^ 62)
+    (hstarts : ∀ q, q < windowFuel →
+      let start := indexedWindowRun idx c q s
+      start.regs rR = 0 ∧
+        start.regs rW = w + q * c.segLen ∧
+        start.regs rWrite < M ∧ start.regs rZero = 0)
+    (hphases : ∀ q, q < windowFuel →
+      idx + (q + 1) * c.period ≤ c.rootSpan ∨
+        c.rootSpan ≤ idx + q * c.period) :
+    readRes (squaredCombinedIndexedRun idx c k
+        (windowFuel * c.period) s) =
+      squaredResFold k
+        (combinedSignals idx c k (windowFuel * c.period) s)
+        (readRes s) := by
+  apply readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold_of_window_bounds
+    idx c k len (windowFuel * c.period) s hregs harr hk hTM hPM
+    hidxFuelM hspanM
+  exact indexedBodyRun_windows_bounds c idx windowFuel s w hperiodPos
+    hLPos hTM hPM hidxFuelM hspanM hspanPos hA hwPos hend hstarts hphases
+
+set_option maxRecDepth 10000 in
+/-- Production main-campaign theorem for the squared checker.  All emitted
+candidate bounds are consequences of the verified compiled main schedule;
+the only remaining endpoint premise is the finite campaign range itself. -/
+theorem readRes_squaredCombinedMainWindows_eq_combinedSignals_fold
+    (idx : Nat) (c : Cfg) (k len : Nat) (s : AState) (ps : List Nat)
+    (bound w fuel : Nat)
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M)
+    (hk : k ≤ 15)
+    (hRep : MachineTableRep c s ps)
+    (hInv : PrimeTableInv ps bound)
+    (hpsLen : ps.length = c.tableLen)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hclear : ∀ j, j < c.segLen → machineCell c s j = ⟨0, 0⟩)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTPos : 0 < c.markSteps)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxFuelM : idx + fuel * c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwFuelM : w + fuel * c.segLen < M)
+    (hA : c.arrayLen < M)
+    (hwPos : 0 < w)
+    (hend : w + fuel * c.segLen < 2 ^ 62) :
+    readRes (squaredCombinedIndexedRun idx c k (fuel * c.period) s) =
+      squaredResFold k
+        (combinedSignals idx c k (fuel * c.period) s) (readRes s) := by
+  apply readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold_of_window_bounds
+    idx c k len (fuel * c.period) s hregs harr hk hTM hPM hidxFuelM
+    hspanM
+  exact indexedBodyRun_main_windows_bounds c idx s ps bound w fuel hRep
+    hInv hpsLen hR hW hzero hclear hmain htableLenPos htableLenM hTPos
+    hTM hPM hidxFuelM hspanM hspanPos hp1Pos hp1LeL hp1LeBound hboundM
+    hboundSqM hsegBoundM hwFuelM hA hwPos hend
 
 end LeanCompCert.Ports.ArraySegMobiusSquaredSignal

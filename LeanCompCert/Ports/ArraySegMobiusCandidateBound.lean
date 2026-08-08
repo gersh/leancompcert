@@ -1,4 +1,5 @@
 import LeanCompCert.Ports.ArraySegMobiusIdleSignal
+import LeanCompCert.Ports.ArraySegMobiusIndexedMain
 
 /-!
 # Uniform candidate bounds for the production Möbius core
@@ -18,7 +19,204 @@ open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusSignal
 open LeanCompCert.Ports.ArraySegMobiusIdleSignal
+open LeanCompCert.Ports.ArraySegMobiusIndexedRun
+open LeanCompCert.Ports.ArraySegMobiusIndexedMain
+open LeanCompCert.Ports.ArraySegMobiusPrimeTable
+open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
+open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.MobiusResidueRealisation
+
+set_option maxRecDepth 10000 in
+/-- At every strict prefix of one complete production window, the literal
+changing-index runner has the expected counter and unchanged base.  The
+window may lie wholly in the root phase or wholly in the main phase. -/
+theorem indexedBodyRun_window_position
+    (c : Cfg) (idx fuel : Nat) (s : AState) (w write : Nat)
+    (hfuel : fuel < c.period)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write) (hzero : s.regs rZero = 0)
+    (hphase : idx + c.period ≤ c.rootSpan ∨ c.rootSpan ≤ idx)
+    (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxPeriodM : idx + c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hwriteM : write < M) (hwM : w < M) (hwSegM : w + c.segLen < M)
+    (hA : c.arrayLen < M) :
+    let out := indexedBodyRun idx c fuel s
+    out.regs rR = fuel ∧ out.regs rW = w := by
+  by_cases hmark : fuel ≤ c.markSteps
+  · exact indexedBodyRun_mark_position_only c idx fuel s w hmark hR hW
+      hLPos hTM hPM (by omega) hspanM (by
+        intro j hj hlast
+        rcases hphase with hroot | hmain
+        · simp only [Cfg.period] at hfuel hroot
+          omega
+        · omega) hwM
+  · let marked := indexedBodyRun idx c c.markSteps s
+    let i := fuel - c.markSteps
+    have hi : i < c.segLen := by
+      dsimp only [i]
+      simp only [Cfg.period] at hfuel
+      omega
+    have hmarkPos := indexedBodyRun_mark_position c idx c.markSteps s w
+      write (Nat.le_refl _) hR hW hWrite hLPos hTM hPM (by omega)
+      hspanM (by
+        intro j hj hlast
+        rcases hphase with hroot | hmain
+        · simp only [Cfg.period] at hroot
+          omega
+        · omega) hwriteM hwM
+    have hmarkedZero : marked.regs rZero = 0 := by
+      exact indexedBodyRun_rZero idx c c.markSteps s hzero
+    have hout : indexedBodyRun idx c fuel s =
+        indexedBodyRun (idx + c.markSteps) c i marked := by
+      have hsplit : fuel = c.markSteps + i := by
+        dsimp only [i]
+        omega
+      rw [hsplit, indexedBodyRun_add]
+    rw [hout]
+    rcases hphase with hroot | hmain
+    · have hp := indexedBodyRun_root_acc_position c
+        (idx + c.markSteps) i marked w hi hmarkPos.2.1 hmarkPos.2.2
+        (by simpa only [Cfg.period, Nat.add_assoc] using hroot)
+        hTM hPM hspanM hwSegM
+      dsimp only [i] at hp ⊢
+      constructor
+      · rw [hp.1]
+        omega
+      · exact hp.2
+    · have hp := indexedBodyRun_main_acc_prefix c
+        (idx + c.markSteps) marked i w write hmarkPos.2.1
+        hmarkPos.2.2 hmarkPos.1 hi (by omega) hmarkedZero hTM hPM
+        (by omega) hspanM hspanPos hwriteM hwM hA
+      dsimp only [i] at hp ⊢
+      constructor
+      · rw [hp.1]
+        omega
+      · exact hp.2.1
+
+set_option maxRecDepth 10000 in
+/-- Finite outer-window lifting of `indexedBodyRun_window_position`.  It
+reduces per-event candidate readiness to boundary facts for each complete
+window, which are exactly what the production root/main schedule proves. -/
+theorem indexedBodyRun_windows_bounds
+    (c : Cfg) (idx windowFuel : Nat) (s : AState) (w : Nat)
+    (hperiodPos : 0 < c.period) (hLPos : 0 < c.segLen)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxFuelM : idx + windowFuel * c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hA : c.arrayLen < M)
+    (hwPos : 0 < w)
+    (hend : w + windowFuel * c.segLen < 2 ^ 62)
+    (hstarts : ∀ q, q < windowFuel →
+      let start := indexedWindowRun idx c q s
+      start.regs rR = 0 ∧
+        start.regs rW = w + q * c.segLen ∧
+        start.regs rWrite < M ∧ start.regs rZero = 0)
+    (hphases : ∀ q, q < windowFuel →
+      idx + (q + 1) * c.period ≤ c.rootSpan ∨
+        c.rootSpan ≤ idx + q * c.period) :
+    ∀ j, j < windowFuel * c.period →
+      let before := indexedBodyRun idx c j s
+      before.regs rR < c.period ∧
+        0 < before.regs rW ∧ before.regs rW + c.segLen < 2 ^ 62 := by
+  intro j hj
+  let q := j / c.period
+  let r := j % c.period
+  have hq : q < windowFuel := by
+    dsimp only [q]
+    exact Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm]; exact hj)
+  have hq1 : q + 1 ≤ windowFuel := by omega
+  have hr : r < c.period := by
+    dsimp only [r]
+    exact Nat.mod_lt _ hperiodPos
+  have hsplit : q * c.period + r = j := by
+    dsimp only [q, r]
+    simpa only [Nat.mul_comm] using Nat.div_add_mod j c.period
+  let start := indexedWindowRun idx c q s
+  have hs := hstarts q hq
+  dsimp only [start] at hs
+  have hperiodLe := Nat.mul_le_mul_right c.period hq1
+  have hsegLe := Nat.mul_le_mul_right c.segLen hq1
+  have hidxPeriodM : idx + q * c.period + c.period < M := by
+    simp only [Nat.add_mul, Nat.one_mul] at hperiodLe
+    omega
+  have hwEnd : w + q * c.segLen + c.segLen < 2 ^ 62 := by
+    simp only [Nat.add_mul, Nat.one_mul] at hsegLe
+    omega
+  have hwM : w + q * c.segLen < M := by
+    have : 2 ^ 62 < M := by decide
+    omega
+  have hwSegM : w + q * c.segLen + c.segLen < M := by
+    have : 2 ^ 62 < M := by decide
+    omega
+  have hp := indexedBodyRun_window_position c (idx + q * c.period) r
+    start (w + q * c.segLen) (start.regs rWrite) hr hs.1 hs.2.1 rfl
+    hs.2.2.2 (by
+      simpa only [Nat.add_mul, Nat.one_mul, Nat.add_assoc] using
+        hphases q hq) hLPos hTM hPM hidxPeriodM hspanM hspanPos
+    hs.2.2.1 hwM hwSegM hA
+  have hstate : indexedBodyRun idx c j s =
+      indexedBodyRun (idx + q * c.period) c r start := by
+    rw [← hsplit, indexedBodyRun_add]
+    rfl
+  rw [hstate]
+  dsimp only at hp ⊢
+  rw [hp.1, hp.2]
+  exact ⟨hr, by omega, hwEnd⟩
+
+set_option maxRecDepth 10000 in
+/-- The verified main-window schedule discharges the whole finite candidate
+bound needed by the squared residue.  In particular, no per-event arithmetic
+assumption remains: every boundary is reconstructed by the compiled indexed
+main runner and then lifted across the complete window. -/
+theorem indexedBodyRun_main_windows_bounds
+    (c : Cfg) (idx : Nat) (s : AState) (ps : List Nat)
+    (bound w fuel : Nat)
+    (hRep : MachineTableRep c s ps)
+    (hInv : PrimeTableInv ps bound)
+    (hpsLen : ps.length = c.tableLen)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hclear : ∀ j, j < c.segLen → machineCell c s j = ⟨0, 0⟩)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTPos : 0 < c.markSteps)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxFuelM : idx + fuel * c.period < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwFuelM : w + fuel * c.segLen < M)
+    (hA : c.arrayLen < M)
+    (hwPos : 0 < w)
+    (hend : w + fuel * c.segLen < 2 ^ 62) :
+    ∀ j, j < fuel * c.period →
+      let before := indexedBodyRun idx c j s
+      before.regs rR < c.period ∧
+        0 < before.regs rW ∧ before.regs rW + c.segLen < 2 ^ 62 := by
+  apply indexedBodyRun_windows_bounds c idx fuel s w
+    (by simp only [Cfg.period]; omega) (by omega) hTM hPM hidxFuelM
+    hspanM hspanPos hA hwPos hend
+  · intro q hq
+    have hqle : q ≤ fuel := by omega
+    have hperiodLe := Nat.mul_le_mul_right c.period hqle
+    have hsegLe := Nat.mul_le_mul_right c.segLen hqle
+    have hidxqM : idx + q * c.period < M := by omega
+    have hwqM : w + q * c.segLen < M := by omega
+    have hp := indexedWindowRun_main_complete c idx s ps bound w q hRep
+      hInv hpsLen hR hW hzero hclear hmain htableLenPos htableLenM hTPos
+      hTM hPM hidxqM hspanM hspanPos hp1Pos hp1LeL hp1LeBound hboundM
+      hboundSqM hsegBoundM hwqM hA
+    dsimp only
+    refine ⟨hp.2.2.1, hp.2.2.2.1, ?_, hp.2.2.2.2⟩
+    rw [hp.2.1.cursor, hpsLen]
+    simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+    omega
+  · intro q hq
+    exact Or.inr (by omega)
 
 /-- On a main-accumulation event the retained candidate is the main-window
 base plus the accumulation offset.  This is the main-phase counterpart of

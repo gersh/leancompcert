@@ -1601,3 +1601,22 @@ resuming the aggregate.  All runs used one Lean worker and zero swap:
 The failed 3 GiB attempts were contained cgroup failures, not host crashes.
 This gives a reproducible shard order while the five elaboration-heavy files
 remain candidates for source splitting.
+
+The finite squared campaign no longer asks for eventwise candidate bounds.
+`indexedBodyRun_windows_bounds` divides an arbitrary event index into its
+window quotient and strict-prefix remainder, reconstructs the exact compiled
+`rR`/`rW` position, and proves positivity and the `< 2^62` endpoint bound.
+`indexedBodyRun_main_windows_bounds` then obtains every required boundary from
+the existing compiled `indexedWindowRun_main_complete` schedule.  The
+campaign-facing theorem
+`readRes_squaredCombinedMainWindows_eq_combinedSignals_fold` composes that
+schedule directly with the squared residue fold.
+
+All checks used one Lean worker and zero swap.  The focused candidate-bound
+target passed in 0.84 s at 644,852 KiB under the 2/3 GiB profile; its squared
+consumer passed in 0.45 s at 615,988 KiB.  A fresh axiom print for the five new
+composition theorems passed in 0.17 s at 559,304 KiB and reported only
+`propext`, `Classical.choice`, and `Quot.sound` (the one-window lemma does not
+need choice).  With the high-memory leaves already isolated and cached, the
+226-job `LeanCompCert` aggregate passed in 0.66 s at 1,720,556 KiB under an
+8 GiB hard cgroup.
