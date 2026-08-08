@@ -212,4 +212,89 @@ theorem bodyRun_first_root_acc_prefix
         base := hstep.2.2.2.2.1
         zero := hstep.2.2.2.2.2 }
 
+/-- Completing the first root accumulation window with an ordinary production
+wrap.  The explicit `bootBound < segLen` premise says the last candidate is
+in the sequential regime; it is the normal nondegenerate emitter shape and
+keeps the candidate-one/bootstrap exceptions inside the proved prefix. -/
+theorem bodyRun_first_root_acc_complete_wrap
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot : List Nat) (bootBound : Nat)
+    (hInv : RootTableInv c s boot bootBound)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = 1)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen →
+      machineCell c s j = rootCellFold boot (1 + j))
+    (hLPos : 0 < c.segLen)
+    (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < c.segLen)
+    (hsegCap : c.segLen ≤ c.rootCap)
+    (hcover : c.segLen < (bootBound + 1) * (bootBound + 1))
+    (hfit : ∀ k, k < c.segLen →
+      (rootScanTable boot bootBound k).length < c.tableLen)
+    (hroot : idx < c.rootSpan)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M)
+    (hwNextM : 1 + c.segLen < M) :
+    RootTableInv c (bodyRun idx c c.segLen s)
+        (rootScanTable boot bootBound c.segLen) c.segLen ∧
+      (∀ j, j < c.segLen →
+        machineCell c (bodyRun idx c c.segLen s) j = ⟨0, 0⟩) ∧
+      (bodyRun idx c c.segLen s).regs rR = 0 ∧
+      (bodyRun idx c c.segLen s).regs rW = 1 + c.segLen ∧
+      (bodyRun idx c c.segLen s).regs rZero = 0 := by
+  let k := c.segLen - 1
+  have hkSeg : k < c.segLen := by omega
+  have hkSucc : k + 1 = c.segLen := by omega
+  have hpref := bodyRun_first_root_acc_prefix c idx k s boot bootBound
+    hInv hR hW hzero hcells hkSeg hboot2 (by omega) (by omega)
+    (fun n hn => hfit n (by omega)) hroot hTM hPM hidxM hspanM hidxNe
+    hcapM hA
+  let prev := bodyRun idx c k s
+  have hbound : max bootBound k = k := by omega
+  have hprevInv : RootTableInv c prev (rootScanTable boot bootBound k) k :=
+    by simpa [prev, hbound] using hpref.table
+  have hprevR : prev.regs rR = c.markSteps + k := hpref.position
+  have hprevW : prev.regs rW = 1 := hpref.base
+  have hprevWrite : prev.regs rWrite =
+      c.primeBase + (rootScanTable boot bootBound k).length :=
+    hprevInv.cursor
+  have hprevCell : machineCell c prev k = rootCellFold boot c.segLen := by
+    have := hpref.pending k (Nat.le_refl _) hkSeg
+    have hone : 1 + k = c.segLen := by omega
+    simpa only [prev, hone] using this
+  have hRM : c.markSteps + k < M := by
+    have : c.markSteps + k < c.period := by
+      simp only [Cfg.period]
+      omega
+    omega
+  have hwrap : c.markSteps + k + 1 = c.period := by
+    simp only [Cfg.period]
+    omega
+  have hstep := arun_coreBody_root_acc_next_wrap c idx prev boot
+    (rootScanTable boot bootBound k) k (c.markSteps + k) 1
+    (c.primeBase + (rootScanTable boot bootBound k).length) k c.segLen
+    hprevInv (hfit k hkSeg) hprevR hprevW hprevWrite (by omega)
+    (by omega) (by omega) (by omega) hroot hRM hTM hPM hidxM hspanM
+    hidxNe hkSeg (by omega) hwrap hwNextM (by omega) hsegCap hcapM hA
+    hpref.zero hprevCell bootBound hInv.primeTable hbootLt hcover
+  have hrun : bodyRun idx c c.segLen s = arun idx prev c.coreBody := by
+    rw [← hkSucc, bodyRun_succ]
+  have hscan : rootScanTable boot bootBound c.segLen =
+      rootTableStep (rootScanTable boot bootBound k) c.segLen := by
+    rw [← hkSucc, rootScanTable_succ, if_neg (by omega)]
+  rw [hrun]
+  refine ⟨?_, ?_, hstep.2.2.2.1, hstep.2.2.2.2.1,
+    hstep.2.2.2.2.2⟩
+  · simpa [hscan] using hstep.1
+  · intro j hj
+    by_cases hjk : j = k
+    · simpa [hjk] using hstep.2.1
+    · exact (hstep.2.2.1 j hj hjk).trans
+        (hpref.cleared j (by omega))
+
 end LeanCompCert.Ports.ArraySegMobiusRootPrefix

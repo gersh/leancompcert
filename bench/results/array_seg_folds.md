@@ -1395,3 +1395,26 @@ The prefix stops strictly before the wrap by construction.  Completing one
 root window now requires applying the already verified ordinary-wrap or
 last-root transition cursor theorem together with the same table/cell update,
 then supplying the marking-fold entry premise for the next window.
+
+The ordinary endpoint is now complete.  The sequential candidate proof is
+factored into cursor-independent table/cell effects plus the finite candidate
+bit; `arun_coreBody_root_acc_next_wrap` combines those effects with the actual
+production wrap suffix.  `bodyRun_first_root_acc_complete_wrap` applies that
+endpoint after the strict prefix, proving the runnable table through
+candidate `segLen`, every live cell cleared, `rR = 0`, and the next root base
+`rW = 1 + segLen`.  Its explicit `bootBound < segLen` premise records the
+normal emitter regime in which the last first-window candidate is later than
+the preloaded table.
+
+All checks used swap disabled and one Lake job:
+
+| check | memory scope | wall | peak RSS | result |
+| --- | --- | ---: | ---: | --- |
+| direct root-accumulation source | 1 GiB high / 2 GiB max | 4.21 s | 915,484 KiB | pass |
+| direct root-prefix source | 1 GiB high / 2 GiB max | 1.12 s | 605,940 KiB | pass |
+| live root-prefix target, 58 jobs | 1 GiB high / 2 GiB max | 1.07 s | 645,372 KiB | pass |
+| strict axiom audit, 667 declarations | 3 GiB high / 4 GiB max | 0.54 s | 1,595,540 KiB | standard foundations only |
+| full repository build, 435 jobs | 7 GiB high / 8 GiB max | 2.26 s | 1,720,940 KiB | pass |
+
+The remaining root composition is subsequent-window entry/iteration and the
+last-root transition endpoint; both reuse the factored table/cell theorem.
