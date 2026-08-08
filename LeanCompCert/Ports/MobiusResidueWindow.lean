@@ -482,6 +482,95 @@ theorem stepAbs_exact_bound (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
     rw [habsEq]
     exact ha
 
+/-- Field-level form of `stepAbs_exact_bound`.  This separates the exact
+two-limb encoding needed by the absolute-value argument from the stronger
+`ResInv.bnd` conclusion.  The squared checker uses it to recover that bound
+from its own passing predicate, avoiding a circular a-priori accumulator
+bound. -/
+theorem stepAbs_exact_bound_of_fields
+    (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
+    (hk15 : k ≤ 15)
+    (hlo : (stepAcc k mu n r).1 < M)
+    (hhi : (stepAcc k mu n r).2 < 2 ^ (k + 1))
+    (hacc : ((stepAcc k mu n r).1 : Int) +
+      (M : Int) * (stepAcc k mu n r).2 =
+        2 ^ (64 + k) + accTrue k mu n) :
+    (accTrue k mu n).natAbs <
+      (stepAbs k mu n r + 1) * 2 ^ (k + 1) := by
+  let t := stepAcc k mu n r
+  let E := t.1 + M * t.2
+  let q := 2 ^ (k + 1)
+  let B := 2 ^ 63
+  have hlo' : t.1 < M := by simpa only [t] using hlo
+  have hhi' : t.2 < q := by simpa only [t, q] using hhi
+  have hv := vBias_spec k t.1 t.2 hk15 hlo' hhi'
+  have hq : 0 < q := Nat.two_pow_pos _
+  have hEcap : E < M * q := by
+    have hs : t.2 + 1 ≤ q := Nat.succ_le_of_lt hhi'
+    dsimp only [E]
+    have hm := Nat.mul_le_mul_left M hs
+    have hfirst : t.1 + M * t.2 < M * (t.2 + 1) := by
+      rw [Nat.mul_succ]
+      omega
+    exact Nat.lt_of_lt_of_le hfirst hm
+  have hvM : vBias k t.1 t.2 < M := by
+    rw [hv]
+    exact (Nat.div_lt_iff_lt_mul hq).2 hEcap
+  have habs := absBias_spec (vBias k t.1 t.2) hvM
+  have henc : ((E : Nat) : Int) =
+      2 ^ (64 + k) + accTrue k mu n := by
+    dsimp only [E]
+    rw [Int.natCast_add, Int.natCast_mul]
+    simpa only [t] using hacc
+  have hbias : B * q = 2 ^ (64 + k) := by
+    dsimp only [B, q]
+    rw [← Nat.pow_add]
+    congr 1
+    omega
+  by_cases hA : 0 ≤ accTrue k mu n
+  · have hAnat : (((accTrue k mu n).natAbs : Nat) : Int) =
+        accTrue k mu n := Int.natAbs_of_nonneg hA
+    have hEI : ((E : Nat) : Int) =
+        ((B * q + (accTrue k mu n).natAbs : Nat) : Int) := by
+      have hbI := congrArg (fun x : Nat => (x : Int)) hbias
+      push_cast at hbI
+      push_cast
+      rw [hAnat, hbI]
+      exact henc
+    have hE : E = B * q + (accTrue k mu n).natAbs := by
+      exact_mod_cast hEI
+    obtain ⟨hB, ha⟩ := centeredDiv_pos q B E
+      (accTrue k mu n).natAbs hq hE
+    have habsEq : stepAbs k mu n r = E / q - B := by
+      unfold stepAbs
+      change absBias (vBias k t.1 t.2) = _
+      rw [habs, hv, if_pos hB]
+    rw [habsEq]
+    exact ha
+  · have hAle : accTrue k mu n ≤ 0 := by omega
+    have haPos : 0 < (accTrue k mu n).natAbs := by
+      have hneg : accTrue k mu n < 0 := by omega
+      exact Int.natAbs_pos.mpr (by omega)
+    have hAnat : (((accTrue k mu n).natAbs : Nat) : Int) =
+        -accTrue k mu n := Int.ofNat_natAbs_of_nonpos hAle
+    have hEI : ((E + (accTrue k mu n).natAbs : Nat) : Int) =
+        ((B * q : Nat) : Int) := by
+      push_cast
+      rw [henc, hAnat]
+      have hbI := congrArg (fun x : Nat => (x : Int)) hbias
+      push_cast at hbI
+      omega
+    have hE : E + (accTrue k mu n).natAbs = B * q := by
+      exact_mod_cast hEI
+    obtain ⟨hvB, ha⟩ := centeredDiv_neg q B E
+      (accTrue k mu n).natAbs hq haPos hE
+    have habsEq : stepAbs k mu n r = B - E / q := by
+      unfold stepAbs
+      change absBias (vBias k t.1 t.2) = _
+      rw [habs, hv, if_neg (Nat.not_le_of_lt hvB)]
+    rw [habsEq]
+    exact ha
+
 /-- The literal comparison made at one gated integer. -/
 abbrev StepPass (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res) : Prop :=
   stepAbs k mu n r + (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1 ≤

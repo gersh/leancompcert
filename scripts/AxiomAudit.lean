@@ -911,6 +911,20 @@ fails elaboration, so an entry cannot silently audit nothing.
 -- The paper-faithful aligned Platt campaign.  The generic audit and
 -- observation bridges must stay axiom-free; the closed fold receipts expose
 -- only their explicitly named physical CompCert runs.
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.stepAbs_exact_bound_of_fields
+#print axioms LeanCompCert.Ports.MobiusSquaredResidueRealisation.squaredUpper_le_pow61_of_pass
+#print axioms LeanCompCert.Ports.MobiusSquaredResidueRealisation.resInv_squaredStep_of_pass
+#print axioms LeanCompCert.Ports.MobiusSquaredResidueRealisation.squaredResRunFrom_inv_of_final_zero
+#print axioms LeanCompCert.Ports.MobiusSquaredResidueRealisation.squaredResRunFrom_zero_sound
+#print axioms LeanCompCert.Ports.ArraySegMobiusResidueFold.combinedSignals_add
+#print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.consecutiveMuSignals_schedule
+#print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.consecutiveMuSignals_eq_map_range
+#print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.ConsecutiveSignalSchedule.of_all_idle
+#print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.squaredCombinedSignals_add
+#print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.squaredCombinedSignals_schedule_of_all_idle
+#print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.squaredCombinedSignals_schedule_of_active
+#print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.ConsecutiveSignalSchedule.append
+#print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.ConsecutiveSignalSchedule.squaredResFold_eq_runFrom
 #print axioms LeanCompCert.Verified.ArrayComputation.AComputation.withOutput_denotes_of_denotes
 #print axioms LeanCompCert.Verified.ArrayAudit.source_total_reg_eq_of_audit_and_observesReg
 #print axioms LeanCompCert.Ports.ArraySegMobiusPlattAuditTraceGeneric.squaredComputation_total_output_to_indexed_viol_zero

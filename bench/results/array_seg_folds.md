@@ -1860,3 +1860,30 @@ trace models.  Together with the zero-violation fold receipts, this closes the
 compiled-evidence portion of the two-link chain.  Relating the retained
 accumulator prefix to the Mathlib Möbius/fixed-point sweep remains a separate
 paper-level theorem obligation.
+
+The first attempt at that last relation exposed a logical, not computational,
+cycle in the historical transparent soundness theorem: it assumed
+`|accTrue| ≤ 2^(62+k)` at every prefix before using a passing artifact to
+prove the paper bound.  The squared test is strong enough to discharge that
+width condition itself.  `stepAbs_exact_bound_of_fields` separates the exact
+two-limb encoding from the old `ResInv.bnd` field;
+`squaredUpper_le_pow61_of_pass` shows immediately that a passing squared test
+has `squaredUpper ≤ 2^61`; and `resInv_squaredStep_of_pass` combines those
+facts to recover the next exact accumulator bound from the pass.  The shifted
+runner `squaredResRunFrom` then supports a campaign beginning after a certified
+prefix, with `squaredResRunFrom_zero_sound` proving the cross-multiplied paper
+inequality from a zero final counter without any external cancellation bound.
+Its direct source check took 1.12 seconds at 648,312 KiB peak RSS under the
+1/2 GiB one-worker, zero-swap profile.  The 107-job live consumer target and
+the strict axiom audit both passed; all five new generic theorems report only
+the standard Lean foundations.
+
+The production-to-mathematics schedule layer now splits squared signal traces
+at arbitrary event boundaries, recognizes proved idle fragments, recognizes
+exact consecutive Möbius fragments, and composes those fragments before
+rewriting `squaredResFold` to `squaredResRunFrom`.  The source check for
+`ArraySegMobiusSquaredFold.lean` took 1.01 seconds at 689,324 KiB peak RSS
+under the same 1/2 GiB one-worker, zero-swap profile.  Its 107-job live target
+passed.  The expanded strict axiom audit then took 0.62 seconds at 1,653,120
+KiB peak RSS under the 2/3 GiB profile and reported only standard Lean
+foundations for every new generic schedule theorem.

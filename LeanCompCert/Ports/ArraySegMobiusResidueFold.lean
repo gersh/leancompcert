@@ -165,6 +165,32 @@ def combinedSignals (idx : Nat) (c : Cfg) (k fuel : Nat) (s : AState) :
   (List.range fuel).map fun j =>
     readSig (arun (idx + j) (combinedIndexedRun idx c k j s) c.coreBody)
 
+/- Signal traces split at the same arbitrary event boundary as the combined
+runner. -/
+set_option maxRecDepth 10000 in
+theorem combinedSignals_add (idx : Nat) (c : Cfg) (k a b : Nat)
+    (s : AState) :
+    combinedSignals idx c k (a + b) s =
+      combinedSignals idx c k a s ++
+        combinedSignals (idx + a) c k b
+          (combinedIndexedRun idx c k a s) := by
+  unfold combinedSignals
+  rw [List.range_add, List.map_append, List.map_map]
+  let pre : List Sig := (List.range a).map fun j =>
+    readSig (arun (idx + j) (combinedIndexedRun idx c k j s) c.coreBody)
+  refine congrArg (fun tail : List Sig => pre ++ tail) ?_
+  apply List.map_congr_left
+  intro j hj
+  simp only [Function.comp_apply]
+  have hidx : idx + (a + j) = idx + a + j := (Nat.add_assoc idx a j).symm
+  have hstate := combinedIndexedRun_add idx c k a j s
+  have hi := congrArg (fun index =>
+    arun index (combinedIndexedRun idx c k (a + j) s)
+      c.coreBody) hidx
+  have hs := congrArg (fun state =>
+    arun (idx + a + j) state c.coreBody) hstate
+  exact congrArg readSig (hi.trans hs)
+
 set_option maxRecDepth 10000 in
 /-- The five residue fields after the literal combined trace are exactly the
 transparent fold over the signals emitted by that same trace. -/

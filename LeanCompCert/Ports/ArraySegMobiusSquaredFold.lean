@@ -195,6 +195,33 @@ def squaredCombinedSignals (idx : Nat) (c : Cfg) (k fuel : Nat)
     readSig (arun (idx + j)
       (squaredCombinedIndexedRun idx c k j s) c.coreBody)
 
+/- Squared signal traces split at the same arbitrary event boundary as their
+changing-index runner. -/
+set_option maxRecDepth 10000 in
+theorem squaredCombinedSignals_add (idx : Nat) (c : Cfg) (k a b : Nat)
+    (s : AState) :
+    squaredCombinedSignals idx c k (a + b) s =
+      squaredCombinedSignals idx c k a s ++
+        squaredCombinedSignals (idx + a) c k b
+          (squaredCombinedIndexedRun idx c k a s) := by
+  unfold squaredCombinedSignals
+  rw [List.range_add, List.map_append, List.map_map]
+  let pre : List Sig := (List.range a).map fun j =>
+    readSig (arun (idx + j)
+      (squaredCombinedIndexedRun idx c k j s) c.coreBody)
+  refine congrArg (fun tail : List Sig => pre ++ tail) ?_
+  apply List.map_congr_left
+  intro j hj
+  simp only [Function.comp_apply]
+  have hidx : idx + (a + j) = idx + a + j := (Nat.add_assoc idx a j).symm
+  have hstate := squaredCombinedIndexedRun_add idx c k a j s
+  have hi := congrArg (fun index =>
+    arun index (squaredCombinedIndexedRun idx c k (a + j) s)
+      c.coreBody) hidx
+  have hs := congrArg (fun state =>
+    arun (idx + a + j) state c.coreBody) hstate
+  exact congrArg readSig (hi.trans hs)
+
 /-- Iterating the squared model over an arbitrary finite signal list. -/
 def squaredResFold (k : Nat) : List Sig → Res → Res
   | [], r => r
@@ -217,6 +244,136 @@ theorem squaredResStep_word (k : Nat) (g : Sig) (r : Res) :
   dsimp only
   exact ⟨accStep_fst_lt _ _ _ _ _ _, accStep_snd_lt _ _ _ _ _ _,
     Nat.mod_lt _ M_pos, Nat.mod_lt _ M_pos, Nat.mod_lt _ M_pos⟩
+
+/-- A finite production signal list consists of arbitrary proved idle events
+interleaved with a consecutive mathematical Möbius suffix.  The final index is
+the number of active rows, not the (much larger) compiled event count. -/
+inductive ConsecutiveSignalSchedule (mu : Nat → Int) :
+    Nat → List Sig → Nat → Prop
+  | nil (lo : Nat) : ConsecutiveSignalSchedule mu lo [] 0
+  | idle {lo n N : Nat} {xs : List Sig}
+      (tail : ConsecutiveSignalSchedule mu lo xs N) :
+      ConsecutiveSignalSchedule mu lo (idleSig n :: xs) N
+  | step {lo N : Nat} {xs : List Sig}
+      (tail : ConsecutiveSignalSchedule mu (lo + 1) xs N) :
+      ConsecutiveSignalSchedule mu lo (muSig mu (lo + 1) :: xs) (N + 1)
+
+/-- Canonical list of the next `N` mathematical signals after prefix `lo`. -/
+def consecutiveMuSignals (mu : Nat → Int) : Nat → Nat → List Sig
+  | _, 0 => []
+  | lo, N + 1 => muSig mu (lo + 1) ::
+      consecutiveMuSignals mu (lo + 1) N
+
+theorem consecutiveMuSignals_schedule (mu : Nat → Int) (lo N : Nat) :
+    ConsecutiveSignalSchedule mu lo (consecutiveMuSignals mu lo N) N := by
+  induction N generalizing lo with
+  | zero => exact .nil lo
+  | succ N ih => exact .step (ih (lo + 1))
+
+/-- The recursive mathematical signal list is the pointwise map over its
+zero-based finite offset range. -/
+theorem consecutiveMuSignals_eq_map_range (mu : Nat → Int) (lo N : Nat) :
+    consecutiveMuSignals mu lo N =
+      (List.range N).map fun j => muSig mu (lo + j + 1) := by
+  induction N generalizing lo with
+  | zero => rfl
+  | succ N ih =>
+      rw [List.range_succ_eq_map]
+      simp only [consecutiveMuSignals, List.map_cons, List.map_map,
+        Nat.add_zero]
+      rw [ih]
+      apply congrArg (List.cons (muSig mu (lo + 1)))
+      apply List.map_congr_left
+      intro j hj
+      simp only [Function.comp_apply]
+      congr 2
+      omega
+
+/-- A list of literal idle signals advances neither the mathematical prefix
+nor its active-row count. -/
+theorem ConsecutiveSignalSchedule.of_all_idle
+    (mu : Nat → Int) (lo : Nat) (xs : List Sig)
+    (h : ∀ g, g ∈ xs → ∃ n, g = idleSig n) :
+    ConsecutiveSignalSchedule mu lo xs 0 := by
+  induction xs with
+  | nil => exact .nil lo
+  | cons g gs ih =>
+      obtain ⟨n, rfl⟩ := h g (by simp)
+      exact .idle (ih (fun x hx => h x (by simp [hx])))
+
+/-- A production signal segment is scheduled as entirely idle whenever each
+of its literal event offsets is proved to emit an idle signal. -/
+theorem squaredCombinedSignals_schedule_of_all_idle
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k fuel : Nat) (s : AState)
+    (h : ∀ j, j < fuel → ∃ n,
+      readSig (arun (idx + j) (squaredCombinedIndexedRun idx c k j s)
+        c.coreBody) = idleSig n) :
+    ConsecutiveSignalSchedule mu lo
+      (squaredCombinedSignals idx c k fuel s) 0 := by
+  apply ConsecutiveSignalSchedule.of_all_idle
+  intro g hg
+  unfold squaredCombinedSignals at hg
+  obtain ⟨j, hj, rfl⟩ := List.mem_map.mp hg
+  exact h j (List.mem_range.mp hj)
+
+/-- A production segment whose literal signals are the next mathematical
+Möbius values has the canonical consecutive schedule. -/
+theorem squaredCombinedSignals_schedule_of_active
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k fuel : Nat) (s : AState)
+    (h : ∀ j, j < fuel →
+      readSig (arun (idx + j) (squaredCombinedIndexedRun idx c k j s)
+        c.coreBody) = muSig mu (lo + j + 1)) :
+    ConsecutiveSignalSchedule mu lo
+      (squaredCombinedSignals idx c k fuel s) fuel := by
+  have heq :
+      (List.range fuel).map (fun j =>
+        readSig (arun (idx + j) (squaredCombinedIndexedRun idx c k j s)
+          c.coreBody)) =
+      (List.range fuel).map (fun j => muSig mu (lo + j + 1)) := by
+    apply List.map_congr_left
+    intro j hj
+    exact h j (List.mem_range.mp hj)
+  rw [squaredCombinedSignals, heq, ← consecutiveMuSignals_eq_map_range]
+  exact consecutiveMuSignals_schedule mu lo fuel
+
+/-- Scheduled fragments compose when the second begins at the first fragment's
+mathematical endpoint. -/
+theorem ConsecutiveSignalSchedule.append
+    {mu : Nat → Int} {lo A B : Nat} {xs ys : List Sig}
+    (hx : ConsecutiveSignalSchedule mu lo xs A)
+    (hy : ConsecutiveSignalSchedule mu (lo + A) ys B) :
+    ConsecutiveSignalSchedule mu lo (xs ++ ys) (A + B) := by
+  induction hx with
+  | nil lo => simpa using hy
+  | idle tail ih =>
+      exact .idle (ih hy)
+  | @step lo N xs tail ih =>
+      have hy' : ConsecutiveSignalSchedule mu ((lo + 1) + N) ys B := by
+        simpa only [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using hy
+      have htail := ih hy'
+      simpa only [List.cons_append, Nat.add_assoc, Nat.add_comm,
+        Nat.add_left_comm] using
+        ConsecutiveSignalSchedule.step htail
+
+/-- Erasing the proved idle events from a scheduled production list leaves
+exactly the shifted consecutive squared run. -/
+theorem ConsecutiveSignalSchedule.squaredResFold_eq_runFrom
+    {mu : Nat → Int} {lo N : Nat} {xs : List Sig}
+    (h : ConsecutiveSignalSchedule mu lo xs N)
+    (k : Nat) (r : Res) (hw : ResWord r) :
+    squaredResFold k xs r = squaredResRunFrom k mu lo r N := by
+  induction h generalizing r with
+  | nil lo => rfl
+  | idle tail ih =>
+      simp only [squaredResFold]
+      rw [squaredResStep_idle k _ r hw.1 hw.2.1 hw.2.2.1
+        hw.2.2.2.1 hw.2.2.2.2]
+      exact ih r hw
+  | step tail ih =>
+      simp only [squaredResFold]
+      rw [ih (squaredResStep k (muSig mu (_ + 1)) r)
+        (squaredResStep_word k (muSig mu (_ + 1)) r)]
+      exact (squaredResRunFrom_succ_shift k mu _ r _).symm
 
 /-- Equality of the four persistent fields shared by the old and squared
 residue models.  The violation counters are intentionally independent. -/
