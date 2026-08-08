@@ -61,6 +61,7 @@ import LeanCompCert.Ports.ArraySegMobiusRootSchedule
 import LeanCompCert.Ports.ArraySegMobiusCursorModel
 import LeanCompCert.Ports.ArraySegMobiusScheduleFold
 import LeanCompCert.Ports.ArraySegMobiusCellRep
+import LeanCompCert.Ports.ArraySegMobiusAccumulation
 import LeanCompCert.Ports.ArraySegMobiusMarkProgress
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
@@ -535,6 +536,13 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_eq_muSig_decodedValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootCellFold_cellRepresents
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.cellRepresents_of_cell_eq_rootCellFold
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.arun_coreBody_main_acc_nowrap
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.arun_coreBody_main_acc_wrap
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_acc_prefix
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_acc_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_acc_current_cellRepresents
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.readSig_bodyRun_main_acc_eq_rootFoldValue
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.readSig_compiled_main_window_cell_eq_rootFoldValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap
