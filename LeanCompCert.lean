@@ -31,6 +31,7 @@ import LeanCompCert.Verified.Frontend
 import LeanCompCert.Verified.ArrayState
 import LeanCompCert.Verified.MemFragment
 import LeanCompCert.Verified.ArrayBridge
+import LeanCompCert.Verified.ArrayAudit
 import LeanCompCert.Verified.ArrayRolled
 import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Ports.LogFixPort
