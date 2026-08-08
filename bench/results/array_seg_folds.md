@@ -1436,3 +1436,12 @@ All checks used swap disabled and one Lake job:
 | live root-prefix target, 58 jobs | 1 GiB high / 2 GiB max | 1.97 s | 710,232 KiB | pass |
 | strict axiom audit, 671 declarations | 3 GiB high / 4 GiB max | 0.67 s | 1,610,612 KiB | standard foundations only |
 | full repository build, 435 jobs | 7 GiB high / 8 GiB max | 2.86 s | 1,720,032 KiB | pass |
+
+The final single-body endpoint now carries the same complete invariant.
+`arun_coreBody_root_acc_next_transition` combines the factored sequential
+table/cell theorem with the actual last-root modular retargeting suffix, so it
+updates `RootTableInv`, clears/frames the live cells, resets `rR`, and proves
+the exact modular `rW` entering the main range.  The 58-job dependency cone
+rebuilt in 6.78 s at 944,332 KiB under 2 GiB; the 672-declaration audit passed
+in 0.67 s at 1,600,776 KiB under 4 GiB; and the 435-job full build passed in
+2.27 s at 1,717,772 KiB under 8 GiB.  All runs used zero swap.

@@ -1384,6 +1384,60 @@ theorem arun_coreBody_root_acc_next_wrap
     hn2 hnCap hcapM hwrap hwriteNextM hwNextM hc.2.2.2.1
   exact ⟨hc.1, hc.2.1, hc.2.2.1, hp.2.1, hp.2.2, hc.2.2.2.2⟩
 
+/-- A later sequential candidate on the final root body performs the same
+finite table/cell step and the production modular retargeting into the main
+range. -/
+theorem arun_coreBody_root_acc_next_transition
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot ps : List Nat) (bound r w write i n delta : Nat)
+    (hInv : RootTableInv c s ps bound)
+    (hFit : ps.length < c.tableLen)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i)
+    (hn : n = w + i) (hnext : n = bound + 1)
+    (hRM : r < M) (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M) (hspanPos : 0 < c.rootSpan)
+    (hspanM : c.rootSpan < M) (hidx : idx = c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hwrap : r + 1 = c.period)
+    (hn2 : 2 ≤ n) (hnCap : n ≤ c.rootCap)
+    (hcapM : c.rootCap < M) (hA : c.arrayLen < M)
+    (hzero : s.regs rZero = 0)
+    (hcell : machineCell c s i = rootCellFold boot n)
+    (bootBound : Nat) (hBoot : PrimeTableInv boot bootBound)
+    (hbootLt : bootBound < n)
+    (hcover : n < (bootBound + 1) * (bootBound + 1))
+    (hDelta : c.wDelta = delta) (hDeltaM : delta < M) :
+    RootTableInv c (arun idx s c.coreBody) (rootTableStep ps n) n ∧
+      machineCell c (arun idx s c.coreBody) i = ⟨0, 0⟩ ∧
+      (∀ j, j < c.segLen → j ≠ i →
+        machineCell c (arun idx s c.coreBody) j = machineCell c s j) ∧
+      (arun idx s c.coreBody).regs rR = 0 ∧
+      (arun idx s c.coreBody).regs rW =
+        (w + ((c.segLen + delta) % M)) % M ∧
+      (arun idx s c.coreBody).regs rZero = 0 := by
+  have hroot : idx < c.rootSpan := by omega
+  have hc := arun_coreBody_root_acc_next_table_cells c idx s boot ps bound
+    r w write i n hInv hFit hR hW hWrite hT hiEq hn hnext hroot hRM hTM
+    hidxM hspanM hi hwM hn2 hnCap hcapM hA hzero hcell bootBound hBoot
+    hbootLt hcover
+  have hwriteEq : write = c.primeBase + ps.length := by
+    rw [← hInv.cursor, hWrite]
+  have hwriteNextM : write + 1 < M := by
+    have hend : c.primeBase + c.tableLen < c.arrayLen := by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+      omega
+    rw [hwriteEq]
+    omega
+  have hp := arun_coreBody_root_acc_transition c idx s ps n r w write i
+    delta hR hW hWrite hT hiEq hn hRM hTM hPM hidxM hspanPos hspanM hidx
+    hi hwM hn2 hnCap hcapM hwrap hwriteNextM hDelta hDeltaM
+    hc.2.2.2.1
+  exact ⟨hc.1, hc.2.1, hc.2.2.1, hp.2.1, hp.2.2, hc.2.2.2.2⟩
+
 /-- A complete production root-accumulation iteration performs one runnable
 finite prime-table step.  The explicit strict-square premise is the
 paper-faithful bootstrap coverage condition. -/

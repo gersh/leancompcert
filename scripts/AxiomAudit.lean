@@ -593,6 +593,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_bootstrap_retain
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_table_cells
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_wrap
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_transition
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.arun_coreBody_root_acc_next_eq_rootTableStep
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootAccumulation.signalBlock_root_candidate_unmarked
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootPrefix.rootScanTable_zero
