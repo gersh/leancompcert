@@ -152,6 +152,46 @@ theorem squaredPrefix_arun_spec (k len idx : Nat) (s : AState)
   · rw [fE 133 (by rfl), fD 133 (by rfl), fC 133 (by rfl),
       fB 133 (by rfl), fA 133 (by rfl)]
 
+/-- The absolute-value word produced by section (D) is at most `2^63`.
+This is a format fact, independent of the accumulator invariant. -/
+theorem absBias_le_two_pow_63 (v : Nat) (hv : v < M) :
+    absBias v ≤ 2 ^ 63 := by
+  rw [absBias_spec v hv]
+  have hM : M = 2 ^ 64 := rfl
+  rw [hM] at hv
+  split <;> omega
+
+/-- A campaign endpoint below `2^62` gives both no-wrap facts needed by the
+division-free squared suffix.  This deliberately uses only the word format
+and the public `k ≤ 15` range, so idle and marking events need no separate
+accumulator estimate. -/
+theorem squaredResidue_word_bounds (k n pos neg tLo tHi : Nat)
+    (hk : k ≤ 15) (hn : n < 2 ^ 62) :
+    n + 2 ^ (k + 2) < M ∧
+      (let w := wPair k n
+       let t := accStep pos neg w.1 w.2 tLo tHi
+       let a := absBias (vBias k t.1 t.2)
+       a + (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1 < M) := by
+  have hp : 2 ^ (k + 2) ≤ 2 ^ 17 := by
+    exact Nat.pow_le_pow_right (by decide) (by omega)
+  have hM : M = 2 ^ 64 := rfl
+  have hnwrap : n + 2 ^ (k + 2) < M := by
+    rw [hM]
+    omega
+  refine ⟨hnwrap, ?_⟩
+  dsimp only
+  let t := accStep pos neg (wPair k n).1 (wPair k n).2 tLo tHi
+  have hv : vBias k t.1 t.2 < M := by
+    unfold vBias
+    exact Nat.mod_lt _ (by rw [hM]; omega)
+  have ha : absBias (vBias k t.1 t.2) ≤ 2 ^ 63 :=
+    absBias_le_two_pow_63 _ hv
+  have hq : (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) ≤
+      n + 2 ^ (k + 2) - 1 := Nat.div_le_self _ _
+  dsimp only [t] at ha ⊢
+  rw [hM]
+  omega
+
 /-- One actual 113-instruction residue execution is exactly one transparent
 squared step.  The guards are the sole partial division and the explicit
 word/no-wrap bounds of the root-free suffix. -/

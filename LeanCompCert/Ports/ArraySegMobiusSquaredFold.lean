@@ -216,4 +216,30 @@ theorem readRes_squaredCombinedIndexedRun_eq_fold
       simp [squaredCombinedSignals, List.range_succ,
         squaredResFold_append, squaredResFold]
 
+set_option maxRecDepth 10000 in
+/-- Campaign-facing trace theorem.  Below `2^62`, the format lemma discharges
+both squared-suffix no-wrap conditions uniformly, including on idle and
+marking events. -/
+theorem readRes_squaredCombinedIndexedRun_eq_fold_of_n_lt
+    (idx : Nat) (c : Cfg) (k len fuel : Nat) (s : AState)
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M)
+    (hk : k ≤ 15)
+    (hready : ∀ j, j < fuel →
+      let before := squaredCombinedIndexedRun idx c k j s
+      let core := arun (idx + j) before c.coreBody
+      core.regs 65 ≠ 0 ∧ core.regs 65 < 2 ^ 62) :
+    readRes (squaredCombinedIndexedRun idx c k fuel s) =
+      squaredResFold k (squaredCombinedSignals idx c k fuel s)
+        (readRes s) := by
+  apply readRes_squaredCombinedIndexedRun_eq_fold idx c k len fuel s
+    hregs harr hk
+  intro j hj
+  let core := arun (idx + j)
+    (squaredCombinedIndexedRun idx c k j s) c.coreBody
+  have hr : core.regs 65 ≠ 0 ∧ core.regs 65 < 2 ^ 62 := hready j hj
+  have hb := squaredResidue_word_bounds k (core.regs 65)
+    (core.regs 79) (core.regs 80) (core.regs rTLo) (core.regs rTHi)
+    hk hr.2
+  exact ⟨hr.1, hb.1, hb.2⟩
+
 end LeanCompCert.Ports.ArraySegMobiusSquaredFold

@@ -1547,3 +1547,32 @@ runs used one Lake job, disabled swap, and completed without approaching the
 hard limit.  The existing transparent production-shape guard benchmark still
 exercises the finite bootstrap/mixed table computations; these theorems add
 the compiled state-transition proof around the same runnable folds.
+
+The squared residue now consumes that same production signal schedule.
+`ArraySegMobiusSquaredSignal` proves eventwise agreement between the squared
+combined trace, the standalone indexed sieve, and the existing combined
+trace, then identifies their complete finite signal lists.  The word-format
+lemma `squaredResidue_word_bounds` discharges both suffix no-wrap guards from
+the campaign conditions `k ≤ 15` and `n < 2^62`; it does not assume an
+analytic accumulator bound and therefore also covers idle and marking
+events.  The campaign-facing composition theorem reduces the literal
+113-instruction squared trace to `squaredResFold` over the already verified
+production signal list.
+
+Focused source checks used one job, a 2 GiB soft limit, a 3 GiB hard limit,
+and zero swap:
+
+| check | wall | peak RSS | result |
+| --- | ---: | ---: | --- |
+| squared residue realization | 0.52 s | 630,968 KiB | pass |
+| squared combined fold | 0.89 s | 665,468 KiB | pass |
+| production-signal adapter | 0.26 s | 596,432 KiB | pass |
+| fresh capstone axiom print | 0.18 s | 558,348 KiB | standard foundations only |
+
+An aggregate `LeanCompCert` rebuild exposed a separate elaborator hot spot in
+`PsiSegSieve.lean`.  With `MemoryHigh=2G` it entered unreclaimable anonymous
+memory pressure; with `MemoryHigh=MemoryMax=3G` the cgroup OOM-killed only the
+compiler process after about 58 seconds, with zero swap and no host failure.
+The new modules had already passed their source and live dependency checks at
+under 0.7 GiB.  The aggregate result therefore records `PsiSegSieve` as a
+split-required build target rather than weakening or bypassing the new proof.
