@@ -1345,3 +1345,30 @@ half produces the bootstrap fold for every candidate, thread this one-step
 table theorem across each accumulation suffix, handle the already isolated
 last-root modular window transition, and compose the resulting exact main
 entry state with `windowRun_main_complete`.
+
+The root-table induction now also covers the entire preloaded prefix.  The
+production initializer opens `rW` at candidate one, so that case is not
+silently discarded: `postRootGate_one` proves the compiled word-level lower
+bound comparison rejects it, and
+`arun_coreBody_root_acc_one_retain` verifies the complete body clears the
+cell, retains the bootstrap table, and advances.  For every
+`2 ≤ n ≤ bootBound`, `not_unmarked_of_primeTableInv_le` obtains a finite
+prime divisor from the proved packed-sieve theorem, while
+`arun_coreBody_root_acc_bootstrap_retain` verifies the same complete machine
+transition.  The later sequential theorem additionally frames every other
+live cell and proves exact cursor progress, giving all three candidate regimes
+the state components required by a finite prefix induction.
+
+All checks used swap disabled and one Lake job:
+
+| check | memory scope | wall | peak RSS | result |
+| --- | --- | ---: | ---: | --- |
+| direct root-accumulation source | 1 GiB high / 2 GiB max | 3.54 s | 873,480 KiB | pass |
+| live root-accumulation target, 55 jobs | 1 GiB high / 2 GiB max | 4.18 s | 924,216 KiB | pass |
+| strict axiom audit, 660 declarations | 3 GiB high / 4 GiB max | 0.68 s | 1,585,828 KiB | standard foundations only |
+| full repository build, 433 jobs | 7 GiB high / 8 GiB max | 2.86 s | 1,714,204 KiB | pass |
+
+The next finite layer is the prefix iterator that chooses candidate one,
+bootstrap retention, or sequential `rootTableStep` from the candidate index.
+The existing wrap and last-root transition theorems remain the endpoints for
+the corresponding finite window cases.
