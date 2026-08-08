@@ -102,6 +102,7 @@ import LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter
 import LeanCompCert.Ports.ArraySegMobiusIndexedProgram
 import LeanCompCert.Ports.ArraySegMobiusIndexedFull
 import LeanCompCert.Ports.ArraySegMobiusResidueFrame
+import LeanCompCert.Ports.ArraySegMobiusResidueFold
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Ports.BlockedFold
 import LeanCompCert.Ports.RS62LadderEncoding
