@@ -1384,6 +1384,115 @@ theorem bodyRun_simulates_main_nonstart_from (c : Cfg)
   · exact hA
   · exact hi
 
+/-- The production-facing simulation premises also preserve the exact table
+representation throughout the same ordinary marking prefix. -/
+theorem bodyRun_mark_preserves_tableRep_nonstart_from (c : Cfg)
+    (idx fuel : Nat) (s : AState) (ps : List Nat) (bound r w i : Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s ps)
+    (hInv :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTable.PrimeTableInv ps bound)
+    (hpsLen : ps.length = c.tableLen)
+    (hcursor0 : CursorMainReady c.segLen w c.tableLen bound
+      (machineScheduleState c i s).cursor)
+    (hR : s.regs rR = r)
+    (hrPos : 0 < r)
+    (hfuel : r + fuel ≤ c.markSteps)
+    (hW : s.regs rW = w)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M)
+    (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hLPos : 0 < c.segLen)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1M : c.firstPrime < M)
+    (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hsegSuccM : c.segLen + 1 < M)
+    (hwSegM : w + c.segLen < M)
+    (hwM : w < M)
+    (hA : c.arrayLen < M)
+    (hi : i < c.segLen) :
+    LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c
+      (bodyRun idx c fuel s) ps := by
+  let table := fun q => s.arr (c.primeBase + q)
+  let write := c.primeBase + ps.length
+  have hwriteM : write < M := by
+    have hend : c.primeBase + c.tableLen < c.arrayLen := by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+      omega
+    dsimp only [write]
+    omega
+  have hposition (n : Nat) (hn : n ≤ fuel) :
+      (bodyRun idx c n s).regs rWrite = write ∧
+        (bodyRun idx c n s).regs rR = r + n ∧
+        (bodyRun idx c n s).regs rW = w :=
+    bodyRun_mark_position_from c idx n s r w write (by omega) hR hW
+      hRep.cursor hLPos hTM hPM hidxM hspanM hidxNe hwriteM hwM
+  have htablePrime : ∀ q, q < c.tableLen →
+      0 < table q ∧ table q ≤ bound := by
+    intro q hq
+    have hqps : q < ps.length := by rwa [hpsLen]
+    have hp := hRep.cell_prime hInv hqps
+    have hu :=
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.TablePrefix.cell_property
+        hRep.table hInv.upper q hqps
+    exact ⟨by
+      dsimp only [table]
+      have := hp.1
+      omega,
+      by simpa only [table] using hu⟩
+  have hguard : 0 < table c.tableLen ∧ table c.tableLen < M := by
+    constructor
+    · exact hRep.guard_pos
+    · dsimp only [table]
+      rw [hRep.guard]
+      simp only [Cfg.sentinel, Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+      omega
+  have hready : ∀ k, k < fuel →
+      MainNonstartReady c (bodyRun idx c k s) := by
+    intro k hk
+    have hsim := bodyRun_simulates_main_nonstart_from c idx k s ps bound
+      r w i hRep hInv hpsLen hcursor0 hR hrPos (by omega) hW hmain
+      htableLenM hTM hPM hidxM hspanM hidxNe hLPos hp1Pos hp1M
+      hboundM hboundSqM hsegBoundM hsegSuccM hwSegM hwM hA hi
+    have hmodelReady := scheduleRun_cursor_main_ready k c.segLen w
+      c.tableLen bound i table (machineScheduleState c i s) hcursor0
+      htablePrime hguard hboundM hsegBoundM hsegSuccM
+    have hmachineCursor : CursorMainReady c.segLen w c.tableLen bound
+        (machineCursor (bodyRun idx c k s)) := by
+      change CursorMainReady c.segLen w c.tableLen bound
+        (machineScheduleState c i (bodyRun idx c k s)).cursor
+      rw [hsim]
+      exact hmodelReady
+    have hp := hposition k (by omega)
+    exact MainNonstartReady.of_cursor c (bodyRun idx c k s) bound w
+      hmachineCursor (by rw [hp.2.1]; omega) hp.2.2 hboundSqM
+      hsegBoundM hwSegM
+  apply bodyRun_mark_preserves_tableRep_nonstart c idx fuel s ps hRep
+    (by omega) hready
+  · intro k hk
+    have hp := hposition k (by omega)
+    rw [hp.2.1]
+    omega
+  · intro k hk
+    rw [(hposition k (by omega)).2.2]
+    exact hwM
+  · exact htableLenM
+  · exact hTM
+  · exact hPM
+  · exact hidxM
+  · exact hspanM
+  · exact hidxNe
+  · exact hLPos
+  · exact hp1Pos
+  · exact hp1M
+  · exact hA
+
 /-- The first production event of a window realizes the executable reset
 step and its first live cell update. -/
 theorem arun_coreBody_simulates_start (c : Cfg) (idx : Nat)
@@ -1501,6 +1610,86 @@ theorem bodyRun_simulates_main_from_start (c : Cfg)
     hLPos hp1Pos hp1M hboundM hboundSqM hsegBoundM hsegSuccM hwSegM
     hwM hA hi
   rw [hstartEq] at hordinary
+  rw [bodyRun_succ_start]
+  exact hordinary
+
+/-- The same complete first-event plus ordinary-prefix construction preserves
+the exact represented main table for the whole finite marking run. -/
+theorem bodyRun_mark_preserves_tableRep_from_start (c : Cfg)
+    (idx fuel : Nat) (s : AState) (ps : List Nat) (bound w : Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s ps)
+    (hInv :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTable.PrimeTableInv ps bound)
+    (hpsLen : ps.length = c.tableLen)
+    (hR : s.regs rR = 0)
+    (hW : s.regs rW = w)
+    (hfuel : fuel + 1 ≤ c.markSteps)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen)
+    (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M)
+    (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound)
+    (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwSegM : w + c.segLen < M)
+    (hnStartM : w + firstOffset w c.firstPrime < M)
+    (hA : c.arrayLen < M) :
+    LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c
+      (bodyRun idx c (fuel + 1) s) ps := by
+  let first := arun idx s c.coreBody
+  have hTPos : 0 < c.markSteps := by omega
+  have hLPos : 0 < c.segLen := by omega
+  have hp1M : c.firstPrime < M := Nat.lt_of_le_of_lt hp1LeBound hboundM
+  have hp1SqM : c.firstPrime * c.firstPrime < M :=
+    Nat.lt_of_le_of_lt
+      (Nat.mul_le_mul hp1LeBound hp1LeBound) hboundSqM
+  have hsegSuccM : c.segLen + 1 < M := by omega
+  have hwM : w < M := by omega
+  have hselector0 : (arun idx s (selectorBlock c)).regs rLimit =
+      c.tableLen :=
+    (selectorBlock_limit_main c idx s hmain hidxM hspanM htableLenM).1
+  have hstartPair := arun_coreBody_simulates_start c idx s w c.tableLen hR
+    hW hselector0 (Nat.le_refl _) htableLenM hTPos hTM hp1Pos hp1LeL
+    hp1M hp1SqM hnStartM hA 0 hLPos
+  have hstartEq : machineScheduleState c 0 first =
+      scheduleStart c.segLen w c.firstPrime 0 (machineCell c s 0) := by
+    exact ScheduleState.ext hstartPair.1 hstartPair.2
+  have hRepFirst := arun_coreBody_mark_preserves_tableRep_start c idx s ps
+    hRep (by omega) hR hTPos hTM hPM hidxM hspanM hidxNe hLPos hp1Pos
+    hp1LeL hp1M hp1SqM (by rw [hW]; exact hnStartM)
+    (by rw [hW]; exact hwM) hA
+  let write := c.primeBase + ps.length
+  have hwriteM : write < M := by
+    have hend : c.primeBase + c.tableLen < c.arrayLen := by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+      omega
+    dsimp only [write]
+    omega
+  have hprogress :=
+    LeanCompCert.Ports.ArraySegMobiusMark.arun_coreBody_mark_nowrap c idx s
+      0 w write (by omega) hR hW hRep.cursor hLPos hTM hPM hidxM
+      hspanM hidxNe hwriteM hwM
+  have hfirstR : first.regs rR = 1 := hprogress.2.1
+  have hfirstW : first.regs rW = w := hprogress.2.2
+  have hcursorFirst : CursorMainReady c.segLen w c.tableLen bound
+      (machineScheduleState c 0 first).cursor := by
+    rw [hstartEq]
+    exact scheduleStart_cursor_ready c.segLen w c.tableLen bound
+      c.firstPrime 0 (machineCell c s 0) htableLenPos hp1Pos hp1LeL
+      hp1LeBound hboundM hsegBoundM
+  have hordinary := bodyRun_mark_preserves_tableRep_nonstart_from c idx fuel
+    first ps bound 1 w 0 hRepFirst hInv hpsLen hcursorFirst hfirstR
+    (by omega) (by omega) hfirstW hmain htableLenM hTM hPM hidxM hspanM
+    hidxNe hLPos hp1Pos hp1M hboundM hboundSqM hsegBoundM hsegSuccM
+    hwSegM hwM hA hLPos
   rw [bodyRun_succ_start]
   exact hordinary
 

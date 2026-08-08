@@ -1273,3 +1273,30 @@ the complete body and arbitrary accumulation prefixes, and reconstructs
 682,388 KiB.  The 606-declaration strict audit passed in 0.63 s at
 1,605,764 KiB under 4 GiB, and the 431-job full build passed in 2.24 s at
 1,711,924 KiB under 8 GiB; all runs used zero swap.
+
+The outer finite-window induction is now explicit.  The actual first
+reset/mark body and every following marking body preserve the represented
+prime table; `bodyRun_main_window_complete` composes that complete mark run
+with all accumulation bodies; and `windowRun_main_complete` iterates any
+finite number of whole production windows while clearing every live cell,
+resetting the phase counter, preserving the table, and advancing `rW` by the
+exact multiple of `segLen`.  The selected observable theorem may start after
+any such finite prefix and still reads
+`muSig (rootFoldValue ps) ((w + q * segLen) + i)` from the next compiled body.
+
+All measurements used swap disabled.  Direct checks and the live target used
+the 1 GiB high / 2 GiB hard scope; the strict audit used 3/4 GiB; the serialized
+full build used 7/8 GiB:
+
+| check | wall | peak RSS | result |
+| --- | ---: | ---: | --- |
+| cursor-model direct source | 1.21 s | 645,888 KiB | pass |
+| accumulation direct source | 2.01 s | 710,764 KiB | pass |
+| live accumulation target, 59 jobs | 2.0 s module rebuild | not separately sampled | pass |
+| strict axiom audit, 612 declarations | 0.61 s | 1,595,864 KiB | standard foundations only |
+| full repository build, 431 jobs | 2.73 s | 1,721,824 KiB | pass |
+
+These theorems close the previously missing arbitrary outer-window
+composition.  The remaining semantic seam is the paper/Mathlib identification
+of the runnable finite `rootFoldValue`; the compiled theorem intentionally
+continues to expose that value until the number-theoretic bridge is proved.

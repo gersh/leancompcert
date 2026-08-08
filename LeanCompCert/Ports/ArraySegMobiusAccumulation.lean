@@ -467,6 +467,26 @@ theorem bodyRun_rZero (idx : Nat) (c : Cfg) (fuel : Nat) (s : AState)
       rw [arun_reg_frame idx rZero c.coreBody (bodyRun idx c k s) (by rfl)]
       exact ih
 
+/-- Finite production body runs compose at an arbitrary split point. -/
+theorem bodyRun_add (idx : Nat) (c : Cfg) (a b : Nat) (s : AState) :
+    bodyRun idx c (a + b) s = bodyRun idx c b (bodyRun idx c a s) := by
+  induction b with
+  | zero => rfl
+  | succ b ih =>
+      rw [Nat.add_succ, bodyRun_succ, bodyRun_succ, ih]
+
+/-- Runnable finite iteration by complete main windows. -/
+def windowRun (idx : Nat) (c : Cfg) (fuel : Nat) (s : AState) : AState :=
+  Nat.rec s (fun _ q => bodyRun idx c c.period q) fuel
+
+@[simp] theorem windowRun_zero (idx : Nat) (c : Cfg) (s : AState) :
+    windowRun idx c 0 s = s := rfl
+
+@[simp] theorem windowRun_succ (idx : Nat) (c : Cfg) (fuel : Nat)
+    (s : AState) :
+    windowRun idx c (fuel + 1) s =
+      bodyRun idx c c.period (windowRun idx c fuel s) := rfl
+
 set_option maxRecDepth 10000 in
 /-- Every strict prefix of the finite accumulation half clears precisely the
 consumed cells.  The remaining suffix still contains the marked values from
@@ -642,6 +662,132 @@ theorem bodyRun_main_acc_preserves_tableRep
       hR hW hWrite (Nat.le_refl _) hRoot hzero hTM hPM hidxM hrootM
       hidxNe hwriteM hwM hA (Nat.le_refl _)).trans hRep.guard
 
+set_option maxRecDepth 10000 in
+/-- One complete compiled main window preserves the full prime table, clears
+the live product/flag banks, resets the position, and advances the window
+base.  This is the transition consumed by the outer finite-window induction. -/
+theorem bodyRun_main_window_complete
+    (c : Cfg) (idx : Nat) (s : AState) (ps : List Nat)
+    (bound w : Nat)
+    (hRep : MachineTableRep c s ps)
+    (hInv : PrimeTableInv ps bound)
+    (hpsLen : ps.length = c.tableLen)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTPos : 0 < c.markSteps)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwSegM : w + c.segLen < M)
+    (hnStartM : w + firstOffset w c.firstPrime < M)
+    (hA : c.arrayLen < M) :
+    let out := bodyRun idx c c.period s
+    (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      MachineTableRep c out ps ∧ out.regs rR = 0 ∧
+      out.regs rW = w + c.segLen ∧ out.regs rZero = 0 := by
+  let marked := bodyRun idx c c.markSteps s
+  let write := c.primeBase + ps.length
+  have hLPos : 0 < c.segLen := by omega
+  have hwriteM : write < M := by
+    dsimp only [write]
+    simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+    omega
+  have hwM : w < M := by omega
+  have hmarkedPos := bodyRun_mark_position c idx c.markSteps s w write
+    (Nat.le_refl _) hR hW hRep.cursor hLPos hTM hPM hidxM hspanM
+    hidxNe hwriteM hwM
+  have hmarkedR : marked.regs rR = c.markSteps := hmarkedPos.2.1
+  have hmarkedW : marked.regs rW = w := hmarkedPos.2.2
+  have hmarkedZero : marked.regs rZero = 0 :=
+    bodyRun_rZero idx c c.markSteps s hzero
+  have hmarkSteps : c.markSteps - 1 + 1 = c.markSteps := by omega
+  have hmarkedRep : MachineTableRep c marked ps := by
+    have hrep := bodyRun_mark_preserves_tableRep_from_start c idx
+      (c.markSteps - 1) s ps bound w hRep hInv hpsLen hR hW (by omega)
+      hmain htableLenPos htableLenM hTM hPM hidxM hspanM hidxNe hp1Pos
+      hp1LeL hp1LeBound hboundM hboundSqM hsegBoundM hwSegM hnStartM hA
+    rw [hmarkSteps] at hrep
+    exact hrep
+  have hacc := bodyRun_main_acc_complete c idx marked w write hmarkedR
+    hmarkedW hmarkedRep.cursor hLPos hmain hmarkedZero hTM hPM hidxM
+    hspanM hidxNe hwriteM hwSegM hA
+  have haccRep := bodyRun_main_acc_preserves_tableRep c idx marked ps w
+    hmarkedRep (by omega) hmarkedR hmarkedW hLPos hmain hmarkedZero hTM
+    hPM hidxM hspanM hidxNe hwSegM hA
+  have hout : bodyRun idx c c.period s =
+      bodyRun idx c c.segLen marked := by
+    rw [Cfg.period, bodyRun_add]
+  rw [hout]
+  exact ⟨hacc.1, haccRep, hacc.2.2.1, hacc.2.2.2,
+    bodyRun_rZero idx c c.segLen marked hmarkedZero⟩
+
+set_option maxRecDepth 10000 in
+/-- Arbitrarily many finite main windows preserve the same exact prime table
+and cleared-window invariant.  The only growing machine bound is the explicit
+final window base `w + fuel * segLen`. -/
+theorem windowRun_main_complete
+    (c : Cfg) (idx : Nat) (s : AState) (ps : List Nat)
+    (bound w fuel : Nat)
+    (hRep : MachineTableRep c s ps)
+    (hInv : PrimeTableInv ps bound)
+    (hpsLen : ps.length = c.tableLen)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hclear : ∀ j, j < c.segLen → machineCell c s j = ⟨0, 0⟩)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTPos : 0 < c.markSteps)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwFuelM : w + fuel * c.segLen < M)
+    (hA : c.arrayLen < M) :
+    let out := windowRun idx c fuel s
+    (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      MachineTableRep c out ps ∧ out.regs rR = 0 ∧
+      out.regs rW = w + fuel * c.segLen ∧ out.regs rZero = 0 := by
+  induction fuel with
+  | zero =>
+      simp only [windowRun_zero, Nat.zero_mul, Nat.add_zero]
+      exact ⟨hclear, hRep, hR, hW, hzero⟩
+  | succ n ih =>
+      have hnBound : w + n * c.segLen < M := by
+        have := hwFuelM
+        simp only [Nat.add_mul] at this
+        omega
+      have hp := ih hnBound
+      let mid := windowRun idx c n s
+      have hwNextM : (w + n * c.segLen) + c.segLen < M := by
+        have := hwFuelM
+        simp only [Nat.add_mul] at this
+        omega
+      have hoff : firstOffset (w + n * c.segLen) c.firstPrime <
+          c.firstPrime := Nat.mod_lt _ hp1Pos
+      have hnStartM : (w + n * c.segLen) +
+          firstOffset (w + n * c.segLen) c.firstPrime < M := by
+        omega
+      have hstep := bodyRun_main_window_complete c idx mid ps bound
+        (w + n * c.segLen) hp.2.1 hInv hpsLen hp.2.2.1 hp.2.2.2.1
+        hp.2.2.2.2 hmain htableLenPos htableLenM hTPos hTM hPM hidxM
+        hspanM hidxNe hp1Pos hp1LeL hp1LeBound hboundM hboundSqM
+        hsegBoundM hwNextM hnStartM hA
+      rw [windowRun_succ]
+      refine ⟨hstep.1, hstep.2.1, hstep.2.2.1, ?_, hstep.2.2.2.2⟩
+      have hw := hstep.2.2.2.1
+      dsimp only [mid] at hw
+      simp only [Nat.add_mul]
+      omega
+
 /-- At accumulation index `i`, the cell about to be decoded is still exactly
 the finite root fold established by the compiled marking run. -/
 theorem bodyRun_main_acc_current_cellRepresents
@@ -786,5 +932,73 @@ theorem readSig_compiled_main_window_cell_eq_rootFoldValue
     (c.firstPrime :: ps) i w write hmarkedR hmarkedW hmarkedWrite hi hmain
     hmarkedZero hTM hPM hidxM hspanM hidxNe hwriteM hwM h2LM hwiM hA
     hmarkedCell
+
+set_option maxRecDepth 10000 in
+/-- Selected-cell observable theorem at an arbitrary finite main-window
+index.  Every earlier whole window is executed by `windowRun`; the selected
+window then executes its compiled mark schedule and accumulation prefix. -/
+theorem readSig_windowRun_main_cell_eq_rootFoldValue
+    (c : Cfg) (idx : Nat) (s : AState) (ps : List Nat)
+    (bound w q i : Nat)
+    (hRep : MachineTableRep c s (c.firstPrime :: ps))
+    (hInv : PrimeTableInv (c.firstPrime :: ps) bound)
+    (hpsLen : (c.firstPrime :: ps).length = c.tableLen)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hclear : ∀ j, j < c.segLen → machineCell c s j = ⟨0, 0⟩)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hA : c.arrayLen < M)
+    (hbudget :
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hi : i < c.segLen)
+    (hqNextM : w + (q + 1) * c.segLen < M) :
+    let current := windowRun idx c q s
+    let marked := bodyRun idx c c.markSteps current
+    readSig (arun idx (bodyRun idx c i marked) c.coreBody) =
+      muSig (rootFoldValue (c.firstPrime :: ps))
+        ((w + q * c.segLen) + i) := by
+  let current := windowRun idx c q s
+  have hsumPos : 0 <
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum := by
+    simp only [List.map_cons, List.sum_cons]
+    exact Nat.add_pos_left (Nat.add_pos_right _ (by decide : 0 < 2)) _
+  have hTPos : 0 < c.markSteps := Nat.lt_of_lt_of_le hsumPos hbudget
+  have hwqM : w + q * c.segLen < M := by
+    have := hqNextM
+    simp only [Nat.add_mul] at this
+    omega
+  have hp := windowRun_main_complete c idx s (c.firstPrime :: ps) bound
+    w q hRep hInv hpsLen hR hW hzero hclear hmain htableLenPos
+    htableLenM hTPos hTM hPM hidxM hspanM hidxNe hp1Pos hp1LeL
+    hp1LeBound hboundM hboundSqM hsegBoundM hwqM hA
+  have hwNextM : (w + q * c.segLen) + c.segLen < M := by
+    have := hqNextM
+    simp only [Nat.add_mul] at this
+    omega
+  have hoff : firstOffset (w + q * c.segLen) c.firstPrime <
+      c.firstPrime := Nat.mod_lt _ hp1Pos
+  have hnStartM : (w + q * c.segLen) +
+      firstOffset (w + q * c.segLen) c.firstPrime < M := by
+    omega
+  have hwiM : (w + q * c.segLen) + i < M := by omega
+  exact readSig_compiled_main_window_cell_eq_rootFoldValue c idx current ps
+    bound (w + q * c.segLen) (c.primeBase + (c.firstPrime :: ps).length)
+    i hp.2.1 hInv hpsLen hp.2.2.1 hp.2.2.2.1 hp.2.1.cursor
+    hp.2.2.2.2 hmain htableLenPos htableLenM hTM hPM hidxM hspanM
+    hidxNe hp1Pos hp1LeL hp1LeBound hboundM hboundSqM hsegBoundM
+    hwNextM hnStartM hA hbudget hi (hp.1 i hi) (by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+      omega) (by omega) (by
+      simp only [Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+      omega) hwiM
 
 end LeanCompCert.Ports.ArraySegMobiusAccumulation

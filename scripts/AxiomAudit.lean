@@ -499,8 +499,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_nonstart
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_nonstart_of_cursor
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_nonstart_from
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_mark_preserves_tableRep_nonstart_from
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.arun_coreBody_simulates_start
 #print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_simulates_main_from_start
+#print axioms LeanCompCert.Ports.ArraySegMobiusCursorModel.bodyRun_mark_preserves_tableRep_from_start
 #print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.primeCellScan_eq_rootCellStep
 #print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.referenceCellSchedule_eq_rootCellFoldFrom
 #print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.referenceCellSchedule_eq_rootCellFold
@@ -548,6 +550,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.arun_coreBody_main_acc_tableCell
 #print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_acc_tableCell
 #print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_acc_preserves_tableRep
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_add
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_window_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.windowRun_main_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.readSig_windowRun_main_cell_eq_rootFoldValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap
