@@ -328,6 +328,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.mobiusLiveResidue_denote
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.accStep_mu
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.ResInv.step
+#print axioms LeanCompCert.Ports.MobiusResidueRealisation.ResInv.changeFunction
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.resFold_range_eq_resRun
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.resRun_inv
 #print axioms LeanCompCert.Ports.MobiusResidueRealisation.resStep_viol_eq
@@ -669,6 +670,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusIdleSignal.mark_event_divisors_ready
 #print axioms LeanCompCert.Ports.ArraySegMobiusIdleSignal.root_acc_event_divisors_ready
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_bits
+#print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootFoldValue_eq_or
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_eq_muSig_decodedValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootCellFold_cellRepresents
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.cellRepresents_of_cell_eq_rootCellFold

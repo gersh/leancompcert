@@ -99,6 +99,33 @@ structure ResInv (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res) : Prop where
   celSq : r.celSq = r.cel * r.cel
   celLt : r.cel + 1 < 2 ^ 32
 
+/-- `accTrue` depends only on the values at the positive integers in its
+finite prefix. -/
+theorem accTrue_congr_prefix (k n : Nat) (mu nu : Nat → Int)
+    (h : ∀ m, 1 ≤ m → m ≤ n → mu m = nu m) :
+    accTrue k mu n = accTrue k nu n := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      simp only [accTrue]
+      rw [ih (fun m hm1 hmn => h m hm1 (by omega)),
+        h (n + 1) (by omega) (Nat.le_refl _)]
+
+/-- Change the arithmetic function named by a residue invariant when the two
+functions agree on the invariant's finite positive prefix. -/
+theorem ResInv.changeFunction {k n : Nat} {mu nu : Nat → Int} {r : Res}
+    (hfun : ∀ m, 1 ≤ m → m ≤ n → mu m = nu m)
+    (h : ResInv k mu n r) : ResInv k nu n r := by
+  have heq := accTrue_congr_prefix k n mu nu hfun
+  exact
+    { loLt := h.loLt
+      hiLt := h.hiLt
+      acc := by simpa only [heq] using h.acc
+      bnd := by simpa only [heq] using h.bnd
+      cel := h.cel
+      celSq := h.celSq
+      celLt := h.celLt }
+
 /-! ## One exact accumulator step -/
 
 /-- The two indicator bits produced for a value of `μ(n)` advance the

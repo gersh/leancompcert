@@ -103,6 +103,20 @@ def decodedValue (n prod flag : Nat) : Int :=
   let g := decodeCell n prod flag
   if g.pos = 1 then 1 else if g.neg = 1 then -1 else 0
 
+/-- Every runnable cell decoder has one of the three Möbius-shaped integer
+values, independently of any number-theoretic interpretation. -/
+theorem decodedValue_eq_or (n prod flag : Nat) :
+    decodedValue n prod flag = 1 ∨ decodedValue n prod flag = -1 ∨
+      decodedValue n prod flag = 0 := by
+  by_cases hp : (decodeCell n prod flag).pos = 1
+  · left
+    simp [decodedValue, hp]
+  · by_cases hn : (decodeCell n prod flag).neg = 1
+    · right; left
+      simp [decodedValue, hp, hn]
+    · right; right
+      simp [decodedValue, hp, hn]
+
 private theorem sig_eq_muSig_of_bits (g : Sig) (n : Nat)
     (hn : g.n = n) (hgate : g.gate = 1)
     (hpos : g.pos ≤ 1) (hneg : g.neg ≤ 1)
@@ -141,6 +155,12 @@ theorem decodeCell_eq_muSig_decodedValue (n prod flag : Nat) :
 def rootFoldValue (ps : List Nat) (n : Nat) : Int :=
   let q := rootCellFold ps n
   decodedValue n q.prod q.flag
+
+/-- The finite represented-prime fold always lands in `{-1, 0, 1}`. -/
+theorem rootFoldValue_eq_or (ps : List Nat) (n : Nat) :
+    rootFoldValue ps n = 1 ∨ rootFoldValue ps n = -1 ∨
+      rootFoldValue ps n = 0 := by
+  exact decodedValue_eq_or n _ _
 
 /-- Transparent finite number-theoretic value of a represented-prime fold.
 It is zero when a listed prime square divides `n`; otherwise its sign is the
