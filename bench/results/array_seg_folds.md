@@ -1757,3 +1757,24 @@ CompCert campaigns, and the exact-domain run took 816.70 s at 532,676 KiB
 under the 2/3 GiB zero-swap scope.  This is the preferred paper-faithful
 receipt shape: zero is the actual compiled result, not a post-hoc subtraction
 of two known pre-domain failures.
+
+The production schedule proof additionally requires root windows to stop
+exactly at `rootCap = 87903`, rather than relying on a harmless emitter-side
+overshoot.  An aligned CompCert campaign therefore used a first root segment
+length of `29301` and a final-link root segment length of `3`; both divide
+`87903`.  It returned:
+
+```
+3 7727054615 0 1711921466838888838 32768 87904 7727113216
+7727054616 7727068586 0 1719079213671136448 32768 87904 7727113216
+```
+
+The second literal seed was the first link's observed accumulator carry, all
+violation counters were zero, and the final state again agrees exactly with
+the earlier campaigns.  Emission, both CompCert compilations, and both runs
+took 916.31 s and peaked at 542,988 KiB under the 2/3 GiB one-worker,
+zero-swap scope.  The two emitted schedule shapes were respectively
+`rootCount = 3, rootLen = 87903` and
+`rootCount = 29301, rootLen = 87903`, so neither root phase crosses the
+formal cap.  As above, these machine-local rows are benchmark and
+falsification evidence until admitted through a proved source denotation.
