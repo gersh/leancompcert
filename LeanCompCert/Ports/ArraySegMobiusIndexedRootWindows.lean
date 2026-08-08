@@ -233,7 +233,7 @@ theorem indexedRootWindow_mixed_complete
 
 /-- One complete ordinary later root window, including preservation of both
 the growing table and the fixed selector-facing bootstrap guard. -/
-theorem indexedRootWindow_later_complete
+theorem indexedRootWindow_later_complete_room
     (c : Cfg) (idx : Nat) (s : AState) (tail full : List Nat)
     (bootBound w : Nat)
     (hInv : RootTableInv c s full (w - 1))
@@ -266,9 +266,11 @@ theorem indexedRootWindow_later_complete
     (hbootLt : bootBound < w)
     (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
     (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
-    (hfullFit : full.length < c.tableLen)
+    (hfullFit : full.length ≤ c.tableLen)
     (hfit : ∀ k, k < c.segLen →
-      (rootScanFrom full w k).length < c.tableLen)
+      (rootScanFrom full w k).length ≤ c.tableLen ∧
+        (unmarkedBool (rootScanFrom full w k) (w + k) = true →
+          (rootScanFrom full w k).length < c.tableLen))
     (hcapM : c.rootCap < M) :
     RootTableInv c (indexedBodyRun idx c c.period s)
         (rootScanFrom full w c.segLen) (w + c.segLen - 1) ∧
@@ -295,7 +297,7 @@ theorem indexedRootWindow_later_complete
   have hidxMarkM : idx + c.markSteps < M := by omega
   have hmarkPair := indexedBodyRun_root_mark_preserves_full_table c idx
     (c.markSteps - 1) s full (c.firstPrime :: tail) guard bootBound w 0
-    hInv.toMachineTableRep (Nat.le_of_lt hfullFit) hLimit hBoot hbootLen
+    hInv.toMachineTableRep hfullFit hLimit hBoot hbootLen
     hR hW (by omega) (by simpa [hsteps] using hmarkRange) hbootPos
     hbootLe htableLenM hTM hPM hspanM hwriteM hp1Pos hp1LeL
     hp1LeBound hboundM hboundSqM hsegBoundM hwSegM hnStartM hA
@@ -321,12 +323,12 @@ theorem indexedRootWindow_later_complete
       htableLenM hTM hPM hspanM hwriteM hp1Pos hp1LeL hp1LeBound
       hboundM hboundSqM hsegBoundM hwSegM hnStartM hA hbudget hj
       (hclear j hj)
-  have hacc := indexedBodyRun_later_root_acc_complete_wrap c
+  have hacc := indexedBodyRun_later_root_acc_complete_wrap_room c
     (idx + c.markSteps) marked (c.firstPrime :: tail) full bootBound w
     hmarkedInv hBoot hmarkedR hmarkedW hmarkedZero hmarkedCells hLPos
     (by simp only [Cfg.period] at hrootWindow ⊢; omega) hboot2 hbootLt
     hsegCap hcover hfit hTM hPM hspanM hcapM hA hwSegM
-  have haccView := indexedBodyRun_later_root_bootstrap_view c
+  have haccView := indexedBodyRun_later_root_bootstrap_view_room c
     (idx + c.markSteps) c.segLen marked (c.firstPrime :: tail) full
     bootBound w hmarkedView hprefix hmarkedInv hBoot hmarkedR hmarkedW
     hmarkedZero hmarkedCells (Nat.le_refl _)

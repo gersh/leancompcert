@@ -134,7 +134,7 @@ theorem indexedProductionRoot_windows_bounds
           omega
         have hnPeriod := Nat.mul_le_mul_right c.period hnLe
         have hnLen := Nat.mul_le_mul_right c.segLen hnLe
-        have hnRun := indexedWindowRun_later_root_complete c idxCross
+        have hnRun := indexedWindowRun_later_root_complete_room c idxCross
           crossState c.bootPrimes crossed bootBound laterW n hcross.1
           h.bootPrime hcross.2.1 hcross.2.2.2.2.2.2
           hcross.2.2.2.1 hcross.2.2.2.2.1 hcross.2.2.2.2.2.1
@@ -159,7 +159,9 @@ theorem indexedProductionRoot_windows_bounds
             omega)
           (fun m hm => h.laterCap m (by omega))
           (fun m hm => h.laterCover m (by omega))
-          (fun m hm k hk => h.laterFit m (by omega) k hk) h.rootCapM
+          (fun m hm k hk => by
+            simpa [crossed, laterW] using h.laterFit m (by omega) k hk)
+          h.rootCapM
         have hcompose : indexedWindowRun 0 c q entry =
             indexedWindowRun idxCross c n crossState := by
           rw [hqEq]

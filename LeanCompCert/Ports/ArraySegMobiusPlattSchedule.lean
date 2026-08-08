@@ -50,11 +50,12 @@ structure ScheduleFiniteEvidence (c : Cfg)
   crossingFit : ∀ k, k < c.segLen →
     (rootScanMixed c.bootPrimes bootBound
       (crossingBase c bootFuel) k).length < c.tableLen
-  laterFit : ∀ n, n < laterFuel → ∀ k, k < c.segLen →
-    (rootScanFrom
-      (rootLaterWindows c (crossingTable c bootBound bootFuel)
-        (laterBase c bootFuel) n)
-      (laterBase c bootFuel + n * c.segLen) k).length < c.tableLen
+  laterRoom : ∀ n, n < laterFuel → ∀ k, k < c.segLen →
+    let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
+      (laterBase c bootFuel) n
+    RoomForStep c
+      (rootScanFrom ps (laterBase c bootFuel + n * c.segLen) k)
+      (laterBase c bootFuel + n * c.segLen + k)
   finalRoom : ∀ k, k < c.segLen →
     let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
       (laterBase c bootFuel) laterFuel
@@ -108,7 +109,9 @@ theorem plattAlignedFirst_schedule
   case markBudget => exact e.markBudget
   case bootstrapFit => exact e.bootstrapFit
   case crossingFit => exact e.crossingFit
-  case laterFit => exact e.laterFit
+  case laterFit =>
+    intro n hn k hk
+    simpa [RoomForStep] using e.laterRoom n hn k hk
   case finalPrefixFit =>
     have h := (e.finalRoom 0 (by
       simp [plattAlignedFirst]))
@@ -139,7 +142,10 @@ theorem plattAlignedFirst_legacySchedule
   case markBudget => exact e.markBudget
   case bootstrapFit => exact e.bootstrapFit
   case crossingFit => exact e.crossingFit
-  case laterFit => exact e.laterFit
+  case laterFit =>
+    intro n hn k hk
+    exact ⟨Nat.le_of_lt (e.laterFit n hn k hk),
+      fun _ => e.laterFit n hn k hk⟩
   case finalPrefixFit => exact Nat.le_of_lt e.finalPrefixFit
   case finalFit =>
     intro k hk
@@ -168,7 +174,9 @@ theorem plattAlignedTail_schedule
   case markBudget => exact e.markBudget
   case bootstrapFit => exact e.bootstrapFit
   case crossingFit => exact e.crossingFit
-  case laterFit => exact e.laterFit
+  case laterFit =>
+    intro n hn k hk
+    simpa [RoomForStep] using e.laterRoom n hn k hk
   case finalPrefixFit =>
     have h := (e.finalRoom 0 (by
       simp [plattAlignedTail]))
@@ -198,7 +206,10 @@ theorem plattAlignedTail_legacySchedule
   case markBudget => exact e.markBudget
   case bootstrapFit => exact e.bootstrapFit
   case crossingFit => exact e.crossingFit
-  case laterFit => exact e.laterFit
+  case laterFit =>
+    intro n hn k hk
+    exact ⟨Nat.le_of_lt (e.laterFit n hn k hk),
+      fun _ => e.laterFit n hn k hk⟩
   case finalPrefixFit => exact Nat.le_of_lt e.finalPrefixFit
   case finalFit =>
     intro k hk

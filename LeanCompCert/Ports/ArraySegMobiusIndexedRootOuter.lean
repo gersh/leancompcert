@@ -252,7 +252,7 @@ structure IndexedLaterWindowsInv (c : Cfg) (idx : Nat) (s : AState)
 set_option maxRecDepth 10000 in
 /-- Any finite sequence of ordinary later root windows composes at the actual
 global indices.  All per-window capacity facts remain explicit and runnable. -/
-theorem indexedWindowRun_later_root_complete
+theorem indexedWindowRun_later_root_complete_room
     (c : Cfg) (idx : Nat) (s : AState) (boot full : List Nat)
     (bootBound w fuel : Nat)
     (hInv : RootTableInv c s full (w - 1))
@@ -289,7 +289,13 @@ theorem indexedWindowRun_later_root_complete
         (bootBound + 1) * (bootBound + 1))
     (hfit : ∀ n, n < fuel → ∀ k, k < c.segLen →
       (rootScanFrom (rootLaterWindows c full w n)
-        (w + n * c.segLen) k).length < c.tableLen)
+        (w + n * c.segLen) k).length ≤ c.tableLen ∧
+      (unmarkedBool
+          (rootScanFrom (rootLaterWindows c full w n)
+            (w + n * c.segLen) k)
+          (w + n * c.segLen + k) = true →
+        (rootScanFrom (rootLaterWindows c full w n)
+          (w + n * c.segLen) k).length < c.tableLen))
     (hcapM : c.rootCap < M) :
     IndexedLaterWindowsInv c idx s boot full bootBound w fuel := by
   obtain ⟨tail, rfl⟩ := hbootShape
@@ -329,10 +335,10 @@ theorem indexedWindowRun_later_root_complete
         have hoff : firstOffset wn c.firstPrime < c.firstPrime :=
           Nat.mod_lt _ hp1Pos
         omega
-      have hcurFit : cur.length < c.tableLen := by
+      have hcurFit : cur.length ≤ c.tableLen := by
         have hz := hfit n (Nat.lt_succ_self n) 0 hLPos
-        simpa [cur, rootScanFrom_zero] using hz
-      have hstep := indexedRootWindow_later_complete c
+        simpa [cur, rootScanFrom_zero] using hz.1
+      have hstep := indexedRootWindow_later_complete_room c
         (idx + n * c.period) mid tail cur bootBound wn hp.table hBoot
         hp.view hp.hasPrefix hp.position hp.base hp.zero hp.cleared hbootLen
         hwindowRoot hbootPos hbootLe htableLenM hTPos hTM hPM hspanM

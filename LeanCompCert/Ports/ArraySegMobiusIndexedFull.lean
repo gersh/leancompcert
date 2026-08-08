@@ -111,10 +111,15 @@ structure ProductionCoreSchedule (c : Cfg)
     laterBase c bootFuel + n * c.segLen + c.segLen <
       (bootBound + 1) * (bootBound + 1)
   laterFit : ∀ n, n < laterFuel → ∀ k, k < c.segLen →
-    (rootScanFrom
-      (rootLaterWindows c (crossingTable c bootBound bootFuel)
-        (laterBase c bootFuel) n)
-      (laterBase c bootFuel + n * c.segLen) k).length < c.tableLen
+    let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
+      (laterBase c bootFuel) n
+    (rootScanFrom ps (laterBase c bootFuel + n * c.segLen) k).length ≤
+        c.tableLen ∧
+      (unmarkedBool
+          (rootScanFrom ps (laterBase c bootFuel + n * c.segLen) k)
+          (laterBase c bootFuel + n * c.segLen + k) = true →
+        (rootScanFrom ps
+          (laterBase c bootFuel + n * c.segLen) k).length < c.tableLen)
 
   finalIndex : (bootFuel + 1) * c.period + laterFuel * c.period +
     c.period = c.rootSpan
@@ -194,7 +199,7 @@ theorem indexedProductionCore_complete
     h.bootFit h.crossingFit h.rootCapM
   let idxCross := (bootFuel + 1) * c.period
   let laterW := laterBase c bootFuel
-  have hlater := indexedWindowRun_later_root_complete c idxCross crossState
+  have hlater := indexedWindowRun_later_root_complete_room c idxCross crossState
     c.bootPrimes crossed bootBound laterW laterFuel hcross.1
     h.bootPrime hcross.2.1 hcross.2.2.2.2.2.2 hcross.2.2.2.1
     hcross.2.2.2.2.1 hcross.2.2.2.2.2.1 hcross.2.2.1 h.bootShape
