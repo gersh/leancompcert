@@ -133,6 +133,32 @@ theorem combinedIndexedRun_add (idx : Nat) (c : Cfg) (k a b : Nat)
       have heq : idx + (a + b) = idx + a + b := by omega
       rw [heq]
 
+/-- Consecutive complete windows of the actual interleaved core/residue
+trace. -/
+def combinedWindowRun (idx : Nat) (c : Cfg) (k fuel : Nat)
+    (s : AState) : AState :=
+  combinedIndexedRun idx c k (fuel * c.period) s
+
+@[simp] theorem combinedWindowRun_zero (idx : Nat) (c : Cfg) (k : Nat)
+    (s : AState) : combinedWindowRun idx c k 0 s = s := by
+  simp [combinedWindowRun]
+
+theorem combinedWindowRun_succ (idx : Nat) (c : Cfg) (k fuel : Nat)
+    (s : AState) :
+    combinedWindowRun idx c k (fuel + 1) s =
+      combinedIndexedRun (idx + fuel * c.period) c k c.period
+        (combinedWindowRun idx c k fuel s) := by
+  simp only [combinedWindowRun, Nat.add_mul, Nat.one_mul]
+  exact combinedIndexedRun_add idx c k (fuel * c.period) c.period s
+
+theorem combinedWindowRun_add (idx : Nat) (c : Cfg) (k a b : Nat)
+    (s : AState) :
+    combinedWindowRun idx c k (a + b) s =
+      combinedWindowRun (idx + a * c.period) c k b
+        (combinedWindowRun idx c k a s) := by
+  simp only [combinedWindowRun, Nat.add_mul]
+  exact combinedIndexedRun_add idx c k (a * c.period) (b * c.period) s
+
 /-- The exact signal sequence consumed by a finite production trace. -/
 def combinedSignals (idx : Nat) (c : Cfg) (k fuel : Nat) (s : AState) :
     List Sig :=

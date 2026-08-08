@@ -54,6 +54,33 @@ theorem combinedIndexedRun_core (idx : Nat) (c : Cfg) (k fuel : Nat)
       rw [combinedIndexedRun_succ, indexedBodyRun_succ]
       exact arun_combined_core c k (idx + n) ih
 
+/-- Window-level form of the sieve/residue projection theorem. -/
+theorem combinedWindowRun_core (idx : Nat) (c : Cfg) (k fuel : Nat)
+    {s t : AState} (h : CoreAgree s t) :
+    CoreAgree (combinedWindowRun idx c k fuel s)
+      (indexedWindowRun idx c fuel t) := by
+  exact combinedIndexedRun_core idx c k (fuel * c.period) h
+
+/-- Outer finite-window induction for a residue invariant.  The step premise
+is designed to be discharged by `readRes_combinedIndexedRun_main_window_inv`
+after the verified core window theorem supplies the next entry state. -/
+theorem readRes_combinedWindowRun_inv_of_step
+    (idx : Nat) (c : Cfg) (k fuel w : Nat) (mu : Nat → Int)
+    (s : AState)
+    (hstep : ∀ q, q < fuel →
+      ResInv k mu (w + q * c.segLen - 1)
+        (readRes (combinedWindowRun idx c k q s)) →
+      ResInv k mu (w + (q + 1) * c.segLen - 1)
+        (readRes (combinedWindowRun idx c k (q + 1) s)))
+    (h0 : ResInv k mu (w - 1) (readRes s)) :
+    ResInv k mu (w + fuel * c.segLen - 1)
+      (readRes (combinedWindowRun idx c k fuel s)) := by
+  induction fuel with
+  | zero => simpa using h0
+  | succ n ih =>
+      have hprev := ih (fun q hq => hstep q (by omega))
+      exact hstep n (Nat.lt_succ_self n) hprev
+
 /-- Consequently the signal consumed by the next residue event is exactly
 the signal emitted by the corresponding standalone production event. -/
 theorem readSig_combinedIndexedRun_eq_indexedBodyRun
