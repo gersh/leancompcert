@@ -462,9 +462,10 @@ theorem indexedBodyRun_later_root_bootstrap_view
             Cfg.tableLen] at hcurFit ⊢
           omega
         omega
-      have hc := arun_coreBody_root_acc_next_table_cells c curIdx prev
+      have hc := arun_coreBody_root_acc_next_table_cells_room c curIdx prev
         boot cur (n - 1) (c.markSteps + k) w
-        (c.primeBase + cur.length) k n hprevInv hcurFit hprevR hprevW
+        (c.primeBase + cur.length) k n hprevInv (Nat.le_of_lt hcurFit)
+        (fun _ => hcurFit) hprevR hprevW
         hprevWrite hT hiEq rfl hnext hcurRoot hRM hTM hcurM hspanM
         hkSeg hnM (by dsimp [n]; omega) (by dsimp [n]; omega) hcapM hA
         hkPrefix.zero hprevCell bootBound hBoot (by dsimp [n]; omega)

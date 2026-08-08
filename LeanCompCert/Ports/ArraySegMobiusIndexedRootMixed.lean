@@ -275,9 +275,10 @@ theorem indexedBodyRun_mixed_root_acc_prefix
               omega
             have hcurrent : RootTableInv c prev cur (n - 1) := by
               simpa [hbound] using hkPrefix.table
-            have hc := arun_coreBody_root_acc_next_table_cells c curIdx prev
+            have hc := arun_coreBody_root_acc_next_table_cells_room c curIdx prev
               boot cur (n - 1) (c.markSteps + k) w
-              (c.primeBase + cur.length) k n hcurrent hcurFit hprevR
+              (c.primeBase + cur.length) k n hcurrent
+              (Nat.le_of_lt hcurFit) (fun _ => hcurFit) hprevR
               hprevW hprevWrite hT hiEq rfl (by omega) hcurRoot hRM hTM
               hcurM hspanM hkSeg hnM (by omega) (by omega) hcapM hA
               hkPrefix.zero hprevCell bootBound hInv.primeTable hnBootLt
@@ -392,9 +393,9 @@ theorem indexedBodyRun_mixed_root_acc_complete_wrap
     hRM hTM hPM hcurM hspanM hcurNe hkSeg hnM hwrap hwNextM (by omega)
     (by dsimp [n, k]; omega) hcapM hA hpref.zero hprevCell bootBound
     hInv.primeTable hnBoot (by omega)
-  have hc := arun_coreBody_root_acc_next_table_cells c curIdx prev boot cur
+  have hc := arun_coreBody_root_acc_next_table_cells_room c curIdx prev boot cur
     (n - 1) (c.markSteps + k) w (c.primeBase + cur.length) k n hprevInv
-    hcurFit hprevR hprevW hprevWrite hT hiEq rfl (by omega) hcurRoot
+    (Nat.le_of_lt hcurFit) (fun _ => hcurFit) hprevR hprevW hprevWrite hT hiEq rfl (by omega) hcurRoot
     hRM hTM hcurM hspanM hkSeg hnM (by omega)
     (by dsimp [n, k]; omega) hcapM hA hpref.zero hprevCell bootBound
     hInv.primeTable hnBoot (by omega)

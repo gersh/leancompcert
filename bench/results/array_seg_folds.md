@@ -1778,3 +1778,18 @@ zero-swap scope.  The two emitted schedule shapes were respectively
 `rootCount = 29301, rootLen = 87903`, so neither root phase crosses the
 formal cap.  As above, these machine-local rows are benchmark and
 falsification evidence until admitted through a proved source denotation.
+
+An attempted kernel proof of only the two aligned `finalRootTable.length`
+equalities was deliberately run under the same 2/3 GiB, one-worker,
+zero-swap scope.  After 106 seconds it had not completed and the Lean process
+had reached approximately 2.73 GiB RSS, so it was interrupted before the
+hard limit.  This reproduces the memory-growth failure mode and confirms that
+the `87903`-candidate table computation must be a LeanCompCert receipt, not a
+`decide`/kernel-normalization leaf in ordinary builds.
+
+That experiment also exposed an obsolete strict guard in
+`ProductionCoreSchedule`: the last prime is `87887`, so the table is already
+full for the final sixteen composite candidates.  The machine correctly
+performs no store on those marked rows.  The replacement finite evidence
+therefore permits `length = tableLen` and requires strict spare capacity only
+when `unmarkedBool` says the current row will append.

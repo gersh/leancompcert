@@ -789,10 +789,11 @@ theorem rootStoreInput_rootTableInv (c : Cfg) (idx : Nat) (s : AState)
 /-- One actual root-table suffix implements the runnable finite table step.
 The current `PrimeTableInv` turns the finite unmarked test into the exact
 append/retain choice for the next sequential candidate. -/
-theorem rootWriteSuffix_next_eq_rootTableStep (c : Cfg) (idx : Nat)
+theorem rootWriteSuffix_next_eq_rootTableStep_room (c : Cfg) (idx : Nat)
     (s : AState) (ps : List Nat) (bound n : Nat)
     (hInv : RootTableInv c s ps bound)
-    (hFit : ps.length < c.tableLen)
+    (hFit : ps.length ≤ c.tableLen)
+    (hAppend : unmarkedBool ps n = true → ps.length < c.tableLen)
     (hnext : n = bound + 1)
     (h65 : s.regs 65 = n)
     (h132 : s.regs 132 = 1)
@@ -810,7 +811,7 @@ theorem rootWriteSuffix_next_eq_rootTableStep (c : Cfg) (idx : Nat)
       (unmarkedBool_eq_true_iff ps n).mp hu
     have h67 : s.regs 67 = 1 := by simpa [hu] using hbit
     simpa [rootTableStep, hu] using
-      hInv.append_next c idx s ps bound n hFit hnext hunmarked h65 h67
+      hInv.append_next c idx s ps bound n (hAppend hu) hnext hunmarked h65 h67
         h132 hn2 hnCap hnM hcapM hA
   · have hfalse : unmarkedBool ps n = false := by
       exact Bool.eq_false_iff.mpr hu
@@ -820,8 +821,28 @@ theorem rootWriteSuffix_next_eq_rootTableStep (c : Cfg) (idx : Nat)
       exact hu ((unmarkedBool_eq_true_iff ps n).mpr hm)
     have h67 : s.regs 67 = 0 := by simpa [hfalse] using hbit
     simpa [rootTableStep, hfalse] using
-      hInv.retain_next c idx s ps bound n (Nat.le_of_lt hFit) hnext
+      hInv.retain_next c idx s ps bound n hFit hnext
         hmarked h67 hn2 hA
+
+/-- Backwards-compatible strict-capacity specialization. -/
+theorem rootWriteSuffix_next_eq_rootTableStep (c : Cfg) (idx : Nat)
+    (s : AState) (ps : List Nat) (bound n : Nat)
+    (hInv : RootTableInv c s ps bound)
+    (hFit : ps.length < c.tableLen)
+    (hnext : n = bound + 1)
+    (h65 : s.regs 65 = n)
+    (h132 : s.regs 132 = 1)
+    (hn2 : 2 ≤ n)
+    (hnCap : n ≤ c.rootCap)
+    (hnM : n < M)
+    (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M)
+    (hbit : s.regs 67 = if unmarkedBool ps n then 1 else 0) :
+    RootTableInv c (arun idx s (rootWriteSuffix c))
+      (rootTableStep ps n) n :=
+  rootWriteSuffix_next_eq_rootTableStep_room c idx s ps bound n hInv
+    (Nat.le_of_lt hFit) (fun _ => hFit) hnext h65 h132 hn2 hnCap hnM
+    hcapM hA hbit
 
 /-- The same runnable append/retain choice frames every cell outside the live
 table cursor and scratch sink. -/
@@ -1455,11 +1476,12 @@ theorem arun_coreBody_root_acc_bootstrap_wrap
 factorization is shared by interior, ordinary-wrap, and last-root-transition
 endpoints; it exposes the exact finite candidate bit needed by the separate
 cursor theorems. -/
-theorem arun_coreBody_root_acc_next_table_cells
+theorem arun_coreBody_root_acc_next_table_cells_room
     (c : Cfg) (idx : Nat) (s : AState)
     (boot ps : List Nat) (bound r w write i n : Nat)
     (hInv : RootTableInv c s ps bound)
-    (hFit : ps.length < c.tableLen)
+    (hFit : ps.length ≤ c.tableLen)
+    (hAppend : unmarkedBool ps n = true → ps.length < c.tableLen)
     (hR : s.regs rR = r) (hW : s.regs rW = w)
     (hWrite : s.regs rWrite = write)
     (hT : c.markSteps ≤ s.regs rR)
@@ -1494,7 +1516,7 @@ theorem arun_coreBody_root_acc_next_table_cells
   have hqprod : q.arr i = prod := by
     simpa [machineCell, prod] using congrArg RootCellState.prod hqcell
   have huInv := rootStoreInput_rootTableInv c idx s ps bound r w write i
-    hInv (Nat.le_of_lt hFit) hR hW hWrite hT hiEq hroot hRM hTM hidxM
+    hInv hFit hR hW hWrite hT hiEq hroot hRM hTM hidxM
     hspanM hi hwM hA
   have hu := rootStoreInput_controls c idx s r w write i prod hR hW hWrite
     hT hiEq hroot hRM hTM hidxM hspanM hi hwM hqprod
@@ -1533,8 +1555,8 @@ theorem arun_coreBody_root_acc_next_table_cells
     omega
   rw [arun_coreBody_eq_rootStoreInput]
   refine ⟨?_, ?_, ?_, hbit, ?_⟩
-  · exact rootWriteSuffix_next_eq_rootTableStep c idx
-      (rootStoreInput c idx s) ps bound n huInv hFit hnext
+  · exact rootWriteSuffix_next_eq_rootTableStep_room c idx
+      (rootStoreInput c idx s) ps bound n huInv hFit hAppend hnext
       (by rw [hu.2.2.2.2.2.2.1, ← hn]) hu.2.2.2.2.1 hn2 hnCap
       (by rw [hn]; exact hwM) hcapM hA hbit
   · apply rootCellState_ext
@@ -1607,8 +1629,8 @@ theorem arun_coreBody_root_acc_next_wrap
       (arun idx s c.coreBody).regs rR = 0 ∧
       (arun idx s c.coreBody).regs rW = w + c.segLen ∧
       (arun idx s c.coreBody).regs rZero = 0 := by
-  have hc := arun_coreBody_root_acc_next_table_cells c idx s boot ps bound
-    r w write i n hInv hFit hR hW hWrite hT hiEq hn hnext hroot hRM hTM
+  have hc := arun_coreBody_root_acc_next_table_cells_room c idx s boot ps bound
+    r w write i n hInv (Nat.le_of_lt hFit) (fun _ => hFit) hR hW hWrite hT hiEq hn hnext hroot hRM hTM
     hidxM hspanM hi hwM hn2 hnCap hcapM hA hzero hcell bootBound hBoot
     hbootLt hcover
   have hwriteEq : write = c.primeBase + ps.length := by
@@ -1660,8 +1682,8 @@ theorem arun_coreBody_root_acc_next_transition
         (w + ((c.segLen + delta) % M)) % M ∧
       (arun idx s c.coreBody).regs rZero = 0 := by
   have hroot : idx < c.rootSpan := by omega
-  have hc := arun_coreBody_root_acc_next_table_cells c idx s boot ps bound
-    r w write i n hInv hFit hR hW hWrite hT hiEq hn hnext hroot hRM hTM
+  have hc := arun_coreBody_root_acc_next_table_cells_room c idx s boot ps bound
+    r w write i n hInv (Nat.le_of_lt hFit) (fun _ => hFit) hR hW hWrite hT hiEq hn hnext hroot hRM hTM
     hidxM hspanM hi hwM hn2 hnCap hcapM hA hzero hcell bootBound hBoot
     hbootLt hcover
   have hwriteEq : write = c.primeBase + ps.length := by
