@@ -361,7 +361,7 @@ theorem indexedWindowRun_later_root_complete
 set_option maxRecDepth 10000 in
 /-- The final later root window consumes the outer induction state and performs
 the exact production transition into the main index range. -/
-theorem indexedLaterWindows_final_transition
+theorem indexedLaterWindows_final_transition_room
     (c : Cfg) (idx : Nat) (s : AState) (boot full : List Nat)
     (bootBound w fuel delta : Nat)
     (hLater : IndexedLaterWindowsInv c idx s boot full bootBound w fuel)
@@ -388,10 +388,16 @@ theorem indexedLaterWindows_final_transition
     (hsegCap : w + (fuel + 1) * c.segLen - 1 ≤ c.rootCap)
     (hcover : w + fuel * c.segLen + c.segLen <
       (bootBound + 1) * (bootBound + 1))
-    (hfullFit : (rootLaterWindows c full w fuel).length < c.tableLen)
+    (hfullFit : (rootLaterWindows c full w fuel).length ≤ c.tableLen)
     (hfit : ∀ k, k < c.segLen →
       (rootScanFrom (rootLaterWindows c full w fuel)
-        (w + fuel * c.segLen) k).length < c.tableLen)
+        (w + fuel * c.segLen) k).length ≤ c.tableLen ∧
+      (unmarkedBool
+          (rootScanFrom (rootLaterWindows c full w fuel)
+            (w + fuel * c.segLen) k)
+          (w + fuel * c.segLen + k) = true →
+        (rootScanFrom (rootLaterWindows c full w fuel)
+          (w + fuel * c.segLen) k).length < c.tableLen))
     (hcapM : c.rootCap < M)
     (hDelta : c.wDelta = delta) (hDeltaM : delta < M) :
     let out := indexedWindowRun idx c (fuel + 1) s
@@ -413,7 +419,7 @@ theorem indexedLaterWindows_final_transition
       Nat.mod_lt _ hp1Pos
     dsimp only [wn] at hoff ⊢
     omega
-  have hstep := indexedRootWindow_later_transition c
+  have hstep := indexedRootWindow_later_transition_room c
     (idx + fuel * c.period) mid tail cur bootBound wn delta hLater.table
     hBoot hLater.view hLater.position hLater.base hLater.zero
     hLater.cleared hbootLen hrootWindow hbootPos hbootLe htableLenM
@@ -429,7 +435,7 @@ theorem indexedLaterWindows_final_transition
 set_option maxRecDepth 10000 in
 /-- The ordinary later-root phase, its exact final retargeting window, and any
 finite suffix of main windows compose into one changing-index execution. -/
-theorem indexedLaterWindows_then_main_complete
+theorem indexedLaterWindows_then_main_complete_room
     (c : Cfg) (idx : Nat) (s : AState) (boot full : List Nat)
     (bootBound w rootFuel delta mainFuel : Nat)
     (hLater : IndexedLaterWindowsInv c idx s boot full bootBound w rootFuel)
@@ -456,10 +462,16 @@ theorem indexedLaterWindows_then_main_complete
     (hsegCap : w + (rootFuel + 1) * c.segLen - 1 ≤ c.rootCap)
     (hcover : w + rootFuel * c.segLen + c.segLen <
       (bootBound + 1) * (bootBound + 1))
-    (hfullFit : (rootLaterWindows c full w rootFuel).length < c.tableLen)
+    (hfullFit : (rootLaterWindows c full w rootFuel).length ≤ c.tableLen)
     (hfit : ∀ k, k < c.segLen →
       (rootScanFrom (rootLaterWindows c full w rootFuel)
-        (w + rootFuel * c.segLen) k).length < c.tableLen)
+        (w + rootFuel * c.segLen) k).length ≤ c.tableLen ∧
+      (unmarkedBool
+          (rootScanFrom (rootLaterWindows c full w rootFuel)
+            (w + rootFuel * c.segLen) k)
+          (w + rootFuel * c.segLen + k) = true →
+        (rootScanFrom (rootLaterWindows c full w rootFuel)
+          (w + rootFuel * c.segLen) k).length < c.tableLen))
     (hcapM : c.rootCap < M)
     (hDelta : c.wDelta = delta) (hDeltaM : delta < M)
     (hfinalLen : (rootScanFrom (rootLaterWindows c full w rootFuel)
@@ -488,7 +500,7 @@ theorem indexedLaterWindows_then_main_complete
   let finalBound := w + rootFuel * c.segLen + c.segLen - 1
   let mainW :=
     ((w + rootFuel * c.segLen) + ((c.segLen + delta) % M)) % M
-  have htransition := indexedLaterWindows_final_transition c idx s boot full
+  have htransition := indexedLaterWindows_final_transition_room c idx s boot full
     bootBound w rootFuel delta hLater hBoot hbootShape hbootLen hrootWindow
     hbootPos hbootLe htableLenM hTPos hTM hPM hspanM hp1Pos hp1LeL
     hp1LeBoot hbootBoundM hbootBoundSqM hsegBootM hwSegM hA hbudget

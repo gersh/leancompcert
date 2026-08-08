@@ -11,6 +11,7 @@ open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusMark
 open LeanCompCert.Ports.ArraySegMobiusPrimeTable
 open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
+open LeanCompCert.Ports.ArraySegMobiusRootCellFold
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusRootPrefix
 open LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv
@@ -124,12 +125,19 @@ structure ProductionCoreSchedule (c : Cfg)
     (bootBound + 1) * (bootBound + 1)
   finalPrefixFit :
     (rootLaterWindows c (crossingTable c bootBound bootFuel)
-      (laterBase c bootFuel) laterFuel).length < c.tableLen
+      (laterBase c bootFuel) laterFuel).length ≤ c.tableLen
   finalFit : ∀ k, k < c.segLen →
-    (rootScanFrom
-      (rootLaterWindows c (crossingTable c bootBound bootFuel)
-        (laterBase c bootFuel) laterFuel)
-      (laterBase c bootFuel + laterFuel * c.segLen) k).length < c.tableLen
+    let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
+      (laterBase c bootFuel) laterFuel
+    (rootScanFrom ps
+      (laterBase c bootFuel + laterFuel * c.segLen) k).length ≤ c.tableLen ∧
+      (unmarkedBool
+          (rootScanFrom ps
+            (laterBase c bootFuel + laterFuel * c.segLen) k)
+          (laterBase c bootFuel + laterFuel * c.segLen + k) = true →
+        (rootScanFrom ps
+          (laterBase c bootFuel + laterFuel * c.segLen) k).length <
+            c.tableLen)
   finalLen : (finalRootTable c bootBound bootFuel laterFuel).length =
     c.tableLen
   finalBoundSqM :
@@ -198,7 +206,7 @@ theorem indexedProductionCore_complete
       dsimp only [laterW, laterBase, crossingBase]
       dsimp only [crossingBase] at hlt
       omega) h.laterCap h.laterCover h.laterFit h.rootCapM
-  have hsuffix := indexedLaterWindows_then_main_complete c idxCross
+  have hsuffix := indexedLaterWindows_then_main_complete_room c idxCross
     crossState c.bootPrimes crossed bootBound laterW laterFuel delta mainFuel
     hlater h.bootPrime h.bootShape rfl h.finalIndex hbootPos
     h.bootLe h.tableLenPos h.tableLenM h.markPos h.markM h.periodM h.spanM

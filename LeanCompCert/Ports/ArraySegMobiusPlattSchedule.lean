@@ -44,19 +44,17 @@ structure ScheduleFiniteEvidence (c : Cfg)
   bootPrime : PrimeTableInv c.bootPrimes bootBound
   markBudget :
     (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps
-  bootstrapRoom : ∀ n, n < bootFuel → ∀ k, k < c.segLen →
-    RoomForStep c
-      (rootScanMixed c.bootPrimes bootBound (1 + n * c.segLen) k)
-      (1 + n * c.segLen + k)
-  crossingRoom : ∀ k, k < c.segLen →
-    RoomForStep c
-      (rootScanMixed c.bootPrimes bootBound (crossingBase c bootFuel) k)
-      (crossingBase c bootFuel + k)
-  laterRoom : ∀ n, n < laterFuel → ∀ k, k < c.segLen →
-    let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
-      (laterBase c bootFuel) n
-    RoomForStep c (rootScanFrom ps (laterBase c bootFuel + n * c.segLen) k)
-      (laterBase c bootFuel + n * c.segLen + k)
+  bootstrapFit : ∀ n, n < bootFuel → ∀ k, k < c.segLen →
+    (rootScanMixed c.bootPrimes bootBound (1 + n * c.segLen) k).length <
+      c.tableLen
+  crossingFit : ∀ k, k < c.segLen →
+    (rootScanMixed c.bootPrimes bootBound
+      (crossingBase c bootFuel) k).length < c.tableLen
+  laterFit : ∀ n, n < laterFuel → ∀ k, k < c.segLen →
+    (rootScanFrom
+      (rootLaterWindows c (crossingTable c bootBound bootFuel)
+        (laterBase c bootFuel) n)
+      (laterBase c bootFuel + n * c.segLen) k).length < c.tableLen
   finalRoom : ∀ k, k < c.segLen →
     let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
       (laterBase c bootFuel) laterFuel
@@ -99,6 +97,37 @@ structure LegacyScheduleFiniteEvidence (c : Cfg)
 
 /-- All non-computational fields of the opening schedule reduce to arithmetic
 once its finite evidence has been supplied. -/
+theorem plattAlignedFirst_schedule
+    (e : ScheduleFiniteEvidence plattAlignedFirst plattBootBound
+      plattFirstBootFuel plattFirstLaterFuel) :
+    ProductionCoreSchedule plattAlignedFirst plattBootBound
+      plattFirstBootFuel plattFirstLaterFuel plattFirstMainFuel
+      plattFirstDelta := by
+  constructor
+  case bootPrime => exact e.bootPrime
+  case markBudget => exact e.markBudget
+  case bootstrapFit => exact e.bootstrapFit
+  case crossingFit => exact e.crossingFit
+  case laterFit => exact e.laterFit
+  case finalPrefixFit =>
+    have h := (e.finalRoom 0 (by
+      simp [plattAlignedFirst]))
+    simpa [RoomForStep, rootScanFrom_zero] using h.1
+  case finalFit =>
+    intro k hk
+    simpa [RoomForStep] using e.finalRoom k hk
+  case finalLen => exact e.finalLen
+  all_goals
+    simp [plattAlignedFirst, plattBootPrimes, plattBootBound,
+      plattFirstBootFuel, plattFirstLaterFuel, plattFirstMainFuel,
+      plattFirstDelta, Cfg.bootCount, Cfg.tableLen, Cfg.period,
+      Cfg.rootSpan, Cfg.firstPrime, Cfg.rootLen, Cfg.arrayLen,
+      Cfg.resultBase, Cfg.wDelta, crossingBase, laterBase, finalRootBound,
+      mainBase, M] <;>
+    omega
+
+/-- Legacy opening adapter for strict certificates generated before the final
+machine-room condition was made explicit. -/
 theorem plattAlignedFirst_legacySchedule
     (e : LegacyScheduleFiniteEvidence plattAlignedFirst plattBootBound
       plattFirstBootFuel plattFirstLaterFuel) :
@@ -111,8 +140,10 @@ theorem plattAlignedFirst_legacySchedule
   case bootstrapFit => exact e.bootstrapFit
   case crossingFit => exact e.crossingFit
   case laterFit => exact e.laterFit
-  case finalPrefixFit => exact e.finalPrefixFit
-  case finalFit => exact e.finalFit
+  case finalPrefixFit => exact Nat.le_of_lt e.finalPrefixFit
+  case finalFit =>
+    intro k hk
+    exact ⟨Nat.le_of_lt (e.finalFit k hk), fun _ => e.finalFit k hk⟩
   case finalLen => exact e.finalLen
   all_goals
     simp [plattAlignedFirst, plattBootPrimes, plattBootBound,
@@ -126,6 +157,36 @@ theorem plattAlignedFirst_legacySchedule
 /-- All non-computational fields of the tail schedule likewise reduce to
 arithmetic; the long sequence of three-cell root windows remains behind the
 finite compiled-evidence boundary. -/
+theorem plattAlignedTail_schedule
+    (e : ScheduleFiniteEvidence plattAlignedTail plattBootBound
+      plattTailBootFuel plattTailLaterFuel) :
+    ProductionCoreSchedule plattAlignedTail plattBootBound
+      plattTailBootFuel plattTailLaterFuel plattTailMainFuel
+      plattTailDelta := by
+  constructor
+  case bootPrime => exact e.bootPrime
+  case markBudget => exact e.markBudget
+  case bootstrapFit => exact e.bootstrapFit
+  case crossingFit => exact e.crossingFit
+  case laterFit => exact e.laterFit
+  case finalPrefixFit =>
+    have h := (e.finalRoom 0 (by
+      simp [plattAlignedTail]))
+    simpa [RoomForStep, rootScanFrom_zero] using h.1
+  case finalFit =>
+    intro k hk
+    simpa [RoomForStep] using e.finalRoom k hk
+  case finalLen => exact e.finalLen
+  all_goals
+    simp [plattAlignedTail, plattBootPrimes, plattBootBound,
+      plattTailBootFuel, plattTailLaterFuel, plattTailMainFuel,
+      plattTailDelta, Cfg.bootCount, Cfg.tableLen, Cfg.period,
+      Cfg.rootSpan, Cfg.firstPrime, Cfg.rootLen, Cfg.arrayLen,
+      Cfg.resultBase, Cfg.wDelta, crossingBase, laterBase, finalRootBound,
+      mainBase, M] <;>
+    omega
+
+/-- Legacy tail adapter for strict certificates. -/
 theorem plattAlignedTail_legacySchedule
     (e : LegacyScheduleFiniteEvidence plattAlignedTail plattBootBound
       plattTailBootFuel plattTailLaterFuel) :
@@ -138,8 +199,10 @@ theorem plattAlignedTail_legacySchedule
   case bootstrapFit => exact e.bootstrapFit
   case crossingFit => exact e.crossingFit
   case laterFit => exact e.laterFit
-  case finalPrefixFit => exact e.finalPrefixFit
-  case finalFit => exact e.finalFit
+  case finalPrefixFit => exact Nat.le_of_lt e.finalPrefixFit
+  case finalFit =>
+    intro k hk
+    exact ⟨Nat.le_of_lt (e.finalFit k hk), fun _ => e.finalFit k hk⟩
   case finalLen => exact e.finalLen
   all_goals
     simp [plattAlignedTail, plattBootPrimes, plattBootBound,
