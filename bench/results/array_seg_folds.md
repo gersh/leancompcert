@@ -1262,3 +1262,14 @@ The benchmarked implementation is commit `247e2ba`.  The next outer-window
 step must preserve the represented prime table across accumulation and prove
 the finite prime fold agrees with the library/paper Möbius function under the
 explicit prime-completeness range; neither fact is hidden in the result above.
+
+The next accumulation-table layer exposes a generic disabled-mark frame,
+proves every represented table cell (including the guard) is constant through
+the complete body and arbitrary accumulation prefixes, and reconstructs
+`MachineTableRep` after the final wrap.  Direct source checks used the same
+1/2 GiB scope and zero swap: `ArraySegMobiusSignal.lean` took 1.48 s at
+671,080 KiB, and the expanded `ArraySegMobiusAccumulation.lean` took 1.61 s at
+662,276 KiB.  Rebuilding the live 59-job dependency cone took 13.65 s at
+682,388 KiB.  The 606-declaration strict audit passed in 0.63 s at
+1,605,764 KiB under 4 GiB, and the 431-job full build passed in 2.24 s at
+1,711,924 KiB under 8 GiB; all runs used zero swap.

@@ -180,6 +180,57 @@ theorem arun_postSignal_main_acc_frame (c : Cfg) (idx : Nat) (s : AState)
   rw [AState.writeArr_arr_ne s0 _ hp']
   exact congrFun hs0arr x
 
+/-- A complete main accumulation body frames every represented prime-table
+cell, including the terminal guard. -/
+theorem arun_coreBody_main_acc_tableCell (c : Cfg) (idx : Nat) (s : AState)
+    (k : Nat)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hi : s.regs rR - c.markSteps < c.segLen)
+    (hRoot : c.rootSpan ≤ idx)
+    (hRM : s.regs rR < M)
+    (hTM : c.markSteps < M)
+    (hidxM : idx < M) (hrootM : c.rootSpan < M)
+    (hA : c.arrayLen < M) (hk : k ≤ c.tableLen) :
+    (arun idx s c.coreBody).arr (c.primeBase + k) =
+      s.arr (c.primeBase + k) := by
+  let i := s.regs rR - c.markSteps
+  let q := signalInput c idx s
+  let t := arun idx q (signalBlock c)
+  let x := c.primeBase + k
+  have hq := signalInput_main_acc_controls c idx s hT hRoot hRM hTM
+    hidxM hrootM
+  have ht := signalBlock_main_acc_controls c idx q (s.regs rR)
+    (s.regs rW) (s.regs rWrite) i hq.1 hq.2.1 hq.2.2.1
+    hq.2.2.2.1 hq.2.2.2.2.1 rfl hT hRM hTM
+  have hxSinkProd : x ≠ c.sinkProd := by
+    simp only [x, Cfg.primeBase, Cfg.sinkProd]
+    omega
+  have hxSinkFlag : x ≠ c.sinkProd + c.segLen := by
+    simp only [x, Cfg.primeBase, Cfg.sinkProd]
+    omega
+  have hpre : q.arr x = s.arr x :=
+    signalInput_main_frame c idx s hT hTM hA x hxSinkProd hxSinkFlag
+  have htArr : t.arr = q.arr :=
+    arun_arr_frame idx (signalBlock c) q (by rfl)
+  have hxProd : x ≠ i := by
+    simp only [x, Cfg.primeBase]
+    dsimp only [i]
+    omega
+  have hxFlag : x ≠ i + c.segLen := by
+    simp only [x, Cfg.primeBase]
+    dsimp only [i]
+    omega
+  have hxPrime : x ≠ c.primeSink := by
+    simp only [x, Cfg.primeBase, Cfg.primeSink, Cfg.resultBase]
+    omega
+  have hpost := arun_postSignal_main_acc_frame c idx t i x
+    ht.2.2.2.1 ht.2.2.2.2.1 ht.2.2.2.2.2 hi hA hxProd hxFlag hxPrime
+  have hcore : arun idx s c.coreBody = arun idx t (postSignal c) := by
+    rw [coreBody_eq_signalSlices, arun_append, arun_append]
+    rfl
+  rw [hcore]
+  exact hpost.trans ((congrFun htArr x).trans hpre)
+
 /-- On the final main accumulation iteration, the disabled collection gate
 keeps the table cursor fixed while the production suffix resets the position
 and advances the represented window base. -/
@@ -472,6 +523,49 @@ theorem bodyRun_main_acc_prefix (c : Cfg) (idx : Nat) (s : AState)
           (hp.2.2.2.2.2 j (by omega) hjL)
 
 set_option maxRecDepth 10000 in
+/-- Every represented prime-table cell is constant throughout an arbitrary
+finite accumulation prefix, including the final wrapping iteration. -/
+theorem bodyRun_main_acc_tableCell (c : Cfg) (idx : Nat) (s : AState)
+    (fuel k w write : Nat)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hfuel : fuel ≤ c.segLen)
+    (hRoot : c.rootSpan ≤ idx)
+    (hzero : s.regs rZero = 0)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hrootM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hwriteM : write < M) (hwM : w < M)
+    (hA : c.arrayLen < M) (hk : k ≤ c.tableLen) :
+    (bodyRun idx c fuel s).arr (c.primeBase + k) =
+      s.arr (c.primeBase + k) := by
+  induction fuel with
+  | zero => rfl
+  | succ n ih =>
+      have hn : n < c.segLen := by omega
+      have hp := bodyRun_main_acc_prefix c idx s n w write hR hW hWrite
+        hn hRoot hzero hTM hPM hidxM hrootM hidxNe hwriteM hwM hA
+      let mid := bodyRun idx c n s
+      have hTle : c.markSteps ≤ mid.regs rR := by
+        dsimp only [mid]
+        rw [hp.1]
+        omega
+      have hoff : mid.regs rR - c.markSteps < c.segLen := by
+        dsimp only [mid]
+        rw [hp.1]
+        omega
+      have hmidRM : mid.regs rR < M := by
+        dsimp only [mid]
+        rw [hp.1]
+        simp only [Cfg.period] at hPM
+        omega
+      have hstep := arun_coreBody_main_acc_tableCell c idx mid k hTle
+        hoff hRoot hmidRM hTM hidxM hrootM hA hk
+      rw [bodyRun_succ]
+      exact hstep.trans (ih (by omega))
+
+set_option maxRecDepth 10000 in
 /-- Running the entire finite accumulation half clears the two live banks and
 performs the ordinary window wrap. -/
 theorem bodyRun_main_acc_complete (c : Cfg) (idx : Nat) (s : AState)
@@ -510,6 +604,43 @@ theorem bodyRun_main_acc_complete (c : Cfg) (idx : Nat) (s : AState)
   · simpa [hjLast] using hstep.1
   · exact (hstep.2.1 j hj hjLast).trans
       (hp.2.2.2.2.1 j (by omega))
+
+/-- A full accumulation half preserves the exact represented prime prefix,
+its write cursor, and the positive terminal guard for the next window. -/
+theorem bodyRun_main_acc_preserves_tableRep
+    (c : Cfg) (idx : Nat) (s : AState) (ps : List Nat) (w : Nat)
+    (hRep : MachineTableRep c s ps)
+    (hpsLen : ps.length ≤ c.tableLen)
+    (hR : s.regs rR = c.markSteps)
+    (hW : s.regs rW = w)
+    (hLPos : 0 < c.segLen)
+    (hRoot : c.rootSpan ≤ idx)
+    (hzero : s.regs rZero = 0)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hrootM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hwNextM : w + c.segLen < M)
+    (hA : c.arrayLen < M) :
+    MachineTableRep c (bodyRun idx c c.segLen s) ps := by
+  let write := c.primeBase + ps.length
+  have hWrite : s.regs rWrite = write := hRep.cursor
+  have hwriteM : write < M := by
+    dsimp only [write]
+    simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase] at hA ⊢
+    omega
+  have hwM : w < M := by omega
+  have hcomplete := bodyRun_main_acc_complete c idx s w write hR hW
+    hWrite hLPos hRoot hzero hTM hPM hidxM hrootM hidxNe hwriteM
+    hwNextM hA
+  refine { table := ?_, cursor := hcomplete.2.1, guard := ?_ }
+  · apply TablePrefix.frame_cells hRep.table
+    intro k hk
+    exact bodyRun_main_acc_tableCell c idx s c.segLen k w write hR hW
+      hWrite (Nat.le_refl _) hRoot hzero hTM hPM hidxM hrootM hidxNe
+      hwriteM hwM hA (by omega)
+  · exact (bodyRun_main_acc_tableCell c idx s c.segLen c.tableLen w write
+      hR hW hWrite (Nat.le_refl _) hRoot hzero hTM hPM hidxM hrootM
+      hidxNe hwriteM hwM hA (Nat.le_refl _)).trans hRep.guard
 
 /-- At accumulation index `i`, the cell about to be decoded is still exactly
 the finite root fold established by the compiled marking run. -/

@@ -543,6 +543,11 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_acc_current_cellRepresents
 #print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.readSig_bodyRun_main_acc_eq_rootFoldValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.readSig_compiled_main_window_cell_eq_rootFoldValue
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.arun_markPrefix_main_frame
+#print axioms LeanCompCert.Ports.ArraySegMobiusSignal.signalInput_main_frame
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.arun_coreBody_main_acc_tableCell
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_acc_tableCell
+#print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_acc_preserves_tableRep
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap

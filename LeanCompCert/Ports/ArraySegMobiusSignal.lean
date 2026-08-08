@@ -198,6 +198,44 @@ theorem arun_markPrefix_main_cells (c : Cfg) (idx : Nat) (s : AState)
     · simp only [Cfg.sinkProd]; omega
     · simp only [Cfg.sinkProd]; omega
 
+/-- Generic disabled-mark frame theorem.  This is the table-preservation form
+of `arun_markPrefix_main_cells`: only the two dedicated sink cells can change
+while the main accumulation gate is active. -/
+theorem arun_markPrefix_main_frame (c : Cfg) (idx : Nat) (s : AState)
+    (hgate : s.regs 8 = 0) (hA : c.arrayLen < M) (x : Nat)
+    (hprod : x ≠ c.sinkProd)
+    (hflag : x ≠ c.sinkProd + c.segLen) :
+    (arun idx s (markPrefix c)).arr x = s.arr x := by
+  let s0 := arun idx s (markBeforeProd c)
+  let s1 := astep idx s0 (.store 25 30)
+  let s2 := arun idx s1 (markBetweenStores c)
+  let s3 := astep idx s2 (.store 26 38)
+  have haddrs := markBeforeProd_main_addresses c idx s hgate hA
+  have h25 : s0.regs 25 = c.sinkProd := haddrs.1
+  have h26 : s0.regs 26 = c.sinkProd + c.segLen := haddrs.2
+  have hs0arr : s0.arr = s.arr :=
+    arun_arr_frame idx (markBeforeProd c) s (by rfl)
+  have hs2arr : s2.arr = s1.arr :=
+    arun_arr_frame idx (markBetweenStores c) s1 (by rfl)
+  have hs2r26 : s2.regs 26 = c.sinkProd + c.segLen := by
+    rw [arun_reg_frame idx 26 (markBetweenStores c) s1 (by rfl)]
+    exact h26
+  have hdecomp : arun idx s (markPrefix c) =
+      arun idx s3 (markAfterFlag c) := by
+    rw [markPrefix_eq_storeSlices, arun_append, arun_append, arun_append,
+      arun_append]
+    rfl
+  rw [hdecomp]
+  rw [congrFun (arun_arr_frame idx (markAfterFlag c) s3 (by rfl)) x]
+  change s3.arr x = s.arr x
+  rw [show s3.arr x = s2.arr x by
+    simp [s3, astep, AState.writeArr, hs2r26, hflag]]
+  rw [congrFun hs2arr x]
+  change s1.arr x = s.arr x
+  rw [show s1.arr x = s0.arr x by
+    simp [s1, astep, AState.writeArr, h25, hprod]]
+  exact congrFun hs0arr x
+
 /-- On a main-phase iteration the seven selector instructions set both the
 accumulation and main gates to one. -/
 theorem selectorBlock_main (c : Cfg) (idx : Nat) (s : AState)
@@ -281,6 +319,23 @@ theorem signalInput_main_cells (c : Cfg) (idx : Nat) (s : AState)
   constructor
   · rw [hp.1]; exact congrFun hqarr i
   · rw [hp.2]; exact congrFun hqarr (i + c.segLen)
+
+/-- The complete selector/disabled-mark prefix frames every nonsink cell in
+the main accumulation phase. -/
+theorem signalInput_main_frame (c : Cfg) (idx : Nat) (s : AState)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hTM : c.markSteps < M) (hA : c.arrayLen < M) (x : Nat)
+    (hprod : x ≠ c.sinkProd)
+    (hflag : x ≠ c.sinkProd + c.segLen) :
+    (signalInput c idx s).arr x = s.arr x := by
+  let q := arun idx s (selectorBlock c)
+  have hgate : q.regs 8 = 0 :=
+    selectorBlock_main_markGate c idx s hT hTM
+  have hqarr : q.arr = s.arr :=
+    arun_arr_frame idx (selectorBlock c) s (by rfl)
+  have hp := arun_markPrefix_main_frame c idx q hgate hA x hprod hflag
+  rw [signalInput, preSignal_eq_selector_mark, arun_append]
+  exact hp.trans (congrFun hqarr x)
 
 /-- The tail clears cells, bootstraps primes, and advances cursors, but does
 not overwrite any of the four registers observed by a Möbius residue. -/
