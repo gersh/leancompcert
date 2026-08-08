@@ -21,6 +21,7 @@ import LeanCompCert.Verified.Rolled
 import LeanCompCert.Verified.GcdEquiv
 import LeanCompCert.Verified.SqrtEquiv
 import LeanCompCert.Verified.SignedLimb
+import LeanCompCert.Ports.SignedProductClaims
 import LeanCompCert.Verified.Log2Fixed
 import LeanCompCert.Verified.LogFixed
 import LeanCompCert.Verified.Sieve
