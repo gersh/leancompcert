@@ -71,6 +71,7 @@ import LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv
 import LeanCompCert.Ports.ArraySegMobiusIndexedRootMixed
 import LeanCompCert.Ports.ArraySegMobiusIndexedRootWindows
 import LeanCompCert.Ports.ArraySegMobiusIndexedMain
+import LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter
 import LeanCompCert.Ports.ArraySegMobiusMarkProgress
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
@@ -613,8 +614,16 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedMain.indexedBodyRun_main_window_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedMain.indexedWindowRun_zero
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedMain.indexedWindowRun_succ
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedMain.indexedWindowRun_add
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedMain.indexedWindowRun_main_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedMain.indexedRootOutput_then_main_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.rootLaterWindows_zero
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.rootLaterWindows_succ
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedWindowRun_bootstrap_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedBootstrapWindows_mixed_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedWindowRun_later_root_complete
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedLaterWindows_final_transition
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter.indexedLaterWindows_then_main_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_bits
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_eq_muSig_decodedValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootCellFold_cellRepresents

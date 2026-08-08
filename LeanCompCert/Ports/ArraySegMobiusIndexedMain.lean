@@ -628,6 +628,15 @@ theorem indexedWindowRun_succ (idx : Nat) (c : Cfg) (fuel : Nat)
   simp only [indexedWindowRun, Nat.add_mul, Nat.one_mul]
   exact indexedBodyRun_add idx c (fuel * c.period) c.period s
 
+/-- Complete indexed-window runs compose at an arbitrary window boundary. -/
+theorem indexedWindowRun_add (idx : Nat) (c : Cfg) (a b : Nat)
+    (s : AState) :
+    indexedWindowRun idx c (a + b) s =
+      indexedWindowRun (idx + a * c.period) c b
+        (indexedWindowRun idx c a s) := by
+  simp only [indexedWindowRun, Nat.add_mul]
+  exact indexedBodyRun_add idx c (a * c.period) (b * c.period) s
+
 set_option maxRecDepth 10000 in
 /-- Arbitrarily many finite main windows at their actual consecutive indices
 preserve the exact table and cleared-window invariant. -/
