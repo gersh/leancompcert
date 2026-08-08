@@ -1488,3 +1488,15 @@ Its 63-job dependency cone built in 0.43 s at 603,300 KiB under the same cap.
 The expanded 711-declaration strict audit passed in 0.60 s at 1,612,404 KiB
 under 4 GiB.  The full 443-job repository build passed in 3.14 s at 1,719,544
 KiB under 8 GiB.  Every run used one Lake job and zero swap.
+
+The transparent guard benchmark `bench/ArraySegRootGuardCheck.lean` evaluates
+the production Platt-strong campaign shape (`targetHi = 7,727,068,586`,
+`segLen = 200`) without `native_decide`.  The rounded artifact range has
+`hi = 7,727,068,600`, `rootCount = 440`, bootstrap bound `296`, and 62
+bootstrap primes.  As expected, the first 200-candidate window cannot extend
+that table; the second window grows it to 78 entries and returns
+`bootstrapExtendedBool = true`.  The run took 0.27 s at 534,588 KiB under the
+2 GiB hard cap with zero swap.  The remaining composition step is therefore
+an indexed preservation induction through the first window followed by this
+finite second-window handoff, not an assumption that the first window always
+finds a new prime.
