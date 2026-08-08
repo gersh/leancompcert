@@ -527,6 +527,9 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.eventCellFold_cursorReferenceLiveEvents
 #print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.cursorTable_of_tablePrefix
 #print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.scheduleRun_from_start_cell_eq_rootCellFoldFrom_of_budget
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.machineCell_eq_rootCellFoldFrom_of_main_schedule
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.bodyRun_main_cell_eq_rootCellFoldFrom
+#print axioms LeanCompCert.Ports.ArraySegMobiusScheduleFold.bodyRun_main_cell_eq_rootCellFold
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.postBeforeRootStore_mark_collect
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_frame
 #print axioms LeanCompCert.Ports.ArraySegMobiusMark.arun_postSignal_mark_nowrap

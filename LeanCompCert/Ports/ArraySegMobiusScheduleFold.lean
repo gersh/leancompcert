@@ -20,6 +20,9 @@ namespace LeanCompCert.Ports.ArraySegMobiusScheduleFold
 open LeanCompCert.Ports.ArraySegMobiusRootCellFold
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusMark
+open LeanCompCert.Ports.ArraySegSieve
+open LeanCompCert.Verified.Reflect
+open LeanCompCert.Verified.ArrayFoldBridge
 
 /-- Runnable finite scan of every offset for one prime. -/
 def primeCellScan (segLen w p i : Nat) (st : RootCellState) : RootCellState :=
@@ -887,6 +890,162 @@ theorem scheduleRun_from_start_cell_eq_rootCellFoldFrom_of_budget
     eventCellFold_cursorReferenceLiveEvents segLen w i (p :: ps) cell
       hpos hi,
     referenceCellSchedule_eq_rootCellFoldFrom segLen w i (p :: ps) cell hi]
+
+/-- Instruction-simulation consumer for one selected main-window cell.  The
+represented array prefix supplies the pure cursor table, `PrimeTableInv`
+supplies positivity, and the finite emit-time bound supplies schedule fuel. -/
+theorem machineCell_eq_rootCellFoldFrom_of_main_schedule
+    (c : LeanCompCert.Ports.ArraySegSieve.Cfg)
+    (first out : LeanCompCert.Verified.ArrayState.AState)
+    (cell : RootCellState) (ps : List Nat) (bound w i : Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c first
+        (c.firstPrime :: ps))
+    (hInv :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTable.PrimeTableInv
+        (c.firstPrime :: ps) bound)
+    (hpsLen : (c.firstPrime :: ps).length = c.tableLen)
+    (hpLe : c.firstPrime ≤ c.segLen)
+    (hbudget :
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hi : i < c.segLen)
+    (hsim : machineScheduleState c i out =
+      scheduleRun (c.markSteps - 1) c.segLen w c.tableLen i
+        (fun k => first.arr (c.primeBase + k))
+        (scheduleStart c.segLen w c.firstPrime i cell)) :
+    machineCell c out i =
+      rootCellFoldFrom (w + i) cell (c.firstPrime :: ps) := by
+  have htable : CursorTable
+      (fun k => first.arr (c.primeBase + k)) 0
+      (c.firstPrime :: ps) := by
+    simpa using cursorTable_of_tablePrefix first.arr c.primeBase 0
+      (c.firstPrime :: ps) (by simpa using hRep.table)
+  have hpos : ∀ p, p ∈ c.firstPrime :: ps → 0 < p := by
+    intro p hp
+    have := (hInv.sound p hp).1
+    omega
+  have hfuel : cursorScheduleFuel c.segLen w (c.firstPrime :: ps) ≤
+      c.markSteps :=
+    Nat.le_trans
+      (cursorScheduleFuel_le_primeBudget c.segLen w (c.firstPrime :: ps))
+      hbudget
+  have hpure := scheduleRun_from_start_cell_eq_rootCellFoldFrom_of_budget
+    c.markSteps c.segLen w c.tableLen c.firstPrime i
+    (fun k => first.arr (c.primeBase + k)) cell ps
+    htable hpsLen hpos hpLe hfuel hi
+  have hcell := congrArg ScheduleState.cell hsim
+  change machineCell c out i = _ at hcell
+  exact hcell.trans hpure
+
+/-- Complete compiled main-window cell theorem.  This instantiates the
+arbitrary-prefix instruction simulation with the configured finite budget,
+proves the first event preserved the represented table, and discharges the
+remaining arithmetic through the verified schedule theorem above. -/
+theorem bodyRun_main_cell_eq_rootCellFoldFrom
+    (c : LeanCompCert.Ports.ArraySegSieve.Cfg) (idx : Nat)
+    (s : LeanCompCert.Verified.ArrayState.AState) (ps : List Nat)
+    (bound w i : Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s
+        (c.firstPrime :: ps))
+    (hInv :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTable.PrimeTableInv
+        (c.firstPrime :: ps) bound)
+    (hpsLen : (c.firstPrime :: ps).length = c.tableLen)
+    (hR : s.regs rR = 0)
+    (hW : s.regs rW = w)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen)
+    (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M)
+    (hPM : c.period < M)
+    (hidxM : idx < M)
+    (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hp1Pos : 0 < c.firstPrime)
+    (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound)
+    (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwSegM : w + c.segLen < M)
+    (hnStartM : w + firstOffset w c.firstPrime < M)
+    (hA : c.arrayLen < M)
+    (hbudget :
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hi : i < c.segLen) :
+    machineCell c (bodyRun idx c c.markSteps s) i =
+      rootCellFoldFrom (w + i) (machineCell c s i)
+        (c.firstPrime :: ps) := by
+  let first := arun idx s c.coreBody
+  have hsumPos : 0 <
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum := by
+    simp only [List.map_cons, List.sum_cons]
+    exact Nat.add_pos_left (Nat.add_pos_right _ (by decide : 0 < 2)) _
+  have hTPos : 0 < c.markSteps := Nat.lt_of_lt_of_le hsumPos hbudget
+  have hLPos : 0 < c.segLen := by omega
+  have hp1M : c.firstPrime < M := Nat.lt_of_le_of_lt hp1LeBound hboundM
+  have hp1SqM : c.firstPrime * c.firstPrime < M :=
+    Nat.lt_of_le_of_lt
+      (Nat.mul_le_mul hp1LeBound hp1LeBound) hboundSqM
+  have hwM : w < M := by omega
+  have hRepFirst :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c first
+        (c.firstPrime :: ps) := by
+    dsimp only [first]
+    exact arun_coreBody_mark_preserves_tableRep_start c idx s
+      (c.firstPrime :: ps) hRep (by omega) hR hTPos hTM hPM hidxM
+      hspanM hidxNe hLPos hp1Pos hp1LeL hp1M hp1SqM
+      (by rw [hW]; exact hnStartM) (by rw [hW]; exact hwM) hA
+  have hsim := bodyRun_simulates_main_from_start c idx (c.markSteps - 1) s
+    (c.firstPrime :: ps) bound w i hRep hInv hpsLen hR hW (by omega)
+    hmain htableLenPos htableLenM hTM hPM hidxM hspanM hidxNe hp1Pos
+    hp1LeL hp1LeBound hboundM hboundSqM hsegBoundM hwSegM hnStartM hA hi
+  have hsteps : c.markSteps - 1 + 1 = c.markSteps := by omega
+  rw [hsteps] at hsim
+  exact machineCell_eq_rootCellFoldFrom_of_main_schedule c first
+    (bodyRun idx c c.markSteps s) (machineCell c s i) ps bound w i
+    hRepFirst hInv hpsLen hp1LeL hbudget hi hsim
+
+/-- Cleared-window specialization used by the outer window induction. -/
+theorem bodyRun_main_cell_eq_rootCellFold
+    (c : LeanCompCert.Ports.ArraySegSieve.Cfg) (idx : Nat)
+    (s : LeanCompCert.Verified.ArrayState.AState) (ps : List Nat)
+    (bound w i : Nat)
+    (hRep :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTableRep.MachineTableRep c s
+        (c.firstPrime :: ps))
+    (hInv :
+      LeanCompCert.Ports.ArraySegMobiusPrimeTable.PrimeTableInv
+        (c.firstPrime :: ps) bound)
+    (hpsLen : (c.firstPrime :: ps).length = c.tableLen)
+    (hR : s.regs rR = 0) (hW : s.regs rW = w)
+    (hmain : c.rootSpan ≤ idx)
+    (htableLenPos : 0 < c.tableLen) (htableLenM : c.tableLen < M)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bound) (hboundM : bound < M)
+    (hboundSqM : bound * bound < M)
+    (hsegBoundM : c.segLen + bound < M)
+    (hwSegM : w + c.segLen < M)
+    (hnStartM : w + firstOffset w c.firstPrime < M)
+    (hA : c.arrayLen < M)
+    (hbudget :
+      ((c.firstPrime :: ps).map fun p => c.segLen / p + 2).sum ≤
+        c.markSteps)
+    (hi : i < c.segLen)
+    (hclear : machineCell c s i = ⟨0, 0⟩) :
+    machineCell c (bodyRun idx c c.markSteps s) i =
+      rootCellFold (c.firstPrime :: ps) (w + i) := by
+  rw [bodyRun_main_cell_eq_rootCellFoldFrom c idx s ps bound w i hRep hInv
+    hpsLen hR hW hmain htableLenPos htableLenM hTM hPM hidxM hspanM
+    hidxNe hp1Pos hp1LeL hp1LeBound hboundM hboundSqM hsegBoundM
+    hwSegM hnStartM hA hbudget hi, hclear]
+  rfl
 
 /-- Exact pure consumer boundary for the configured-fuel arithmetic proof.
 Once the full trace is the ordered multiple list, the complete schedule cell
