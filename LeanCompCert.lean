@@ -91,6 +91,9 @@ import LeanCompCert.Ports.ArraySegMobiusCellRep
 import LeanCompCert.Ports.ArraySegMobiusAccumulation
 import LeanCompCert.Ports.ArraySegMobiusRootAccumulation
 import LeanCompCert.Ports.ArraySegMobiusRootPrefix
+import LeanCompCert.Ports.ArraySegMobiusRootMarkFold
+import LeanCompCert.Ports.ArraySegMobiusIndexedRun
+import LeanCompCert.Ports.ArraySegMobiusIndexedRootPrefix
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Ports.BlockedFold
 import LeanCompCert.Ports.RS62LadderEncoding

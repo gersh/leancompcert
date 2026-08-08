@@ -1445,3 +1445,33 @@ the exact modular `rW` entering the main range.  The 58-job dependency cone
 rebuilt in 6.78 s at 944,332 KiB under 2 GiB; the 672-declaration audit passed
 in 0.67 s at 1,600,776 KiB under 4 GiB; and the 435-job full build passed in
 2.27 s at 1,717,772 KiB under 8 GiB.  All runs used zero swap.
+
+The root marking and accumulation proofs now follow the real changing loop
+index.  `LimitTableRep` represents exactly the bootstrap prefix selected by
+the root branch plus its positive terminal guard; the generic cursor proof
+uses that finite limit rather than the completed main table.
+`bodyRun_root_cell_eq_rootCellFold` proves the fixed-index local theorem, and
+`indexedBodyRun_root_cell_eq_rootCellFold` lifts it to production event
+indices `idx + k`.  The latter is the relevant compiled-loop statement.
+
+`ArraySegMobiusIndexedRootPrefix` likewise invokes every accumulation body at
+its actual global index.  It covers the candidate-one/bootstrap/sequential
+first window, all later sequential windows, ordinary nonfinal wraps, and the
+special final event at `rootSpan - 1` that performs the modular retarget into
+the main range.  The executable references remain the finite
+`rootCellFold`, `rootScanTable`, and `rootScanFrom` computations.
+
+All checks used one Lake job and zero swap:
+
+| check | memory scope | wall | peak RSS | result |
+| --- | --- | ---: | ---: | --- |
+| direct root-mark-fold source | 1 GiB high / 2 GiB max | 0.52 s | 578,100 KiB | pass |
+| direct indexed-run source | 1 GiB high / 2 GiB max | 0.47 s | 594,056 KiB | pass |
+| indexed root dependency cone, 62 jobs | 1 GiB high / 2 GiB max | 3.64 s | 784,736 KiB | pass |
+| strict axiom audit, 700 declarations | 3 GiB high / 4 GiB max | 0.62 s | 1,609,992 KiB | standard foundations only |
+| full repository build, 441 jobs | 7 GiB high / 8 GiB max | 2.74 s | 1,718,808 KiB | pass |
+
+The next whole-window invariant must carry the selected bootstrap guard
+alongside the growing `RootTableInv`, so the marking theorem can feed these
+indexed accumulation endpoints repeatedly without re-assuming the entry
+table view.
