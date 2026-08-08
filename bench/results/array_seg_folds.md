@@ -1887,3 +1887,13 @@ under the same 1/2 GiB one-worker, zero-swap profile.  Its 107-job live target
 passed.  The expanded strict axiom audit then took 0.62 seconds at 1,653,120
 KiB peak RSS under the 2/3 GiB profile and reported only standard Lean
 foundations for every new generic schedule theorem.
+
+The next compiled-control layer classifies every event before `rootSpan` as
+idle and every main-window marking prefix as idle, while leaving selected
+main cells to the already proved signal theorem.  It also exports the exact
+completed prime-table invariants for both aligned campaigns.  Direct source
+checks took 0.37 seconds at 600,924 KiB for
+`ArraySegMobiusSquaredSignal.lean` and 0.77 seconds at 677,016 KiB for
+`ArraySegMobiusPlattFiniteEvidence.lean`, again under the 1/2 GiB profile.
+Their joint 116-job live build passed.  The expanded strict axiom audit took
+0.65 seconds at 1,653,352 KiB under the 2/3 GiB profile.

@@ -28,11 +28,13 @@ open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusResidueFrame
 open LeanCompCert.Ports.ArraySegMobiusResidueFold
+open LeanCompCert.Ports.ArraySegMobiusIdleSignal
 open LeanCompCert.Ports.ArraySegMobiusIndexedSignal
 open LeanCompCert.Ports.ArraySegMobiusSquaredFold
 open LeanCompCert.Ports.ArraySegMobiusCandidateBound
 open LeanCompCert.Ports.ArraySegMobiusProductionBounds
 open LeanCompCert.Ports.MobiusResidueRealisation
+open LeanCompCert.Ports.MobiusResidueTrial
 
 /-- At every event, the squared combined trace emits the signal of the same
 standalone indexed sieve event. -/
@@ -74,6 +76,90 @@ theorem squaredCombinedSignals_eq_combinedSignals
   intro j hj
   exact readSig_squaredCombinedIndexedRun_eq_combinedIndexedRun
     idx c k j (CoreAgree.refl s)
+
+/-- An ordinary production signal segment is scheduled as entirely idle when
+each of its literal event offsets is proved idle. -/
+theorem combinedSignals_schedule_of_all_idle
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k fuel : Nat) (s : AState)
+    (h : ∀ j, j < fuel → ∃ n,
+      readSig (arun (idx + j) (combinedIndexedRun idx c k j s)
+        c.coreBody) = idleSig n) :
+    ConsecutiveSignalSchedule mu lo (combinedSignals idx c k fuel s) 0 := by
+  apply ConsecutiveSignalSchedule.of_all_idle
+  intro g hg
+  unfold combinedSignals at hg
+  obtain ⟨j, hj, rfl⟩ := List.mem_map.mp hg
+  exact h j (List.mem_range.mp hj)
+
+/-- An ordinary production segment whose literal signals are the next
+mathematical values has the canonical consecutive schedule. -/
+theorem combinedSignals_schedule_of_active
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k fuel : Nat) (s : AState)
+    (h : ∀ j, j < fuel →
+      readSig (arun (idx + j) (combinedIndexedRun idx c k j s)
+        c.coreBody) = muSig mu (lo + j + 1)) :
+    ConsecutiveSignalSchedule mu lo (combinedSignals idx c k fuel s) fuel := by
+  have heq :
+      (List.range fuel).map (fun j =>
+        readSig (arun (idx + j) (combinedIndexedRun idx c k j s)
+          c.coreBody)) =
+      (List.range fuel).map (fun j => muSig mu (lo + j + 1)) := by
+    apply List.map_congr_left
+    intro j hj
+    exact h j (List.mem_range.mp hj)
+  rw [combinedSignals, heq, ← consecutiveMuSignals_eq_map_range]
+  exact consecutiveMuSignals_schedule mu lo fuel
+
+/-- Every production event strictly before `rootSpan` is idle: the literal
+counter is either still in marking, or it is in root accumulation, whose main
+output gate is disabled.  No table or candidate evaluation is needed. -/
+theorem combinedSignals_root_schedule
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k fuel : Nat) (s : AState)
+    (hroot : idx + fuel ≤ c.rootSpan)
+    (hTM : c.markSteps < M) (hspanM : c.rootSpan < M)
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M) :
+    ConsecutiveSignalSchedule mu lo (combinedSignals idx c k fuel s) 0 := by
+  apply combinedSignals_schedule_of_all_idle
+  intro j hj
+  let before := combinedIndexedRun idx c k j s
+  have hw := combinedIndexedRun_word idx c k j s hregs harr
+  by_cases hmark : before.regs rR < c.markSteps
+  · exact ⟨(arun (idx + j) before c.coreBody).regs 65,
+      readSig_arun_coreBody_mark_idle c (idx + j) before hmark hTM⟩
+  · have hT : c.markSteps ≤ before.regs rR := by omega
+    exact ⟨(arun (idx + j) before c.coreBody).regs 65,
+      readSig_arun_coreBody_root_acc_idle c (idx + j) before hT (by omega)
+        (hw.1 rR) hTM (by omega) hspanM⟩
+
+/-- The literal marking prefix of a main window is an idle schedule.  Counter
+position is transported from the verified standalone indexed core. -/
+theorem combinedSignals_main_mark_schedule
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k : Nat)
+    (combined core : AState) (w : Nat)
+    (hagree : CoreAgree combined core)
+    (hR : core.regs rR = 0) (hW : core.regs rW = w)
+    (hmain : c.rootSpan ≤ idx)
+    (hLPos : 0 < c.segLen) (hTM : c.markSteps < M)
+    (hPM : c.period < M) (hidxMarkM : idx + c.markSteps < M)
+    (hspanM : c.rootSpan < M) (hspanPos : 0 < c.rootSpan)
+    (hwM : w < M) :
+    ConsecutiveSignalSchedule mu lo
+      (combinedSignals idx c k c.markSteps combined) 0 := by
+  apply combinedSignals_schedule_of_all_idle
+  intro j hj
+  let before := combinedIndexedRun idx c k j combined
+  let beforeCore := indexedBodyRun idx c j core
+  have hp := indexedBodyRun_mark_position_only c idx j core w (by omega)
+    hR hW hLPos hTM hPM (by omega) hspanM (by
+      intro m hm
+      omega) hwM
+  have hframe : CoreAgree before beforeCore :=
+    combinedIndexedRun_core idx c k j hagree
+  have hmark : before.regs rR < c.markSteps := by
+    rw [hframe.2 rR (by decide), hp.1]
+    exact hj
+  exact ⟨(arun (idx + j) before c.coreBody).regs 65,
+    readSig_arun_coreBody_mark_idle c (idx + j) before hmark hTM⟩
 
 /-- Nonzero and endpoint bounds may be proved entirely on the standalone
 sieve trace and transported to the squared combined execution. -/

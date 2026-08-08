@@ -444,6 +444,65 @@ theorem plattAlignedTail_finiteEvidence :
     simpa [finalRootTable, laterBase, crossingBase, plattTailBootFuel,
       plattTailLaterFuel, plattAlignedTail, Cfg.tableLen] using hLen
 
+/-- The exact opening campaign's completed root table contains precisely the
+primes through its source-shaped final bound. -/
+theorem plattAlignedFirst_finalPrime :
+    PrimeTableInv
+      (finalRootTable plattAlignedFirst plattBootBound
+        plattFirstBootFuel plattFirstLaterFuel)
+      (finalRootBound plattAlignedFirst plattFirstBootFuel
+        plattFirstLaterFuel) := by
+  have hWindows : PrimeTableInv
+      (rootLaterWindows plattAlignedFirst
+        (crossingTable plattAlignedFirst plattBootBound plattFirstBootFuel)
+        29302 plattFirstLaterFuel)
+      58602 := by
+    simpa [plattAlignedFirst, plattFirstLaterFuel] using
+      (rootLaterWindows_primeTable (c := plattAlignedFirst)
+        (fuel := plattFirstLaterFuel) plattFirstCrossPrime
+        (w := 29302) (by decide) (by decide))
+  have hFinal : PrimeTableInv
+      (rootScanFrom
+        (rootLaterWindows plattAlignedFirst
+          (crossingTable plattAlignedFirst plattBootBound
+            plattFirstBootFuel)
+          29302 plattFirstLaterFuel)
+        58603 29301)
+      87903 := by
+    simpa using rootScanFrom_primeTable (fuel := 29301) hWindows
+      (w := 58603) (by decide) (by decide)
+  simpa [finalRootTable, finalRootBound, laterBase, crossingBase,
+    plattFirstBootFuel, plattFirstLaterFuel, plattAlignedFirst] using hFinal
+
+/-- The exact tail campaign reconstructs the same complete prime table and
+final bound with its three-cell root windows. -/
+theorem plattAlignedTail_finalPrime :
+    PrimeTableInv
+      (finalRootTable plattAlignedTail plattBootBound
+        plattTailBootFuel plattTailLaterFuel)
+      (finalRootBound plattAlignedTail plattTailBootFuel
+        plattTailLaterFuel) := by
+  have hWindows : PrimeTableInv
+      (rootLaterWindows plattAlignedTail
+        (crossingTable plattAlignedTail plattBootBound plattTailBootFuel)
+        298 plattTailLaterFuel)
+      87900 := by
+    simpa [plattAlignedTail, plattTailLaterFuel] using
+      (rootLaterWindows_primeTable (c := plattAlignedTail)
+        (fuel := plattTailLaterFuel) plattTailCrossPrime
+        (w := 298) (by decide) (by decide))
+  have hFinal : PrimeTableInv
+      (rootScanFrom
+        (rootLaterWindows plattAlignedTail
+          (crossingTable plattAlignedTail plattBootBound plattTailBootFuel)
+          298 plattTailLaterFuel)
+        87901 3)
+      87903 := by
+    simpa using rootScanFrom_primeTable (fuel := 3) hWindows
+      (w := 87901) (by decide) (by decide)
+  simpa [finalRootTable, finalRootBound, laterBase, crossingBase,
+    plattTailBootFuel, plattTailLaterFuel, plattAlignedTail] using hFinal
+
 /-- The opening literal configuration now has a complete production schedule
 whose only finite admissions are the two named CompCert return receipts. -/
 theorem plattAlignedFirst_productionSchedule :
