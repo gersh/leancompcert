@@ -94,6 +94,7 @@ import LeanCompCert.Ports.ArraySegMobiusRootPrefix
 import LeanCompCert.Ports.ArraySegMobiusRootMarkFold
 import LeanCompCert.Ports.ArraySegMobiusIndexedRun
 import LeanCompCert.Ports.ArraySegMobiusIndexedRootPrefix
+import LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Ports.BlockedFold
 import LeanCompCert.Ports.RS62LadderEncoding

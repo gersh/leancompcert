@@ -1471,7 +1471,20 @@ All checks used one Lake job and zero swap:
 | strict axiom audit, 700 declarations | 3 GiB high / 4 GiB max | 0.62 s | 1,609,992 KiB | standard foundations only |
 | full repository build, 441 jobs | 7 GiB high / 8 GiB max | 2.74 s | 1,718,808 KiB | pass |
 
-The next whole-window invariant must carry the selected bootstrap guard
-alongside the growing `RootTableInv`, so the marking theorem can feed these
-indexed accumulation endpoints repeatedly without re-assuming the entry
-table view.
+`ArraySegMobiusRootBootstrapInv` now supplies the cross-window selector
+handoff.  A growing `RootTableInv` with a nonempty suffix beyond the fixed
+bootstrap prefix represents the first suffix prime exactly in the cell loaded
+at bootstrap-cursor exhaustion; primality supplies positivity and the table
+bound supplies word safety.  The first finite `rootScanTable` never removes
+the bootstrap prefix, and the runnable `bootstrapExtendedBool` length check
+certifies that it acquired such a suffix.  Thus no unbounded prime-gap fact is
+smuggled into the handoff.  Candidate one and candidates already covered by
+the bootstrap table separately preserve a pre-existing guard through the
+actual disabled collection gate, while a later `rootTableStep` either frames
+that guard or replaces it with the first newly collected prime.
+
+The new source elaborated in 0.34 s at 589,120 KiB under the 2 GiB hard cap.
+Its 63-job dependency cone built in 0.43 s at 603,300 KiB under the same cap.
+The expanded 711-declaration strict audit passed in 0.60 s at 1,612,404 KiB
+under 4 GiB.  The full 443-job repository build passed in 3.14 s at 1,719,544
+KiB under 8 GiB.  Every run used one Lake job and zero swap.
