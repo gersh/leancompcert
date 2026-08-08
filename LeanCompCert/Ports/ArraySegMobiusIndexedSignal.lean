@@ -26,6 +26,7 @@ open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 open LeanCompCert.Ports.ArraySegMobiusCellRep
 open LeanCompCert.Ports.ArraySegMobiusIndexedRun
 open LeanCompCert.Ports.ArraySegMobiusIndexedMain
+open LeanCompCert.Ports.ArraySegMobiusIndexedProgram
 open LeanCompCert.Ports.ArraySegMobiusIdleSignal
 open LeanCompCert.Ports.ArraySegMobiusResidueFrame
 open LeanCompCert.Ports.ArraySegMobiusResidueFold
@@ -82,6 +83,28 @@ theorem combinedWindowRun_word (idx : Nat) (c : Cfg) (k fuel : Nat)
     (∀ j, (combinedWindowRun idx c k fuel s).regs j < M) ∧
       (∀ j, (combinedWindowRun idx c k fuel s).arr j < M) := by
   exact combinedIndexedRun_word idx c k (fuel * c.period) s hregs harr
+
+/-- Any finite prefix starting at the real compiled initializer arrives with
+the exact standalone core projection and with all machine-word bounds already
+discharged.  This is the entry seam used to attach a verified root schedule to
+the main-window residue induction without adding unverified state premises. -/
+theorem combinedWindowRun_from_entry_core_word
+    (c : Cfg) (k fuel : Nat) (seed : MobLiveSeed) :
+    let combined := combinedWindowRun 0 c k fuel (combinedEntry c seed)
+    let core := indexedWindowRun 0 c fuel (coreEntry c)
+    CoreAgree combined core ∧
+      (∀ j, combined.regs j < M) ∧
+      (∀ j, combined.arr j < M) := by
+  let entry := combinedEntry c seed
+  let coreEntryState := coreEntry c
+  let combined := combinedWindowRun 0 c k fuel entry
+  let core := indexedWindowRun 0 c fuel coreEntryState
+  have hentryWord := combinedEntry_word c seed
+  have hword := combinedWindowRun_word 0 c k fuel entry
+    hentryWord.1 hentryWord.2
+  have hagree : CoreAgree combined core := by
+    exact combinedWindowRun_core 0 c k fuel (combinedEntry_core c seed)
+  exact ⟨hagree, hword.1, hword.2⟩
 
 /-- In particular every complete combined-window entry has word-sized
 persistent residue fields, including its violation counter. -/

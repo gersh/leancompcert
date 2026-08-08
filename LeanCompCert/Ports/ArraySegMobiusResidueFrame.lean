@@ -260,6 +260,60 @@ theorem arun_liveInit_core_frame (seed : MobLiveSeed) (s : AState) :
 def combinedEntry (c : Cfg) (seed : MobLiveSeed) : AState :=
   arun 0 initialAState (c.coreInit ++ mobiusLiveInit seed)
 
+/-- Every component of the real combined entry is a machine word.  In
+particular, callers of the window-level residue theorem do not need to carry
+word bounds as extra certificate fields: they follow from execution of the
+compiled initializer itself. -/
+theorem combinedEntry_word (c : Cfg) (seed : MobLiveSeed) :
+    (∀ j, (combinedEntry c seed).regs j < M) ∧
+      (∀ j, (combinedEntry c seed).arr j < M) := by
+  apply arun_word 0 _ initialAState
+  · intro j
+    simp [initialAState, initialState, M]
+  · intro j
+    simp [initialAState, M]
+
+/-- The five persistent residue fields installed by the real combined
+initializer.  This exposes the exact modulo-normalized carry-in consumed by
+the finite compiled trace. -/
+theorem readRes_combinedEntry (c : Cfg) (seed : MobLiveSeed) :
+    readRes (combinedEntry c seed) =
+      { tLo := seed.tLo % M
+        tHi := seed.tHi % M
+        cel := seed.c % M
+        celSq := seed.cSq % M
+        viol := 0 } := by
+  rw [combinedEntry, arun_append]
+  simp [mobiusLiveInit, ArraySegSieve.seed, readRes, arun, astep,
+    AState.writeReg, rTLo, rTHi, rCeil, rCeilSq, rMViol,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand]
+
+/-- The standard compiled carry-in is the exact mathematical residue at
+prefix zero.  The statement is independent of the arithmetic function,
+because its finite prefix is empty. -/
+theorem readRes_combinedEntry_start_inv (c : Cfg) (k : Nat)
+    (mu : Nat → Int) (hk15 : k ≤ 15) :
+    ResInv k mu 0 (readRes (combinedEntry c (mobLiveSeedStart k))) := by
+  rw [readRes_combinedEntry]
+  have hk64 : 2 ^ k < M := by
+    simp only [M]
+    exact Nat.pow_lt_pow_right (by decide) (by omega)
+  have h1 : 1 % M = 1 := Nat.mod_eq_of_lt (by decide)
+  simp only [mobLiveSeedStart, Nat.zero_mod, Nat.mod_eq_of_lt hk64, h1]
+  constructor
+  · exact M_pos
+  · exact hk64
+  ·
+    have hp : 2 ^ 64 * 2 ^ k = 2 ^ (64 + k) :=
+      (Nat.pow_add 2 64 k).symm
+    simpa [Res.tLo, Res.tHi, M, accTrue] using
+      congrArg (fun n : Nat => (n : Int)) hp
+  · simp [accTrue]
+  · simp [CeilInv]
+  · rfl
+  · decide
+
 /-- Total-state changing-index trace of the combined program body. -/
 def combinedRun (c : Cfg) (k fuel : Nat) (seed : MobLiveSeed) : AState :=
   (List.range fuel).foldl
