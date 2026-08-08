@@ -142,6 +142,44 @@ def rootFoldValue (ps : List Nat) (n : Nat) : Int :=
   let q := rootCellFold ps n
   decodedValue n q.prod q.flag
 
+/-- Transparent finite number-theoretic value of a represented-prime fold.
+It is zero when a listed prime square divides `n`; otherwise its sign is the
+parity of the listed prime divisors plus the decoder's possible one remaining
+prime factor. -/
+def finiteRootValue (ps : List Nat) (n : Nat) : Int :=
+  let logic := rootLogicFold ps n
+  let extra := if divisorProduct ps n = n then 0 else 1
+  if logic.square then 0
+  else if (divisorCount ps n + extra) % 2 = 0 then 1 else -1
+
+/-- The machine-oriented decoder and the transparent finite
+parity/square/product description agree. -/
+theorem rootFoldValue_eq_finiteRootValue (ps : List Nat) (n : Nat)
+    (hprime : ∀ p, p ∈ ps → LeanCompCert.Verified.PackedSieve.IsPrime p)
+    (hordered : ps.Pairwise (· < ·))
+    (hnPos : 0 < n) (hnM : n < M) :
+    rootFoldValue ps n = finiteRootValue ps n := by
+  have hdPos := divisorProduct_pos ps n hprime
+  have hdM := divisorProduct_lt_modulus ps n hprime hordered hnPos hnM
+  have hprod := rootCellFold_prod_eq_encoded ps n hprime hordered hnPos hnM
+  have hprodDecode := encodedProduct_decode (divisorProduct ps n) hdPos hdM
+  have hflag := rootCellFold_flag_eq_encode ps n
+  have hpar := rootLogicFold_parity_eq ps n
+  dsimp only [rootFoldValue, finiteRootValue, decodedValue]
+  rw [hprod, hflag]
+  unfold decodeCell
+  rw [hprodDecode]
+  simp only [encodeRootLogic, hpar]
+  rcases Nat.eq_zero_or_pos (divisorCount ps n % 2) with hz | hpos
+  · by_cases hs : (rootLogicFold ps n).square = true <;>
+      by_cases hd : divisorProduct ps n = n <;>
+      simp [hs, hz, hd, Nat.add_mod] <;> decide
+  · have hr := Nat.mod_lt (divisorCount ps n) (by decide : 0 < 2)
+    have ho : divisorCount ps n % 2 = 1 := by omega
+    by_cases hs : (rootLogicFold ps n).square = true <;>
+      by_cases hd : divisorProduct ps n = n <;>
+      simp [hs, ho, hd, Nat.add_mod] <;> decide
+
 /-- Every finite root fold satisfies `CellRepresents` for its explicitly
 named executable value. -/
 theorem rootCellFold_cellRepresents (ps : List Nat) (n : Nat) :

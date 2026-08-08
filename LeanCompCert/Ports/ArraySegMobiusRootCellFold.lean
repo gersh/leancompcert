@@ -22,6 +22,37 @@ structure RootCellState where
   flag : Nat
   deriving Repr, DecidableEq
 
+/-- Number-theoretic meaning of the two bits accumulated in `RootCellState.flag`.
+`parity` toggles once for every listed prime divisor, while `square` records
+whether a listed prime square divides the represented integer. -/
+structure RootLogicState where
+  parity : Bool
+  square : Bool
+  deriving Repr, DecidableEq
+
+/-- Transparent Boolean update corresponding to one production flag update. -/
+def rootLogicStep (n : Nat) (st : RootLogicState) (p : Nat) : RootLogicState :=
+  if n % p = 0 then
+    ⟨!st.parity, st.square || decide (n % (p * p) = 0)⟩
+  else st
+
+/-- Finite logical fold over the same prime list as `rootCellFold`. -/
+def rootLogicFoldFrom (n : Nat) (st : RootLogicState)
+    (ps : List Nat) : RootLogicState :=
+  ps.foldl (rootLogicStep n) st
+
+def rootLogicFold (ps : List Nat) (n : Nat) : RootLogicState :=
+  rootLogicFoldFrom n ⟨false, false⟩ ps
+
+/-- Exact word encoding used by the production flag cell. -/
+def encodeRootLogic (st : RootLogicState) : Nat :=
+  (if st.parity then 1 else 0) + (if st.square then 2 else 0)
+
+/-- Number of listed primes that divide `n`; only its parity is stored by the
+production cell. -/
+def divisorCount (ps : List Nat) (n : Nat) : Nat :=
+  (ps.filter fun p => n % p = 0).length
+
 /-- One listed prime either misses the represented integer or performs the
 exact production product/parity/square-hit update. -/
 def rootCellStep (n : Nat) (st : RootCellState) (p : Nat) : RootCellState :=
@@ -57,6 +88,115 @@ def divisorProduct : List Nat → Nat → Nat
 stored literally. -/
 def encodedProduct (d : Nat) : Nat :=
   if d = 1 then 0 else d
+
+theorem encodedProduct_decode (d : Nat) (hdPos : 0 < d) (hdM : d < M) :
+    (encodedProduct d + if encodedProduct d = 0 then 1 else 0) % M = d := by
+  by_cases hd1 : d = 1
+  · subst d
+    simpa [encodedProduct] using Nat.mod_eq_of_lt hdM
+  · have hd0 : d ≠ 0 := by omega
+    simp [encodedProduct, hd1, hd0, Nat.mod_eq_of_lt hdM]
+
+theorem flagUpdate_encodeRootLogic (n p : Nat) (st : RootLogicState)
+    (hp : n % p = 0) :
+    flagUpdate n (encodeRootLogic st) p =
+      encodeRootLogic (rootLogicStep n st p) := by
+  rcases st with ⟨parity, square⟩
+  cases parity <;> cases square <;>
+    by_cases hs : n % (p * p) = 0 <;>
+    simp [flagUpdate, encodeRootLogic, rootLogicStep, hp, hs] <;> decide
+
+theorem rootCellStep_flag_eq_encode (n p : Nat) (cell : RootCellState)
+    (logic : RootLogicState) (hflag : cell.flag = encodeRootLogic logic) :
+    (rootCellStep n cell p).flag =
+      encodeRootLogic (rootLogicStep n logic p) := by
+  by_cases hp : n % p = 0
+  · simp [rootCellStep, rootLogicStep, hp, hflag,
+      flagUpdate_encodeRootLogic n p logic hp]
+  · simp [rootCellStep, rootLogicStep, hp, hflag]
+
+theorem rootCellFoldFrom_flag_eq_encode (ps : List Nat) (n : Nat)
+    (cell : RootCellState) (logic : RootLogicState)
+    (hflag : cell.flag = encodeRootLogic logic) :
+    (rootCellFoldFrom n cell ps).flag =
+      encodeRootLogic (rootLogicFoldFrom n logic ps) := by
+  induction ps generalizing cell logic with
+  | nil => simpa [rootCellFoldFrom, rootLogicFoldFrom] using hflag
+  | cons p ps ih =>
+      apply ih (rootCellStep n cell p) (rootLogicStep n logic p)
+      exact rootCellStep_flag_eq_encode n p cell logic hflag
+
+/-- The production flag after the finite root fold is exactly the transparent
+parity/square summary. -/
+theorem rootCellFold_flag_eq_encode (ps : List Nat) (n : Nat) :
+    (rootCellFold ps n).flag = encodeRootLogic (rootLogicFold ps n) := by
+  apply rootCellFoldFrom_flag_eq_encode ps n ⟨0, 0⟩ ⟨false, false⟩
+  rfl
+
+theorem rootLogicFoldFrom_square_iff (ps : List Nat) (n : Nat)
+    (st : RootLogicState) :
+    (rootLogicFoldFrom n st ps).square = true ↔
+      st.square = true ∨ ∃ p ∈ ps, n % (p * p) = 0 := by
+  induction ps generalizing st with
+  | nil => simp [rootLogicFoldFrom]
+  | cons p ps ih =>
+      rw [show rootLogicFoldFrom n st (p :: ps) =
+        rootLogicFoldFrom n (rootLogicStep n st p) ps by rfl]
+      rw [ih]
+      by_cases hp : n % p = 0
+      · by_cases hs : n % (p * p) = 0
+        · simp [rootLogicStep, hp, hs]
+        · simp [rootLogicStep, hp, hs]
+      · have hs : n % (p * p) ≠ 0 := by
+          intro hsq
+          apply hp
+          exact Nat.dvd_iff_mod_eq_zero.mp
+            (Nat.dvd_trans (show p ∣ p * p from ⟨p, rfl⟩)
+              (Nat.dvd_iff_mod_eq_zero.mpr hsq))
+        simp [rootLogicStep, hp, hs]
+
+theorem rootLogicFold_square_iff (ps : List Nat) (n : Nat) :
+    (rootLogicFold ps n).square = true ↔
+      ∃ p ∈ ps, n % (p * p) = 0 := by
+  simpa [rootLogicFold] using
+    rootLogicFoldFrom_square_iff ps n ⟨false, false⟩
+
+theorem rootLogicFoldFrom_parity_eq (ps : List Nat) (n : Nat)
+    (st : RootLogicState) :
+    (rootLogicFoldFrom n st ps).parity =
+      if divisorCount ps n % 2 = 0 then st.parity else !st.parity := by
+  induction ps generalizing st with
+  | nil => simp [rootLogicFoldFrom, divisorCount]
+  | cons p ps ih =>
+      rw [show rootLogicFoldFrom n st (p :: ps) =
+        rootLogicFoldFrom n (rootLogicStep n st p) ps by rfl]
+      rw [ih]
+      by_cases hp : n % p = 0
+      · have hcount : divisorCount (p :: ps) n =
+            divisorCount ps n + 1 := by
+          simp [divisorCount, hp]
+        rw [hcount]
+        have hr := Nat.mod_lt (divisorCount ps n) (by decide : 0 < 2)
+        rcases Nat.eq_zero_or_pos (divisorCount ps n % 2) with hz | hpos
+        · cases st <;> simp [rootLogicStep, hp, hz,
+            Nat.add_mod]
+        · have ho : divisorCount ps n % 2 = 1 := by omega
+          cases st <;> simp [rootLogicStep, hp, ho,
+            Nat.add_mod]
+      · have hcount : divisorCount (p :: ps) n =
+            divisorCount ps n := by
+          simp [divisorCount, hp]
+        rw [hcount]
+        cases st <;> simp [rootLogicStep, hp]
+
+theorem rootLogicFold_parity_eq (ps : List Nat) (n : Nat) :
+    (rootLogicFold ps n).parity = decide (divisorCount ps n % 2 = 1) := by
+  have h := rootLogicFoldFrom_parity_eq ps n ⟨false, false⟩
+  rcases Nat.eq_zero_or_pos (divisorCount ps n % 2) with hz | hpos
+  · simpa [rootLogicFold, hz] using h
+  · have hr := Nat.mod_lt (divisorCount ps n) (by decide : 0 < 2)
+    have ho : divisorCount ps n % 2 = 1 := by omega
+    simpa [rootLogicFold, ho] using h
 
 @[simp] theorem rootCellStep_hit (n : Nat) (st : RootCellState) (p : Nat)
     (h : p ∣ n) :

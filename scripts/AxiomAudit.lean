@@ -440,6 +440,11 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootTableStep_preserves
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFold_eq_zero_of_unmarked
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFold_single_hit_ne_zero
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.flagUpdate_encodeRootLogic
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootCellFold_flag_eq_encode
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootLogicFold_square_iff
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.rootLogicFold_parity_eq
+#print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.encodedProduct_decode
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.isPrime_coprime_of_ne
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.prime_coprime_divisorProduct
 #print axioms LeanCompCert.Ports.ArraySegMobiusRootCellFold.divisorProduct_dvd
@@ -538,6 +543,7 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_eq_muSig_decodedValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootCellFold_cellRepresents
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.cellRepresents_of_cell_eq_rootCellFold
+#print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootFoldValue_eq_finiteRootValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.arun_coreBody_main_acc_nowrap
 #print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.arun_coreBody_main_acc_wrap
 #print axioms LeanCompCert.Ports.ArraySegMobiusAccumulation.bodyRun_main_acc_prefix

@@ -1300,3 +1300,21 @@ These theorems close the previously missing arbitrary outer-window
 composition.  The remaining semantic seam is the paper/Mathlib identification
 of the runnable finite `rootFoldValue`; the compiled theorem intentionally
 continues to expose that value until the number-theoretic bridge is proved.
+
+The finite fold now exposes the exact number-theoretic state needed by that
+bridge.  `RootLogicState` is a runnable two-Boolean fold recording divisor
+parity and whether a listed prime square divides the cell; its encoding is
+proved equal to the production flag word.  `finiteRootValue` combines those
+bits with the already verified distinct-prime product and the decoder's
+possible one residual prime, and `rootFoldValue_eq_finiteRootValue` proves the
+machine-oriented decoder computes that transparent value.  The Mathlib-facing
+consumer proves this finite value is the paper Möbius function under the
+explicit prime-table completeness and square-root coverage guard.
+
+All sibling checks used swap disabled.  The expanded root-fold direct source
+check peaked at 591,088 KiB, the cell-decoder source check at 602,916 KiB, and
+the rebuilt 59-job accumulation consumer at 712,240 KiB under the 2 GiB hard
+cap.  The 618-declaration strict audit passed at 1,602,432 KiB under 4 GiB;
+the serialized 431-job full build passed at 1,736,700 KiB under 8 GiB.  The
+Mathlib consumer source check, measured separately in the downstream project,
+passed in 1.51 s at 1,938,208 KiB with zero swap under a 4 GiB hard cap.
