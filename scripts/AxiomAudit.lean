@@ -76,6 +76,7 @@ import LeanCompCert.Ports.ArraySegMobiusIndexedProgram
 import LeanCompCert.Ports.ArraySegMobiusIndexedFull
 import LeanCompCert.Ports.ArraySegMobiusResidueFrame
 import LeanCompCert.Ports.ArraySegMobiusResidueFold
+import LeanCompCert.Ports.ArraySegMobiusIndexedSignal
 import LeanCompCert.Ports.ArraySegMobiusMarkProgress
 import LeanCompCert.Ports.MobiusResidueRealisation
 import LeanCompCert.Ports.MobiusResidueWindow
@@ -643,6 +644,10 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusResidueFrame.combinedProductionCore_complete
 #print axioms LeanCompCert.Ports.ArraySegMobiusResidueFold.readRes_arun_residue
 #print axioms LeanCompCert.Ports.ArraySegMobiusResidueFold.readRes_combinedIndexedRun_eq_resFold
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedSignal.combinedIndexedRun_core
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedSignal.readSig_indexedBodyRun_main_acc_eq_rootFoldValue
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedSignal.readSig_combinedIndexedRun_main_acc_eq_rootFoldValue
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedSignal.combined_main_event_divisors_ready
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_bits
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.decodeCell_eq_muSig_decodedValue
 #print axioms LeanCompCert.Ports.ArraySegMobiusCellRep.rootCellFold_cellRepresents
