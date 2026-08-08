@@ -173,6 +173,35 @@ def squaredResFold (k : Nat) : List Sig → Res → Res
   | [], r => r
   | g :: gs, r => squaredResFold k gs (squaredResStep k g r)
 
+/-- Equality of the four persistent fields shared by the old and squared
+residue models.  The violation counters are intentionally independent. -/
+def ResPrefixEq (a b : Res) : Prop :=
+  a.tLo = b.tLo ∧ a.tHi = b.tHi ∧ a.cel = b.cel ∧ a.celSq = b.celSq
+
+theorem squaredResStep_resStep_prefix_eq (k : Nat) (g : Sig) (a b : Res)
+    (h : ResPrefixEq a b) :
+    ResPrefixEq (squaredResStep k g a) (resStep k g b) := by
+  rcases a with ⟨alo, ahi, ac, acs, av⟩
+  rcases b with ⟨blo, bhi, bc, bcs, bv⟩
+  simp only [ResPrefixEq] at h ⊢
+  rcases h with ⟨rfl, rfl, rfl, rfl⟩
+  simp [squaredResStep, resStep]
+
+/-- Any finite squared fold has the same accumulator and ceiling fields as
+the old fold over the same signals, provided those fields agree initially. -/
+theorem squaredResFold_resFold_prefix_eq (k : Nat) (xs : List Sig)
+    (a b : Res) (h : ResPrefixEq a b) :
+    ResPrefixEq (squaredResFold k xs a) (resFold k xs b) := by
+  induction xs generalizing a b with
+  | nil => exact h
+  | cons g gs ih =>
+      exact ih _ _ (squaredResStep_resStep_prefix_eq k g a b h)
+
+theorem squaredResFold_resFold_prefix_eq_self (k : Nat) (xs : List Sig)
+    (r : Res) :
+    ResPrefixEq (squaredResFold k xs r) (resFold k xs r) := by
+  exact squaredResFold_resFold_prefix_eq k xs r r ⟨rfl, rfl, rfl, rfl⟩
+
 theorem squaredResFold_append (k : Nat) (xs ys : List Sig) (r : Res) :
     squaredResFold k (xs ++ ys) r =
       squaredResFold k ys (squaredResFold k xs r) := by

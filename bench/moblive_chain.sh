@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# Chain the per-integer `Σ μ(m)/m` artifact (`plattstronglive`) over [1, HI].
+# Chain a per-integer `Σ μ(m)/m` artifact over [1, HI].
 #
 #   bench/moblive_chain.sh HI SEGLEN LINKLEN [CC] [MANIFEST] [--corrupt K]
+#   MOBLIVE_MODE=plattstrongsquared bench/moblive_chain.sh ...
 #
 # SEGLEN  cells per sieve window -- a memory parameter only.
 # LINKLEN integers per artifact; must be a multiple of SEGLEN.  One link is one
 #         emitted, compiled, executed C program.
 #
+# `plattstronglive` is the historical square-root relaxation and remains the
+# default.  `plattstrongsquared` is the paper-faithful exact squared predicate.
 # The chain always opens at n = 1, because that is the only carry-in that is
 # not a hand-computed number: the accumulator is the bare bias.  The first link
-# must therefore report exactly FIRSTVIOL = 3 failed tests, and every later
-# link exactly 0.  The three are known, and none of them is a defect:
+# reports two genuine failures, at n = 1 and n = 2.  The relaxed mode also
+# reports the known spurious tie at n = 4:
 #
 #   n = 1  the family is false: the sum is 1, the majorant 1/(2√2) = 0.354;
 #   n = 2  the family is false: 1/2 against 1/(2√3) = 0.289;
@@ -22,7 +25,7 @@
 #          n = 4 is the ONLY integer in [3, 7.727·10⁹] where the relaxation
 #          costs anything -- see bench/results/array_seg_folds.md.
 #
-# Both counts are asserted.  A first link reporting 0 would mean the artifact
+# The selected count is asserted.  A first link reporting 0 would mean the artifact
 # was not testing what it claims.
 #
 # WHAT IS DIFFERENT FROM bench/seg_chain.sh, AND WHY IT MATTERS
@@ -62,9 +65,14 @@ SEGLEN=${2:-1000000}
 LINKLEN=${3:-$HI}
 CC=${4:-gcc}
 MANIFEST=${5:-}
+MODE=${MOBLIVE_MODE:-plattstronglive}
 CORRUPT=-1
 if [ "${6:-}" = "--corrupt" ]; then CORRUPT=${7:-1}; fi
-FIRSTVIOL=3   # n = 1, 2 (family false) and n = 4 (an exact tie); see above
+case "$MODE" in
+  plattstronglive) FIRSTVIOL=3 ;;
+  plattstrongsquared) FIRSTVIOL=2 ;;
+  *) echo "unsupported MOBLIVE_MODE: $MODE"; exit 2 ;;
+esac
 
 if [ $((LINKLEN % SEGLEN)) -ne 0 ]; then
   echo "LINKLEN ($LINKLEN) must be a multiple of SEGLEN ($SEGLEN)"; exit 2
@@ -105,11 +113,20 @@ while [ "$lo" -le "$HI" ]; do
     echo "link $link: carry-in DELIBERATELY CORRUPTED (+1 ulp on the low limb)"
   fi
 
-  lake env lean --run bench/ArraySegEmit.lean plattstronglive \
+  lake env lean --run bench/ArraySegEmit.lean "$MODE" \
       "$lo" "$len" "$cnt" "$WORK/w.c" - "$seedlo" "$seedhi" \
       > "$WORK/emit.txt" 2>&1 || { cat "$WORK/emit.txt"; exit 2; }
   $CC -O2 -o "$WORK/w" "$WORK/w.c" || exit 2
-  "$WORK/w" > "$WORK/out.txt" || exit 2
+  # Status 2 is the hosted driver's specified result for a nonzero majorant
+  # class.  The opening link is expected to take it because n = 1 and n = 2
+  # genuinely fail; validate its printed count below instead of aborting here.
+  "$WORK/w" > "$WORK/out.txt"
+  run_status=$?
+  if [ "$run_status" != "0" ] && [ "$run_status" != "2" ]; then
+    cat "$WORK/out.txt"
+    echo "artifact exited with unexpected status $run_status"
+    exit 2
+  fi
 
   viol=$(awk '/^violations/{print $2}' "$WORK/out.txt")
   s0=$(awk '/^slot0/{print $2}' "$WORK/out.txt")
@@ -153,4 +170,5 @@ if [ "$fail" != "0" ]; then
   echo "chain REJECTED"
   exit 1
 fi
-echo "chain accepted: [1, $HI], $link links, failures only at n = 1, 2, 4, manifest reproduced"
+if [ "$MODE" = "plattstrongsquared" ]; then failures="n = 1, 2"; else failures="n = 1, 2, 4"; fi
+echo "chain accepted: mode=$MODE [1, $HI], $link links, failures only at $failures, manifest reproduced"

@@ -101,6 +101,34 @@ theorem squaredCombined_ready_of_indexedBodyRun
   rw [h65]
   exact hr
 
+/-- Seed-aware readiness transport.  The squared trace may start from the
+live residue initializer while the standalone production schedule starts from
+`coreEntry`; agreement on the sieve projection is the only required bridge. -/
+theorem squaredCombined_ready_of_indexedBodyRun_core
+    (idx : Nat) (c : Cfg) (k fuel : Nat) {s t : AState}
+    (h : CoreAgree s t)
+    (hready : ∀ j, j < fuel →
+      let core := arun (idx + j) (indexedBodyRun idx c j t) c.coreBody
+      core.regs 65 ≠ 0 ∧ core.regs 65 < 2 ^ 62) :
+    ∀ j, j < fuel →
+      let before := squaredCombinedIndexedRun idx c k j s
+      let core := arun (idx + j) before c.coreBody
+      core.regs 65 ≠ 0 ∧ core.regs 65 < 2 ^ 62 := by
+  intro j hj
+  let squaredCore := arun (idx + j)
+    (squaredCombinedIndexedRun idx c k j s) c.coreBody
+  let indexedCore := arun (idx + j) (indexedBodyRun idx c j t) c.coreBody
+  have hagree : CoreAgree squaredCore indexedCore :=
+    arun_coreBody_congr c (idx + j)
+      (squaredCombinedIndexedRun_core idx c k j h)
+  have h65 : squaredCore.regs 65 = indexedCore.regs 65 :=
+    hagree.2 65 (by decide)
+  have hr : indexedCore.regs 65 ≠ 0 ∧ indexedCore.regs 65 < 2 ^ 62 :=
+    hready j hj
+  change squaredCore.regs 65 ≠ 0 ∧ squaredCore.regs 65 < 2 ^ 62
+  rw [h65]
+  exact hr
+
 /-- The finite schedule need only expose the ordinary window-position
 invariant.  The compiled-core candidate theorem converts it to the exact
 nonzero and endpoint premise consumed by the squared trace. -/
@@ -141,6 +169,40 @@ theorem readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold
   exact readRes_squaredCombinedIndexedRun_eq_fold_of_n_lt idx c k len fuel s
     hregs harr hk
     (squaredCombined_ready_of_indexedBodyRun idx c k fuel s hready)
+
+set_option maxRecDepth 10000 in
+/-- The same finite trace theorem when the squared initializer and the
+standalone schedule initializer agree only on the sieve-facing projection. -/
+theorem readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold_core
+    (idx : Nat) (c : Cfg) (k len fuel : Nat) {s t : AState}
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M)
+    (hk : k ≤ 15) (hcore : CoreAgree s t)
+    (hready : ∀ j, j < fuel →
+      let core := arun (idx + j) (indexedBodyRun idx c j t) c.coreBody
+      core.regs 65 ≠ 0 ∧ core.regs 65 < 2 ^ 62) :
+    readRes (squaredCombinedIndexedRun idx c k fuel s) =
+      squaredResFold k (combinedSignals idx c k fuel s) (readRes s) := by
+  rw [← squaredCombinedSignals_eq_combinedSignals idx c k fuel s]
+  exact readRes_squaredCombinedIndexedRun_eq_fold_of_n_lt idx c k len fuel s
+    hregs harr hk
+    (squaredCombined_ready_of_indexedBodyRun_core idx c k fuel hcore hready)
+
+set_option maxRecDepth 10000 in
+/-- Zero-based specialization used by the literal production program.  It
+keeps the large initializer terms out of index-normalization unification. -/
+theorem readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold_core_zero
+    (c : Cfg) (k len fuel : Nat) {s t : AState}
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M)
+    (hk : k ≤ 15) (hcore : CoreAgree s t)
+    (hready : ∀ j, j < fuel →
+      let core := arun j (indexedBodyRun 0 c j t) c.coreBody
+      core.regs 65 ≠ 0 ∧ core.regs 65 < 2 ^ 62) :
+    readRes (squaredCombinedIndexedRun 0 c k fuel s) =
+      squaredResFold k (combinedSignals 0 c k fuel s) (readRes s) := by
+  apply readRes_squaredCombinedIndexedRun_eq_combinedSignals_fold_core
+    (idx := 0) (c := c) (k := k) (len := len) (fuel := fuel)
+    (s := s) (t := t) hregs harr hk hcore
+  simpa only [Nat.zero_add] using hready
 
 set_option maxRecDepth 10000 in
 /-- Campaign-facing form driven by finite window positions rather than a

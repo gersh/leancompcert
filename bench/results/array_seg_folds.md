@@ -1642,3 +1642,70 @@ passed in 0.17 s at 580,432 KiB and reported only `propext`,
 only `propext`).  All checks used the 2/3 GiB one-worker profile with zero
 swap.  With the isolated high-memory leaves cached, the 227-job aggregate
 passed in 0.66 s at 1,721,596 KiB under the 8 GiB hard profile.
+
+## Paper-faithful squared chain runner (2026-08-08)
+
+`ArraySegEmit.lean` now exposes the proved production suffix as mode
+`plattstrongsquared`:
+
+```
+lake env lean --run bench/ArraySegEmit.lean \
+  plattstrongsquared LO SEGLEN SEGCOUNT OUT - TLO THI
+MOBLIVE_MODE=plattstrongsquared \
+  bench/moblive_chain.sh HI SEGLEN LINKLEN [CC] [MANIFEST]
+```
+
+It retains the two accumulator limbs and four-slot chain shape of
+`plattstronglive`, but tests the exact finite squared predicate rather than
+the ceiling-square-root relaxation.  Consequently the opening link has
+exactly two failures, the genuinely false rows `n = 1, 2`; `n = 4` passes.
+The chain driver asserts this mode-specific count, feeds each link's literal
+carry-out into the next link, and checks every printed result against an
+optional receipt manifest.  It now also treats the hosted driver's specified
+exit status `2` as a report to validate, rather than aborting before reading
+the known opening failures.  The generated C driver passes its array pointer
+with the function's actual pointer type.
+
+Under the 2/3 GiB one-worker profile with zero swap, direct emitter source
+elaboration passed in 0.32 s at 534,500 KiB.  A five-link run over
+`[1, 100000]` created and then exactly reproduced the same manifest; both
+runs reported only two failures and peaked below 548 MiB.  The final slots
+were `(318441023180074197, 32760, 317, 100489)`, agreeing with the independent
+fixed-point result already recorded above.
+
+A single GCC `-O2` link over `[1, 100000000]` used `SEGLEN = 1000000`, ran
+the complete 224-instruction body for 351,977,425 compiled-loop iterations,
+and returned:
+
+```
+violations=2
+slots=(6187938147428368818, 32768, 10001, 100020001)
+```
+
+Emission, compilation, and execution together took 7.74 s at 537,872 KiB.
+At that end-to-end rate, the exact literature range through
+`7,727,068,586` costs about 598 seconds (10.0 minutes) on one GCC core.  A
+production run should use multiple receipt-sized links for restartability;
+the accumulator dependency makes those links serial, while the sieve memory
+remains controlled by `SEGLEN`.
+
+The proof-side production adapter now starts from the same live initializer as
+the emitted artifact.  `ArraySegMobiusSquaredSeed` transports the finite core
+schedule from `coreEntry` to `combinedEntry c seed` through `CoreAgree`, while
+retaining the literal accumulator limbs and violation counter.  The first
+same-file formulation repeatedly exhausted the heartbeat budget while
+unfolding production machinery, so the final theorem was split into an opaque
+candidate-readiness declaration and a seed-aware trace declaration in a new
+module.  Direct source checks then took 0.33 s at 589,900 KiB for the signal
+adapter and 0.23 s at 590,676 KiB for the seed adapter.  Their 112-job focused
+target built in 1.64 s at 702,740 KiB under the 2/3 GiB profile.
+
+`ResPrefixEq` and `squaredResFold_resFold_prefix_eq_self` additionally prove
+that the exact squared fold retains precisely the old fold's two accumulator
+and two ceiling fields, while allowing its violation counter to differ.  This
+is the finite bridge needed to reuse the established Möbius invariant rather
+than duplicating it.  A fresh five-theorem axiom audit took 0.16 s at 574,300
+KiB and reported only `propext`, `Classical.choice`, and `Quot.sound`; the
+fold-prefix theorem itself requires only `propext`.
+With the isolated high-memory leaves cached, the 228-job aggregate then passed
+in 0.63 s at 1,717,076 KiB under the 7/8 GiB profile with zero swap.

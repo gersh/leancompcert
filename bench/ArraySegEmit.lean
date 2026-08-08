@@ -1,4 +1,5 @@
 import LeanCompCert.Ports.ArraySegSieve
+import LeanCompCert.Ports.ArraySegMobiusSquared
 
 /-!
 Emission driver for the offset segmented sieve of `Ports.ArraySegSieve`.
@@ -26,6 +27,11 @@ lake env lean --run bench/ArraySegEmit.lean MODE LO SEGLEN SEGCOUNT OUT [EXPECTE
                `2^(mobWideBits+1)` times smaller.  Result slots are the two
                accumulator limbs, `⌈√(hi+1)⌉` and its square; the seeds are the
                two limbs.
+* `plattstrongsquared` — the paper-faithful live checker, replacing the
+               square-root relaxation by the exact finite predicate
+               `(n+1) * upper^2 ≤ 2^122`.  It has the same two accumulator
+               seed/result limbs; the remaining result slots are retained for
+               chain compatibility.
 
 ## The emitted `main` carries a verdict
 
@@ -103,7 +109,7 @@ def verdictDriver (name : String) (cells base slots classBase : Nat)
   "\n#include <stdio.h>\n" ++
   "static uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
-  "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    uint64_t r = l_" ++ name ++ "(cells);\n" ++
   "    uint64_t sum = 0;\n" ++
   "    printf(\"violations %llu\\n\", (unsigned long long)r);\n" ++
   "    for (int i = 0; i < " ++ toString slots ++ "; i++)\n" ++
@@ -122,7 +128,7 @@ a substitute for it — reproducing a nonzero count exits `2`. -/
 def exitDriver (name : String) (cells expected : Nat) : String :=
   "\nstatic uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
-  "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    uint64_t r = l_" ++ name ++ "(cells);\n" ++
   "    if (r != UINT64_C(" ++ toString expected ++ ")) return 1;\n" ++
   "    return r == UINT64_C(0) ? 0 : 2;\n}\n"
 
@@ -132,14 +138,16 @@ Every one of them is a **clause**: this file's residues carry no budgets and no
 in-loop guards, so there is nothing here that says "the run was invalid", only
 statements that failed.  `plattstronglive` has a single class because
 `mobiusLiveResidue` folds the two sides into `|V|` before it compares; there is
-nothing to separate, and the block has a realisation theorem proved about it. -/
+nothing to separate, and the block has a realisation theorem proved about it.
+The squared replacement likewise has one exact finite majorant predicate. -/
 def classesOf : String → List Class
   | "mertens" | "mertens2" | "mertenslive" | "mertenslive2" =>
       [ ("hurst_upper", 0, 2), ("hurst_lower", 1, 3)
       , ("cdem_upper", 2, 4), ("cdem_lower", 3, 5) ]
   | "platt211" | "plattstrong" =>
       [ ("mobius_upper", 0, 2), ("mobius_lower", 1, 3) ]
-  | "plattstronglive" => [ ("mobius_majorant", 0, 2) ]
+  | "plattstronglive" | "plattstrongsquared" =>
+      [ ("mobius_majorant", 0, 2) ]
   | _ => []
 
 /-- How many of the result cells the chain reads, per mode. -/
@@ -191,6 +199,15 @@ def main (args : List String) : IO UInt32 := do
             let s : MobLiveSeed :=
               (mobLiveSeed lo (seeds[0]?.getD dflt.tLo) (seeds[1]?.getD dflt.tHi))
             pure (mobiusLiveProgram c k s)
+        | "plattstrongsquared" =>
+            -- The exact squared predicate uses the same accumulator carry as
+            -- `plattstronglive`, so existing manifests can retain their four
+            -- result-slot shape while new receipts use the exact test.
+            let k := mobWideBits
+            let dflt := mobLiveSeedStart k
+            let s : MobLiveSeed :=
+              (mobLiveSeed lo (seeds[0]?.getD dflt.tLo) (seeds[1]?.getD dflt.tHi))
+            pure (mobiusLiveSquaredProgram c k s)
         | _ => do IO.eprintln "bad MODE"; return 1
       let base := p.arrayLen - 16
       let driver :=
