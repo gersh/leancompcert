@@ -374,6 +374,30 @@ discharge of the composed theorem's explicit word/table invariants.
 
 ## Build-memory measurements
 
+The arbitrary-window/literal-body marking lift was measured on 2026-08-09
+with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
+`MemorySwapMax=0`:
+
+| proof target | wall | peak RSS | swap | result |
+| --- | ---: | ---: | ---: | --- |
+| production phase constants, direct source check | 43.23 s | 12,059,016 KiB | 0 | success |
+| production phase constants, module build | 45.73 s | 12,058,680 KiB | 0 | success |
+| generic window-boundary constructor, direct source check | 1:05.18 | 5,171,184 KiB | 0 | success |
+| generic window-boundary constructor, module build | 1:05.55 | 5,116,556 KiB | 0 | success |
+| initializer consumer after layering change, direct source check | 1:44.12 | 4,573,848 KiB | 0 | success |
+| initializer consumer after layering change, module build | 1:44.00 | 4,700,000 KiB | 0 | success |
+| literal full-body arbitrary-window invariant, direct source check | 0.58 s | 583,944 KiB | 0 | success |
+| literal full-body arbitrary-window invariant, live module build | 15.80 s | 789,288 KiB | 0 | success |
+
+The new `productionWindowStart_markInv` removes the initializer from the
+window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
+proves that the inactive log/lambda/psi suffix preserves the complete marking
+state, so `productionWindow_cell_eq_cursorRows` applies to the literal
+`LambdaPsiSweep.body` at any production window.  It remains conditional on
+zero incoming and outgoing failure counters; carrying or deriving those facts
+through classification, together with `ArithmeticPre`, is the next whole-loop
+obligation.
+
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert
 umbrella build completed serialized under an 8 GiB hard cap; its peak was

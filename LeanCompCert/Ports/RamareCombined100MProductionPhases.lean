@@ -41,4 +41,14 @@ theorem productionPowerPhaseChain :
   apply PowerPhaseChain.of_check
   decide +kernel
 
+/-- The first flattened power phase is the first prime-table row at its
+first power.  Keeping this small closed fact beside the production phase
+definition makes it available to every window-reset proof. -/
+theorem productionPowerPhases_head :
+    productionPowerPhases.headD ⟨0, 1, 1⟩ = ⟨0, 2, 2⟩ := by
+  decide +kernel
+
+theorem productionTable_head : productionCursorCfg.table.headD 1 = 2 := by
+  decide +kernel
+
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve

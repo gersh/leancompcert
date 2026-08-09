@@ -288,13 +288,6 @@ theorem productionInitState_plane_empty
     rw [hbase] <;>
     omega
 
-theorem productionPowerPhases_head :
-    productionPowerPhases.headD ⟨0, 1, 1⟩ = ⟨0, 2, 2⟩ := by
-  decide +kernel
-
-theorem productionTable_head : productionCursorCfg.table.headD 1 = 2 := by
-  decide +kernel
-
 theorem productionInitState_reset
     (i : Nat) (hi : i < productionCursorCfg.segLen) :
     resetPowerCellState productionCursorCfg i productionInitState =

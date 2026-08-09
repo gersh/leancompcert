@@ -1043,6 +1043,39 @@ structure ProductionMarkStateInv
       (powerCellRun productionCursorCfg round w i
         productionPowerTable initial).cursor.pi ≤ s.regs rVMark
 
+/-- Any period-boundary state with an empty selected plane cell, the intact
+production table, and zero failure counters is a valid fresh-window marking
+state.  Unlike `productionInitState_markInv`, this constructor does not refer
+to the program initializer, so it can be reused after a completed
+classification sweep. -/
+theorem productionWindowStart_markInv
+    (w i : Nat) (s : AState)
+    (hround : s.regs rR = 0)
+    (hwindow : s.regs rW = w)
+    (htable : ∀ pi, pi ≤ productionCursorCfg.tableLen →
+      s.arr (pi + productionCursorCfg.tableBase) = productionPowerTable pi)
+    (hempty : productionCursorCfg.readPlaneCell i s = emptyPlaneCell)
+    (hviol : s.regs rViol = 0)
+    (hvmark : s.regs rVMark = 0) :
+    ProductionMarkStateInv w i 0 (productionInitialPowerCell w) s := by
+  refine {
+    observable := ?_
+    table := htable
+    round_eq := hround
+    window_eq := hwindow
+    viol_le := ?_
+    vmark_le := ?_
+    last_failure_le := ?_ }
+  · apply PowerCellState.ext
+    · simp only [resetPowerCellState, resetPowerCursor, hround, if_pos,
+        productionInitialPowerCell]
+      rw [productionPowerPhases_head, productionTable_head, hwindow]
+      rfl
+    · exact hempty
+  · omega
+  · omega
+  · omega
+
 /-- The emitted phase/reset prefix realizes the reset projection recorded by
 the simultaneous invariant. -/
 theorem ProductionMarkStateInv.phaseReset_observable
