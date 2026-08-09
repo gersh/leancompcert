@@ -143,6 +143,18 @@ derives the live gate and exact candidate for the complete loop body rather
 than assuming the gate at classifier entry.  The expanded capped source
 compile took **78.07 wall-seconds**, **3,345,568 KiB peak RSS**, and zero swap.
 
+The physical mark loop is now split, with the emitted order unchanged, into
+cursor reset, address selection, seven loads, all-product, first-prime,
+second-prime, and cursor-advance blocks.  The separate
+`RamareCombined100MMarkRefinement.lean` proves exact reset/preservation,
+seven live addresses and loads, all-product writeback, first-prime
+selection/exponent/product updates, and second-prime flag/commit/exponent
+updates.  Its capped direct source check took **1.16 wall-seconds**,
+**642,572 KiB peak RSS**, and zero swap.  The deliberately split proof avoids
+normalizing the full 120-instruction mark core.  Regenerating the production C
+after this refactor gives the same SHA-256 `aa222123bc751266392d65d92b99fbc02c82fb36cb674b8610bcd704f99fb224`;
+the full run still reports `guards 0 seen 99990000 mark 0 shape 0`.
+
 ### Exact log-ladder carry
 
 `Ports/RamareCombined100MLogSweep.lean` appends the two word-safe RS62

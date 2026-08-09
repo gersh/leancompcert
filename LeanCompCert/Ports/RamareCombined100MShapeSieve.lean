@@ -116,10 +116,7 @@ def Cfg.markPhaseBody (c : Cfg) : List Instr :=
   [ .binop 10 .lt (.reg rR) (.lit c.markSteps)
   , .binop 11 .sub (.lit 1) (.reg 10) ]
 
-def Cfg.markCoreBody (c : Cfg) : List AInstr :=
-  let L := c.segLen
-  let T := c.markSteps
-  let K := c.tableLen
+def Cfg.markResetBody (c : Cfg) : List AInstr :=
   let p0 := c.table.headD 1
   [ -- reset the prime-power cursor at a window boundary
     .scalar (.binop 12 .eq (.reg rR) (.lit 0))
@@ -137,8 +134,13 @@ def Cfg.markCoreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 21 .mul (.reg 12) (.reg 16))
   , .scalar (.binop 22 .mul (.reg 13) (.reg rJ))
   , .scalar (.binop rJ .add (.reg 21) (.reg 22))
-    -- choose live addresses or the seven sinks
-  , .scalar (.binop 23 .lt (.reg rJ) (.lit L))
+  ]
+
+/-- Choose the live cell in each plane, or the corresponding sink when this
+cursor step does not mark the current window. -/
+def Cfg.markAddressBody (c : Cfg) : List AInstr :=
+  let L := c.segLen
+  [ .scalar (.binop 23 .lt (.reg rJ) (.lit L))
   , .scalar (.binop 24 .mul (.reg 23) (.reg 10))         -- live mark
   , .scalar (.binop 25 .sub (.lit 1) (.reg 24))
   , .scalar (.binop 26 .mul (.reg 24) (.reg rJ))
@@ -150,15 +152,26 @@ def Cfg.markCoreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 34 .add (.reg 30) (.lit (4 * L)))
   , .scalar (.binop 35 .add (.reg 30) (.lit (5 * L)))
   , .scalar (.binop 36 .add (.reg 30) (.lit (6 * L)))
-  , .load 40 30, .load 41 31, .load 42 32, .load 43 33
+  ]
+
+/-- Read one cell from each of the seven physical planes. -/
+def Cfg.markLoadBody : List AInstr :=
+  [ .load 40 30, .load 41 31, .load 42 32, .load 43 33
   , .load 44 34, .load 45 35, .load 46 36
-    -- empty products denote one
-  , .scalar (.binop 47 .eq (.reg 40) (.lit 0))
+  ]
+
+/-- Multiply the all-prime-power product, interpreting zero as the empty
+product sentinel. -/
+def Cfg.markAllProductBody : List AInstr :=
+  [ .scalar (.binop 47 .eq (.reg 40) (.lit 0))
   , .scalar (.binop 48 .add (.reg 40) (.reg 47))
   , .scalar (.binop 49 .mul (.reg 48) (.reg rBase))
   , .store 30 49
-    -- first/second distinct prime and multiplicity hits
-  , .scalar (.binop 50 .eq (.reg rPow) (.reg rBase))     -- first power
+  ]
+
+/-- Select and, on its first power, install the first distinct prime. -/
+def Cfg.markFirstSelectBody : List AInstr :=
+  [ .scalar (.binop 50 .eq (.reg rPow) (.reg rBase))     -- first power
   , .scalar (.binop 51 .eq (.reg 41) (.lit 0))
   , .scalar (.binop 52 .mul (.reg 50) (.reg 51))        -- install p
   , .scalar (.binop 53 .eq (.reg rBase) (.reg 41))
@@ -168,9 +181,17 @@ def Cfg.markCoreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 57 .mul (.reg 55) (.reg 41))
   , .scalar (.binop 58 .add (.reg 56) (.reg 57))
   , .store 31 58
-  , .scalar (.binop 59 .add (.reg 42) (.reg 54))
+  ]
+
+/-- Increment the first-prime exponent on exactly its power hits. -/
+def Cfg.markFirstExponentBody : List AInstr :=
+  [ .scalar (.binop 59 .add (.reg 42) (.reg 54))
   , .store 32 59
-  , .scalar (.binop 60 .eq (.reg 43) (.lit 0))
+  ]
+
+/-- Extend the exact first-prime-power product on exactly its power hits. -/
+def Cfg.markFirstProductBody : List AInstr :=
+  [ .scalar (.binop 60 .eq (.reg 43) (.lit 0))
   , .scalar (.binop 61 .add (.reg 43) (.reg 60))
   , .scalar (.binop 62 .mul (.reg 61) (.reg rBase))
   , .scalar (.binop 63 .sub (.lit 1) (.reg 54))
@@ -178,20 +199,45 @@ def Cfg.markCoreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 65 .mul (.reg 63) (.reg 43))
   , .scalar (.binop 66 .add (.reg 64) (.reg 65))
   , .store 33 66
-  , .scalar (.binop 67 .ne (.reg 41) (.lit 0))
+  ]
+
+/-- Update the first recorded distinct prime, its multiplicity, and its exact
+prime-power product. -/
+def Cfg.markFirstBody : List AInstr :=
+  markFirstSelectBody ++ markFirstExponentBody ++ markFirstProductBody
+
+/-- Select and, on its first power, install the second distinct prime. -/
+def Cfg.markSecondFlagsBody : List AInstr :=
+  [ .scalar (.binop 67 .ne (.reg 41) (.lit 0))
   , .scalar (.binop 68 .eq (.reg 44) (.lit 0))
   , .scalar (.binop 69 .mul (.reg 50) (.reg 67))
   , .scalar (.binop 70 .mul (.reg 69) (.reg 68))        -- install q
   , .scalar (.binop 71 .eq (.reg rBase) (.reg 44))
   , .scalar (.binop 72 .add (.reg 70) (.reg 71))        -- q hit
-  , .scalar (.binop 73 .sub (.lit 1) (.reg 70))
+  ]
+
+/-- Commit the selected second-prime base to plane four. -/
+def Cfg.markSecondCommitBody : List AInstr :=
+  [ .scalar (.binop 73 .sub (.lit 1) (.reg 70))
   , .scalar (.binop 74 .mul (.reg 70) (.reg rBase))
   , .scalar (.binop 75 .mul (.reg 73) (.reg 44))
   , .scalar (.binop 76 .add (.reg 74) (.reg 75))
   , .store 34 76
-  , .scalar (.binop 77 .add (.reg 45) (.reg 72))
+  ]
+
+/-- Select and, on its first power, install the second distinct prime. -/
+def Cfg.markSecondSelectBody : List AInstr :=
+  markSecondFlagsBody ++ markSecondCommitBody
+
+/-- Increment the second-prime exponent on exactly its power hits. -/
+def Cfg.markSecondExponentBody : List AInstr :=
+  [ .scalar (.binop 77 .add (.reg 45) (.reg 72))
   , .store 35 77
-  , .scalar (.binop 78 .eq (.reg 46) (.lit 0))
+  ]
+
+/-- Extend the exact second-prime-power product on exactly its power hits. -/
+def Cfg.markSecondProductBody : List AInstr :=
+  [ .scalar (.binop 78 .eq (.reg 46) (.lit 0))
   , .scalar (.binop 79 .add (.reg 46) (.reg 78))
   , .scalar (.binop 80 .mul (.reg 79) (.reg rBase))
   , .scalar (.binop 81 .sub (.lit 1) (.reg 72))
@@ -199,8 +245,20 @@ def Cfg.markCoreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 83 .mul (.reg 81) (.reg 46))
   , .scalar (.binop 84 .add (.reg 82) (.reg 83))
   , .store 36 84
-    -- advance to the next power or the next prime
-  , .scalar (.binop 85 .mul (.reg 10) (.reg 25))
+  ]
+
+/-- Update the second recorded distinct prime, its multiplicity, and its
+exact prime-power product. -/
+def Cfg.markSecondBody : List AInstr :=
+  markSecondSelectBody ++ markSecondExponentBody ++ markSecondProductBody
+
+/-- Advance to the next multiple, prime power, or prime-table row and account
+for an exhausted mark budget. -/
+def Cfg.markAdvanceBody (c : Cfg) : List AInstr :=
+  let L := c.segLen
+  let T := c.markSteps
+  let K := c.tableLen
+  [ .scalar (.binop 85 .mul (.reg 10) (.reg 25))
   , .scalar (.binop 86 .mul (.reg rPow) (.reg rBase))
   , .scalar (.binop 87 .le (.reg 86) (.lit c.hi))
   , .scalar (.binop 88 .mul (.reg 85) (.reg 87))        -- bump power
@@ -242,6 +300,11 @@ def Cfg.markCoreBody (c : Cfg) : List AInstr :=
   , .scalar (.binop rViol .add (.reg rViol) (.reg 128))
   , .scalar (.binop rVMark .add (.reg rVMark) (.reg 128))
   ]
+
+def Cfg.markCoreBody (c : Cfg) : List AInstr :=
+  c.markResetBody ++ c.markAddressBody ++ markLoadBody ++
+    markAllProductBody ++ markFirstBody ++ markSecondBody ++
+    c.markAdvanceBody
 
 def Cfg.markBody (c : Cfg) : List AInstr :=
   lift c.markPhaseBody ++ c.markCoreBody
