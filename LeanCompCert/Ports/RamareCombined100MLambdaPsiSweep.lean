@@ -1,5 +1,9 @@
 import LeanCompCert.Ports.RamareCombined100MLogSweep
 import LeanCompCert.Ports.RamareCombined100MQuotient
+import LeanCompCert.Ports.RamarePsiQRBlock
+import LeanCompCert.Verified.ArrayFoldBridge
+import LeanCompCert.Verified.ArrayScalarBlock
+import LeanCompCert.Verified.RegFrame
 
 /-!
 # Prime-power lambda and word-sized psi carry for the combined Ramaré sweep
@@ -29,6 +33,9 @@ namespace LeanCompCert.Ports.RamareCombined100M.LambdaPsiSweep
 open LeanCompCert
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
+open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.ArrayScalarBlock
+open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.PsiSegSieve (storeLit storeLits seedRegs)
 open LeanCompCert.Ports.RamareCombined100M
@@ -95,31 +102,187 @@ def rT2 : Nat := 214
 
 def regCount : Nat := 260
 
-/-- Branchless quotient/remainder advance.  `q` and `r` are scratch copies;
-registers `scratch..scratch+16` are destroyed. -/
+/-- Scalar branchless quotient/remainder advance.  `q` and `r` are scratch
+copies; registers `scratch..scratch+16` are destroyed. -/
+def advanceScalarBody (q r lam n scratch : Nat) : List Instr :=
+  [ .binop scratch .add (.reg r) (.reg lam)
+  , .binop (scratch+1) .add (.reg n) (.lit 1)
+  , .binop (scratch+2) .le (.reg q) (.reg scratch)
+  , .binop (scratch+3) .sub (.reg scratch) (.reg q)
+  , .binop (scratch+4) .udiv (.reg (scratch+3)) (.reg (scratch+1))
+  , .binop (scratch+5) .urem (.reg (scratch+3)) (.reg (scratch+1))
+  , .binop (scratch+6) .sub (.reg q) (.reg scratch)
+  , .binop (scratch+7) .udiv (.reg (scratch+6)) (.reg (scratch+1))
+  , .binop (scratch+8) .urem (.reg (scratch+6)) (.reg (scratch+1))
+  , .binop (scratch+9) .ne (.reg (scratch+8)) (.lit 0)
+  , .binop (scratch+10) .add (.reg q) (.reg (scratch+4))
+  , .binop (scratch+11) .sub (.reg q) (.reg (scratch+7))
+  , .binop (scratch+11) .sub (.reg (scratch+11)) (.reg (scratch+9))
+  , .binop (scratch+12) .sub (.reg (scratch+1)) (.reg (scratch+8))
+  , .binop (scratch+12) .mul (.reg (scratch+12)) (.reg (scratch+9))
+  , .binop (scratch+13) .sub (.lit 1) (.reg (scratch+2))
+  , .binop (scratch+14) .mul (.reg (scratch+10)) (.reg (scratch+2))
+  , .binop (scratch+15) .mul (.reg (scratch+11)) (.reg (scratch+13))
+  , .binop q .add (.reg (scratch+14)) (.reg (scratch+15))
+  , .binop (scratch+14) .mul (.reg (scratch+5)) (.reg (scratch+2))
+  , .binop (scratch+15) .mul (.reg (scratch+12)) (.reg (scratch+13))
+  , .binop r .add (.reg (scratch+14)) (.reg (scratch+15)) ]
+
+/-- Array-machine embedding of `advanceScalarBody`. -/
 def advanceBody (q r lam n scratch : Nat) : List AInstr :=
-  [ .scalar (.binop scratch .add (.reg r) (.reg lam))
-  , .scalar (.binop (scratch+1) .add (.reg n) (.lit 1))
-  , .scalar (.binop (scratch+2) .le (.reg q) (.reg scratch))
-  , .scalar (.binop (scratch+3) .sub (.reg scratch) (.reg q))
-  , .scalar (.binop (scratch+4) .udiv (.reg (scratch+3)) (.reg (scratch+1)))
-  , .scalar (.binop (scratch+5) .urem (.reg (scratch+3)) (.reg (scratch+1)))
-  , .scalar (.binop (scratch+6) .sub (.reg q) (.reg scratch))
-  , .scalar (.binop (scratch+7) .udiv (.reg (scratch+6)) (.reg (scratch+1)))
-  , .scalar (.binop (scratch+8) .urem (.reg (scratch+6)) (.reg (scratch+1)))
-  , .scalar (.binop (scratch+9) .ne (.reg (scratch+8)) (.lit 0))
-  , .scalar (.binop (scratch+10) .add (.reg q) (.reg (scratch+4)))
-  , .scalar (.binop (scratch+11) .sub (.reg q) (.reg (scratch+7)))
-  , .scalar (.binop (scratch+11) .sub (.reg (scratch+11)) (.reg (scratch+9)))
-  , .scalar (.binop (scratch+12) .sub (.reg (scratch+1)) (.reg (scratch+8)))
-  , .scalar (.binop (scratch+12) .mul (.reg (scratch+12)) (.reg (scratch+9)))
-  , .scalar (.binop (scratch+13) .sub (.lit 1) (.reg (scratch+2)))
-  , .scalar (.binop (scratch+14) .mul (.reg (scratch+10)) (.reg (scratch+2)))
-  , .scalar (.binop (scratch+15) .mul (.reg (scratch+11)) (.reg (scratch+13)))
-  , .scalar (.binop q .add (.reg (scratch+14)) (.reg (scratch+15)))
-  , .scalar (.binop (scratch+14) .mul (.reg (scratch+5)) (.reg (scratch+2)))
-  , .scalar (.binop (scratch+15) .mul (.reg (scratch+12)) (.reg (scratch+13)))
-  , .scalar (.binop r .add (.reg (scratch+14)) (.reg (scratch+15))) ]
+  lift (advanceScalarBody q r lam n scratch)
+
+/-! ## Exact semantics of the embedded quotient/remainder blocks -/
+
+/-- The scalar quotient block never changes the array. -/
+theorem advanceBody_arr (k : Nat) (s : AState) (q r lam n scratch : Nat) :
+    (arun k s (advanceBody q r lam n scratch)).arr = s.arr := by
+  rw [advanceBody, arun_lift_arr]
+
+/-- Decidable register frame for the embedded scalar block. -/
+theorem advanceBody_frame (k : Nat) (s : AState)
+    (q r lam n scratch j : Nat)
+    (h : LeanCompCert.Verified.RegFrame.writes j
+      (advanceScalarBody q r lam n scratch) = false) :
+    (arun k s (advanceBody q r lam n scratch)).regs j = s.regs j := by
+  rw [advanceBody, arun_lift_regs]
+  exact LeanCompCert.Verified.RegFrame.srun_frame
+    k j (advanceScalarBody q r lam n scratch) h s.regs
+
+/-- The lower transition preserves the candidate and lambda input registers. -/
+theorem advanceBody_lower_inputs (k : Nat) (s : AState) :
+    let out := arun k s (advanceBody 220 221 rLamL 132 222)
+    out.regs 132 = s.regs 132 ∧ out.regs rLamL = s.regs rLamL := by
+  constructor <;> apply advanceBody_frame <;> decide
+
+/-- The upper transition preserves the candidate and lambda input registers. -/
+theorem advanceBody_upper_inputs (k : Nat) (s : AState) :
+    let out := arun k s (advanceBody 220 221 rLamU 132 222)
+    out.regs 132 = s.regs 132 ∧ out.regs rLamU = s.regs rLamU := by
+  constructor <;> apply advanceBody_frame <;> decide
+
+/-- The lower-endpoint instance of `advanceBody` is exactly the mathematical
+`PsiQR.advance` transition.  This is the first whole-state semantic link for
+the physical combined sweep: it reuses the independently proved scalar block
+rather than trusting the emitted C arithmetic. -/
+theorem advanceBody_lower_run (k : Nat) (s : AState)
+    (hq : s.regs 220 < M) (hr : s.regs 221 < M)
+    (hlam : s.regs rLamL < M) (hn : s.regs 132 + 1 < M)
+    (ha : s.regs 221 + s.regs rLamL < M)
+    (houtQ :
+      (PsiQR.advance (s.regs 132) (s.regs rLamL)
+        ⟨s.regs 220, s.regs 221⟩).q < M) :
+    let out := arun k s (advanceBody 220 221 rLamL 132 222)
+    out.regs 220 =
+        (PsiQR.advance (s.regs 132) (s.regs rLamL)
+          ⟨s.regs 220, s.regs 221⟩).q ∧
+      out.regs 221 =
+        (PsiQR.advance (s.regs 132) (s.regs rLamL)
+          ⟨s.regs 220, s.regs 221⟩).r := by
+  have hdM : (s.regs 132 + 1) % M = s.regs 132 + 1 := Nat.mod_eq_of_lt hn
+  have hd0 : (s.regs 132 + 1) % M ≠ 0 := by rw [hdM]; omega
+  have hrun :
+      let out := arun k s (advanceBody 220 221 rLamL 132 222)
+      out.regs 220 =
+          (LeanCompCert.Ports.RamareCombined100M.PsiQRBlock.wordAdvance
+            (s.regs 132) (s.regs rLamL)
+            ⟨s.regs 220, s.regs 221⟩).q ∧
+        out.regs 221 =
+          (LeanCompCert.Ports.RamareCombined100M.PsiQRBlock.wordAdvance
+            (s.regs 132) (s.regs rLamL)
+            ⟨s.regs 220, s.regs 221⟩).r := by
+    rw [advanceBody, arun_lift]
+    set_option maxRecDepth 10000 in
+      simp [advanceScalarBody, srun,
+        LeanCompCert.Ports.RamareCombined100M.PsiQRBlock.wordAdvance,
+        sdest, sval, denoteOperand, denoteOp,
+        RegState.set, hd0]
+  rw [LeanCompCert.Ports.RamareCombined100M.PsiQRBlock.wordAdvance_eq
+    (s.regs 132) (s.regs rLamL) ⟨s.regs 220, s.regs 221⟩
+    hq hr hlam hn ha houtQ] at hrun
+  exact hrun
+
+/-- The upper-endpoint instance has the same exact source semantics. -/
+theorem advanceBody_upper_run (k : Nat) (s : AState)
+    (hq : s.regs 220 < M) (hr : s.regs 221 < M)
+    (hlam : s.regs rLamU < M) (hn : s.regs 132 + 1 < M)
+    (ha : s.regs 221 + s.regs rLamU < M)
+    (houtQ :
+      (PsiQR.advance (s.regs 132) (s.regs rLamU)
+        ⟨s.regs 220, s.regs 221⟩).q < M) :
+    let out := arun k s (advanceBody 220 221 rLamU 132 222)
+    out.regs 220 =
+        (PsiQR.advance (s.regs 132) (s.regs rLamU)
+          ⟨s.regs 220, s.regs 221⟩).q ∧
+      out.regs 221 =
+        (PsiQR.advance (s.regs 132) (s.regs rLamU)
+          ⟨s.regs 220, s.regs 221⟩).r := by
+  have hdM : (s.regs 132 + 1) % M = s.regs 132 + 1 := Nat.mod_eq_of_lt hn
+  have hd0 : (s.regs 132 + 1) % M ≠ 0 := by rw [hdM]; omega
+  have hrun :
+      let out := arun k s (advanceBody 220 221 rLamU 132 222)
+      out.regs 220 =
+          (LeanCompCert.Ports.RamareCombined100M.PsiQRBlock.wordAdvance
+            (s.regs 132) (s.regs rLamU)
+            ⟨s.regs 220, s.regs 221⟩).q ∧
+        out.regs 221 =
+          (LeanCompCert.Ports.RamareCombined100M.PsiQRBlock.wordAdvance
+            (s.regs 132) (s.regs rLamU)
+            ⟨s.regs 220, s.regs 221⟩).r := by
+    rw [advanceBody, arun_lift]
+    set_option maxRecDepth 10000 in
+      simp [advanceScalarBody, srun,
+        LeanCompCert.Ports.RamareCombined100M.PsiQRBlock.wordAdvance,
+        sdest, sval, denoteOperand, denoteOp,
+        RegState.set, hd0]
+  rw [LeanCompCert.Ports.RamareCombined100M.PsiQRBlock.wordAdvance_eq
+    (s.regs 132) (s.regs rLamU) ⟨s.regs 220, s.regs 221⟩
+    hq hr hlam hn ha houtQ] at hrun
+  exact hrun
+
+/-- Successful partial denotation of the lower block has the exact source
+transition.  This is the form consumed by a future whole-loop refinement. -/
+theorem advanceBody_lower_denote (len k : Nat) (s out : AState)
+    (hden : denoteAInstrs len k s
+      (advanceBody 220 221 rLamL 132 222) = some out)
+    (hq : s.regs 220 < M) (hr : s.regs 221 < M)
+    (hlam : s.regs rLamL < M) (hn : s.regs 132 + 1 < M)
+    (ha : s.regs 221 + s.regs rLamL < M)
+    (houtQ :
+      (PsiQR.advance (s.regs 132) (s.regs rLamL)
+        ⟨s.regs 220, s.regs 221⟩).q < M) :
+    out.regs 220 =
+        (PsiQR.advance (s.regs 132) (s.regs rLamL)
+          ⟨s.regs 220, s.regs 221⟩).q ∧
+      out.regs 221 =
+        (PsiQR.advance (s.regs 132) (s.regs rLamL)
+          ⟨s.regs 220, s.regs 221⟩).r := by
+  have hout : out = arun k s (advanceBody 220 221 rLamL 132 222) :=
+    eq_arun_of_denoteAInstrs_eq_some len k _ s out hden
+  subst out
+  exact advanceBody_lower_run k s hq hr hlam hn ha houtQ
+
+/-- Successful partial denotation of the upper block has the exact source
+transition. -/
+theorem advanceBody_upper_denote (len k : Nat) (s out : AState)
+    (hden : denoteAInstrs len k s
+      (advanceBody 220 221 rLamU 132 222) = some out)
+    (hq : s.regs 220 < M) (hr : s.regs 221 < M)
+    (hlam : s.regs rLamU < M) (hn : s.regs 132 + 1 < M)
+    (ha : s.regs 221 + s.regs rLamU < M)
+    (houtQ :
+      (PsiQR.advance (s.regs 132) (s.regs rLamU)
+        ⟨s.regs 220, s.regs 221⟩).q < M) :
+    out.regs 220 =
+        (PsiQR.advance (s.regs 132) (s.regs rLamU)
+          ⟨s.regs 220, s.regs 221⟩).q ∧
+      out.regs 221 =
+        (PsiQR.advance (s.regs 132) (s.regs rLamU)
+          ⟨s.regs 220, s.regs 221⟩).r := by
+  have hout : out = arun k s (advanceBody 220 221 rLamU 132 222) :=
+    eq_arun_of_denoteAInstrs_eq_some len k _ s out hden
+  subst out
+  exact advanceBody_upper_run k s hq hr hlam hn ha houtQ
 
 /-- Select lambda endpoints, update the two quotient sums, and advance both
 psi endpoints.  Shape registers `100..105`, candidate `132`, and phase gate
