@@ -61,6 +61,35 @@ def powerCursorStep (segLen w hi limit : Nat) (table : Nat → Nat)
       { pi := pi', pow := base', base := base'
         j := if pi' = limit then segLen + 1 else startOffset w base' }
 
+/-- If the sentinel table index uniquely denotes the explicit fixed cursor,
+one cursor transition preserves that fact when the sentinel table value is
+one. -/
+theorem powerCursorStep_terminal_shape
+    (segLen w hi limit : Nat) (table : Nat → Nat) (cur : PowerCursor)
+    (hshape : cur.pi = limit →
+      cur = { pi := limit, pow := 1, base := 1, j := segLen + 1 })
+    (htable : table limit = 1) (hhi : 1 ≤ hi) :
+    let out := powerCursorStep segLen w hi limit table cur
+    out.pi = limit →
+      out = { pi := limit, pow := 1, base := 1, j := segLen + 1 } := by
+  dsimp only
+  intro hout
+  by_cases hj : cur.j < segLen
+  · have hcurPi : cur.pi = limit := by
+      simpa [powerCursorStep, hj] using hout
+    have hcur := hshape hcurPi
+    have hjEq := congrArg PowerCursor.j hcur
+    change cur.j = segLen + 1 at hjEq
+    omega
+  · by_cases hfit : cur.pow * cur.base ≤ hi
+    · have hcurPi : cur.pi = limit := by
+        simpa [powerCursorStep, hj, hfit] using hout
+      rw [hshape hcurPi]
+      simp [powerCursorStep, hhi]
+    · have hmin : min (cur.pi + 1) limit = limit := by
+        simpa [powerCursorStep, hj, hfit] using hout
+      simp [powerCursorStep, hj, hfit, hmin, htable]
+
 /-- The source-shaped mux expressions used by the emitted advance block are
 exactly the next pure cursor's power and base. -/
 theorem powerCursorStep_value_eq
@@ -1907,6 +1936,25 @@ def powerCellRun (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
     (st : PowerCellState) :
     powerCellRun c (fuel + 1) w i table st =
       powerCellStep c w i table (powerCellRun c fuel w i table st) := rfl
+
+/-- Sentinel-shape uniqueness survives an arbitrary symbolic selected-cell
+run. -/
+theorem powerCellRun_terminal_shape
+    (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState)
+    (hshape : st.cursor.pi = c.tableLen →
+      st.cursor = { pi := c.tableLen, pow := 1, base := 1, j := c.segLen + 1 })
+    (htable : table c.tableLen = 1) (hhi : 1 ≤ c.hi) :
+    let out := powerCellRun c fuel w i table st
+    out.cursor.pi = c.tableLen →
+      out.cursor = { pi := c.tableLen, pow := 1, base := 1, j := c.segLen + 1 } := by
+  induction fuel with
+  | zero => exact hshape
+  | succ fuel ih =>
+      change (powerCursorStep c.segLen w c.hi c.tableLen table
+        (powerCellRun c fuel w i table st).cursor).pi = c.tableLen → _
+      exact powerCursorStep_terminal_shape c.segLen w c.hi c.tableLen table
+        (powerCellRun c fuel w i table st).cursor ih htable hhi
 
 /-- The selected-cell fold splits at an arbitrary symbolic prefix. -/
 theorem powerCellRun_add

@@ -370,4 +370,33 @@ theorem productionFirstWindow_cursor_exhausted
   exact (productionFirstWindow_markInv k i hi).cursor_exhausted_of_vmark_zero
     hzero
 
+/-- A zero compiled marking-failure word now identifies the actual first
+window plane cell with the complete source-shaped factor-row fold. -/
+theorem productionFirstWindow_cell_eq_cursorRows
+    (k i : Nat) (hi : i < productionCursorCfg.segLen)
+    (hzero : (emittedBodyRun k productionCursorCfg
+      productionCursorCfg.markSteps productionInitState).regs rVMark = 0) :
+    productionCursorCfg.readPlaneCell i
+        (emittedBodyRun k productionCursorCfg productionCursorCfg.markSteps
+          productionInitState) =
+      cursorRowsFold productionCursorCfg.segLen productionCursorCfg.lo i
+        (factorRows productionCursorCfg.table) emptyPlaneCell := by
+  let out := emittedBodyRun k productionCursorCfg
+    productionCursorCfg.markSteps productionInitState
+  have hinv := productionFirstWindow_markInv k i hi
+  have hcell := congrArg PowerCellState.cell hinv.observable
+  change productionCursorCfg.readPlaneCell i out =
+    (powerCellRun productionCursorCfg productionCursorCfg.markSteps
+      productionCursorCfg.lo i productionPowerTable
+      (productionInitialPowerCell productionCursorCfg.lo)).cell at hcell
+  rw [hcell]
+  apply productionPowerCellRun_cell_eq_cursorRows_of_exhausted
+    productionCursorCfg.markSteps productionCursorCfg.lo i hi
+  · change 0 < 10001 + i
+    omega
+  · change 10001 + i ≤ 100000000
+    change i < 999900 at hi
+    omega
+  · exact productionFirstWindow_cursor_exhausted k i hi hzero
+
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve

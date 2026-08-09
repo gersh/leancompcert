@@ -625,6 +625,27 @@ theorem productionInitialPowerCell_base_le_10000 (w : Nat) :
       simpa [productionInitialPowerCell, hphases] using
         productionPowerPhases_base_le_10000 phase hphase
 
+/-- The production initial cursor cannot already carry the sentinel table
+index, so sentinel-shape uniqueness holds vacuously at round zero. -/
+theorem productionInitialPowerCell_terminal_shape (w : Nat) :
+    (productionInitialPowerCell w).cursor.pi = productionCursorCfg.tableLen →
+      (productionInitialPowerCell w).cursor =
+        { pi := productionCursorCfg.tableLen, pow := 1, base := 1,
+          j := productionCursorCfg.segLen + 1 } := by
+  cases hphases : productionPowerPhases with
+  | nil => exact (productionPowerPhases_nonempty hphases).elim
+  | cons phase phases =>
+      intro hpi
+      have hphase : phase ∈ productionPowerPhases := by
+        rw [hphases]
+        simp
+      have hlt := tablePowerPhases_pi_lt hphase
+      change phase.pi < productionCursorCfg.tableLen at hlt
+      have hhead : (productionInitialPowerCell w).cursor.pi = phase.pi := by
+        simp [productionInitialPowerCell, hphases]
+      have hpi' : phase.pi = productionCursorCfg.tableLen := hhead.symm.trans hpi
+      omega
+
 /-- The selected cell at the exact compact-chain endpoint has the closed
 source production bounds. -/
 theorem productionPowerCellRun_phase_bounds
@@ -703,6 +724,76 @@ theorem productionPowerCellRun_phase_terminal
       rw [powerCellRun_cursor_eq_powerScheduleRun]
       simpa [productionInitialPowerCell, hphases, st, fuel,
         productionPowerTable_sentinel] using hsched
+
+set_option maxRecDepth 10000 in
+/-- Any production run which has reached the sentinel is the same complete
+selected-cell state as the compact phase-chain endpoint.  Totality of the
+natural-number order and terminal fixed-point slack avoid comparing either
+fuel by reduction. -/
+theorem productionPowerCellRun_eq_phase_of_cursor_exhausted
+    (fuel w i : Nat)
+    (hpi : (powerCellRun productionCursorCfg fuel w i productionPowerTable
+      (productionInitialPowerCell w)).cursor.pi =
+        productionCursorCfg.tableLen) :
+    powerCellRun productionCursorCfg fuel w i productionPowerTable
+        (productionInitialPowerCell w) =
+      powerCellRun productionCursorCfg
+        (powerPhaseChainFuel productionCursorCfg.segLen w
+          productionPowerPhases)
+        w i productionPowerTable (productionInitialPowerCell w) := by
+  have hhi : 1 ≤ productionCursorCfg.hi := by
+    change 1 ≤ 100000000
+    omega
+  let c := productionCursorCfg
+  let initial := productionInitialPowerCell w
+  let total := powerPhaseChainFuel c.segLen w productionPowerPhases
+  let final := powerCellRun c fuel w i productionPowerTable initial
+  let endpoint := powerCellRun c total w i productionPowerTable initial
+  have hfinalTerminal : final.cursor =
+      { pi := c.tableLen, pow := 1, base := 1, j := c.segLen + 1 } := by
+    apply powerCellRun_terminal_shape c fuel w i productionPowerTable initial
+      (productionInitialPowerCell_terminal_shape w)
+      productionPowerTable_sentinel
+    · exact hhi
+    · exact hpi
+  have hendpointTerminal : endpoint.cursor =
+      { pi := c.tableLen, pow := 1, base := 1, j := c.segLen + 1 } := by
+    exact productionPowerCellRun_phase_terminal w i
+  by_cases hle : fuel ≤ total
+  · have hsum : fuel + (total - fuel) = total := by omega
+    have hrun : endpoint = powerCellRun c (total - fuel) w i
+        productionPowerTable final := by
+      calc
+        endpoint = powerCellRun c (fuel + (total - fuel)) w i
+            productionPowerTable initial := congrArg
+              (fun n => powerCellRun c n w i productionPowerTable initial)
+              hsum.symm
+        _ = powerCellRun c (total - fuel) w i productionPowerTable
+            (powerCellRun c fuel w i productionPowerTable initial) :=
+              powerCellRun_add c fuel (total - fuel) w i
+                productionPowerTable initial
+        _ = powerCellRun c (total - fuel) w i productionPowerTable final := rfl
+    have hslack := powerCellRun_terminal_slack c (total - fuel) w i
+      productionPowerTable final hhi hfinalTerminal
+    rw [hslack] at hrun
+    exact hrun.symm
+  · have hsum : total + (fuel - total) = fuel := by omega
+    have hrun : final = powerCellRun c (fuel - total) w i
+        productionPowerTable endpoint := by
+      calc
+        final = powerCellRun c (total + (fuel - total)) w i
+            productionPowerTable initial := congrArg
+              (fun n => powerCellRun c n w i productionPowerTable initial)
+              hsum.symm
+        _ = powerCellRun c (fuel - total) w i productionPowerTable
+            (powerCellRun c total w i productionPowerTable initial) :=
+              powerCellRun_add c total (fuel - total) w i
+                productionPowerTable initial
+        _ = powerCellRun c (fuel - total) w i productionPowerTable endpoint := rfl
+    have hslack := powerCellRun_terminal_slack c (fuel - total) w i
+      productionPowerTable endpoint hhi hendpointTerminal
+    rw [hslack] at hrun
+    exact hrun
 
 /-- Every live selected round of the production cursor has the exact local
 word precondition needed by the emitted cell update.  Rounds beyond the
@@ -1258,5 +1349,27 @@ theorem productionPowerSchedule_cell_eq_cursorRows
       productionCursorCfg.segLen w i productionCursorCfg.hi
       productionCursorCfg.table emptyPlaneCell hpos hi hnpos hnglobal
     simpa [hphases, st] using hrun.trans hfold
+
+/-- Reaching the sentinel at any symbolic production fuel is enough to
+identify the selected cell with the complete source table-row fold. -/
+theorem productionPowerCellRun_cell_eq_cursorRows_of_exhausted
+    (fuel w i : Nat) (hi : i < productionCursorCfg.segLen)
+    (hnpos : 0 < w + i) (hnglobal : w + i ≤ productionCursorCfg.hi)
+    (hpi : (powerCellRun productionCursorCfg fuel w i productionPowerTable
+      (productionInitialPowerCell w)).cursor.pi =
+        productionCursorCfg.tableLen) :
+    (powerCellRun productionCursorCfg fuel w i productionPowerTable
+      (productionInitialPowerCell w)).cell =
+        cursorRowsFold productionCursorCfg.segLen w i
+          (factorRows productionCursorCfg.table) emptyPlaneCell := by
+  have hcomplete := productionPowerCellRun_eq_phase_of_cursor_exhausted
+    fuel w i hpi
+  rw [hcomplete]
+  have hbridge := powerCellRun_cell_eq_powerScheduleRun productionCursorCfg
+    (powerPhaseChainFuel productionCursorCfg.segLen w productionPowerPhases)
+    w i productionPowerTable (productionInitialPowerCell w)
+  rw [hbridge]
+  simpa [productionInitialPowerCell] using
+    productionPowerSchedule_cell_eq_cursorRows w i hi hnpos hnglobal
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve
