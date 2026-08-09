@@ -398,6 +398,8 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | initializer consumer with counter relation, module build | 1:43.45 | 4,635,528 KiB | 0 | success |
 | public-result marking exhaustion, direct source check | 17.17 s | 3,986,476 KiB | 0 | success |
 | public-result marking exhaustion, live module build | 32.05 s | 3,992,084 KiB | 0 | success; rebuilt body refinements |
+| staged classifier guard refinement, direct source check | 0.74 s | 618,616 KiB | 0 | success |
+| staged classifier guard refinement, module build | 0.85 s | 622,100 KiB | 0 | success |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -417,6 +419,16 @@ window position, and zero failure counters for the actual lambda/psi
 initializer, and `productionPhysicalInitState_markInv` feeds that state into
 the whole-sweep invariant.  The direct and module checks above stayed below
 4 GiB with no swap; no closed initializer computation was introduced.
+
+The classifier guard proof is deliberately staged through the existing
+normalize, first-shape, flag, tail, and exact-guard block theorems.  An early
+whole-body `simp` formulation exceeded the recursion and simplification-step
+limits even after raising `maxRecDepth`; the compositional replacement checks
+in under a second and about 604 MiB.  It proves both physical product guards
+return one for every `CellRel` cell satisfying the finite divisor, factor
+shape, and classification preconditions.  Consequently the emitted guard
+commit preserves `rViol` and `rVShape`, increments `rSeen`, and the complete
+scalar `classDecodeBody` has the same verified counter effect.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert
