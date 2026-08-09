@@ -404,6 +404,8 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | live classification counters and inactive-mark plane frame, module build | 4.78 s | 704,080 KiB | 0 | success |
 | active-classifier other-cell frame, direct source check | 4.96 s | 761,028 KiB | 0 | success |
 | full literal-body other-cell frame, module build | 5.07 s | 765,452 KiB | 0 | success |
+| finite production classification sweep, direct source check | 18.10 s | 717,720 KiB | 0 | success |
+| finite production classification sweep, module build | 17.93 s | 707,184 KiB | 0 | success |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -450,6 +452,14 @@ every different offset, and this property composes through the inactive mark
 block, tail, and store-free arithmetic suffix for the literal emitted body.
 This supplies the memory-preservation step needed for the finite
 multi-candidate classification induction without assuming `ArithmeticPre`.
+That induction is now compiled in a separate module.  Its prefix invariant
+records cleared earlier cells, source-related pending cells, exact failure and
+seen counters, and the literal round/window position.  The verified marking
+invariant supplies every pending `markCell` relation at the classification
+seam.  After exactly `999900` symbolic steps all live planes are empty and the
+tail has moved to the next window boundary.  This closes the finite memory and
+classifier-counter sweep; the remaining whole-window obligation is the
+arithmetic-state invariant needed to identify the six numerical outputs.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert
