@@ -1258,6 +1258,108 @@ theorem arithmeticBody_run (c : Cfg) (k : Nat) (s : AState)
   simpa only [arithmeticBody, afterLogCandidate, arun_append, logged, out]
     using hout
 
+/-- Word, table, and no-wrap invariants required by the complete candidate
+arithmetic suffix.  Packaging them makes the classifier-to-arithmetic seam
+explicit without duplicating a twenty-argument theorem signature. -/
+structure ArithmeticPre (c : Cfg) (k : Nat) (s : AState) : Prop where
+  regs : ∀ j, s.regs j < M
+  arr : ∀ j, s.arr j < M
+  gate : s.regs 11 ≤ 1
+  n2 : 2 ≤ s.regs 132
+  n40 : s.regs 132 ≤ 2 ^ 40
+  lowerMul : s.regs 11 * RS62.incLWord (s.regs 132) < M
+  lowerAdd : s.regs lRLogL +
+    s.regs 11 * RS62.incLWord (s.regs 132) < M
+  upperMul : s.regs 11 * RS62.incUWord (s.regs 132) < M
+  upperAdd : s.regs lRLogU +
+    s.regs 11 * RS62.incUWord (s.regs 132) < M
+  logLen : c.logLen < M
+  addrL : (afterLogCandidate k s).regs sRP + c.logLoBase < M
+  addrU : (afterLogCandidate k s).regs sRP + c.logHiBase < M
+  sink : c.logSink < M
+  sumL : (afterLogCandidate k s).regs rSumL +
+    candidateLowerLambda c (afterLogCandidate k s) /
+      (afterLogCandidate k s).regs 132 < M
+  sumU : (afterLogCandidate k s).regs rSumU +
+    ceilDiv (candidateUpperLambda c (afterLogCandidate k s))
+      ((afterLogCandidate k s).regs 132) < M
+  addL : (afterLogCandidate k s).regs rPsiLR +
+    candidateLowerLambda c (afterLogCandidate k s) < M
+  addU : (afterLogCandidate k s).regs rPsiUR +
+    candidateUpperLambda c (afterLogCandidate k s) < M
+  outL :
+    (PsiQR.advance ((afterLogCandidate k s).regs 132)
+      (candidateLowerLambda c (afterLogCandidate k s))
+      ⟨(afterLogCandidate k s).regs rPsiLQ,
+        (afterLogCandidate k s).regs rPsiLR⟩).q < M
+  outU :
+    (PsiQR.advance ((afterLogCandidate k s).regs 132)
+      (candidateUpperLambda c (afterLogCandidate k s))
+      ⟨(afterLogCandidate k s).regs rPsiUQ,
+        (afterLogCandidate k s).regs rPsiUR⟩).q < M
+
+theorem arithmeticBody_run_of_pre (c : Cfg) (k : Nat) (s : AState)
+    (h : ArithmeticPre c k s) :
+    let out := arun k s (arithmeticBody c)
+    out.regs lRLogL =
+        s.regs lRLogL + s.regs 11 * RS62.incLWord (s.regs 132) ∧
+      out.regs lRLogU =
+        s.regs lRLogU + s.regs 11 * RS62.incUWord (s.regs 132) ∧
+      observeCandidate out = candidateArithmetic c (afterLogCandidate k s) ∧
+      out.arr = s.arr :=
+  arithmeticBody_run c k s h.regs h.arr h.gate h.n2 h.n40
+    h.lowerMul h.lowerAdd h.upperMul h.upperAdd h.logLen h.addrL h.addrU
+    h.sink h.sumL h.sumU h.addL h.addU h.outL h.outU
+
+/-- State at the verified seam between seven-plane classification and the
+log/lambda/psi arithmetic. -/
+def afterClassification (c : Cfg) (k : Nat) (s : AState) : AState :=
+  arun k s c.shape.classBody
+
+/-- Complete live-candidate path from seven-plane classification through all
+proved log, lambda, sum, and psi arithmetic. -/
+def classifiedArithmeticBody (c : Cfg) : List AInstr :=
+  c.shape.classBody ++ arithmeticBody c
+
+set_option maxRecDepth 20000 in
+/-- The classifier supplies the exact candidate and live gate consumed by the
+already-proved arithmetic suffix.  All arithmetic preconditions are stated on
+that concrete post-classification state. -/
+theorem classifiedArithmeticBody_run (c : Cfg) (k : Nat) (s : AState)
+    (hphase : s.regs 11 = 1)
+    (hT : c.shape.markSteps ≤ s.regs ShapeSieve.rR)
+    (hR : s.regs ShapeSieve.rR < M)
+    (hsum : s.regs ShapeSieve.rR - c.shape.markSteps +
+      s.regs ShapeSieve.rW < M)
+    (hpre : ArithmeticPre c k (afterClassification c k s)) :
+    let classified := afterClassification c k s
+    let out := arun k s (classifiedArithmeticBody c)
+    classified.regs 132 =
+        s.regs ShapeSieve.rR - c.shape.markSteps + s.regs ShapeSieve.rW ∧
+      classified.regs 11 = 1 ∧
+      out.regs lRLogL = classified.regs lRLogL +
+        RS62.incLWord (classified.regs 132) ∧
+      out.regs lRLogU = classified.regs lRLogU +
+        RS62.incUWord (classified.regs 132) ∧
+      observeCandidate out =
+        candidateArithmetic c (afterLogCandidate k classified) ∧
+      out.arr = classified.arr := by
+  let classified := afterClassification c k s
+  have hclass :=
+    ShapeSieve.Cfg.classBody_candidate_run c.shape k s hphase hT hR hsum
+  change classified.regs 132 =
+      s.regs ShapeSieve.rR - c.shape.markSteps + s.regs ShapeSieve.rW ∧
+    classified.regs 11 = 1 at hclass
+  have harith := arithmeticBody_run_of_pre c k classified hpre
+  dsimp only at harith
+  have hlogL := harith.1
+  have hlogU := harith.2.1
+  rw [hclass.2, Nat.one_mul] at hlogL hlogU
+  rw [classifiedArithmeticBody, arun_append]
+  change classified.regs 132 = _ ∧ classified.regs 11 = 1 ∧ _
+  exact ⟨hclass.1, hclass.2, hlogL, hlogU,
+    harith.2.2.1, harith.2.2.2⟩
+
 def init (c : Cfg) (s : Seed) : List AInstr :=
   LeanCompCert.Ports.RamareCombined100M.LogSweep.init c.shape s.log ++
     storeLits c.logCells ++

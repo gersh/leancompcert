@@ -126,6 +126,19 @@ candidate arithmetic and quotient-state carry to the classification phase,
 then prove the seven-plane number-theoretic refinement at the consumer
 boundary.
 
+The classifier instruction list is now definitionally factored into
+kernel-small index, plane-address, sink, load, normalization, first/second
+shape, tail, two exact-product guard, commit, and clear stages without changing
+the emitted program.  Exact run theorems cover every stage, including the
+seven load/store bounds, nonzero normalized divisors, all six decoded `Shape`
+registers, both product checks, both violation counters, and the seen counter.
+`classBody_candidate_run` composes the full mixed block and proves that the
+candidate register is exactly `windowBase + liveOffset` and that the live gate
+remains one.  The reusable `Verified/ArrayRegFrame.lean` framing theorem makes
+that composition inspect only instruction destinations, so it never
+normalizes the decoder arithmetic.  A capped source compile took **74.15
+wall-seconds**, **3,449,268 KiB peak RSS**, and zero swap.
+
 ### Exact log-ladder carry
 
 `Ports/RamareCombined100MLogSweep.lean` appends the two word-safe RS62
@@ -228,6 +241,12 @@ now composes this theorem with the complete 26-instruction log suffix.  It
 derives the selector's old-endpoint subtraction guards from the proved log
 update and returns both carried logs, the four candidate projection fields,
 and the complete array frame in one theorem.
+`classifiedArithmeticBody_run` closes the next seam as well: it composes the
+complete seven-plane classifier with `arithmeticBody_run`, exposes the exact
+candidate and live gate, and returns the two logs, full candidate projection,
+and cleared-array frame.  Its assumptions are packaged as the explicit
+`ArithmeticPre` word/table/no-wrap invariant on the concrete
+post-classification state.
 
 The production artifact used the exact `[10001, 100000000]` configuration,
 the certified prefix-through-10 state, and denominator `100000001`.  It
@@ -265,8 +284,9 @@ control binary  3a5f3bbd1d035556861e5631004d02b2f41532d9d3def0b13813c525f4633815
 All phases were run without swap.  Emission used `MemoryHigh=9G` and
 `MemoryMax=10G`, CompCert used `4G`/`5G`, and execution used `768M`/`1G`.
 The source file containing the embedded-block, sum-stage, lambda-selection,
-copy, commit, endpoint-shell, whole-candidate, and composed-log semantics
-compiled from source in **40.30 wall-seconds** with **3,099,260 KiB peak
+copy, commit, endpoint-shell, whole-candidate, composed-log, and
+classifier-to-arithmetic semantics compiled from source in **40.93
+wall-seconds** with **3,431,708 KiB peak
 RSS**, serialized under a **20/22 GiB physical-memory cgroup**, with zero
 swap.
 
