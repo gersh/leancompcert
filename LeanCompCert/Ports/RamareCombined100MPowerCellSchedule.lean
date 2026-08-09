@@ -13,7 +13,7 @@ namespace LeanCompCert.Ports.RamareCombined100M.ShapeSieve
 open LeanCompCert.Ports.ArraySegMobiusScheduleFold (liveCount cursorLiveEvents)
 open LeanCompCert.Verified.Reflect (M)
 open LeanCompCert.Verified.ArrayState (AState)
-open LeanCompCert.Verified.ArrayFoldBridge (arun)
+open LeanCompCert.Verified.ArrayFoldBridge (arun arun_append)
 open LeanCompCert.Verified.ArrayScalarBlock (lift)
 open LeanCompCert.Verified.ArrayRegFrame (writes arun_frame)
 
@@ -659,6 +659,248 @@ theorem productionAdvanceWordPre_after_mark_prefix
     exact hviol
   · rw [hmVMark, hmR]
     exact hvmark
+
+/-- The first physical table entry is positive and representable, as follows
+from the already-proved indexed production table bounds. -/
+theorem productionTableHead_word :
+    productionCursorCfg.table.headD 1 ≠ 0 ∧
+      productionCursorCfg.table.headD 1 < M := by
+  have hpos := productionPowerTable_pos 0
+  have hle := productionPowerTable_le_10000 0
+  have heq : productionCursorCfg.table.headD 1 = productionPowerTable 0 := by
+    cases htable : productionCursorCfg.table with
+    | nil => simp [productionPowerTable, List.headD, htable]
+    | cons p ps => simp [productionPowerTable, List.headD, htable]
+  constructor
+  · rw [heq]
+    omega
+  · rw [heq]
+    have hM : 10000 < M := by decide
+    omega
+
+/-- Simultaneous machine invariant for one production marking window.  The
+reset projection makes round zero and all later nonzero rounds uniform. -/
+structure ProductionMarkStateInv
+    (w i round : Nat) (initial : PowerCellState) (s : AState) : Prop where
+  observable :
+    resetPowerCellState productionCursorCfg i s =
+      powerCellRun productionCursorCfg round w i productionPowerTable initial
+  table : ∀ pi, pi ≤ productionCursorCfg.tableLen →
+    s.arr (pi + productionCursorCfg.tableBase) = productionPowerTable pi
+  round_eq : s.regs rR = round
+  window_eq : s.regs rW = w
+  viol_le : s.regs rViol ≤ round
+  vmark_le : s.regs rVMark ≤ round
+
+/-- The emitted phase/reset prefix realizes the reset projection recorded by
+the simultaneous invariant. -/
+theorem ProductionMarkStateInv.phaseReset_observable
+    {w i round : Nat} {initial : PowerCellState} {s : AState}
+    (h : ProductionMarkStateInv w i round initial s)
+    (hbounds : PowerCursorBounds productionCursorCfg.segLen
+      productionCursorCfg.hi productionCursorCfg.tableLen
+      productionPowerTable
+      (powerCellRun productionCursorCfg round w i
+        productionPowerTable initial).cursor)
+    (k : Nat) :
+    let phased := arun k s (lift productionCursorCfg.markPhaseBody)
+    let reset := arun k phased productionCursorCfg.markResetBody
+    machinePowerCellState productionCursorCfg i reset =
+      powerCellRun productionCursorCfg round w i
+        productionPowerTable initial := by
+  let c := productionCursorCfg
+  let pure := powerCellRun c round w i productionPowerTable initial
+  have hmachineCursor (hn : s.regs rR ≠ 0) :
+      machinePowerCursor s = pure.cursor := by
+    have heq : machinePowerCellState c i s = pure := by
+      rw [← resetPowerCellState_eq_machinePowerCellState c i s hn]
+      exact h.observable
+    exact congrArg PowerCellState.cursor heq
+  rcases productionCursorStaticWordBounds with
+    ⟨_hhiPos, hhiWord, _hhiSq, hK1, _haddr, hjpow⟩
+  rcases productionTableHead_word with ⟨hp0, hp0M⟩
+  have hreset := c.markPhaseResetBody_machinePowerCellState k s i
+    productionCursorCfg_markSteps_lt_word hp0 hp0M
+    (by
+      intro hn
+      have heq := congrArg PowerCursor.pi (hmachineCursor hn)
+      change s.regs rPi = pure.cursor.pi at heq
+      rw [heq]
+      have hpi := hbounds.pi_le
+      change pure.cursor.pi ≤ productionCursorCfg.tableLen at hpi
+      omega)
+    (by
+      intro hn
+      have heq := congrArg PowerCursor.pow (hmachineCursor hn)
+      change s.regs rPow = pure.cursor.pow at heq
+      rw [heq]
+      exact Nat.lt_of_le_of_lt hbounds.pow_le hhiWord)
+    (by
+      intro hn
+      have heq := congrArg PowerCursor.base (hmachineCursor hn)
+      change s.regs rBase = pure.cursor.base at heq
+      rw [heq]
+      exact Nat.lt_of_le_of_lt hbounds.base_le hhiWord)
+    (by
+      intro hn
+      have heq := congrArg PowerCursor.j (hmachineCursor hn)
+      change s.regs rJ = pure.cursor.j at heq
+      rw [heq]
+      exact Nat.lt_of_le_of_lt hbounds.j_le (by omega))
+  rw [Cfg.markPhaseResetBody, arun_append] at hreset
+  simpa [c, pure] using hreset.trans h.observable
+
+set_option maxRecDepth 2000 in
+set_option maxHeartbeats 800000 in
+/-- One actual emitted marking body preserves the simultaneous production
+invariant and advances the pure selected-cell run by one step. -/
+theorem ProductionMarkStateInv.step
+    {w i round : Nat} {initial : PowerCellState} {s : AState}
+    (h : ProductionMarkStateInv w i round initial s)
+    (k : Nat) (hi : i < productionCursorCfg.segLen)
+    (hround : round < productionCursorCfg.markSteps)
+    (hwM : w < M)
+    (hinitial : PowerCursorBounds productionCursorCfg.segLen
+      productionCursorCfg.hi productionCursorCfg.tableLen
+      productionPowerTable initial.cursor)
+    (hmark :
+      let pure := powerCellRun productionCursorCfg round w i
+        productionPowerTable initial
+      pure.cursor.j < productionCursorCfg.segLen → pure.cursor.j = i →
+        PlaneCellMarkPre pure.cursor.pow pure.cursor.base pure.cell) :
+    ProductionMarkStateInv w i (round + 1) initial
+      (arun k s productionCursorCfg.body) := by
+  let c := productionCursorCfg
+  let pure := powerCellRun c round w i productionPowerTable initial
+  let phased := arun k s (lift c.markPhaseBody)
+  let reset := arun k phased c.markResetBody
+  let out := arun k s c.body
+  have hhiPos : 0 < c.hi := productionCursorStaticWordBounds.1
+  have hbounds : PowerCursorBounds c.segLen c.hi c.tableLen
+      productionPowerTable pure.cursor := by
+    exact powerCellRun_cursor_bounds c round w i productionPowerTable
+      initial hinitial hhiPos
+  have hresetState : machinePowerCellState c i reset = pure := by
+    simpa [c, pure, phased, reset] using h.phaseReset_observable hbounds k
+  have hcur : machinePowerCursor reset = pure.cursor :=
+    congrArg PowerCellState.cursor hresetState
+  have hresetW : reset.regs rW = w := by
+    exact (arun_frame k rW c.markResetBody (by rfl) phased).trans
+      ((arun_frame k rW (lift c.markPhaseBody) (by rfl) s).trans h.window_eq)
+  have hroundS : s.regs rR < c.markSteps := by
+    rw [h.round_eq]
+    exact hround
+  have hviolS : s.regs rViol ≤ s.regs rR := by
+    rw [h.round_eq]
+    exact h.viol_le
+  have hvmarkS : s.regs rVMark ≤ s.regs rR := by
+    rw [h.round_eq]
+    exact h.vmark_le
+  have hadvance := productionAdvanceWordPre_after_mark_prefix k s
+    pure.cursor hroundS (by simpa [c, phased, reset] using hcur)
+    hbounds h.table hviolS hvmarkS
+  rcases productionStaticPlaneWordBounds with
+    ⟨_hseg, h7, h8, h9, h10, h11, h12, h13⟩
+  have hlive : pure.cursor.j < c.segLen →
+      pure.cursor.j < M ∧ pure.cursor.j + c.segLen < M ∧
+      pure.cursor.j + 2 * c.segLen < M ∧
+      pure.cursor.j + 3 * c.segLen < M ∧
+      pure.cursor.j + 4 * c.segLen < M ∧
+      pure.cursor.j + 5 * c.segLen < M ∧
+      pure.cursor.j + 6 * c.segLen < M := by
+    intro hj
+    exact productionLivePlaneWordBounds hj
+  have hmarkReset : pure.cursor.j < c.segLen → pure.cursor.j = i →
+      PlaneCellMarkPre (reset.regs rPow) (reset.regs rBase)
+        (c.readPlaneCell (reset.regs rJ) reset) := by
+    intro hj hji
+    have hpow := congrArg PowerCursor.pow hcur
+    have hbase := congrArg PowerCursor.base hcur
+    have hjreg := congrArg PowerCursor.j hcur
+    change reset.regs rPow = pure.cursor.pow at hpow
+    change reset.regs rBase = pure.cursor.base at hbase
+    change reset.regs rJ = pure.cursor.j at hjreg
+    have hcell := congrArg PowerCellState.cell hresetState
+    change c.readPlaneCell i reset = pure.cell at hcell
+    rw [hpow, hbase, hjreg, hji, hcell]
+    exact hmark hj hji
+  have hbody := c.body_mark_powerCell_run k s productionPowerTable i
+    hroundS productionCursorCfg_markSteps_lt_word hi pure.cursor
+    (by simpa [phased, reset] using hcur) hlive
+    h7 h8 h9 h10 h11 h12 h13
+    (by simpa [phased, reset] using hmarkReset)
+    (by simpa [phased, reset] using hadvance) hbounds.pi_le
+  have hbodyState : machinePowerCellState c i out =
+      powerCellStep c w i productionPowerTable pure := by
+    simpa [out, phased, reset, hresetW, hresetState] using hbody
+  have hpos := c.body_mark_position k s hroundS (by
+      change 0 < 999900
+      omega) productionCursorCfg_period_lt_word (by simpa [h.window_eq] using hwM)
+  dsimp only at hpos
+  have houtR : out.regs rR = round + 1 := by
+    rw [hpos.1, h.round_eq]
+  have houtW : out.regs rW = w := hpos.2.trans h.window_eq
+  have hcounter := c.body_mark_counter_bounds k s productionPowerTable
+    hroundS productionCursorCfg_markSteps_lt_word (by
+      change 0 < 999900
+      omega) productionCursorCfg_period_lt_word
+    (by simpa [h.window_eq] using hwM) hviolS hvmarkS
+    (by simpa [phased, reset] using hadvance)
+  dsimp only at hcounter
+  have houtReset : resetPowerCellState c i out =
+      powerCellRun c (round + 1) w i productionPowerTable initial := by
+    rw [resetPowerCellState_eq_machinePowerCellState c i out (by
+      rw [houtR]
+      omega)]
+    rw [hbodyState]
+    rfl
+  dsimp only [c, out] at houtR houtW houtReset
+  refine {
+    observable := ?_
+    table := ?_
+    round_eq := houtR
+    window_eq := houtW
+    viol_le := ?_
+    vmark_le := ?_ }
+  · exact houtReset
+  · intro pi hpi
+    have hframe := c.body_mark_table_frame k s
+      (pi + c.tableBase) hroundS productionCursorCfg_markSteps_lt_word
+      (by change 0 < 999900; omega) pure.cursor
+      (by simpa [phased, reset] using hcur) hlive
+      h7 h8 h9 h10 h11 h12 h13 (by omega)
+    exact hframe.trans (h.table pi hpi)
+  · rw [hpos.1, h.round_eq] at hcounter
+    exact hcounter.1
+  · rw [hpos.1, h.round_eq] at hcounter
+    exact hcounter.2
+
+/-- Simultaneous invariant for every symbolic prefix of the emitted
+production marking loop.  Specializing `fuel` to the production budget does
+not reduce the millions of body iterations. -/
+theorem productionMarkStateInv_run
+    (k w i fuel : Nat) (initial : PowerCellState) (s : AState)
+    (hi : i < productionCursorCfg.segLen) (hwM : w < M)
+    (hfuel : fuel ≤ productionCursorCfg.markSteps)
+    (hinitial : PowerCursorBounds productionCursorCfg.segLen
+      productionCursorCfg.hi productionCursorCfg.tableLen
+      productionPowerTable initial.cursor)
+    (h0 : ProductionMarkStateInv w i 0 initial s)
+    (hmark : ∀ round, round < fuel →
+      let pure := powerCellRun productionCursorCfg round w i
+        productionPowerTable initial
+      pure.cursor.j < productionCursorCfg.segLen → pure.cursor.j = i →
+        PlaneCellMarkPre pure.cursor.pow pure.cursor.base pure.cell) :
+    ProductionMarkStateInv w i fuel initial
+      (emittedBodyRun k productionCursorCfg fuel s) := by
+  induction fuel with
+  | zero => simpa using h0
+  | succ fuel ih =>
+      have hprev := ih (by omega)
+        (fun round hround => hmark round (by omega))
+      have hnext := hprev.step k hi (by omega) hwM hinitial
+        (hmark fuel (Nat.lt_succ_self fuel))
+      simpa using hnext
 
 /-- Closed production phase enumeration has the same selected-cell result as
 the exact production table-row fold for every live window cell. -/
