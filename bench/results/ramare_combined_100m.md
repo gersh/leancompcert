@@ -141,17 +141,23 @@ stages of at most four instructions.  `lowerNumeratorBody_run`,
 `lowerCorrectionBody_run`, and `lowerFinalizeBody_run` compose kernel-small
 per-instruction proofs, and `lowerScalarBody_run` proves that all nine emitted
 instructions compute exactly `incLWord` while preserving the candidate and
-array.  This avoids expanding all 26 candidate instructions in one proof.
+array.  The upper path now uses the same method: `upperNumeratorBody_run`
+proves the first six instructions and `upperCorrectionBody_run` proves the
+following division by `2n`.  This avoids expanding the candidate instructions
+in one proof.
 
-A capped source compile of the completed lower semantics took **77.10
-wall-seconds**, **2,492,960 KiB peak RSS**, and zero swap; its live lambda/psi
-consumer compiled in **43.47 wall-seconds** at **3,096,476 KiB** and zero swap
-under the same 22,528,000 KiB virtual-memory limit.  During development, one
+A capped source compile through the first eight upper instructions took
+**77.38 wall-seconds**, **2,505,724 KiB peak RSS**, and zero swap; its live
+lambda/psi consumer compiled in **43.13 wall-seconds** at **3,094,872 KiB**
+and zero swap under a 20/22-GiB physical-memory cgroup.  During development, one
 unresolved simplifier goal involving the literal `1 % 2^64` grew to
 **20,021,928 KiB RSS** before Lean reported its internal out-of-memory
 condition.  The virtual-memory cap contained that failure.  Supplying the
 one-line modular fact explicitly restored the 2.49-GiB source compile; this is
-the concrete failure mode behind the earlier high-memory behavior.
+the concrete failure mode behind the earlier high-memory behavior.  A later
+six-instruction upper proof similarly reached **19,251,208 KiB RSS** and a
+kernel-recursion error; splitting it into one- and two-instruction lemmas
+restored the 2.51-GiB compile without changing emitted code.
 
 The exact production run starts from the kernel-certified `prefixState10`
 endpoints and returns:
