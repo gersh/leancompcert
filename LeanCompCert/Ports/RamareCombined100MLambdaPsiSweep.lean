@@ -1389,6 +1389,9 @@ def program (c : Cfg) (s : Seed) : AProgram := {
   output := shapeOutputReg
 }
 
+theorem program_loopCount (c : Cfg) (s : Seed) :
+    (program c s).loopCount = c.shape.period * c.shape.segCount := rfl
+
 /-! ## Verified compiler package -/
 
 theorem storeLit_all (cell value : Nat) :
