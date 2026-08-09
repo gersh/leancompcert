@@ -188,12 +188,16 @@ wall-seconds**, **597,176 KiB peak RSS**, and zero swap.
 `RamareCombined100MCursorMachine.lean` adds the finite power-aware state
 machine needed for the emitted marking loop.  It proves exact live-prefix,
 power-bump, next-table-row, terminal-sentinel, and slack behavior, then
-composes those cases over an explicit production phase chain.  The chain
-checker evaluates only the few-thousand power descriptors; it does not
-reduce the 3.26-million-round mark loop.  A capped direct source check took
-**45.68 wall-seconds**, **12,092,172 KiB peak RSS**, and zero swap.  This is
-the intentionally high-water kernel check for the closed production
-descriptor and remains below the documented 20/22 GiB build limits.
+composes those cases over an explicit phase chain.  It also proves that the
+complete emitted advance block implements one pure power-cursor transition,
+with its table and word-safety premises explicit.  The generic source check
+remains below one second.  The separate
+`RamareCombined100MProductionPhases.lean` checker evaluates only the
+few-thousand closed production descriptors; it does not reduce the
+3.26-million-round mark loop.  Its capped module build took **46.89
+wall-seconds**, **12,051,732 KiB peak RSS**, and zero swap.  This is the
+intentionally isolated high-water kernel check and remains below the
+documented 20/22 GiB build limits.
 Regenerating the production C
 after this refactor gives the same SHA-256 `aa222123bc751266392d65d92b99fbc02c82fb36cb674b8610bcd704f99fb224`;
 the full run still reports `guards 0 seen 99990000 mark 0 shape 0`.
