@@ -284,6 +284,70 @@ theorem advanceBody_upper_denote (len k : Nat) (s out : AState)
   subst out
   exact advanceBody_upper_run k s hq hr hlam hn ha houtQ
 
+/-! ## Exact floor/ceiling sum stage -/
+
+/-- Scalar update of `sum lambdaLower/n` and `sum lambdaUpper/n`. -/
+def sumScalarBody : List Instr :=
+  [ .binop rT0 .udiv (.reg rLamL) (.reg 132)
+  , .binop rSumL .add (.reg rSumL) (.reg rT0)
+  , .binop rT0 .udiv (.reg rLamU) (.reg 132)
+  , .binop rT1 .urem (.reg rLamU) (.reg 132)
+  , .binop rT1 .ne (.reg rT1) (.lit 0)
+  , .binop rT0 .add (.reg rT0) (.reg rT1)
+  , .binop rSumU .add (.reg rSumU) (.reg rT0) ]
+
+def sumBody : List AInstr := lift sumScalarBody
+
+/-- Under the explicit word bounds, the physical sum stage is the exact
+floor/ceiling update used by `qStep`. -/
+theorem sumBody_run (k : Nat) (s : AState)
+    (hn0 : 0 < s.regs 132) (hnM : s.regs 132 < M)
+    (hsumL : s.regs rSumL + s.regs rLamL / s.regs 132 < M)
+    (hsumU : s.regs rSumU +
+      ceilDiv (s.regs rLamU) (s.regs 132) < M) :
+    let out := arun k s sumBody
+    out.regs rSumL = s.regs rSumL + s.regs rLamL / s.regs 132 ∧
+      out.regs rSumU = s.regs rSumU +
+        ceilDiv (s.regs rLamU) (s.regs 132) := by
+  have hnNe0 : s.regs 132 ≠ 0 := Nat.ne_of_gt hn0
+  have hremM : s.regs rLamU % s.regs 132 < M :=
+    Nat.lt_trans (Nat.mod_lt _ hn0) hnM
+  rw [sumBody, arun_lift]
+  simp [sumScalarBody, rT0, rT1, rSumL, rSumU, rLamL, rLamU,
+    srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, hnNe0]
+  constructor
+  · apply Nat.mod_eq_of_lt
+    simpa [rSumL, rLamL] using hsumL
+  · have hremEq : s.regs 207 % s.regs 132 % M =
+        s.regs 207 % s.regs 132 := by
+      apply Nat.mod_eq_of_lt
+      simpa [rLamU] using hremM
+    have hceilEq' := ceilDiv_eq_div_add_modBit
+      (s.regs 207) (s.regs 132) hn0
+    rw [hremEq]
+    rw [← hceilEq']
+    apply Nat.mod_eq_of_lt
+    simpa [rSumU, rLamU] using hsumU
+
+/-- The sum stage preserves both lambda inputs, the candidate, and the array. -/
+theorem sumBody_inputs (k : Nat) (s : AState) :
+    let out := arun k s sumBody
+    out.regs rLamL = s.regs rLamL ∧
+      out.regs rLamU = s.regs rLamU ∧
+      out.regs 132 = s.regs 132 ∧ out.arr = s.arr := by
+  rw [sumBody, arun_lift]
+  constructor
+  · exact LeanCompCert.Verified.RegFrame.srun_frame
+      k rLamL sumScalarBody (by decide) s.regs
+  constructor
+  · exact LeanCompCert.Verified.RegFrame.srun_frame
+      k rLamU sumScalarBody (by decide) s.regs
+  constructor
+  · exact LeanCompCert.Verified.RegFrame.srun_frame
+      k 132 sumScalarBody (by decide) s.regs
+  · rfl
+
 /-- Select lambda endpoints, update the two quotient sums, and advance both
 psi endpoints.  Shape registers `100..105`, candidate `132`, and phase gate
 `11` are the stable conventions of the lower layers. -/
@@ -322,15 +386,9 @@ def candidateBody (c : Cfg) : List AInstr :=
   , .scalar (.binop rLamU .add (.reg rLamU) (.reg rT2))
   , .scalar (.binop rLamU .mul (.reg rLamU) (.reg rT0))
     -- sumL += floor(lamL/n); sumU += ceil(lamU/n)
-  , .scalar (.binop rT0 .udiv (.reg rLamL) (.reg 132))
-  , .scalar (.binop rSumL .add (.reg rSumL) (.reg rT0))
-  , .scalar (.binop rT0 .udiv (.reg rLamU) (.reg 132))
-  , .scalar (.binop rT1 .urem (.reg rLamU) (.reg 132))
-  , .scalar (.binop rT1 .ne (.reg rT1) (.lit 0))
-  , .scalar (.binop rT0 .add (.reg rT0) (.reg rT1))
-  , .scalar (.binop rSumU .add (.reg rSumU) (.reg rT0))
-    -- scratch copies of the lower endpoint
-  , .scalar (.mov 220 (.reg rPsiLQ)), .scalar (.mov 221 (.reg rPsiLR))
+  ] ++ sumBody ++
+  [ -- scratch copies of the lower endpoint
+    .scalar (.mov 220 (.reg rPsiLQ)), .scalar (.mov 221 (.reg rPsiLR))
   ] ++ advanceBody 220 221 rLamL 132 222 ++
   [ -- gated lower commit
     .scalar (.binop rT0 .mul (.reg 11) (.reg 220))

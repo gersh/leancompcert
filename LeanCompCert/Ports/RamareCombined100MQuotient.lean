@@ -256,6 +256,34 @@ def correctedQOK (n logL logU sumL sumU lamL lamU : Nat)
     psiL.floorAfter n lamL
   decide (1000 * intervalAbsUpper lo hi ≤ 4 * scale)
 
+/-- The quotient-plus-remainder-bit form used by the physical candidate
+block is exactly the model's ceiling division. -/
+theorem ceilDiv_eq_div_add_modBit (x d : Nat) (hd : 0 < d) :
+    ceilDiv x d = x / d + if x % d = 0 then 0 else 1 := by
+  have hdm := Nat.div_add_mod x d
+  have hrlt := Nat.mod_lt x hd
+  by_cases hr : x % d = 0
+  · simp [hr]
+    let q := x / d
+    change ceilDiv x d = q
+    unfold ceilDiv
+    have hx : x = d * q := by simp only [q]; omega
+    rw [hx, Nat.mul_add_div hd]
+    have hzero : (d - 1) / d = 0 := Nat.div_eq_of_lt (by omega)
+    rw [hzero, Nat.add_zero]
+  · simp [hr]
+    let q := x / d
+    change ceilDiv x d = q + 1
+    unfold ceilDiv
+    have hx : x = d * q + x % d := by simp only [q]; omega
+    rw [hx]
+    rw [show d * q + x % d + (d - 1) =
+      d * q + (x % d + (d - 1)) by omega]
+    rw [Nat.mul_add_div hd]
+    have hone : (x % d + (d - 1)) / d = 1 := by
+      apply Nat.div_eq_of_lt_le <;> omega
+    rw [hone]
+
 /-- Ceiling division detects an integral multiple bound exactly. -/
 theorem ceilDiv_le_iff_le_mul {x n k : Nat} (hn : 0 < n) :
     ceilDiv x n ≤ k ↔ x ≤ k * n := by
