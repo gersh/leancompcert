@@ -318,4 +318,77 @@ theorem markRows_refines_markCell (rows : List PrimeRow) (n : Nat)
   simpa [markCell] using
     CellRel.markRows CellRel.empty rows n hfresh hvalid hdistinct
 
+/-! ## The physical prime table as source rows -/
+
+def factorRow (p : Nat) : PrimeRow := ⟨p, true, 0, 0, 0, 0⟩
+
+def factorRows (ps : List Nat) : List PrimeRow := ps.map factorRow
+
+theorem factorRows_valid (ps : List Nat)
+    (htwo : ∀ p ∈ ps, 2 ≤ p) : ValidRows (factorRows ps) := by
+  intro row hrow
+  simp only [factorRows, List.mem_map] at hrow
+  obtain ⟨p, hp, rfl⟩ := hrow
+  exact ⟨rfl, htwo p hp⟩
+
+theorem factorRows_distinct (ps : List Nat) (hnodup : ps.Nodup) :
+    DistinctRows (factorRows ps) := by
+  rw [DistinctRows, factorRows]
+  induction ps with
+  | nil => simp
+  | cons p ps ih =>
+      rw [List.nodup_cons] at hnodup
+      simp only [List.map_cons]
+      rw [List.pairwise_cons]
+      constructor
+      · intro row hrow
+        simp only [List.mem_map] at hrow
+        obtain ⟨q, hq, rfl⟩ := hrow
+        simp only [factorRow]
+        intro heq
+        apply hnodup.1
+        simpa [heq] using hq
+      · exact ih hnodup.2
+
+theorem markRows_factorRows_refines (ps : List Nat) (n : Nat)
+    (htwo : ∀ p ∈ ps, 2 ≤ p) (hnodup : ps.Nodup) :
+    CellRel (markRows (factorRows ps) n emptyPlaneCell)
+      (markCell (factorRows ps) n) :=
+  markRows_refines_markCell _ _ (factorRows_valid ps htwo)
+    (factorRows_distinct ps hnodup)
+
+theorem nodup_filter {α : Type} (f : α → Bool) :
+    ∀ {xs : List α}, xs.Nodup → (xs.filter f).Nodup := by
+  intro xs hxs
+  induction xs with
+  | nil => simp
+  | cons x xs ih =>
+      rw [List.nodup_cons] at hxs
+      by_cases hx : f x = true
+      · simp [hx, List.nodup_cons, hxs.1, ih hxs.2]
+      · simp [hx, ih hxs.2]
+
+theorem trialPrimesBelow_two_le (bound p : Nat)
+    (hp : p ∈ trialPrimesBelow bound) : 2 ≤ p := by
+  have htest := (List.mem_filter.mp hp).2
+  by_cases hsmall : p < 2
+  · simp [trialPrime, hsmall] at htest
+  · omega
+
+theorem trialPrimesBelow_nodup (bound : Nat) :
+    (trialPrimesBelow bound).Nodup := by
+  exact nodup_filter trialPrime List.nodup_range
+
+/-- The exact table constructor used by `Cfg.ofChain` satisfies the row-fold
+side conditions without evaluating or trusting the old array sieve. -/
+theorem ofChain_factorRows_refines (lo segLen segCount tableHi n : Nat) :
+    CellRel
+      (markRows (factorRows (Cfg.ofChain lo segLen segCount tableHi).table)
+        n emptyPlaneCell)
+      (markCell (factorRows (Cfg.ofChain lo segLen segCount tableHi).table) n) := by
+  apply markRows_factorRows_refines
+  · intro p hp
+    exact trialPrimesBelow_two_le _ p hp
+  · exact trialPrimesBelow_nodup _
+
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve

@@ -164,10 +164,13 @@ The separate `RamareCombined100MMarkInvariant.lean` then proves the
 number-theoretic row fold.  It identifies the first, second, and later-prime
 power-event modes; proves that a complete positive-power block is exactly
 `RamareCombined100MSeg.markPrime`; and folds distinct active rows from the
-seven zero planes to `RamareCombined100MSeg.markCell`.  Its capped direct
-source check took **0.34 wall-seconds**, **556,736 KiB peak RSS**, and zero
-swap.  Production-table validity and the physical cursor schedule remain the
-next loop-invariant obligations.
+seven zero planes to `RamareCombined100MSeg.markCell`.  `Cfg.ofChain` now uses
+the extensionally identical bounded-trial table, whose entries are
+definitionally at least two and whose filtered range is proved duplicate-free;
+this specializes the row-fold theorem to the exact production table.  Its
+expanded capped direct source check took **0.38 wall-seconds**, **552,136 KiB
+peak RSS**, and zero swap.  The physical cursor schedule remains the next
+loop-invariant obligation.
 Regenerating the production C
 after this refactor gives the same SHA-256 `aa222123bc751266392d65d92b99fbc02c82fb36cb674b8610bcd704f99fb224`;
 the full run still reports `guards 0 seen 99990000 mark 0 shape 0`.

@@ -59,6 +59,17 @@ def Cfg.root (c : Cfg) : Nat := Nat.sqrt c.tableHi
 def Cfg.tableLen (c : Cfg) : Nat := c.table.length
 def Cfg.period (c : Cfg) : Nat := c.markSteps + c.segLen
 
+/-- Proof-friendly trial predicate for the small (`≤ 10,000`) factor table.
+The bounded divisor range is retained as a declarative list, so membership and
+duplicate-freedom can be proved independently of the emit-time array sieve. -/
+def trialPrime (n : Nat) : Bool :=
+  if n < 2 then false
+  else (List.range (Nat.sqrt n + 1)).all fun d =>
+    d < 2 || n % d ≠ 0 || n == d
+
+def trialPrimesBelow (n : Nat) : List Nat :=
+  (List.range n).filter trialPrime
+
 /-- Construct one link of a production chain.  Every link carries the prime
 table for the common global endpoint `tableHi`. -/
 def Cfg.ofChain (lo segLen segCount tableHi : Nat) : Cfg :=
@@ -66,7 +77,7 @@ def Cfg.ofChain (lo segLen segCount tableHi : Nat) : Cfg :=
   let hi := lo + segLen * segCount - 1
   { lo, segLen, segCount, tableHi
     markSteps := markBudget root hi segLen
-    table := primesBelow (root + 1) }
+    table := trialPrimesBelow (root + 1) }
 
 /-! ## Array layout
 
