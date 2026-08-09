@@ -252,26 +252,39 @@ exact prime-power product. -/
 def Cfg.markSecondBody : List AInstr :=
   markSecondSelectBody ++ markSecondExponentBody ++ markSecondProductBody
 
-/-- Advance to the next multiple, prime power, or prime-table row and account
-for an exhausted mark budget. -/
-def Cfg.markAdvanceBody (c : Cfg) : List AInstr :=
-  let L := c.segLen
-  let T := c.markSteps
-  let K := c.tableLen
+/-- Decide whether the cursor stays on this power, advances to its next power,
+or advances to the next prime-table row. -/
+def Cfg.markAdvancePowerBody (c : Cfg) : List AInstr :=
   [ .scalar (.binop 85 .mul (.reg 10) (.reg 25))
   , .scalar (.binop 86 .mul (.reg rPow) (.reg rBase))
   , .scalar (.binop 87 .le (.reg 86) (.lit c.hi))
   , .scalar (.binop 88 .mul (.reg 85) (.reg 87))        -- bump power
   , .scalar (.binop 89 .sub (.reg 85) (.reg 88))        -- step prime
-  , .scalar (.binop 90 .add (.reg rPi) (.reg 89))
+  ]
+
+/-- Advance and clamp the selected prime-table index. -/
+def Cfg.markAdvancePiBody (c : Cfg) : List AInstr :=
+  let K := c.tableLen
+  [ .scalar (.binop 90 .add (.reg rPi) (.reg 89))
   , .scalar (.binop 91 .gt (.reg 90) (.lit K))
   , .scalar (.binop 92 .sub (.lit 1) (.reg 91))
   , .scalar (.binop 93 .mul (.reg 92) (.reg 90))
   , .scalar (.binop 94 .mul (.reg 91) (.lit K))
   , .scalar (.binop rPi .add (.reg 93) (.reg 94))
-  , .scalar (.binop 95 .add (.reg rPi) (.lit c.tableBase))
+  ]
+
+def Cfg.markAdvanceSelectBody (c : Cfg) : List AInstr :=
+  c.markAdvancePowerBody ++ c.markAdvancePiBody
+
+/-- Load the selected next prime-table row. -/
+def Cfg.markAdvanceLoadBody (c : Cfg) : List AInstr :=
+  [ .scalar (.binop 95 .add (.reg rPi) (.lit c.tableBase))
   , .load 96 95
-  , .scalar (.binop 97 .sub (.lit 1) (.reg 85))
+  ]
+
+/-- Materialize the selected next power, base, and window offset. -/
+def Cfg.markAdvanceValueBody : List AInstr :=
+  [ .scalar (.binop 97 .sub (.lit 1) (.reg 85))
   , .scalar (.binop 98 .add (.reg rJ) (.reg rPow))
   , .scalar (.binop 99 .mul (.reg 88) (.reg 86))
   , .scalar (.binop 110 .mul (.reg 89) (.reg 96))
@@ -282,7 +295,14 @@ def Cfg.markAdvanceBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 114 .mul (.reg 89) (.reg 96))
   , .scalar (.binop 115 .mul (.reg 113) (.reg rBase))
   , .scalar (.binop rBase .add (.reg 114) (.reg 115))
-  , .scalar (.binop 116 .urem (.reg rW) (.reg rPow))
+  ]
+
+/-- Compute the next multiple offset, or the sentinel offset when the prime
+table is exhausted. -/
+def Cfg.markAdvanceOffsetBody (c : Cfg) : List AInstr :=
+  let L := c.segLen
+  let K := c.tableLen
+  [ .scalar (.binop 116 .urem (.reg rW) (.reg rPow))
   , .scalar (.binop 117 .sub (.reg rPow) (.reg 116))
   , .scalar (.binop 118 .urem (.reg 117) (.reg rPow))
   , .scalar (.binop 119 .eq (.reg rPi) (.lit K))
@@ -293,13 +313,27 @@ def Cfg.markAdvanceBody (c : Cfg) : List AInstr :=
   , .scalar (.binop 124 .mul (.reg 85) (.reg 123))
   , .scalar (.binop 125 .mul (.reg 97) (.reg 98))
   , .scalar (.binop rJ .add (.reg 124) (.reg 125))
-    -- a short mark budget is a failed run, never a truncated certificate
-  , .scalar (.binop 126 .eq (.reg rR) (.lit (T - 1)))
+  ]
+
+def Cfg.markAdvanceCursorBody (c : Cfg) : List AInstr :=
+  markAdvanceValueBody ++ c.markAdvanceOffsetBody
+
+/-- A short mark budget is a failed run, never a truncated certificate. -/
+def Cfg.markBudgetBody (c : Cfg) : List AInstr :=
+  let T := c.markSteps
+  let K := c.tableLen
+  [ .scalar (.binop 126 .eq (.reg rR) (.lit (T - 1)))
   , .scalar (.binop 127 .ne (.reg rPi) (.lit K))
   , .scalar (.binop 128 .mul (.reg 126) (.reg 127))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 128))
   , .scalar (.binop rVMark .add (.reg rVMark) (.reg 128))
   ]
+
+/-- Advance to the next multiple, prime power, or prime-table row and account
+for an exhausted mark budget. -/
+def Cfg.markAdvanceBody (c : Cfg) : List AInstr :=
+  c.markAdvanceSelectBody ++ c.markAdvanceLoadBody ++
+    c.markAdvanceCursorBody ++ c.markBudgetBody
 
 def Cfg.markCoreBody (c : Cfg) : List AInstr :=
   c.markResetBody ++ c.markAddressBody ++ markLoadBody ++
