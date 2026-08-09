@@ -929,6 +929,9 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusSquaredSignal.combinedSignals_schedule_of_active
 #print axioms LeanCompCert.Ports.ArraySegMobiusSquaredSignal.combinedSignals_root_schedule
 #print axioms LeanCompCert.Ports.ArraySegMobiusSquaredSignal.combinedSignals_main_mark_schedule
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedFull.rootLaterWindows_has_prefix
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedFull.finalRootTable_has_boot_prefix
+#print axioms LeanCompCert.Ports.ArraySegMobiusIndexedFull.finalRootTable_shape
 #print axioms LeanCompCert.Ports.ArraySegMobiusPlattFiniteEvidence.plattAlignedFirst_finalPrime
 #print axioms LeanCompCert.Ports.ArraySegMobiusPlattFiniteEvidence.plattAlignedTail_finalPrime
 #print axioms LeanCompCert.Verified.ArrayComputation.AComputation.withOutput_denotes_of_denotes

@@ -1897,3 +1897,10 @@ checks took 0.37 seconds at 600,924 KiB for
 `ArraySegMobiusPlattFiniteEvidence.lean`, again under the 1/2 GiB profile.
 Their joint 116-job live build passed.  The expanded strict axiom audit took
 0.65 seconds at 1,653,352 KiB under the 2/3 GiB profile.
+
+The final root-table shape bridge is structural: mixed scans, later windows,
+and the final sequential scan all retain the configured bootstrap prefix, so
+no closed prime list is reduced merely to recover its head.  The direct
+`ArraySegMobiusIndexedFull.lean` source check took 0.39 seconds at 573,696 KiB
+under the 1/2 GiB profile; its 72-job target passed.  The expanded strict
+axiom audit took 0.68 seconds at 1,636,904 KiB under the 2/3 GiB profile.

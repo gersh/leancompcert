@@ -39,6 +39,42 @@ def finalRootTable (c : Cfg) (bootBound bootFuel laterFuel : Nat) :
 def finalRootBound (c : Cfg) (bootFuel laterFuel : Nat) : Nat :=
   laterBase c bootFuel + laterFuel * c.segLen + c.segLen - 1
 
+/-- Consecutive later root windows retain every existing prime-table prefix. -/
+theorem rootLaterWindows_has_prefix (c : Cfg) {boot full : List Nat}
+    (hfull : ∃ tail, full = boot ++ tail) (w fuel : Nat) :
+    ∃ tail, rootLaterWindows c full w fuel = boot ++ tail := by
+  induction fuel with
+  | zero => simpa using hfull
+  | succ n ih =>
+      rw [rootLaterWindows_succ]
+      exact rootScanFrom_has_prefix ih _ _
+
+/-- The complete production root table retains the configured bootstrap
+prime list as a literal prefix. -/
+theorem finalRootTable_has_boot_prefix (c : Cfg)
+    (bootBound bootFuel laterFuel : Nat) :
+    ∃ tail, finalRootTable c bootBound bootFuel laterFuel =
+      c.bootPrimes ++ tail := by
+  have hcross := rootScanMixed_has_prefix c.bootPrimes bootBound
+    (crossingBase c bootFuel) c.segLen
+  have hlater := rootLaterWindows_has_prefix c hcross
+    (laterBase c bootFuel) laterFuel
+  unfold finalRootTable
+  exact rootScanFrom_has_prefix hlater _ _
+
+/-- Hence a bootstrap table beginning with `firstPrime` gives the
+source-shaped final table required by Mathlib-facing consumers. -/
+theorem finalRootTable_shape (c : Cfg) (bootBound bootFuel laterFuel : Nat)
+    (hboot : ∃ tail, c.bootPrimes = c.firstPrime :: tail) :
+    ∃ tail, finalRootTable c bootBound bootFuel laterFuel =
+      c.firstPrime :: tail := by
+  obtain ⟨bootTail, hboot⟩ := hboot
+  obtain ⟨tail, hfinal⟩ :=
+    finalRootTable_has_boot_prefix c bootBound bootFuel laterFuel
+  refine ⟨bootTail ++ tail, ?_⟩
+  rw [hfinal, hboot]
+  rfl
+
 def mainBase (c : Cfg) (bootFuel laterFuel delta : Nat) : Nat :=
   ((laterBase c bootFuel + laterFuel * c.segLen) +
     ((c.segLen + delta) % M)) % M
