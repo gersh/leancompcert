@@ -42,6 +42,16 @@ theorem body_eq_mark_class_tail_arithmetic (c : LambdaPsiSweep.Cfg) :
     ShapeSieve.Cfg.body, LambdaPsiSweep.arithmeticBody,
     List.append_assoc]
 
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 100000 in
+/-- The emitted body does not use the loop-index operand; its total state
+transition is therefore independent of the `arun` index parameter. -/
+theorem body_index_irrel
+    (c : LambdaPsiSweep.Cfg) (k l : Nat) (s : AState) :
+    arun k s (LambdaPsiSweep.body c) =
+      arun l s (LambdaPsiSweep.body c) := by
+  rfl
+
 /-- Exact round/window effect of the six-instruction tail, including the
 period boundary.  The boundary branch resets the round and advances the
 window by one segment; every other branch increments only the round. -/
@@ -159,6 +169,20 @@ theorem bodyRun_add (k : Nat) (c : LambdaPsiSweep.Cfg)
   | succ b ih =>
       rw [show a + (b + 1) = (a + b) + 1 by omega,
         bodyRun_succ, ih, bodyRun_succ]
+
+/-- The flat changing-index fold used by `AProgram` is exactly `bodyRun`.
+Index irrelevance is proved from the literal body rather than assumed. -/
+theorem foldl_range_body_eq_bodyRun
+    (c : LambdaPsiSweep.Cfg) (fuel : Nat) (s : AState) :
+    (List.range fuel).foldl
+        (fun st index => arun index st (LambdaPsiSweep.body c)) s =
+      bodyRun 0 c fuel s := by
+  induction fuel with
+  | zero => rfl
+  | succ fuel ih =>
+      rw [List.range_succ, List.foldl_append, List.foldl_cons,
+        List.foldl_nil, ih, bodyRun_succ]
+      exact body_index_irrel c fuel 0 (bodyRun 0 c fuel s)
 
 /-- A symbolic prefix of one period has the expected position.  At exactly
 one period the round resets and the window advances; every strict prefix is
