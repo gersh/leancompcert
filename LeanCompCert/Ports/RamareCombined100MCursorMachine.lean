@@ -1206,6 +1206,72 @@ theorem Cfg.classClearBody_arr_frame (k : Nat) (s : AState) (q : Nat)
   simp [Cfg.classClearBody, arun, astep, AState.writeArr,
     h131, h133, h134, h135, h136, h137, h138]
 
+/-- Classifier scalar work before the final guarded counter commit. -/
+def Cfg.classDecodeBeforeCommitBody : List Instr :=
+  Cfg.classNormalizeBody ++ Cfg.classFirstShapeBody ++
+    Cfg.classSecondFlagsBody ++ Cfg.classSecondShapeBody ++
+    Cfg.classTailBody ++ Cfg.classFirstGuardBody ++
+    Cfg.classSecondGuardBody
+
+/-- Complete classifier prefix before its guarded counter commit. -/
+def Cfg.classBeforeGuardCommitBody (c : Cfg) : List AInstr :=
+  c.classIndexBody ++ lift c.classPlaneBody ++ lift c.classSinkBody ++
+    Cfg.classLoadBody ++ lift Cfg.classDecodeBeforeCommitBody
+
+theorem Cfg.classBody_eq_beforeGuardCommit_append (c : Cfg) :
+    c.classBody =
+      c.classBeforeGuardCommitBody ++ lift Cfg.classGuardCommitBody ++
+        Cfg.classClearBody := by
+  simp [Cfg.classBody, Cfg.classPostCandidateBody,
+    Cfg.classBeforeGuardCommitBody, Cfg.classDecodeBeforeCommitBody,
+    Cfg.classDecodeBody, lift, List.append_assoc]
+
+/-- With classification disabled, its guarded commit adds zero to the shared
+violation counter. -/
+theorem Cfg.classGuardCommitBody_mark_viol_frame
+    (k : Nat) (s : AState) (hphase : s.regs 11 = 0)
+    (hviolM : s.regs rViol < M) :
+    (arun k s (lift Cfg.classGuardCommitBody)).regs rViol =
+      s.regs rViol := by
+  have hviolMod : s.regs 8 % 18446744073709551616 = s.regs 8 :=
+    Nat.mod_eq_of_lt (by simpa [rViol, M] using hviolM)
+  simp [Cfg.classGuardCommitBody, arun, astep, AState.writeReg,
+    sdest, sval, denoteOperand, denoteOp, hphase,
+    hviolMod, rViol, rVShape, rSeen, M]
+
+/-- During a marking round the complete classifier preserves both marking
+failure counters. -/
+theorem Cfg.classBody_mark_counter_frame
+    (c : Cfg) (k : Nat) (s : AState) (hphase : s.regs 11 = 0)
+    (hviolM : s.regs rViol < M) :
+    let out := arun k s c.classBody
+    out.regs rViol = s.regs rViol ∧
+      out.regs rVMark = s.regs rVMark := by
+  let before := arun k s c.classBeforeGuardCommitBody
+  let committed := arun k before (lift Cfg.classGuardCommitBody)
+  have hb11 : before.regs 11 = s.regs 11 :=
+    arun_frame k 11 c.classBeforeGuardCommitBody (by rfl) s
+  have hbViol : before.regs rViol = s.regs rViol :=
+    arun_frame k rViol c.classBeforeGuardCommitBody (by rfl) s
+  have hbVMark : before.regs rVMark = s.regs rVMark :=
+    arun_frame k rVMark c.classBeforeGuardCommitBody (by rfl) s
+  have hcViol : committed.regs rViol = before.regs rViol :=
+    Cfg.classGuardCommitBody_mark_viol_frame k before
+      (hb11.trans hphase) (by simpa [hbViol] using hviolM)
+  have hcVMark : committed.regs rVMark = before.regs rVMark :=
+    arun_frame k rVMark (lift Cfg.classGuardCommitBody) (by rfl) before
+  have htViol :
+      (arun k committed Cfg.classClearBody).regs rViol =
+        committed.regs rViol :=
+    arun_frame k rViol Cfg.classClearBody (by rfl) committed
+  have htVMark :
+      (arun k committed Cfg.classClearBody).regs rVMark =
+        committed.regs rVMark :=
+    arun_frame k rVMark Cfg.classClearBody (by rfl) committed
+  rw [c.classBody_eq_beforeGuardCommit_append, arun_append, arun_append]
+  exact ⟨htViol.trans (hcViol.trans hbViol),
+    htVMark.trans (hcVMark.trans hbVMark)⟩
+
 /-- During a mark round the complete classifier can modify only the seven
 sink cells. -/
 theorem Cfg.classBody_mark_arr_frame (c : Cfg) (k : Nat) (s : AState)
@@ -2364,5 +2430,98 @@ theorem Cfg.body_mark_position
     (hcR.trans hmR) (hcW.trans hmW) hnext hperiodM hwM
   rw [Cfg.body, arun_append, arun_append]
   simpa only [marked, classified] using htail
+
+/-- The only mark-phase counter update is the final budget-failure bit.  Since
+that bit is at most one, counters bounded by the incoming round remain bounded
+by the exactly incremented outgoing round. -/
+theorem Cfg.body_mark_counter_bounds
+    (c : Cfg) (k : Nat) (s : AState) (table : Nat → Nat)
+    (hround : s.regs rR < c.markSteps) (hT : c.markSteps < M)
+    (hLPos : 0 < c.segLen) (hperiodM : c.period < M)
+    (hwM : s.regs rW < M)
+    (hviol : s.regs rViol ≤ s.regs rR)
+    (hvmark : s.regs rVMark ≤ s.regs rR)
+    (hadvance :
+      let phased := arun k s (lift c.markPhaseBody)
+      let reset := arun k phased c.markResetBody
+      let marked := arun k reset c.markCellPrefix
+      AdvanceWordPre c marked table) :
+    let out := arun k s c.body
+    out.regs rViol ≤ out.regs rR ∧
+      out.regs rVMark ≤ out.regs rR := by
+  let phased := arun k s (lift c.markPhaseBody)
+  let reset := arun k phased c.markResetBody
+  let marked := arun k reset c.markCellPrefix
+  let active := arun k marked c.markAdvanceBody
+  let classified := arun k active c.classBody
+  change AdvanceWordPre c marked table at hadvance
+  have hp := c.markPhaseBody_run k s hT
+  dsimp only at hp
+  have hp11 : phased.regs 11 = 0 := by
+    rw [hp.2.1, if_neg (by omega : ¬c.markSteps ≤ s.regs rR)]
+  have hr11 : reset.regs 11 = 0 :=
+    (arun_frame k 11 c.markResetBody (by rfl) phased).trans hp11
+  have hm11 : marked.regs 11 = 0 :=
+    (arun_frame k 11 c.markCellPrefix (by rfl) reset).trans hr11
+  have ha11 : active.regs 11 = 0 :=
+    (arun_frame k 11 c.markAdvanceBody (by rfl) marked).trans hm11
+  have hrun := c.markAdvanceBody_run k marked
+    hadvance.values hadvance.pow_ne_zero hadvance.seg_sentinel
+    hadvance.mark_steps hadvance.viol hadvance.vmark
+  dsimp only at hrun
+  rcases hrun with
+    ⟨_hPi, _hPow, _hBase, _hJ, haViol, haVMark, _haR, _haW, _haArr⟩
+  let failure := c.budgetFailure (marked.regs rR)
+    (clampPi c.tableLen
+      (marked.regs rPi + c.stepPrime (marked.regs 10) (marked.regs 25)
+        (marked.regs rPow) (marked.regs rBase)))
+  have hfailure : failure ≤ 1 := c.budgetFailure_le_one _ _
+  have frameToMarked (r : Nat)
+      (hphaseF : writes r (lift c.markPhaseBody) = false)
+      (hresetF : writes r c.markResetBody = false)
+      (hprefixF : writes r c.markCellPrefix = false) :
+      marked.regs r = s.regs r := by
+    exact (arun_frame k r c.markCellPrefix hprefixF reset).trans
+      ((arun_frame k r c.markResetBody hresetF phased).trans
+        (arun_frame k r (lift c.markPhaseBody) hphaseF s))
+  have hmR : marked.regs rR = s.regs rR :=
+    frameToMarked rR (by rfl) (by rfl) (by rfl)
+  have hmViol : marked.regs rViol = s.regs rViol :=
+    frameToMarked rViol (by rfl) (by rfl) (by rfl)
+  have hmVMark : marked.regs rVMark = s.regs rVMark :=
+    frameToMarked rVMark (by rfl) (by rfl) (by rfl)
+  have haViolEq : active.regs rViol = marked.regs rViol + failure := by
+    simpa [active, failure] using haViol
+  have haVMarkEq : active.regs rVMark = marked.regs rVMark + failure := by
+    simpa [active, failure] using haVMark
+  have haViolLe : active.regs rViol ≤ s.regs rR + 1 := by
+    rw [haViolEq, hmViol]
+    omega
+  have haVMarkLe : active.regs rVMark ≤ s.regs rR + 1 := by
+    rw [haVMarkEq, hmVMark]
+    omega
+  have haViolM : active.regs rViol < M := by
+    rw [haViolEq]
+    simpa [failure] using hadvance.viol
+  have hclass := c.classBody_mark_counter_frame k active ha11 haViolM
+  have htViol :
+      (arun k classified c.tailBody).regs rViol = classified.regs rViol :=
+    arun_frame k rViol c.tailBody (by rfl) classified
+  have htVMark :
+      (arun k classified c.tailBody).regs rVMark = classified.regs rVMark :=
+    arun_frame k rVMark c.tailBody (by rfl) classified
+  have hbodyRun : arun k s c.body = arun k classified c.tailBody := by
+    simp [Cfg.body, c.markBody_eq_phase_reset_active, Cfg.markActiveBody,
+      phased, reset, marked, active, classified, arun_append]
+  have hpos := c.body_mark_position k s hround hLPos hperiodM hwM
+  dsimp only at hpos
+  rw [hbodyRun]
+  constructor
+  · rw [htViol, hclass.1]
+    rw [hbodyRun] at hpos
+    omega
+  · rw [htVMark, hclass.2]
+    rw [hbodyRun] at hpos
+    omega
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve
