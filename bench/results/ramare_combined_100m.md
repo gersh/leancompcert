@@ -152,12 +152,15 @@ selection/exponent/product updates, and second-prime flag/commit/exponent
 updates.  The second exact-product update, power-vs-prime cursor choice,
 clamped table index, exact next-row load, selected power/base values,
 next-multiple offset (including the sentinel), and budget-failure accounting
-are now exact as well.  The all-product, first-prime, and second-prime blocks
+are now exact as well.  The selector, clamped load, value, offset, and budget
+lemmas are composed into an exact theorem for the emitted
+`Cfg.markAdvanceBody`; it preserves the round, word, and array while proving
+the new cursor and both failure counters.  The all-product, first-prime, and second-prime blocks
 are then composed into one exact `PlaneCell.markPower` transition: seven
 physical plane writes and a positive-width read-after-write theorem establish
 the complete cell update without normalizing the combined 43-instruction
-stream.  Its expanded capped direct source check took **2.30 wall-seconds**,
-**749,404 KiB peak RSS**, and zero swap.  The deliberately split proof avoids
+stream.  Its expanded capped direct source check took **3.20 wall-seconds**,
+**781,208 KiB peak RSS**, and zero swap.  The deliberately split proof avoids
 normalizing the full 120-instruction mark core.
 
 The separate `RamareCombined100MMarkInvariant.lean` then proves the

@@ -1402,4 +1402,483 @@ theorem Cfg.markBudgetBody_run (c : Cfg) (k : Nat) (s : AState)
         Nat.mod_eq_of_lt (toNum hv8), Nat.mod_eq_of_lt (toNum hm177),
         rR, rPi, rViol, rVMark, M]
 
+/-! ## Composed cursor-selection stage -/
+
+/-- The emitted power-choice and prime-index blocks compose to the exact pure
+mode bits and clamped table cursor.  Keeping this composition separate from
+the subsequent load/value/offset stages prevents the simplifier from seeing
+the complete cursor pipeline at once. -/
+theorem Cfg.markAdvanceSelectBody_run (c : Cfg) (k : Nat) (s : AState)
+    (h10 : s.regs 10 ≤ 1) (h25 : s.regs 25 ≤ 1)
+    (hmul : s.regs rPow * s.regs rBase < M) (hhi : c.hi < M)
+    (hsum : s.regs rPi +
+      c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase) < M)
+    (hK : c.tableLen < M) :
+    let active := advanceActive (s.regs 10) (s.regs 25)
+    let bump := c.bumpPower (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let candidate := s.regs rPi + step
+    let out := arun k s c.markAdvanceSelectBody
+    out.regs 85 = active ∧ out.regs 86 = s.regs rPow * s.regs rBase ∧
+      out.regs 88 = bump ∧ out.regs 89 = step ∧
+      out.regs rPi = clampPi c.tableLen candidate ∧
+      out.regs rPow = s.regs rPow ∧ out.regs rBase = s.regs rBase ∧
+      out.regs rJ = s.regs rJ ∧ out.regs rW = s.regs rW ∧
+      out.arr = s.arr := by
+  let selected := arun k s c.markAdvancePowerBody
+  have hpower := c.markAdvancePowerBody_run k s h10 h25 hmul hhi
+  dsimp only at hpower
+  rcases hpower with
+    ⟨h85, h86, _h87, h88, h89, hpow, hbase, harr1⟩
+  have frame1 (r : Nat)
+      (h : writes r c.markAdvancePowerBody = false) :
+      selected.regs r = s.regs r :=
+    arun_frame k r c.markAdvancePowerBody h s
+  have hpi1 : selected.regs rPi = s.regs rPi :=
+    frame1 rPi (by rfl)
+  have hj1 : selected.regs rJ = s.regs rJ :=
+    frame1 rJ (by rfl)
+  have hw1 : selected.regs rW = s.regs rW :=
+    frame1 rW (by rfl)
+  have hpiRun := c.markAdvancePiBody_run k selected (by
+      rw [hpi1, h89]
+      exact hsum) hK
+  dsimp only at hpiRun
+  rcases hpiRun with
+    ⟨_h90, _h91, _h92, _h93, _h94, hpi, h89', harr2⟩
+  let out := arun k selected c.markAdvancePiBody
+  have frame2 (r : Nat) (h : writes r c.markAdvancePiBody = false) :
+      out.regs r = selected.regs r :=
+    arun_frame k r c.markAdvancePiBody h selected
+  simp only [Cfg.markAdvanceSelectBody, arun_append]
+  refine ⟨frame2 85 (by rfl) |>.trans h85,
+    frame2 86 (by rfl) |>.trans h86,
+    frame2 88 (by rfl) |>.trans h88,
+    h89'.trans h89,
+    ?_,
+    (frame2 rPow (by rfl)).trans hpow,
+    (frame2 rBase (by rfl)).trans hbase,
+    (frame2 rJ (by rfl)).trans hj1,
+    (frame2 rW (by rfl)).trans hw1,
+    harr2.trans harr1⟩
+  have hpi' := hpi
+  rw [hpi1, h89] at hpi'
+  exact hpi'
+
+/-- The next emitted stage loads exactly the table word selected by the
+composed and clamped cursor. -/
+theorem Cfg.markAdvanceSelectLoadBody_run (c : Cfg) (k : Nat) (s : AState)
+    (h10 : s.regs 10 ≤ 1) (h25 : s.regs 25 ≤ 1)
+    (hmul : s.regs rPow * s.regs rBase < M) (hhi : c.hi < M)
+    (hsum : s.regs rPi +
+      c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase) < M)
+    (hK : c.tableLen < M)
+    (haddr : clampPi c.tableLen
+      (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)) + c.tableBase < M) :
+    let active := advanceActive (s.regs 10) (s.regs 25)
+    let bump := c.bumpPower (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let piOut := clampPi c.tableLen (s.regs rPi + step)
+    let address := piOut + c.tableBase
+    let out := arun k s (c.markAdvanceSelectBody ++ c.markAdvanceLoadBody)
+    out.regs 85 = active ∧ out.regs 86 = s.regs rPow * s.regs rBase ∧
+      out.regs 88 = bump ∧ out.regs 89 = step ∧
+      out.regs rPi = piOut ∧ out.regs 96 = s.arr address ∧
+      out.regs rPow = s.regs rPow ∧ out.regs rBase = s.regs rBase ∧
+      out.regs rJ = s.regs rJ ∧ out.regs rW = s.regs rW ∧
+      out.arr = s.arr := by
+  let selected := arun k s c.markAdvanceSelectBody
+  have hselect := c.markAdvanceSelectBody_run k s h10 h25 hmul hhi hsum hK
+  dsimp only at hselect
+  rcases hselect with
+    ⟨h85, h86, h88, h89, hpi, hpow, hbase, hj, hw, harr1⟩
+  have hload := c.markAdvanceLoadBody_run k selected (by
+      rw [hpi]
+      exact haddr)
+  dsimp only at hload
+  rcases hload with ⟨_h95, h96, hpi', harr2⟩
+  let out := arun k selected c.markAdvanceLoadBody
+  have frame (r : Nat) (h : writes r c.markAdvanceLoadBody = false) :
+      out.regs r = selected.regs r :=
+    arun_frame k r c.markAdvanceLoadBody h selected
+  simp only [arun_append]
+  refine ⟨(frame 85 (by rfl)).trans h85,
+    (frame 86 (by rfl)).trans h86,
+    (frame 88 (by rfl)).trans h88,
+    (frame 89 (by rfl)).trans h89,
+    hpi'.trans hpi,
+    ?_,
+    (frame rPow (by rfl)).trans hpow,
+    (frame rBase (by rfl)).trans hbase,
+    (frame rJ (by rfl)).trans hj,
+    (frame rW (by rfl)).trans hw,
+    harr2.trans harr1⟩
+  have h96' := h96
+  rw [hpi, harr1] at h96'
+  exact h96'
+
+/-- The value stage selects the retained power, next power, or next prime
+from the exact clamped table load. -/
+theorem Cfg.markAdvanceSelectLoadValueBody_run (c : Cfg) (k : Nat)
+    (s : AState)
+    (h10 : s.regs 10 ≤ 1) (h25 : s.regs 25 ≤ 1)
+    (hmul : s.regs rPow * s.regs rBase < M) (hhi : c.hi < M)
+    (hsum : s.regs rPi +
+      c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase) < M)
+    (hK : c.tableLen < M)
+    (haddr : clampPi c.tableLen
+      (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)) + c.tableBase < M)
+    (hactive : advanceActive (s.regs 10) (s.regs 25) ≤ 1)
+    (hbump : c.bumpPower (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase) ≤ 1)
+    (hstep : c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase) ≤ 1)
+    (hmodes : c.bumpPower (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase) +
+      c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase) =
+      advanceActive (s.regs 10) (s.regs 25))
+    (hjpow : s.regs rJ + s.regs rPow < M)
+    (hpowOut :
+      let step := c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)
+      let piOut := clampPi c.tableLen (s.regs rPi + step)
+      let nextPrime := s.arr (piOut + c.tableBase)
+      nextPowValue (advanceActive (s.regs 10) (s.regs 25))
+        (c.bumpPower (s.regs 10) (s.regs 25)
+          (s.regs rPow) (s.regs rBase)) step
+        (s.regs rPow) (s.regs rPow * s.regs rBase) nextPrime < M)
+    (hbaseOut :
+      let step := c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)
+      let piOut := clampPi c.tableLen (s.regs rPi + step)
+      let nextPrime := s.arr (piOut + c.tableBase)
+      nextBaseValue step (s.regs rBase) nextPrime < M) :
+    let active := advanceActive (s.regs 10) (s.regs 25)
+    let bump := c.bumpPower (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let piOut := clampPi c.tableLen (s.regs rPi + step)
+    let nextPrime := s.arr (piOut + c.tableBase)
+    let powOut := nextPowValue active bump step
+      (s.regs rPow) (s.regs rPow * s.regs rBase) nextPrime
+    let baseOut := nextBaseValue step (s.regs rBase) nextPrime
+    let out := arun k s
+      ((c.markAdvanceSelectBody ++ c.markAdvanceLoadBody) ++
+        Cfg.markAdvanceValueBody)
+    out.regs 85 = active ∧ out.regs 88 = bump ∧ out.regs 89 = step ∧
+      out.regs 97 = 1 - active ∧
+      out.regs 98 = s.regs rJ + s.regs rPow ∧
+      out.regs rPi = piOut ∧ out.regs rPow = powOut ∧
+      out.regs rBase = baseOut ∧ out.regs rJ = s.regs rJ ∧
+      out.regs rW = s.regs rW ∧ out.arr = s.arr := by
+  let loaded := arun k s
+    (c.markAdvanceSelectBody ++ c.markAdvanceLoadBody)
+  have hload := c.markAdvanceSelectLoadBody_run k s h10 h25 hmul hhi
+    hsum hK haddr
+  dsimp only at hload
+  rcases hload with
+    ⟨h85, h86, h88, h89, hpi, h96, hpow, hbase, hj, hw, harr1⟩
+  have hvalue := Cfg.markAdvanceValueBody_run k loaded (by
+      rw [h85]
+      exact hactive) (by
+      rw [h88]
+      exact hbump) (by
+      rw [h89]
+      exact hstep) (by
+      rw [h88, h89, h85]
+      exact hmodes) (by
+      rw [hj, hpow]
+      exact hjpow) (by
+      rw [h85, h88, h89, hpow, h86, h96]
+      exact hpowOut) (by
+      rw [h89, hbase, h96]
+      exact hbaseOut)
+  dsimp only at hvalue
+  rcases hvalue with
+    ⟨h97, h98, hpow', hbase', h85', h88', h89', _h96', hj', harr2⟩
+  let out := arun k loaded Cfg.markAdvanceValueBody
+  have frame (r : Nat) (h : writes r Cfg.markAdvanceValueBody = false) :
+      out.regs r = loaded.regs r :=
+    arun_frame k r Cfg.markAdvanceValueBody h loaded
+  simp only [arun_append]
+  rw [h85] at h97
+  rw [hj, hpow] at h98
+  rw [h85, h88, h89, hpow, h86, h96] at hpow'
+  rw [h89, hbase, h96] at hbase'
+  exact ⟨h85'.trans h85, h88'.trans h88, h89'.trans h89,
+    h97, h98, (frame rPi (by rfl)).trans hpi, hpow', hbase',
+    hj'.trans hj, (frame rW (by rfl)).trans hw, harr2.trans harr1⟩
+
+/-- Word-safety and Boolean-mode obligations for the composed cursor value
+prefix.  The production loop invariant will discharge this record once per
+mark iteration. -/
+structure CursorValuePre (c : Cfg) (s : AState) : Prop where
+  h10 : s.regs 10 ≤ 1
+  h25 : s.regs 25 ≤ 1
+  hmul : s.regs rPow * s.regs rBase < M
+  hhi : c.hi < M
+  hsum : s.regs rPi +
+    c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase) < M
+  hK : c.tableLen < M
+  haddr : clampPi c.tableLen
+    (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)) + c.tableBase < M
+  hactive : advanceActive (s.regs 10) (s.regs 25) ≤ 1
+  hbump : c.bumpPower (s.regs 10) (s.regs 25)
+    (s.regs rPow) (s.regs rBase) ≤ 1
+  hstep : c.stepPrime (s.regs 10) (s.regs 25)
+    (s.regs rPow) (s.regs rBase) ≤ 1
+  hmodes : c.bumpPower (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase) +
+    c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase) =
+    advanceActive (s.regs 10) (s.regs 25)
+  hjpow : s.regs rJ + s.regs rPow < M
+  hpowOut :
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let piOut := clampPi c.tableLen (s.regs rPi + step)
+    let nextPrime := s.arr (piOut + c.tableBase)
+    nextPowValue (advanceActive (s.regs 10) (s.regs 25))
+      (c.bumpPower (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)) step
+      (s.regs rPow) (s.regs rPow * s.regs rBase) nextPrime < M
+  hbaseOut :
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let piOut := clampPi c.tableLen (s.regs rPi + step)
+    let nextPrime := s.arr (piOut + c.tableBase)
+    nextBaseValue step (s.regs rBase) nextPrime < M
+
+/-- Complete emitted cursor transition through power/prime choice, clamped
+table load, value selection, and next-offset selection. -/
+theorem Cfg.markAdvanceCursorPrefix_run (c : Cfg) (k : Nat) (s : AState)
+    (hpre : CursorValuePre c s)
+    (hpow0 :
+      let step := c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)
+      let piOut := clampPi c.tableLen (s.regs rPi + step)
+      let nextPrime := s.arr (piOut + c.tableBase)
+      nextPowValue (advanceActive (s.regs 10) (s.regs 25))
+        (c.bumpPower (s.regs 10) (s.regs 25)
+          (s.regs rPow) (s.regs rBase)) step
+        (s.regs rPow) (s.regs rPow * s.regs rBase) nextPrime ≠ 0)
+    (hL1 : c.segLen + 1 < M) :
+    let active := advanceActive (s.regs 10) (s.regs 25)
+    let bump := c.bumpPower (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let piOut := clampPi c.tableLen (s.regs rPi + step)
+    let nextPrime := s.arr (piOut + c.tableBase)
+    let powOut := nextPowValue active bump step
+      (s.regs rPow) (s.regs rPow * s.regs rBase) nextPrime
+    let baseOut := nextBaseValue step (s.regs rBase) nextPrime
+    let fallback := s.regs rJ + s.regs rPow
+    let jOut := nextOffset active (c.selectedOffset piOut (s.regs rW) powOut)
+      fallback
+    let out := arun k s
+      (((c.markAdvanceSelectBody ++ c.markAdvanceLoadBody) ++
+        Cfg.markAdvanceValueBody) ++ c.markAdvanceOffsetBody)
+    out.regs 85 = active ∧ out.regs 88 = bump ∧ out.regs 89 = step ∧
+      out.regs rPi = piOut ∧ out.regs rPow = powOut ∧
+      out.regs rBase = baseOut ∧ out.regs rJ = jOut ∧
+      out.regs rW = s.regs rW ∧ out.arr = s.arr := by
+  let valued := arun k s
+    ((c.markAdvanceSelectBody ++ c.markAdvanceLoadBody) ++
+      Cfg.markAdvanceValueBody)
+  have hvalue := c.markAdvanceSelectLoadValueBody_run k s
+    hpre.h10 hpre.h25 hpre.hmul hpre.hhi hpre.hsum hpre.hK hpre.haddr
+    hpre.hactive hpre.hbump hpre.hstep hpre.hmodes hpre.hjpow
+    hpre.hpowOut hpre.hbaseOut
+  dsimp only at hvalue
+  rcases hvalue with
+    ⟨h85, h88, h89, h97, h98, hpi, hpow, hbase, _hj, hw, harr1⟩
+  have hoffset := c.markAdvanceOffsetBody_run k valued (by
+      rw [h85]
+      exact hpre.hactive) (by
+      rw [h97, h85]) (by
+      rw [hpow]
+      exact hpow0) (by
+      rw [hpow]
+      exact hpre.hpowOut) hpre.hK hL1 (by
+      rw [h98]
+      exact hpre.hjpow)
+  dsimp only at hoffset
+  rcases hoffset with
+    ⟨_h116, _h118, _h119, _h123, hjOut, hpi', hpow', hw', harr2⟩
+  let out := arun k valued c.markAdvanceOffsetBody
+  have frame (r : Nat) (h : writes r c.markAdvanceOffsetBody = false) :
+      out.regs r = valued.regs r :=
+    arun_frame k r c.markAdvanceOffsetBody h valued
+  simp only [arun_append]
+  rw [h85, hpi, hw, hpow, h98] at hjOut
+  exact ⟨(frame 85 (by rfl)).trans h85,
+    (frame 88 (by rfl)).trans h88,
+    (frame 89 (by rfl)).trans h89,
+    hpi'.trans hpi, hpow'.trans hpow,
+    (frame rBase (by rfl)).trans hbase,
+    hjOut, hw'.trans hw, harr2.trans harr1⟩
+
+/-- The complete emitted advance block implements the pure cursor transition
+and records exactly the configured final-round budget failure.  This theorem
+keeps the already-composed cursor proof opaque while checking the five budget
+instructions, so elaboration never expands the full block at once. -/
+theorem Cfg.markAdvanceBody_run (c : Cfg) (k : Nat) (s : AState)
+    (hpre : CursorValuePre c s)
+    (hpow0 :
+      let step := c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)
+      let piOut := clampPi c.tableLen (s.regs rPi + step)
+      let nextPrime := s.arr (piOut + c.tableBase)
+      nextPowValue (advanceActive (s.regs 10) (s.regs 25))
+        (c.bumpPower (s.regs 10) (s.regs 25)
+          (s.regs rPow) (s.regs rBase)) step
+        (s.regs rPow) (s.regs rPow * s.regs rBase) nextPrime ≠ 0)
+    (hL1 : c.segLen + 1 < M) (hT : c.markSteps < M)
+    (hviol :
+      let step := c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)
+      let piOut := clampPi c.tableLen (s.regs rPi + step)
+      s.regs rViol + c.budgetFailure (s.regs rR) piOut < M)
+    (hvmark :
+      let step := c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)
+      let piOut := clampPi c.tableLen (s.regs rPi + step)
+      s.regs rVMark + c.budgetFailure (s.regs rR) piOut < M) :
+    let active := advanceActive (s.regs 10) (s.regs 25)
+    let bump := c.bumpPower (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let piOut := clampPi c.tableLen (s.regs rPi + step)
+    let nextPrime := s.arr (piOut + c.tableBase)
+    let powOut := nextPowValue active bump step
+      (s.regs rPow) (s.regs rPow * s.regs rBase) nextPrime
+    let baseOut := nextBaseValue step (s.regs rBase) nextPrime
+    let fallback := s.regs rJ + s.regs rPow
+    let jOut := nextOffset active (c.selectedOffset piOut (s.regs rW) powOut)
+      fallback
+    let failure := c.budgetFailure (s.regs rR) piOut
+    let out := arun k s c.markAdvanceBody
+    out.regs rPi = piOut ∧ out.regs rPow = powOut ∧
+      out.regs rBase = baseOut ∧ out.regs rJ = jOut ∧
+      out.regs rViol = s.regs rViol + failure ∧
+      out.regs rVMark = s.regs rVMark + failure ∧
+      out.regs rR = s.regs rR ∧ out.regs rW = s.regs rW ∧
+      out.arr = s.arr := by
+  let cursorPrefix :=
+    (((c.markAdvanceSelectBody ++ c.markAdvanceLoadBody) ++
+      Cfg.markAdvanceValueBody) ++ c.markAdvanceOffsetBody)
+  let advanced := arun k s cursorPrefix
+  have hcursor := c.markAdvanceCursorPrefix_run k s hpre hpow0 hL1
+  dsimp only at hcursor
+  rcases hcursor with
+    ⟨_h85, _h88, _h89, hpi, hpow, hbase, hj, hw, harr1⟩
+  have framePrefix (r : Nat) (h : writes r cursorPrefix = false) :
+      advanced.regs r = s.regs r :=
+    arun_frame k r cursorPrefix h s
+  have hr := framePrefix rR (by rfl)
+  have hviolFrame := framePrefix rViol (by rfl)
+  have hvmarkFrame := framePrefix rVMark (by rfl)
+  have hbudget := c.markBudgetBody_run k advanced hT hpre.hK (by
+      rw [hviolFrame, hr, hpi]
+      exact hviol) (by
+      rw [hvmarkFrame, hr, hpi]
+      exact hvmark)
+  dsimp only at hbudget
+  rcases hbudget with
+    ⟨_h126, _h127, _h128, hviolOut, hvmarkOut, hrOut, hpiOut, harr2⟩
+  let out := arun k advanced c.markBudgetBody
+  have frameBudget (r : Nat) (h : writes r c.markBudgetBody = false) :
+      out.regs r = advanced.regs r :=
+    arun_frame k r c.markBudgetBody h advanced
+  have result :
+      out.regs rPi = clampPi c.tableLen
+          (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+            (s.regs rPow) (s.regs rBase)) ∧
+        out.regs rPow = nextPowValue
+          (advanceActive (s.regs 10) (s.regs 25))
+          (c.bumpPower (s.regs 10) (s.regs 25)
+            (s.regs rPow) (s.regs rBase))
+          (c.stepPrime (s.regs 10) (s.regs 25)
+            (s.regs rPow) (s.regs rBase))
+          (s.regs rPow) (s.regs rPow * s.regs rBase)
+          (s.arr (clampPi c.tableLen
+            (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+              (s.regs rPow) (s.regs rBase)) + c.tableBase)) ∧
+        out.regs rBase = nextBaseValue
+          (c.stepPrime (s.regs 10) (s.regs 25)
+            (s.regs rPow) (s.regs rBase)) (s.regs rBase)
+          (s.arr (clampPi c.tableLen
+            (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+              (s.regs rPow) (s.regs rBase)) + c.tableBase)) ∧
+        out.regs rJ = nextOffset
+          (advanceActive (s.regs 10) (s.regs 25))
+          (c.selectedOffset
+            (clampPi c.tableLen
+              (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+                (s.regs rPow) (s.regs rBase)))
+            (s.regs rW)
+            (nextPowValue (advanceActive (s.regs 10) (s.regs 25))
+              (c.bumpPower (s.regs 10) (s.regs 25)
+                (s.regs rPow) (s.regs rBase))
+              (c.stepPrime (s.regs 10) (s.regs 25)
+                (s.regs rPow) (s.regs rBase))
+              (s.regs rPow) (s.regs rPow * s.regs rBase)
+              (s.arr (clampPi c.tableLen
+                (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+                  (s.regs rPow) (s.regs rBase)) + c.tableBase))))
+          (s.regs rJ + s.regs rPow) ∧
+        out.regs rViol = s.regs rViol +
+          c.budgetFailure (s.regs rR)
+            (clampPi c.tableLen
+              (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+                (s.regs rPow) (s.regs rBase))) ∧
+        out.regs rVMark = s.regs rVMark +
+          c.budgetFailure (s.regs rR)
+            (clampPi c.tableLen
+              (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+                (s.regs rPow) (s.regs rBase))) ∧
+        out.regs rR = s.regs rR ∧ out.regs rW = s.regs rW ∧
+        out.arr = s.arr := by
+    refine ⟨hpiOut.trans hpi,
+      (frameBudget rPow (by rfl)).trans hpow,
+      (frameBudget rBase (by rfl)).trans hbase,
+      (frameBudget rJ (by rfl)).trans hj, ?_, ?_,
+      hrOut.trans hr, (frameBudget rW (by rfl)).trans hw,
+      harr2.trans harr1⟩
+    · calc
+        out.regs rViol = advanced.regs rViol +
+            c.budgetFailure (advanced.regs rR) (advanced.regs rPi) := hviolOut
+        _ = s.regs rViol +
+            c.budgetFailure (s.regs rR)
+              (clampPi c.tableLen
+                (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+                  (s.regs rPow) (s.regs rBase))) := by
+          rw [hviolFrame, hr, hpi]
+    · calc
+        out.regs rVMark = advanced.regs rVMark +
+            c.budgetFailure (advanced.regs rR) (advanced.regs rPi) := hvmarkOut
+        _ = s.regs rVMark +
+            c.budgetFailure (s.regs rR)
+              (clampPi c.tableLen
+                (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+                  (s.regs rPow) (s.regs rBase))) := by
+          rw [hvmarkFrame, hr, hpi]
+  simpa only [Cfg.markAdvanceBody, Cfg.markAdvanceCursorBody,
+    List.append_assoc, arun_append, out, advanced, cursorPrefix] using result
+
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve
