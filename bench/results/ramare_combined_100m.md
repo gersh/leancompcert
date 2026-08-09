@@ -152,9 +152,13 @@ selection/exponent/product updates, and second-prime flag/commit/exponent
 updates.  The second exact-product update, power-vs-prime cursor choice,
 clamped table index, exact next-row load, selected power/base values,
 next-multiple offset (including the sentinel), and budget-failure accounting
-are now exact as well.  Its expanded capped direct source check took **1.72
-wall-seconds**, **736,212 KiB peak RSS**, and zero swap.  The deliberately
-split proof avoids normalizing the full 120-instruction mark core.
+are now exact as well.  The all-product, first-prime, and second-prime blocks
+are then composed into one exact `PlaneCell.markPower` transition: seven
+physical plane writes and a positive-width read-after-write theorem establish
+the complete cell update without normalizing the combined 43-instruction
+stream.  Its expanded capped direct source check took **2.30 wall-seconds**,
+**749,404 KiB peak RSS**, and zero swap.  The deliberately split proof avoids
+normalizing the full 120-instruction mark core.
 Regenerating the production C
 after this refactor gives the same SHA-256 `aa222123bc751266392d65d92b99fbc02c82fb36cb674b8610bcd704f99fb224`;
 the full run still reports `guards 0 seen 99990000 mark 0 shape 0`.

@@ -335,10 +335,13 @@ def Cfg.markAdvanceBody (c : Cfg) : List AInstr :=
   c.markAdvanceSelectBody ++ c.markAdvanceLoadBody ++
     c.markAdvanceCursorBody ++ c.markBudgetBody
 
+/-- The seven physical writes made by one live prime-power hit. -/
+def Cfg.markCellBody : List AInstr :=
+  markAllProductBody ++ markFirstBody ++ markSecondBody
+
 def Cfg.markCoreBody (c : Cfg) : List AInstr :=
   c.markResetBody ++ c.markAddressBody ++ markLoadBody ++
-    markAllProductBody ++ markFirstBody ++ markSecondBody ++
-    c.markAdvanceBody
+    markCellBody ++ c.markAdvanceBody
 
 def Cfg.markBody (c : Cfg) : List AInstr :=
   lift c.markPhaseBody ++ c.markCoreBody
