@@ -13,10 +13,180 @@ literal body used by `AProgram` and to an arbitrary window-boundary state.
 
 namespace LeanCompCert.Ports.RamareCombined100M.WholeSweepInvariant
 
-open LeanCompCert.Verified.ArrayState (AState)
+open LeanCompCert.Verified.ArrayState (AState initialAState)
 open LeanCompCert.Verified.ArrayFoldBridge (arun arun_append)
 open LeanCompCert.Ports.RamareCombined100M
 open LeanCompCert.Ports.RamareCombined100M.ShapeSieve
+open LeanCompCert.Ports.PsiSegSieve (storeLit storeLits seedRegs)
+
+/-- A literal store whose representable address is different from `j` frames
+cell `j`; its value need not be evaluated or bounded. -/
+theorem arun_storeLit_arr_frame
+    (k cell value j : Nat) (s : AState)
+    (hcell : cell < LeanCompCert.Verified.Reflect.M) (hne : j ≠ cell) :
+    (arun k s (storeLit cell value)).arr j = s.arr j := by
+  simp [storeLit, arun, LeanCompCert.Verified.ArrayFoldBridge.astep,
+    LeanCompCert.Verified.ArrayState.AState.writeReg,
+    LeanCompCert.Verified.ArrayState.AState.writeArr,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval,
+    LeanCompCert.Verified.Reflect.denoteOperand,
+    Nat.mod_eq_of_lt hcell, hne]
+
+/-- A finite list of literal stores frames `j` when every represented address
+is in range and distinct from `j`. -/
+theorem arun_storeLits_arr_frame
+    (k j : Nat) (s : AState) (l : List (Nat × Nat))
+    (haddr : ∀ x ∈ l, x.1 < LeanCompCert.Verified.Reflect.M)
+    (hne : ∀ x ∈ l, j ≠ x.1) :
+    (arun k s (storeLits l)).arr j = s.arr j := by
+  induction l generalizing s with
+  | nil => rfl
+  | cons x xs ih =>
+      simp only [storeLits, List.flatMap_cons, arun_append]
+      change (arun k (arun k s (storeLit x.1 x.2))
+        (storeLits xs)).arr j = s.arr j
+      rw [ih (arun k s (storeLit x.1 x.2))
+        (fun y hy => haddr y (by simp [hy]))
+        (fun y hy => hne y (by simp [hy]))]
+      exact arun_storeLit_arr_frame k x.1 x.2 j s
+        (haddr x (by simp)) (hne x (by simp))
+
+/-- The all-zero machine state after the literal production lambda/psi
+initializer. -/
+def productionPhysicalInitState (logs : List LogCell)
+    (seed : LambdaPsiSweep.Seed) : AState :=
+  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  arun 0 initialAState (LambdaPsiSweep.init c seed)
+
+/-- The extra log-table stores and arithmetic seeds in the physical
+initializer preserve every shape-sieve fact needed to start the first
+window.  Only their addresses matter; log values are deliberately not
+reduced. -/
+theorem productionPhysicalInitState_shape
+    (logs : List LogCell) (seed : LambdaPsiSweep.Seed)
+    (haddrM : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      x.1 < LeanCompCert.Verified.Reflect.M)
+    (haddrAway : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      productionCursorCfg.arrayLen ≤ x.1) :
+    let s := productionPhysicalInitState logs seed
+    s.regs rR = 0 ∧
+      s.regs rW = productionCursorCfg.lo ∧
+      (∀ pi, pi ≤ productionCursorCfg.tableLen →
+        s.arr (pi + productionCursorCfg.tableBase) = productionPowerTable pi) ∧
+      (∀ i, i < productionCursorCfg.segLen →
+        productionCursorCfg.readPlaneCell i s = emptyPlaneCell) ∧
+      s.regs rViol = 0 ∧ s.regs rVMark = 0 := by
+  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  let logSeeded := arun 0 productionInitState
+    (seedRegs [(LambdaPsiSweep.lRLogL, seed.log.logL),
+      (LambdaPsiSweep.lRLogU, seed.log.logU)])
+  let stored := arun 0 logSeeded (storeLits c.logCells)
+  let out := arun 0 stored
+    (seedRegs [(LambdaPsiSweep.rSumL, seed.sumL),
+      (LambdaPsiSweep.rSumU, seed.sumU),
+      (LambdaPsiSweep.rPsiLQ, seed.psiL.q),
+      (LambdaPsiSweep.rPsiLR, seed.psiL.r),
+      (LambdaPsiSweep.rPsiUQ, seed.psiU.q),
+      (LambdaPsiSweep.rPsiUR, seed.psiU.r)])
+  have hout : productionPhysicalInitState logs seed = out := by
+    simp only [productionPhysicalInitState, LambdaPsiSweep.init,
+      LeanCompCert.Ports.RamareCombined100M.LogSweep.init,
+      productionInitState, c, out, stored, logSeeded, arun_append]
+  have hlow (j : Nat) (hj : j < productionCursorCfg.arrayLen) :
+      out.arr j = productionInitState.arr j := by
+    have hlogArr : logSeeded.arr = productionInitState.arr :=
+      arun_seedRegs_arr 0 productionInitState _
+    have hstored : stored.arr j = logSeeded.arr j := by
+      exact arun_storeLits_arr_frame 0 j logSeeded c.logCells
+        (by simpa [c] using haddrM)
+        (fun x hx heq => by
+          have haway := haddrAway x (by simpa [c] using hx)
+          omega)
+    have houtArr : out.arr = stored.arr := arun_seedRegs_arr 0 stored _
+    rw [houtArr, hstored, hlogArr]
+  have hreg (r : Nat)
+      (hlog : LambdaPsiSweep.ablockWritesReg r
+        (seedRegs [(LambdaPsiSweep.lRLogL, seed.log.logL),
+          (LambdaPsiSweep.lRLogU, seed.log.logU)]) = false)
+      (hcand : LambdaPsiSweep.ablockWritesReg r
+        (seedRegs [(LambdaPsiSweep.rSumL, seed.sumL),
+          (LambdaPsiSweep.rSumU, seed.sumU),
+          (LambdaPsiSweep.rPsiLQ, seed.psiL.q),
+          (LambdaPsiSweep.rPsiLR, seed.psiL.r),
+          (LambdaPsiSweep.rPsiUQ, seed.psiU.q),
+          (LambdaPsiSweep.rPsiUR, seed.psiU.r)]) = false)
+      (hr90 : r ≠ 90) (hr91 : r ≠ 91) :
+      out.regs r = productionInitState.regs r := by
+    exact (LambdaPsiSweep.arun_reg_frame 0 r _ stored hcand).trans
+      ((arun_storeLits_regs_frame 0 r logSeeded c.logCells hr90 hr91).trans
+        (LambdaPsiSweep.arun_reg_frame 0 r _ productionInitState hlog))
+  rw [hout]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [hreg rR (by rfl) (by rfl) (by decide) (by decide)]
+    exact productionInitState_regs_zero rR (by decide) (by decide) (by decide)
+  · rw [hreg rW (by rfl) (by rfl) (by decide) (by decide)]
+    exact productionInitState_window
+  · intro pi hpi
+    rw [hlow]
+    · simpa [Nat.add_comm] using productionInitState_table pi hpi
+    · have hstatic := productionCursorStaticWordBounds
+      unfold Cfg.arrayLen Cfg.resultBase
+      omega
+  · intro i hi
+    have hplane (m : Nat) (hm : m ≤ 6) :
+        i + m * productionCursorCfg.segLen < productionCursorCfg.arrayLen := by
+      have hbase : 7 * productionCursorCfg.segLen ≤
+          productionCursorCfg.tableBase := by
+        change 7 * 999900 ≤ 14 * 999900
+        omega
+      have hmprod : m * productionCursorCfg.segLen ≤
+          6 * productionCursorCfg.segLen :=
+        Nat.mul_le_mul_right productionCursorCfg.segLen hm
+      unfold Cfg.arrayLen Cfg.resultBase
+      omega
+    have hread : productionCursorCfg.readPlaneCell i out =
+        productionCursorCfg.readPlaneCell i productionInitState := by
+      apply PlaneCell.ext <;> simp only [Cfg.readPlaneCell]
+      · exact hlow i (by simpa using hplane 0 (by omega))
+      · exact hlow (i + productionCursorCfg.segLen)
+          (by simpa using hplane 1 (by omega))
+      · exact hlow (i + 2 * productionCursorCfg.segLen)
+          (hplane 2 (by omega))
+      · exact hlow (i + 3 * productionCursorCfg.segLen)
+          (hplane 3 (by omega))
+      · exact hlow (i + 4 * productionCursorCfg.segLen)
+          (hplane 4 (by omega))
+      · exact hlow (i + 5 * productionCursorCfg.segLen)
+          (hplane 5 (by omega))
+      · exact hlow (i + 6 * productionCursorCfg.segLen)
+          (hplane 6 (by omega))
+    exact hread.trans (productionInitState_plane_empty i hi)
+  · rw [hreg rViol (by rfl) (by rfl) (by decide) (by decide)]
+    exact productionInitState_regs_zero rViol (by decide) (by decide) (by decide)
+  · rw [hreg rVMark (by rfl) (by rfl) (by decide) (by decide)]
+    exact productionInitState_regs_zero rVMark (by decide) (by decide) (by decide)
+
+/-- The literal lambda/psi initializer establishes the selected-cell marking
+invariant at the first production window. -/
+theorem productionPhysicalInitState_markInv
+    (logs : List LogCell) (seed : LambdaPsiSweep.Seed)
+    (haddrM : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      x.1 < LeanCompCert.Verified.Reflect.M)
+    (haddrAway : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      productionCursorCfg.arrayLen ≤ x.1)
+    (i : Nat) (hi : i < productionCursorCfg.segLen) :
+    ProductionMarkStateInv productionCursorCfg.lo i 0
+      (productionInitialPowerCell productionCursorCfg.lo)
+      (productionPhysicalInitState logs seed) := by
+  have hs := productionPhysicalInitState_shape logs seed haddrM haddrAway
+  exact productionWindowStart_markInv productionCursorCfg.lo i
+    (productionPhysicalInitState logs seed) hs.1 hs.2.1 hs.2.2.1
+    (hs.2.2.2.1 i hi) hs.2.2.2.2.1 hs.2.2.2.2.2
 
 /-- The log/lambda/psi suffix writes neither the persistent power cursor nor
 the seven-plane array.  It therefore preserves the complete selected-cell

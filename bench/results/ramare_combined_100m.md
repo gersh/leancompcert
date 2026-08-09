@@ -388,6 +388,8 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | initializer consumer after layering change, module build | 1:44.00 | 4,700,000 KiB | 0 | success |
 | literal full-body arbitrary-window invariant, direct source check | 0.58 s | 583,944 KiB | 0 | success |
 | literal full-body arbitrary-window invariant, live module build | 15.80 s | 789,288 KiB | 0 | success |
+| literal physical initializer plus whole-sweep invariant, direct source check | 16.35 s | 3,994,116 KiB | 0 | success |
+| literal physical initializer plus whole-sweep invariant, module build | 16.73 s | 4,012,428 KiB | 0 | success |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -397,6 +399,15 @@ state, so `productionWindow_cell_eq_cursorRows` applies to the literal
 zero incoming and outgoing failure counters; carrying or deriving those facts
 through classification, together with `ArithmeticPre`, is the next whole-loop
 obligation.
+
+The literal initializer is now covered as well.  Generic finite-store frame
+lemmas prove that all positional log-table stores lie above the shape array,
+without evaluating their endpoint payloads.  Consequently
+`productionPhysicalInitState_shape` establishes the table, empty planes,
+window position, and zero failure counters for the actual lambda/psi
+initializer, and `productionPhysicalInitState_markInv` feeds that state into
+the whole-sweep invariant.  The direct and module checks above stayed below
+4 GiB with no swap; no closed initializer computation was introduced.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert
