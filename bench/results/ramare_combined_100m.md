@@ -406,6 +406,7 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | full literal-body other-cell frame, module build | 5.07 s | 765,452 KiB | 0 | success |
 | finite production classification sweep, direct source check | 18.10 s | 717,720 KiB | 0 | success |
 | finite production classification sweep, module build | 17.93 s | 707,184 KiB | 0 | success |
+| physical initializer to classification seam, direct source check | 35.12 s | 4,188,456 KiB | 0 | success |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -460,6 +461,12 @@ seam.  After exactly `999900` symbolic steps all live planes are empty and the
 tail has moved to the next window boundary.  This closes the finite memory and
 classifier-counter sweep; the remaining whole-window obligation is the
 arithmetic-state invariant needed to identify the six numerical outputs.
+The physical initializer-to-seam composition is also kept in LeanCompCert.
+It stages architectural-zero framing across the seed, finite log stores, and
+candidate seed blocks before invoking the marking and classification
+invariants.  A concrete downstream `writes` reduction was stopped after more
+than three minutes; the generic replacement restores the Goldbach bridge to
+its prior roughly 38-second compile baseline.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert

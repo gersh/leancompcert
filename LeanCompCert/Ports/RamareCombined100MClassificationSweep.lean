@@ -529,6 +529,43 @@ theorem BodyRefinement.bodyRun_reg_frame
         arun_frame k r (LambdaPsiSweep.body c) hw,
         ih]
 
+/-- The generic physical lambda/psi initializer preserves architectural
+register zero.  Staging the four initializer blocks here prevents downstream
+production specializations from reducing the concrete log table merely to
+decide a `writes` expression. -/
+theorem productionPhysicalInitState_zero
+    (logs : List LogCell) (seed : LambdaPsiSweep.Seed) :
+    (WholeSweepInvariant.productionPhysicalInitState logs seed).regs 0 = 0 := by
+  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  let logSeeded := arun 0 productionInitState
+    (LeanCompCert.Ports.PsiSegSieve.seedRegs
+      [(LambdaPsiSweep.lRLogL, seed.log.logL),
+       (LambdaPsiSweep.lRLogU, seed.log.logU)])
+  let stored := arun 0 logSeeded
+    (LeanCompCert.Ports.PsiSegSieve.storeLits c.logCells)
+  let out := arun 0 stored
+    (LeanCompCert.Ports.PsiSegSieve.seedRegs
+      [(LambdaPsiSweep.rSumL, seed.sumL),
+       (LambdaPsiSweep.rSumU, seed.sumU),
+       (LambdaPsiSweep.rPsiLQ, seed.psiL.q),
+       (LambdaPsiSweep.rPsiLR, seed.psiL.r),
+       (LambdaPsiSweep.rPsiUQ, seed.psiU.q),
+       (LambdaPsiSweep.rPsiUR, seed.psiU.r)])
+  have hout : WholeSweepInvariant.productionPhysicalInitState logs seed = out := by
+    simp only [WholeSweepInvariant.productionPhysicalInitState,
+      LambdaPsiSweep.init,
+      LeanCompCert.Ports.RamareCombined100M.LogSweep.init,
+      productionInitState, c, out, stored, logSeeded, arun_append]
+  have hout0 : out.regs 0 = stored.regs 0 :=
+    LambdaPsiSweep.arun_reg_frame 0 0 _ stored (by rfl)
+  have hstored0 : stored.regs 0 = logSeeded.regs 0 :=
+    arun_storeLits_regs_frame
+      0 0 logSeeded c.logCells (by decide) (by decide)
+  have hseed0 : logSeeded.regs 0 = productionInitState.regs 0 :=
+    LambdaPsiSweep.arun_reg_frame 0 0 _ productionInitState (by rfl)
+  rw [hout, hout0, hstored0, hseed0]
+  exact productionInitState_regs_zero 0 (by decide) (by decide) (by decide)
+
 set_option maxRecDepth 100000 in
 /-- The already-verified finite marking phase establishes the pending-cell
 relations required by the classification induction for every live offset.
@@ -609,5 +646,43 @@ theorem productionWindow_classStart
   · rfl
   · rfl
   · rfl
+
+/-- The generic physical initializer followed by the finite marking phase
+establishes the first production classification seam.  Downstream users need
+only prove their finite log-store addresses and provide the public zero
+failure result. -/
+theorem productionPhysicalInit_classStart
+    (logs : List LogCell) (seed : LambdaPsiSweep.Seed)
+    (haddrM : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      x.1 < M)
+    (haddrAway : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      productionCursorCfg.arrayLen ≤ x.1)
+    (hmarkZero :
+      let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+      let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+      (BodyRefinement.bodyRun 0 c productionCursorCfg.markSteps s).regs
+        rViol = 0) :
+    let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+    let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+    let marked := BodyRefinement.bodyRun 0 c productionCursorCfg.markSteps s
+    ProductionClassSweepInv productionCursorCfg.lo 0
+      (marked.regs rViol) (marked.regs rVMark)
+      (marked.regs rVShape) (marked.regs rSeen) marked := by
+  let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+  have hs := WholeSweepInvariant.productionPhysicalInitState_shape
+    logs seed haddrM haddrAway
+  exact productionWindow_classStart logs 0 productionCursorCfg.lo s
+    (by change 10001 < M; decide)
+    (by change 10001 + 999900 < M; decide)
+    (by intro i hi; change 0 < 10001 + i; omega)
+    (by
+      intro i hi
+      change i < 999900 at hi
+      change 10001 + i ≤ 100000000
+      omega)
+    hs.1 hs.2.1 (productionPhysicalInitState_zero logs seed)
+    hs.2.2.1 hs.2.2.2.1 hs.2.2.2.2.1 hs.2.2.2.2.2 hmarkZero
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve
