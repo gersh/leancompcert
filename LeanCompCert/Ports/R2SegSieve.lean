@@ -228,17 +228,40 @@ root phase can collect prime *values* but not their logarithms. -/
 def markTable (S hi : Nat) : List Nat :=
   (primesBelow (Nat.sqrt hi + 1)).map (fun p => packEntry p (lnFix S p) 1)
 
+/-- The contribution of the powers `q, q*p, ...` to a mark budget.
+
+The fuel is deliberately explicit.  `markBudget` supplies `hi + 1`, which is
+more than enough because every table entry is a prime and hence at least two.
+Besides making termination transparent, this presentation lets word-safety
+proofs bound the computation symbolically instead of reducing a large
+imperative `while` in the kernel. -/
+def powerMarkBudgetAux (hi len p q : Nat) : Nat → Nat
+  | 0 => 0
+  | fuel + 1 =>
+      if q ≤ hi then
+        len / q + 2 + powerMarkBudgetAux hi len p (q * p) fuel
+      else 0
+
 /-- Mark steps a window of `len` cells needs: one per multiple of each prime
 **power** `p^j ≤ hi`, one per power to advance the cursor or bump it, and
-slack. -/
-def markBudget (root hi len : Nat) : Nat := Id.run do
-  let mut acc := 16
-  for p in primesBelow (root + 1) do
-    let mut q := p
-    while q ≤ hi do
-      acc := acc + len / q + 2
-      q := q * p
-  return acc
+slack.  This is extensionally the former imperative loop on prime inputs, but
+is structurally recursive so downstream proofs can use a small symbolic
+bound without normalizing the production computation. -/
+def rawMarkBudget (root hi len : Nat) : Nat :=
+  16 + (primesBelow (root + 1)).foldl
+    (fun acc p => acc + powerMarkBudgetAux hi len p p (hi + 1)) 0
+
+/-- The emitted machine stores the round counter in one 64-bit word.  Clamp
+the emit-time estimate to the largest representable counter; every consumer
+also checks the budget-failure flag, so a genuinely oversized configuration
+fails closed instead of wrapping. -/
+def markBudget (root hi len : Nat) : Nat :=
+  min (rawMarkBudget root hi len) (M - 1)
+
+theorem markBudget_lt_word (root hi len : Nat) :
+    markBudget root hi len < M := by
+  have hM : 0 < M := by decide +kernel
+  exact Nat.lt_of_le_of_lt (Nat.min_le_right _ _) (Nat.sub_lt hM (by omega))
 
 /-! ### Classification, at emit time
 

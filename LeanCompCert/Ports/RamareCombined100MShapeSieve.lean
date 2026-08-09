@@ -43,7 +43,7 @@ open LeanCompCert.Verified.ArrayRegFrame
 open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.PsiSegSieve (storeLit storeLits seedRegs)
-open LeanCompCert.Ports.R2SegSieve (markBudget)
+open LeanCompCert.Ports.R2SegSieve (markBudget markBudget_lt_word)
 
 structure Cfg where
   lo : Nat
@@ -78,6 +78,15 @@ def Cfg.ofChain (lo segLen segCount tableHi : Nat) : Cfg :=
   { lo, segLen, segCount, tableHi
     markSteps := markBudget root hi segLen
     table := trialPrimesBelow (root + 1) }
+
+/-- Every generated cursor configuration has a representable round budget.
+Oversized emit-time estimates are clamped by `markBudget`; the executable
+budget-failure counter still makes an insufficient budget fail closed. -/
+theorem Cfg.ofChain_markSteps_lt_word
+    (lo segLen segCount tableHi : Nat) :
+    (Cfg.ofChain lo segLen segCount tableHi).markSteps < M := by
+  simp only [Cfg.ofChain]
+  exact markBudget_lt_word _ _ _
 
 /-! ## Array layout
 
