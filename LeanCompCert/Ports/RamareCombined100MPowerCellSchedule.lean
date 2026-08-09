@@ -13,6 +13,9 @@ namespace LeanCompCert.Ports.RamareCombined100M.ShapeSieve
 open LeanCompCert.Ports.ArraySegMobiusScheduleFold (liveCount cursorLiveEvents)
 open LeanCompCert.Verified.Reflect (M)
 open LeanCompCert.Verified.ArrayState (AState)
+open LeanCompCert.Verified.ArrayFoldBridge (arun)
+open LeanCompCert.Verified.ArrayScalarBlock (lift)
+open LeanCompCert.Verified.ArrayRegFrame (writes arun_frame)
 
 /-- Selected-cell fold of a finite list of power-phase descriptors. -/
 def cursorPhasesFold (segLen w i : Nat) (phases : List PowerPhase)
@@ -569,6 +572,93 @@ theorem productionStaticPlaneWordBounds :
     10 * 999900 < M ∧ 11 * 999900 < M ∧
     12 * 999900 < M ∧ 13 * 999900 < M
   decide
+
+/-- The live whole-state invariant automatically supplies the advance
+premise after phase selection, cursor reset, and the physical cell prefix. -/
+theorem productionAdvanceWordPre_after_mark_prefix
+    (k : Nat) (s : AState) (cur : PowerCursor)
+    (hround : s.regs rR < productionCursorCfg.markSteps)
+    (hcur :
+      let phased := arun k s (lift productionCursorCfg.markPhaseBody)
+      let reset := arun k phased productionCursorCfg.markResetBody
+      machinePowerCursor reset = cur)
+    (hbounds : PowerCursorBounds productionCursorCfg.segLen
+      productionCursorCfg.hi productionCursorCfg.tableLen
+      productionPowerTable cur)
+    (htable : ∀ pi, pi ≤ productionCursorCfg.tableLen →
+      s.arr (pi + productionCursorCfg.tableBase) = productionPowerTable pi)
+    (hviol : s.regs rViol ≤ s.regs rR)
+    (hvmark : s.regs rVMark ≤ s.regs rR) :
+    let phased := arun k s (lift productionCursorCfg.markPhaseBody)
+    let reset := arun k phased productionCursorCfg.markResetBody
+    let marked := arun k reset productionCursorCfg.markCellPrefix
+    AdvanceWordPre productionCursorCfg marked productionPowerTable := by
+  let c := productionCursorCfg
+  let phased := arun k s (lift c.markPhaseBody)
+  let reset := arun k phased c.markResetBody
+  let marked := arun k reset c.markCellPrefix
+  change machinePowerCursor reset = cur at hcur
+  change ∀ pi, pi ≤ c.tableLen →
+    s.arr (pi + c.tableBase) = productionPowerTable pi at htable
+  have hp := c.markPhaseBody_run k s productionCursorCfg_markSteps_lt_word
+  dsimp only at hp
+  have hp10 : phased.regs 10 = 1 := by
+    rw [hp.1, if_pos hround]
+  have hr10 : reset.regs 10 = 1 :=
+    (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
+  rcases productionStaticPlaneWordBounds with
+    ⟨_hseg, h7, h8, h9, h10, h11, h12, h13⟩
+  have hlive : reset.regs rJ < c.segLen →
+      reset.regs rJ < M ∧ reset.regs rJ + c.segLen < M ∧
+      reset.regs rJ + 2 * c.segLen < M ∧
+      reset.regs rJ + 3 * c.segLen < M ∧
+      reset.regs rJ + 4 * c.segLen < M ∧
+      reset.regs rJ + 5 * c.segLen < M ∧
+      reset.regs rJ + 6 * c.segLen < M := by
+    intro hj
+    exact productionLivePlaneWordBounds hj
+  have hprefix := c.markCellPrefix_cursor_past k reset hr10 hlive
+    h7 h8 h9 h10 h11 h12 h13
+  have hmCur : machinePowerCursor marked = cur := by
+    exact hprefix.1.trans hcur
+  have hrJ : reset.regs rJ = cur.j := congrArg PowerCursor.j hcur
+  have hmPast : marked.regs 25 =
+      if cur.j < c.segLen then 0 else 1 := by
+    simpa [hrJ] using hprefix.2
+  have hmPhase : marked.regs 10 = 1 :=
+    (arun_frame k 10 c.markCellPrefix (by rfl) reset).trans hr10
+  have hresetArr : reset.arr = phased.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markResetBody phased (by rfl)
+  have hmTable : ∀ pi, pi ≤ c.tableLen →
+      marked.arr (pi + c.tableBase) = productionPowerTable pi := by
+    intro pi hpi
+    have hmark := c.markCellPrefix_table_frame k reset
+      (pi + c.tableBase) hr10 (by change 0 < 999900; omega)
+      hlive h7 h8 h9 h10 h11 h12 h13 (by omega)
+    exact hmark.trans ((congrFun hresetArr _).trans
+      ((congrFun hp.2.2.2 _).trans (htable pi hpi)))
+  have frameToMarked (r : Nat)
+      (hphaseF : writes r (lift c.markPhaseBody) = false)
+      (hresetF : writes r c.markResetBody = false)
+      (hprefixF : writes r c.markCellPrefix = false) :
+      marked.regs r = s.regs r := by
+    exact (arun_frame k r c.markCellPrefix hprefixF reset).trans
+      ((arun_frame k r c.markResetBody hresetF phased).trans
+        (arun_frame k r (lift c.markPhaseBody) hphaseF s))
+  have hmR : marked.regs rR = s.regs rR :=
+    frameToMarked rR (by rfl) (by rfl) (by rfl)
+  have hmViol : marked.regs rViol = s.regs rViol :=
+    frameToMarked rViol (by rfl) (by rfl) (by rfl)
+  have hmVMark : marked.regs rVMark = s.regs rVMark :=
+    frameToMarked rVMark (by rfl) (by rfl) (by rfl)
+  apply productionAdvanceWordPre_of_cursorBounds marked cur hmCur hmPhase
+    hmPast hbounds hmTable
+  · simpa [hmR] using hround
+  · rw [hmViol, hmR]
+    exact hviol
+  · rw [hmVMark, hmR]
+    exact hvmark
 
 /-- Closed production phase enumeration has the same selected-cell result as
 the exact production table-row fold for every live window cell. -/

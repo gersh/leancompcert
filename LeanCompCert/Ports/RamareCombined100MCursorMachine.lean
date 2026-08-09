@@ -1820,6 +1820,55 @@ theorem Cfg.markCellPrefix_table_frame
       unfold Cfg.tableBase at hq
       omega
 
+/-- The address/load/cell prefix preserves the persistent cursor and exposes
+the exact exhausted-offset selector consumed by the advance block. -/
+theorem Cfg.markCellPrefix_cursor_past
+    (c : Cfg) (k : Nat) (s : AState)
+    (hphase : s.regs 10 = 1)
+    (hliveBounds : s.regs rJ < c.segLen →
+      s.regs rJ < M ∧ s.regs rJ + c.segLen < M ∧
+      s.regs rJ + 2 * c.segLen < M ∧
+      s.regs rJ + 3 * c.segLen < M ∧
+      s.regs rJ + 4 * c.segLen < M ∧
+      s.regs rJ + 5 * c.segLen < M ∧
+      s.regs rJ + 6 * c.segLen < M)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M) :
+    let out := arun k s c.markCellPrefix
+    machinePowerCursor out = machinePowerCursor s ∧
+      out.regs 25 = if s.regs rJ < c.segLen then 0 else 1 := by
+  let addressed := arun k s c.markAddressBody
+  let tail := Cfg.markLoadBody ++ Cfg.markCellBody
+  let out := arun k addressed tail
+  have hcursor : machinePowerCursor out = machinePowerCursor s := by
+    apply PowerCursor.ext
+    · exact (arun_frame k rPi tail (by rfl) addressed).trans
+        (arun_frame k rPi c.markAddressBody (by rfl) s)
+    · exact (arun_frame k rPow tail (by rfl) addressed).trans
+        (arun_frame k rPow c.markAddressBody (by rfl) s)
+    · exact (arun_frame k rBase tail (by rfl) addressed).trans
+        (arun_frame k rBase c.markAddressBody (by rfl) s)
+    · exact (arun_frame k rJ tail (by rfl) addressed).trans
+        (arun_frame k rJ c.markAddressBody (by rfl) s)
+  have h25 : out.regs 25 = addressed.regs 25 :=
+    arun_frame k 25 tail (by rfl) addressed
+  have hout : arun k s c.markCellPrefix = out := by
+    simp [Cfg.markCellPrefix, out, tail, addressed, arun_append]
+  rw [hout]
+  refine ⟨hcursor, ?_⟩
+  by_cases hlive : s.regs rJ < c.segLen
+  · rcases hliveBounds hlive with ⟨h0, h1, h2, h3, h4, h5, h6⟩
+    have ha := c.markAddressBody_live_run k s hphase hlive
+      h0 h1 h2 h3 h4 h5 h6
+    dsimp only at ha
+    rw [h25, ha.2.1, if_pos hlive]
+  · have ha := c.markAddressBody_exhausted_run k s hphase hlive
+      h7 h8 h9 h10 h11 h12 h13
+    dsimp only at ha
+    rw [h25, ha.2.1, if_neg hlive]
+
 structure PowerCellState where
   cursor : PowerCursor
   cell : PlaneCell
