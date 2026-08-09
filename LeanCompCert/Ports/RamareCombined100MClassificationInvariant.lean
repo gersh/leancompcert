@@ -93,6 +93,178 @@ theorem Cfg.markBody_class_counter_frame
   exact ⟨hbudget.1.trans hbViol,
     hbudget.2.trans hbVMark, houtSeen.trans hbSeen⟩
 
+/-- With the mark gate disabled, all seven unconditional memory operations
+select the dedicated sink planes, independently of the cursor offset. -/
+theorem Cfg.markAddressBody_inactive_run
+    (c : Cfg) (k : Nat) (s : AState)
+    (hphase : s.regs 10 = 0)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M) :
+    let out := arun k s c.markAddressBody
+    out.regs 30 = 7 * c.segLen ∧ out.regs 31 = 8 * c.segLen ∧
+      out.regs 32 = 9 * c.segLen ∧ out.regs 33 = 10 * c.segLen ∧
+      out.regs 34 = 11 * c.segLen ∧ out.regs 35 = 12 * c.segLen ∧
+      out.regs 36 = 13 * c.segLen ∧ out.arr = s.arr := by
+  have h8' : (8 * c.segLen) % M = 8 * c.segLen := Nat.mod_eq_of_lt h8
+  have h9' : (9 * c.segLen) % M = 9 * c.segLen := Nat.mod_eq_of_lt h9
+  have h10' : (10 * c.segLen) % M = 10 * c.segLen := Nat.mod_eq_of_lt h10
+  have h11' : (11 * c.segLen) % M = 11 * c.segLen := Nat.mod_eq_of_lt h11
+  have h12' : (12 * c.segLen) % M = 12 * c.segLen := Nat.mod_eq_of_lt h12
+  have h13' : (13 * c.segLen) % M = 13 * c.segLen := Nat.mod_eq_of_lt h13
+  have h8raw : (7 * c.segLen + c.segLen) % M = 8 * c.segLen := by
+    rw [show 7 * c.segLen + c.segLen = 8 * c.segLen by omega, h8']
+  have h9raw : (7 * c.segLen + 2 * c.segLen) % M = 9 * c.segLen := by
+    rw [show 7 * c.segLen + 2 * c.segLen = 9 * c.segLen by omega, h9']
+  have h10raw : (7 * c.segLen + 3 * c.segLen) % M = 10 * c.segLen := by
+    rw [show 7 * c.segLen + 3 * c.segLen = 10 * c.segLen by omega, h10']
+  have h11raw : (7 * c.segLen + 4 * c.segLen) % M = 11 * c.segLen := by
+    rw [show 7 * c.segLen + 4 * c.segLen = 11 * c.segLen by omega, h11']
+  have h12raw : (7 * c.segLen + 5 * c.segLen) % M = 12 * c.segLen := by
+    rw [show 7 * c.segLen + 5 * c.segLen = 12 * c.segLen by omega, h12']
+  have h13raw : (7 * c.segLen + 6 * c.segLen) % M = 13 * c.segLen := by
+    rw [show 7 * c.segLen + 6 * c.segLen = 13 * c.segLen by omega, h13']
+  simp [Cfg.markAddressBody, arun, astep,
+    LeanCompCert.Verified.ArrayState.AState.writeReg,
+    sdest, sval, denoteOperand, denoteOp, hphase, Cfg.sink, M]
+  exact ⟨by simpa [M] using h7,
+    by simpa [M] using h8raw,
+    by simpa [M] using h9raw,
+    by simpa [M] using h10raw,
+    by simpa [M] using h11raw,
+    by simpa [M] using h12raw,
+    by simpa [M] using h13raw⟩
+
+/-- In a classification round the complete mark block writes only sink
+planes, hence every live seven-plane cell is an exact frame. -/
+theorem Cfg.markBody_class_plane_frame
+    (c : Cfg) (k : Nat) (s : AState) (i : Nat)
+    (hclass : c.markSteps ≤ s.regs rR) (hTM : c.markSteps < M)
+    (hi : i < c.segLen)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M) :
+    c.readPlaneCell i (arun k s c.markBody) = c.readPlaneCell i s := by
+  let phased := arun k s (lift c.markPhaseBody)
+  let reset := arun k phased c.markResetBody
+  let addressed := arun k reset c.markAddressBody
+  let loaded := arun k addressed Cfg.markLoadBody
+  let marked := arun k loaded Cfg.markCellBody
+  let advanced := arun k marked c.markAdvanceBody
+  have hp := c.markPhaseBody_run k s hTM
+  dsimp only at hp
+  have hp10 : phased.regs 10 = 0 := by
+    rw [hp.1, if_neg (by omega : ¬s.regs rR < c.markSteps)]
+  have hr10 : reset.regs 10 = 0 :=
+    (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
+  have ha := c.markAddressBody_inactive_run k reset hr10
+    h7 h8 h9 h10 h11 h12 h13
+  dsimp only at ha
+  rcases ha with ⟨ha30, ha31, ha32, ha33, ha34, ha35, ha36, _⟩
+  have loadFrame (r : Nat) (hw : writes r Cfg.markLoadBody = false) :
+      loaded.regs r = addressed.regs r :=
+    arun_frame k r Cfg.markLoadBody hw addressed
+  have h30 : loaded.regs 30 = 7 * c.segLen :=
+    (loadFrame 30 (by rfl)).trans ha30
+  have h31 : loaded.regs 31 = 8 * c.segLen :=
+    (loadFrame 31 (by rfl)).trans ha31
+  have h32 : loaded.regs 32 = 9 * c.segLen :=
+    (loadFrame 32 (by rfl)).trans ha32
+  have h33 : loaded.regs 33 = 10 * c.segLen :=
+    (loadFrame 33 (by rfl)).trans ha33
+  have h34 : loaded.regs 34 = 11 * c.segLen :=
+    (loadFrame 34 (by rfl)).trans ha34
+  have h35 : loaded.regs 35 = 12 * c.segLen :=
+    (loadFrame 35 (by rfl)).trans ha35
+  have h36 : loaded.regs 36 = 13 * c.segLen :=
+    (loadFrame 36 (by rfl)).trans ha36
+  have sinkNe (a b : Nat) (ha6 : a ≤ 6) (hb6 : b ≤ 6) :
+      i + a * c.segLen ≠ (7 + b) * c.segLen := by
+    intro heq
+    have hleft : i + a * c.segLen < (a + 1) * c.segLen := by
+      simpa [Nat.add_mul, Nat.add_comm] using
+        Nat.add_lt_add_right hi (a * c.segLen)
+    have hright : (a + 1) * c.segLen ≤ (7 + b) * c.segLen := by
+      calc
+        (a + 1) * c.segLen ≤ 7 * c.segLen :=
+          Nat.mul_le_mul_right c.segLen (by omega)
+        _ ≤ (7 + b) * c.segLen :=
+          Nat.mul_le_mul_right c.segLen (by omega)
+    exact (Nat.not_lt_of_ge hright) (heq ▸ hleft)
+  have frameAt (a : Nat) (ha6 : a ≤ 6) :
+      marked.arr (i + a * c.segLen) =
+        loaded.arr (i + a * c.segLen) := by
+    apply Cfg.markCellBody_arr_frame
+    · rw [h30]
+      simpa using sinkNe a 0 ha6 (by omega)
+    · rw [h31]
+      simpa using sinkNe a 1 ha6 (by omega)
+    · rw [h32]
+      simpa using sinkNe a 2 ha6 (by omega)
+    · rw [h33]
+      simpa using sinkNe a 3 ha6 (by omega)
+    · rw [h34]
+      simpa using sinkNe a 4 ha6 (by omega)
+    · rw [h35]
+      simpa using sinkNe a 5 ha6 (by omega)
+    · rw [h36]
+      simpa using sinkNe a 6 ha6 (by omega)
+  have hpArr : phased.arr = s.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k (lift c.markPhaseBody) s (by rfl)
+  have hrArr : reset.arr = phased.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markResetBody phased (by rfl)
+  have haArr : addressed.arr = reset.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markAddressBody reset (by rfl)
+  have hlArr : loaded.arr = addressed.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k Cfg.markLoadBody addressed (by rfl)
+  have hprefixArr : loaded.arr = s.arr :=
+    hlArr.trans (haArr.trans (hrArr.trans hpArr))
+  have hadvArr : advanced.arr = marked.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markAdvanceBody marked (by rfl)
+  have hrun : arun k s c.markBody = advanced := by
+    simp only [Cfg.markBody, Cfg.markCoreBody, Cfg.markAdvanceBody,
+      arun_append]
+    rfl
+  rw [hrun]
+  apply PlaneCell.ext
+  · change advanced.arr i = s.arr i
+    rw [hadvArr]
+    have hf := frameAt 0 (by omega)
+    simp only [Nat.zero_mul, Nat.add_zero] at hf
+    exact hf.trans (congrFun hprefixArr i)
+  · change advanced.arr (i + c.segLen) = s.arr (i + c.segLen)
+    rw [hadvArr]
+    have hf := frameAt 1 (by omega)
+    simp only [Nat.one_mul] at hf
+    exact hf.trans (congrFun hprefixArr (i + c.segLen))
+  · change advanced.arr (i + 2 * c.segLen) = s.arr (i + 2 * c.segLen)
+    rw [hadvArr]
+    exact (frameAt 2 (by omega)).trans
+      (congrFun hprefixArr (i + 2 * c.segLen))
+  · change advanced.arr (i + 3 * c.segLen) = s.arr (i + 3 * c.segLen)
+    rw [hadvArr]
+    exact (frameAt 3 (by omega)).trans
+      (congrFun hprefixArr (i + 3 * c.segLen))
+  · change advanced.arr (i + 4 * c.segLen) = s.arr (i + 4 * c.segLen)
+    rw [hadvArr]
+    exact (frameAt 4 (by omega)).trans
+      (congrFun hprefixArr (i + 4 * c.segLen))
+  · change advanced.arr (i + 5 * c.segLen) = s.arr (i + 5 * c.segLen)
+    rw [hadvArr]
+    exact (frameAt 5 (by omega)).trans
+      (congrFun hprefixArr (i + 5 * c.segLen))
+  · change advanced.arr (i + 6 * c.segLen) = s.arr (i + 6 * c.segLen)
+    rw [hadvArr]
+    exact (frameAt 6 (by omega)).trans
+      (congrFun hprefixArr (i + 6 * c.segLen))
+
 /-- Starting from the seven selected live-plane addresses, the actual loads
 and scalar decoder preserve both violation counters and advance `seen` once.
 All arithmetic premises are derived from the finite production `markCell`.
