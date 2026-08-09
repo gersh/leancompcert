@@ -138,6 +138,116 @@ theorem body_position_run
   rw [hbody, houtR, houtW]
   exact htail
 
+/-- Symbolic iteration of the literal complete emitted body. -/
+def bodyRun (k : Nat) (c : LambdaPsiSweep.Cfg) : Nat → AState → AState
+  | 0, s => s
+  | fuel + 1, s => arun k (bodyRun k c fuel s) (LambdaPsiSweep.body c)
+
+@[simp] theorem bodyRun_zero (k : Nat) (c : LambdaPsiSweep.Cfg)
+    (s : AState) : bodyRun k c 0 s = s := rfl
+
+@[simp] theorem bodyRun_succ (k : Nat) (c : LambdaPsiSweep.Cfg)
+    (fuel : Nat) (s : AState) :
+    bodyRun k c (fuel + 1) s =
+      arun k (bodyRun k c fuel s) (LambdaPsiSweep.body c) := rfl
+
+theorem bodyRun_add (k : Nat) (c : LambdaPsiSweep.Cfg)
+    (a b : Nat) (s : AState) :
+    bodyRun k c (a + b) s = bodyRun k c b (bodyRun k c a s) := by
+  induction b with
+  | zero => rfl
+  | succ b ih =>
+      rw [show a + (b + 1) = (a + b) + 1 by omega,
+        bodyRun_succ, ih, bodyRun_succ]
+
+/-- A symbolic prefix of one period has the expected position.  At exactly
+one period the round resets and the window advances; every strict prefix is
+at `(fuel, w)`. -/
+theorem bodyRun_onePeriod_position
+    (c : LambdaPsiSweep.Cfg) (k fuel w : Nat) (s : AState)
+    (hR : s.regs ShapeSieve.rR = 0)
+    (hW : s.regs ShapeSieve.rW = w)
+    (hperiodPos : 0 < c.shape.period)
+    (hperiodM : c.shape.period < M)
+    (hwindowM : w + c.shape.segLen < M)
+    (hfuel : fuel ≤ c.shape.period) :
+    let out := bodyRun k c fuel s
+    out.regs ShapeSieve.rR =
+        (if fuel = c.shape.period then 0 else fuel) ∧
+      out.regs ShapeSieve.rW =
+        (if fuel = c.shape.period then w + c.shape.segLen else w) := by
+  induction fuel with
+  | zero =>
+      have hne : 0 ≠ c.shape.period := Nat.ne_of_lt hperiodPos
+      simp [bodyRun, hR, hW, hne]
+  | succ fuel ih =>
+      have hfuelLt : fuel < c.shape.period := by omega
+      have hprev := ih (by omega)
+      dsimp only at hprev
+      simp only [if_neg (Nat.ne_of_lt hfuelLt)] at hprev
+      have hstep := body_position_run c k (bodyRun k c fuel s) fuel w
+        hprev.1 hprev.2 (by omega) hperiodM hwindowM
+      dsimp only at hstep
+      simpa only [bodyRun_succ, Nat.succ_eq_add_one] using hstep
+
+/-- Iterating complete periods advances only the window base.  The proof is
+an ordinary symbolic window induction; it never unfolds the bodies inside a
+production period. -/
+def windowRun (k : Nat) (c : LambdaPsiSweep.Cfg) : Nat → AState → AState
+  | 0, s => s
+  | windows + 1, s => bodyRun k c c.shape.period (windowRun k c windows s)
+
+@[simp] theorem windowRun_zero (k : Nat) (c : LambdaPsiSweep.Cfg)
+    (s : AState) : windowRun k c 0 s = s := rfl
+
+@[simp] theorem windowRun_succ (k : Nat) (c : LambdaPsiSweep.Cfg)
+    (windows : Nat) (s : AState) :
+    windowRun k c (windows + 1) s =
+      bodyRun k c c.shape.period (windowRun k c windows s) := rfl
+
+/-- Window iteration is the flat emitted-body iteration used by `AProgram`;
+only its fuel is factored into complete periods. -/
+theorem windowRun_eq_bodyRun_mul
+    (k : Nat) (c : LambdaPsiSweep.Cfg) (windows : Nat) (s : AState) :
+    windowRun k c windows s =
+      bodyRun k c (windows * c.shape.period) s := by
+  induction windows with
+  | zero => simp
+  | succ windows ih =>
+      rw [windowRun_succ, ih, Nat.add_mul, Nat.one_mul,
+        bodyRun_add]
+
+theorem windowRun_position
+    (c : LambdaPsiSweep.Cfg) (k windows w : Nat) (s : AState)
+    (hR : s.regs ShapeSieve.rR = 0)
+    (hW : s.regs ShapeSieve.rW = w)
+    (hperiodPos : 0 < c.shape.period)
+    (hperiodM : c.shape.period < M)
+    (hwindowM : w + windows * c.shape.segLen < M) :
+    let out := windowRun k c windows s
+    out.regs ShapeSieve.rR = 0 ∧
+      out.regs ShapeSieve.rW = w + windows * c.shape.segLen := by
+  induction windows with
+  | zero => simpa [windowRun] using And.intro hR hW
+  | succ windows ih =>
+      have hwindowM' :
+          w + windows * c.shape.segLen + c.shape.segLen < M := by
+        simpa only [Nat.add_mul, Nat.one_mul, Nat.add_assoc] using hwindowM
+      have hprefixM : w + windows * c.shape.segLen < M := by
+        omega
+      have hprev := ih hprefixM
+      dsimp only at hprev
+      have hnextWindow :
+          (w + windows * c.shape.segLen) + c.shape.segLen < M := by
+        exact hwindowM'
+      have hperiod := bodyRun_onePeriod_position c k c.shape.period
+        (w + windows * c.shape.segLen) (windowRun k c windows s)
+        hprev.1 hprev.2 hperiodPos hperiodM hnextWindow (Nat.le_refl _)
+      dsimp only at hperiod
+      simp only [if_true] at hperiod
+      simpa only [windowRun_succ, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
+        using hperiod
+
 set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 30000 in
 /-- One complete emitted classification-phase body has the exact source
