@@ -136,8 +136,12 @@ registers, both product checks, both violation counters, and the seen counter.
 candidate register is exactly `windowBase + liveOffset` and that the live gate
 remains one.  The reusable `Verified/ArrayRegFrame.lean` framing theorem makes
 that composition inspect only instruction destinations, so it never
-normalizes the decoder arithmetic.  A capped source compile took **74.15
-wall-seconds**, **3,449,268 KiB peak RSS**, and zero swap.
+normalizes the decoder arithmetic.  The leading mark/class phase selector is
+also isolated and proved exact; destination framing carries it through the
+remaining mark instructions and the loop tail, so `body_candidate_run`
+derives the live gate and exact candidate for the complete loop body rather
+than assuming the gate at classifier entry.  The expanded capped source
+compile took **78.07 wall-seconds**, **3,345,568 KiB peak RSS**, and zero swap.
 
 ### Exact log-ladder carry
 

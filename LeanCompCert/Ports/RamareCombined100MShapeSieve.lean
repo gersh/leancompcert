@@ -111,16 +111,18 @@ Plane order: all-product, p, p-exponent, p-product, q, q-exponent,
 q-product.  A zero product cell denotes the empty product `1`.
 -/
 
-def Cfg.markBody (c : Cfg) : List AInstr :=
+/-- Compute the two complementary mark/classification phase selectors. -/
+def Cfg.markPhaseBody (c : Cfg) : List Instr :=
+  [ .binop 10 .lt (.reg rR) (.lit c.markSteps)
+  , .binop 11 .sub (.lit 1) (.reg 10) ]
+
+def Cfg.markCoreBody (c : Cfg) : List AInstr :=
   let L := c.segLen
   let T := c.markSteps
   let K := c.tableLen
   let p0 := c.table.headD 1
-  [ -- phase selectors
-    .scalar (.binop 10 .lt (.reg rR) (.lit T))           -- inMark
-  , .scalar (.binop 11 .sub (.lit 1) (.reg 10))          -- inClass
-    -- reset the prime-power cursor at a window boundary
-  , .scalar (.binop 12 .eq (.reg rR) (.lit 0))
+  [ -- reset the prime-power cursor at a window boundary
+    .scalar (.binop 12 .eq (.reg rR) (.lit 0))
   , .scalar (.binop 13 .sub (.lit 1) (.reg 12))
   , .scalar (.binop 14 .urem (.reg rW) (.lit p0))
   , .scalar (.binop 15 .sub (.lit p0) (.reg 14))
@@ -240,6 +242,47 @@ def Cfg.markBody (c : Cfg) : List AInstr :=
   , .scalar (.binop rViol .add (.reg rViol) (.reg 128))
   , .scalar (.binop rVMark .add (.reg rVMark) (.reg 128))
   ]
+
+def Cfg.markBody (c : Cfg) : List AInstr :=
+  lift c.markPhaseBody ++ c.markCoreBody
+
+/-- Exact complementary phase bits before the mark core executes. -/
+theorem Cfg.markPhaseBody_run (c : Cfg) (k : Nat) (s : AState)
+    (hT : c.markSteps < M) :
+    let out := arun k s (lift c.markPhaseBody)
+    out.regs 10 = (if s.regs rR < c.markSteps then 1 else 0) ∧
+      out.regs 11 = (if c.markSteps ≤ s.regs rR then 1 else 0) ∧
+      out.regs rR = s.regs rR ∧ out.arr = s.arr := by
+  have hTnum : c.markSteps < 18446744073709551616 := by
+    simpa [M] using hT
+  have hTmodNum :
+      c.markSteps % 18446744073709551616 = c.markSteps :=
+    Nat.mod_eq_of_lt hTnum
+  rw [arun_lift]
+  by_cases hp : s.regs rR < c.markSteps
+  · have hp5 : s.regs 5 < c.markSteps := by simpa [rR] using hp
+    simp [Cfg.markPhaseBody, srun, sdest, sval, denoteOperand, denoteOp,
+      RegState.set, rR, hp5, hTmodNum, M]
+  · have hp5 : ¬s.regs 5 < c.markSteps := by simpa [rR] using hp
+    simp [Cfg.markPhaseBody, srun, sdest, sval, denoteOperand, denoteOp,
+      RegState.set, rR, hp5, hTmodNum, M]
+
+/-- The 120-instruction mark core never overwrites the phase selectors, so
+the complete mark block exposes the same exact complementary bits. -/
+theorem Cfg.markBody_phase_run (c : Cfg) (k : Nat) (s : AState)
+    (hT : c.markSteps < M) :
+    let out := arun k s c.markBody
+    out.regs 10 = (if s.regs rR < c.markSteps then 1 else 0) ∧
+      out.regs 11 = (if c.markSteps ≤ s.regs rR then 1 else 0) := by
+  let phased := arun k s (lift c.markPhaseBody)
+  have hp := Cfg.markPhaseBody_run c k s hT
+  dsimp only at hp
+  have h10 := arun_frame k 10 c.markCoreBody (by rfl) phased
+  have h11 := arun_frame k 11 c.markCoreBody (by rfl) phased
+  rw [Cfg.markBody, arun_append]
+  constructor
+  · rw [h10, hp.1]
+  · rw [h11, hp.2.1]
 
 /-! ## Classification
 
@@ -921,6 +964,40 @@ def Cfg.tailBody (c : Cfg) : List AInstr :=
   , .scalar (.binop rW .add (.reg rW) (.reg 23)) ]
 
 def Cfg.body (c : Cfg) : List AInstr := c.markBody ++ c.classBody ++ c.tailBody
+
+/-- On every live classification round, the complete loop body retains the
+exact candidate `windowBase + (round-markSteps)` and the live gate.  The mark
+core and tail are discharged purely by destination framing. -/
+theorem Cfg.body_candidate_run (c : Cfg) (k : Nat) (s : AState)
+    (hTword : c.markSteps < M)
+    (hclass : c.markSteps ≤ s.regs rR)
+    (hR : s.regs rR < M)
+    (hsum : s.regs rR - c.markSteps + s.regs rW < M) :
+    let out := arun k s c.body
+    out.regs 132 = s.regs rR - c.markSteps + s.regs rW ∧
+      out.regs 11 = 1 := by
+  let marked := arun k s c.markBody
+  let classified := arun k marked c.classBody
+  have hmphase := Cfg.markBody_phase_run c k s hTword
+  dsimp only at hmphase
+  have hmR : marked.regs rR = s.regs rR :=
+    arun_frame k rR c.markBody (by rfl) s
+  have hmW : marked.regs rW = s.regs rW :=
+    arun_frame k rW c.markBody (by rfl) s
+  have hm11 : marked.regs 11 = 1 := by
+    rw [hmphase.2, if_pos hclass]
+  have hc := Cfg.classBody_candidate_run c k marked hm11
+    (by simpa [hmR] using hclass) (by simpa [hmR] using hR)
+    (by simpa [hmR, hmW] using hsum)
+  dsimp only at hc
+  have ht132 : (arun k classified c.tailBody).regs 132 = classified.regs 132 :=
+    arun_frame k 132 c.tailBody (by rfl) classified
+  have ht11 : (arun k classified c.tailBody).regs 11 = classified.regs 11 :=
+    arun_frame k 11 c.tailBody (by rfl) classified
+  rw [Cfg.body, arun_append, arun_append]
+  constructor
+  · rw [ht132, hc.1, hmR, hmW]
+  · rw [ht11, hc.2]
 
 def Cfg.tableCells (c : Cfg) : List (Nat × Nat) :=
   (c.table.zipIdx.map fun x => (c.tableBase + x.2, x.1)) ++
