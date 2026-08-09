@@ -169,8 +169,18 @@ the extensionally identical bounded-trial table, whose entries are
 definitionally at least two and whose filtered range is proved duplicate-free;
 this specializes the row-fold theorem to the exact production table.  Its
 expanded capped direct source check took **0.38 wall-seconds**, **552,136 KiB
-peak RSS**, and zero swap.  The physical cursor schedule remains the next
-loop-invariant obligation.
+peak RSS**, and zero swap.
+
+`RamareCombined100MCursorInvariant.lean` now closes that obligation at the
+selected-cell level.  It reuses the audited segmented-Möbius residue-cursor
+arithmetic to prove that each finite live progression reaches an offset
+exactly when its translated integer is divisible by the represented power.
+It then proves that the divisible powers among the fixed exponents `1..32`
+form a prefix, identifies their length with `exponent32`, folds every power
+cursor to `markRange`, and folds every production-table row to `markCell`.
+The theorem is specialized to the exact `Cfg.ofChain` table at every live
+window offset.  Its expanded capped direct source check took **0.54
+wall-seconds**, **597,176 KiB peak RSS**, and zero swap.
 Regenerating the production C
 after this refactor gives the same SHA-256 `aa222123bc751266392d65d92b99fbc02c82fb36cb674b8610bcd704f99fb224`;
 the full run still reports `guards 0 seen 99990000 mark 0 shape 0`.
