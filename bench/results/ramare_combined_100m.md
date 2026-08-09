@@ -400,6 +400,8 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | public-result marking exhaustion, live module build | 32.05 s | 3,992,084 KiB | 0 | success; rebuilt body refinements |
 | staged classifier guard refinement, direct source check | 0.74 s | 618,616 KiB | 0 | success |
 | staged classifier guard refinement, module build | 0.85 s | 622,100 KiB | 0 | success |
+| live classification counter invariant, direct source check | 4.33 s | 715,584 KiB | 0 | success |
+| live classification counter invariant, module build | 4.46 s | 695,632 KiB | 0 | success |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -429,6 +431,14 @@ return one for every `CellRel` cell satisfying the finite divisor, factor
 shape, and classification preconditions.  Consequently the emitted guard
 commit preserves `rViol` and `rVShape`, increments `rSeen`, and the complete
 scalar `classDecodeBody` has the same verified counter effect.
+
+The next compositional layer lifts those scalar facts through the seven live
+plane loads, physical clears, plane-address selection, offset recovery, and
+the literal complete body.  In classification rounds the inactive mark
+budget is proved to add zero, the live classifier leaves both violation
+counters unchanged, `seen` advances once, and the tail plus complete
+log/lambda/psi suffix are register frames for all four classification
+counters.  This full-body theorem remains below 700 MiB in the module build.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert

@@ -1,0 +1,590 @@
+import LeanCompCert.Ports.RamareCombined100MClassGuardRefinement
+import LeanCompCert.Ports.RamareCombined100MBodyRefinement
+
+/-!
+# Live classification invariant for the Ramaré combined sweep
+
+This module lifts the exact scalar guard theorem through the physical seven
+plane loads.  The source `markCell` invariants discharge every guard and word
+premise, leaving the counter equations needed by the production loop.
+-/
+
+namespace LeanCompCert.Ports.RamareCombined100M.ShapeSieve
+
+open LeanCompCert.Ports.RamareCombined100M
+open LeanCompCert.Ports.RamareCombined100MSeg
+open LeanCompCert
+open LeanCompCert.Verified.Reflect
+open LeanCompCert.Verified.ArrayState (AState)
+open LeanCompCert.Verified.ArrayFoldBridge (arun arun_append astep)
+open LeanCompCert.Verified.ArrayScalarBlock (lift arun_lift)
+open LeanCompCert.Verified.ArrayRegFrame (writes arun_frame)
+open LeanCompCert.Verified.InstrBlock
+
+/-! ## Classification-phase mark framing -/
+
+/-- All instructions in the mark block before its only counter-writing
+suffix. -/
+def Cfg.markBeforeBudgetBody (c : Cfg) :
+    List LeanCompCert.Verified.ArrayState.AInstr :=
+  lift c.markPhaseBody ++ c.markResetBody ++ c.markAddressBody ++
+    Cfg.markLoadBody ++ Cfg.markCellBody ++ c.markAdvanceSelectBody ++
+    c.markAdvanceLoadBody ++ c.markAdvanceCursorBody
+
+theorem Cfg.markBody_eq_beforeBudget_append (c : Cfg) :
+    c.markBody = c.markBeforeBudgetBody ++ c.markBudgetBody := by
+  simp [Cfg.markBody, Cfg.markCoreBody, Cfg.markAdvanceBody,
+    Cfg.markBeforeBudgetBody, List.append_assoc]
+
+/-- Outside the mark rounds, the budget-failure selector is zero, so its two
+physical counter additions are exact frames. -/
+theorem Cfg.markBudgetBody_class_counter_frame
+    (c : Cfg) (k : Nat) (s : AState)
+    (hTpos : 0 < c.markSteps) (hT : c.markSteps ≤ s.regs rR)
+    (hTM : c.markSteps < M)
+    (hviol : s.regs rViol < M) (hvmark : s.regs rVMark < M) :
+    let out := arun k s c.markBudgetBody
+    out.regs rViol = s.regs rViol ∧
+      out.regs rVMark = s.regs rVMark := by
+  have hne : s.regs rR ≠ c.markSteps - 1 := by omega
+  have hTm1 : c.markSteps - 1 < M :=
+    Nat.lt_of_le_of_lt (Nat.sub_le _ _) hTM
+  have hTmod : (c.markSteps - 1) % M = c.markSteps - 1 :=
+    Nat.mod_eq_of_lt hTm1
+  have hTmodN : (c.markSteps - 1) % 18446744073709551616 =
+      c.markSteps - 1 := by simpa [M] using hTmod
+  have hne5 : s.regs 5 ≠ c.markSteps - 1 := by
+    simpa [rR] using hne
+  simp [Cfg.markBudgetBody, arun, astep,
+    LeanCompCert.Verified.ArrayState.AState.writeReg,
+    sdest, sval, denoteOperand, denoteOp, rR, rViol, rVMark,
+    hne5, hTmodN, M]
+  exact ⟨by simpa [rViol, M] using hviol,
+    by simpa [rVMark, M] using hvmark⟩
+
+/-- The complete phase-gated mark block preserves all three classification
+counters once the round cursor has entered the classification phase. -/
+theorem Cfg.markBody_class_counter_frame
+    (c : Cfg) (k : Nat) (s : AState)
+    (hTpos : 0 < c.markSteps) (hT : c.markSteps ≤ s.regs rR)
+    (hTM : c.markSteps < M)
+    (hviol : s.regs rViol < M) (hvmark : s.regs rVMark < M) :
+    let out := arun k s c.markBody
+    out.regs rViol = s.regs rViol ∧
+      out.regs rVMark = s.regs rVMark ∧
+      out.regs rSeen = s.regs rSeen := by
+  let before := arun k s c.markBeforeBudgetBody
+  have hbR : before.regs rR = s.regs rR :=
+    arun_frame k rR c.markBeforeBudgetBody (by rfl) s
+  have hbViol : before.regs rViol = s.regs rViol :=
+    arun_frame k rViol c.markBeforeBudgetBody (by rfl) s
+  have hbVMark : before.regs rVMark = s.regs rVMark :=
+    arun_frame k rVMark c.markBeforeBudgetBody (by rfl) s
+  have hbSeen : before.regs rSeen = s.regs rSeen :=
+    arun_frame k rSeen c.markBeforeBudgetBody (by rfl) s
+  have hbudget := c.markBudgetBody_class_counter_frame k before hTpos
+    (by rw [hbR]; exact hT) hTM
+    (hbViol.symm ▸ hviol) (hbVMark.symm ▸ hvmark)
+  dsimp only at hbudget
+  have houtSeen :
+      (arun k before c.markBudgetBody).regs rSeen = before.regs rSeen :=
+    arun_frame k rSeen c.markBudgetBody (by rfl) before
+  rw [c.markBody_eq_beforeBudget_append, arun_append]
+  exact ⟨hbudget.1.trans hbViol,
+    hbudget.2.trans hbVMark, houtSeen.trans hbSeen⟩
+
+/-- Starting from the seven selected live-plane addresses, the actual loads
+and scalar decoder preserve both violation counters and advance `seen` once.
+All arithmetic premises are derived from the finite production `markCell`.
+-/
+theorem ofChain_classAfterAddressDecode_counters
+    (lo segLen segCount tableHi k : Nat) (s : AState)
+    (j n : Nat)
+    (hrel : CellRel
+      ((Cfg.ofChain lo segLen segCount tableHi).readPlaneCell j s)
+      (markCell
+        (factorRows (Cfg.ofChain lo segLen segCount tableHi).table) n))
+    (hn : 0 < n) (hN : n ≤ 100000000)
+    (hphase : s.regs 11 = 1)
+    (h132 : s.regs 132 = n)
+    (h131 : s.regs 131 = j)
+    (h133 : s.regs 133 = j + segLen)
+    (h134 : s.regs 134 = j + 2 * segLen)
+    (h135 : s.regs 135 = j + 3 * segLen)
+    (h136 : s.regs 136 = j + 4 * segLen)
+    (h137 : s.regs 137 = j + 5 * segLen)
+    (h138 : s.regs 138 = j + 6 * segLen)
+    (hviol : s.regs rViol < M)
+    (hvshape : s.regs rVShape < M)
+    (hseen : s.regs rSeen + 1 < M) :
+    let out := arun k s Cfg.classAfterAddressBody
+    ClassDecodeResult s out := by
+  let c := Cfg.ofChain lo segLen segCount tableHi
+  let rows := factorRows c.table
+  let cell := markCell rows n
+  let x := c.readPlaneCell j s
+  let loaded := arun k s Cfg.classLoadBody
+  let decoded := arun k loaded (lift Cfg.classDecodeBody)
+  have hload := Cfg.classLoadBody_run k s
+  dsimp only at hload
+  rcases hload with
+    ⟨hl140, hl141, hl142, hl143, hl144, hl145, hl146,
+      _, _, _, _, _, _, _, hloadArray⟩
+  have h140 : loaded.regs 140 = x.prod := by
+    rw [hl140, h131]
+    rfl
+  have h141 : loaded.regs 141 = x.p := by
+    rw [hl141, h133]
+    rfl
+  have h142 : loaded.regs 142 = x.pe := by
+    rw [hl142, h134]
+    rfl
+  have h143 : loaded.regs 143 = x.pProd := by
+    rw [hl143, h135]
+    rfl
+  have h144 : loaded.regs 144 = x.q := by
+    rw [hl144, h136]
+    rfl
+  have h145 : loaded.regs 145 = x.qe := by
+    rw [hl145, h137]
+    rfl
+  have h146 : loaded.regs 146 = x.qProd := by
+    rw [hl146, h138]
+    rfl
+  have loadedFrame (r : Nat) (hw : writes r Cfg.classLoadBody = false) :
+      loaded.regs r = s.regs r := arun_frame k r Cfg.classLoadBody hw s
+  have h132' : loaded.regs 132 = n :=
+    (loadedFrame 132 (by rfl)).trans h132
+  have hphase' : loaded.regs 11 = 1 :=
+    (loadedFrame 11 (by rfl)).trans hphase
+  have hviol' : loaded.regs rViol = s.regs rViol :=
+    loadedFrame rViol (by rfl)
+  have hvshape' : loaded.regs rVShape = s.regs rVShape :=
+    loadedFrame rVShape (by rfl)
+  have hseen' : loaded.regs rSeen = s.regs rSeen :=
+    loadedFrame rSeen (by rfl)
+  have hvalid : ValidRows rows := by
+    apply factorRows_valid
+    intro p hp
+    exact trialPrimesBelow_two_le _ p hp
+  have hpair : PairwiseCoprimeRows rows :=
+    ofChain_factorRows_pairwiseCoprime lo segLen segCount tableHi
+  have hdiv : CellDivisorBounds n cell :=
+    markCell_divisorBounds rows n hn hpair
+  have hshape : CellFactorShape cell := markCell_factorShape rows n hvalid
+  have hpre : CellClassifyPre n cell :=
+    markCell_classifyPre rows n hn hvalid hpair
+  have hcell : CellProductionBounds cell := hdiv.productionBounds hn hN
+  have hx : PlaneCellProductionBounds x := hrel.productionBounds hcell
+  have hword : 100000000 < M := by decide
+  have hxprod : x.prod < M :=
+    Nat.lt_of_le_of_lt
+      (Nat.le_trans (Nat.le_add_right x.prod (zeroBit x.prod)) hx.prod)
+      hword
+  have hdecode := c.classDecodeBody_correct k loaded n x cell hrel hdiv
+    hshape hpre h132' h140 h141 h142 h143 h144 h145 h146
+    (Nat.lt_of_le_of_lt hN hword) hxprod
+    (Nat.lt_of_le_of_lt hx.p hword)
+    (Nat.lt_of_le_of_lt hx.pe (by omega))
+    (Nat.lt_of_le_of_lt hx.pProd hword)
+    (Nat.lt_of_le_of_lt hx.q hword)
+    (Nat.lt_of_le_of_lt hx.qe (by omega))
+    (Nat.lt_of_le_of_lt hx.qProd hword) hphase'
+    (hviol'.symm ▸ hviol) (hvshape'.symm ▸ hvshape)
+    (hseen'.symm ▸ hseen)
+  have hout : arun k s Cfg.classAfterAddressBody = decoded := by
+    simp only [Cfg.classAfterAddressBody, arun_append]
+    rfl
+  refine {
+    viol := by rw [hout, hdecode.viol, hviol']
+    vshape := by rw [hout, hdecode.vshape, hvshape']
+    seen := by rw [hout, hdecode.seen, hseen']
+    array := by rw [hout, hdecode.array, hloadArray] }
+
+/-- Counter-only result used after the physical clear stores. -/
+structure ClassCounterResult (before out : AState) : Prop where
+  viol : out.regs rViol = before.regs rViol
+  vshape : out.regs rVShape = before.regs rVShape
+  seen : out.regs rSeen = before.regs rSeen + 1
+
+/-- The seven clear stores do not disturb the verified decode counter effect.
+-/
+theorem ofChain_classAfterAddressClear_counters
+    (lo segLen segCount tableHi k : Nat) (s : AState)
+    (j n : Nat)
+    (hrel : CellRel
+      ((Cfg.ofChain lo segLen segCount tableHi).readPlaneCell j s)
+      (markCell
+        (factorRows (Cfg.ofChain lo segLen segCount tableHi).table) n))
+    (hn : 0 < n) (hN : n ≤ 100000000)
+    (hphase : s.regs 11 = 1)
+    (h132 : s.regs 132 = n)
+    (h131 : s.regs 131 = j)
+    (h133 : s.regs 133 = j + segLen)
+    (h134 : s.regs 134 = j + 2 * segLen)
+    (h135 : s.regs 135 = j + 3 * segLen)
+    (h136 : s.regs 136 = j + 4 * segLen)
+    (h137 : s.regs 137 = j + 5 * segLen)
+    (h138 : s.regs 138 = j + 6 * segLen)
+    (hviol : s.regs rViol < M)
+    (hvshape : s.regs rVShape < M)
+    (hseen : s.regs rSeen + 1 < M) :
+    let out := arun k s
+      (Cfg.classAfterAddressBody ++ Cfg.classClearBody)
+    ClassCounterResult s out := by
+  let decoded := arun k s Cfg.classAfterAddressBody
+  let cleared := arun k decoded Cfg.classClearBody
+  have hdecode := ofChain_classAfterAddressDecode_counters
+    lo segLen segCount tableHi k s j n hrel hn hN hphase h132
+    h131 h133 h134 h135 h136 h137 h138 hviol hvshape hseen
+  dsimp only at hdecode
+  have hclearViol : cleared.regs rViol = decoded.regs rViol :=
+    arun_frame k rViol Cfg.classClearBody (by rfl) decoded
+  have hclearVShape : cleared.regs rVShape = decoded.regs rVShape :=
+    arun_frame k rVShape Cfg.classClearBody (by rfl) decoded
+  have hclearSeen : cleared.regs rSeen = decoded.regs rSeen :=
+    arun_frame k rSeen Cfg.classClearBody (by rfl) decoded
+  simp only [arun_append]
+  exact {
+    viol := hclearViol.trans hdecode.viol
+    vshape := hclearVShape.trans hdecode.vshape
+    seen := hclearSeen.trans hdecode.seen }
+
+/-- From a retained live offset and candidate, the complete post-candidate
+classifier preserves both violation counters and advances `seen`. -/
+theorem ofChain_classPostCandidateBody_counters
+    (lo segLen segCount tableHi k : Nat) (s : AState)
+    (j n : Nat)
+    (hrel : CellRel
+      ((Cfg.ofChain lo segLen segCount tableHi).readPlaneCell j s)
+      (markCell
+        (factorRows (Cfg.ofChain lo segLen segCount tableHi).table) n))
+    (hn : 0 < n) (hN : n ≤ 100000000)
+    (hphase : s.regs 10 = 0) (hclass : s.regs 11 = 1)
+    (h132 : s.regs 132 = n) (h131 : s.regs 131 = j)
+    (h1 : j + segLen < M) (h2 : j + 2 * segLen < M)
+    (h3 : j + 3 * segLen < M) (h4 : j + 4 * segLen < M)
+    (h5 : j + 5 * segLen < M) (h6 : j + 6 * segLen < M)
+    (hviol : s.regs rViol < M)
+    (hvshape : s.regs rVShape < M)
+    (hseen : s.regs rSeen + 1 < M) :
+    let c := Cfg.ofChain lo segLen segCount tableHi
+    ClassCounterResult s (arun k s c.classPostCandidateBody) := by
+  let c := Cfg.ofChain lo segLen segCount tableHi
+  let planed := arun k s (lift c.classPlaneBody)
+  let sinked := arun k planed (lift c.classSinkBody)
+  have hp := c.classPlaneBody_run k s
+    (by simpa [c, Cfg.ofChain, h131] using h1)
+    (by simpa [c, Cfg.ofChain, h131] using h2)
+    (by simpa [c, Cfg.ofChain, h131] using h3)
+    (by simpa [c, Cfg.ofChain, h131] using h4)
+    (by simpa [c, Cfg.ofChain, h131] using h5)
+    (by simpa [c, Cfg.ofChain, h131] using h6)
+  dsimp only at hp
+  have planeFrame (r : Nat)
+      (hw : writes r (lift c.classPlaneBody) = false) :
+      planed.regs r = s.regs r :=
+    arun_frame k r (lift c.classPlaneBody) hw s
+  have hp10 : planed.regs 10 = 0 :=
+    (planeFrame 10 (by rfl)).trans hphase
+  have hs := c.classSinkBody_run k planed hp10
+    (by rw [hp.2.2.2.2.2.2.1, h131]; omega)
+    (by rw [hp.1, h131]; simpa [c, Cfg.ofChain] using h1)
+    (by rw [hp.2.1, h131]; simpa [c, Cfg.ofChain] using h2)
+    (by rw [hp.2.2.1, h131]; simpa [c, Cfg.ofChain] using h3)
+    (by rw [hp.2.2.2.1, h131]; simpa [c, Cfg.ofChain] using h4)
+    (by rw [hp.2.2.2.2.1, h131]; simpa [c, Cfg.ofChain] using h5)
+    (by rw [hp.2.2.2.2.2.1, h131]; simpa [c, Cfg.ofChain] using h6)
+  dsimp only at hs
+  have sinkFrame (r : Nat)
+      (hw : writes r (lift c.classSinkBody) = false) :
+      sinked.regs r = planed.regs r :=
+    arun_frame k r (lift c.classSinkBody) hw planed
+  have hS132 : sinked.regs 132 = n :=
+    (sinkFrame 132 (by rfl)).trans
+      ((planeFrame 132 (by rfl)).trans h132)
+  have hS11 : sinked.regs 11 = 1 :=
+    (sinkFrame 11 (by rfl)).trans
+      ((planeFrame 11 (by rfl)).trans hclass)
+  have hS131 : sinked.regs 131 = j := by
+    rw [hs.2.1, hp.2.2.2.2.2.2.1, h131]
+  have hS133 : sinked.regs 133 = j + segLen := by
+    rw [hs.2.2.1, hp.1, h131]
+    rfl
+  have hS134 : sinked.regs 134 = j + 2 * segLen := by
+    rw [hs.2.2.2.1, hp.2.1, h131]
+    rfl
+  have hS135 : sinked.regs 135 = j + 3 * segLen := by
+    rw [hs.2.2.2.2.1, hp.2.2.1, h131]
+    rfl
+  have hS136 : sinked.regs 136 = j + 4 * segLen := by
+    rw [hs.2.2.2.2.2.1, hp.2.2.2.1, h131]
+    rfl
+  have hS137 : sinked.regs 137 = j + 5 * segLen := by
+    rw [hs.2.2.2.2.2.2.1, hp.2.2.2.2.1, h131]
+    rfl
+  have hS138 : sinked.regs 138 = j + 6 * segLen := by
+    rw [hs.2.2.2.2.2.2.2.1, hp.2.2.2.2.2.1, h131]
+    rfl
+  have harr : sinked.arr = s.arr :=
+    hs.2.2.2.2.2.2.2.2.trans hp.2.2.2.2.2.2.2
+  have hrel' : CellRel (c.readPlaneCell j sinked)
+      (markCell (factorRows c.table) n) := by
+    rw [c.readPlaneCell_congr j sinked s harr]
+    exact hrel
+  have hSViol : sinked.regs rViol = s.regs rViol :=
+    (sinkFrame rViol (by rfl)).trans (planeFrame rViol (by rfl))
+  have hSVShape : sinked.regs rVShape = s.regs rVShape :=
+    (sinkFrame rVShape (by rfl)).trans (planeFrame rVShape (by rfl))
+  have hSSeen : sinked.regs rSeen = s.regs rSeen :=
+    (sinkFrame rSeen (by rfl)).trans (planeFrame rSeen (by rfl))
+  have hout := ofChain_classAfterAddressClear_counters
+    lo segLen segCount tableHi k sinked j n hrel' hn hN hS11 hS132
+    hS131 hS133 hS134 hS135 hS136 hS137 hS138
+    (hSViol.symm ▸ hviol) (hSVShape.symm ▸ hvshape)
+    (hSSeen.symm ▸ hseen)
+  dsimp only at hout
+  have hrun : arun k s c.classPostCandidateBody =
+      arun k sinked (Cfg.classAfterAddressBody ++ Cfg.classClearBody) := by
+    simp only [Cfg.classPostCandidateBody, Cfg.classAfterAddressBody,
+      arun_append]
+    rfl
+  exact {
+    viol := by rw [hrun, hout.viol, hSViol]
+    vshape := by rw [hrun, hout.vshape, hSVShape]
+    seen := by rw [hrun, hout.seen, hSSeen] }
+
+set_option maxRecDepth 2000 in
+/-- The complete live classifier, including offset recovery, preserves both
+violation counters and advances the exact number of classified candidates.
+-/
+theorem ofChain_classBody_counters
+    (lo segLen segCount tableHi k : Nat) (s : AState)
+    (hrel : CellRel
+      ((Cfg.ofChain lo segLen segCount tableHi).readPlaneCell
+        (s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps) s)
+      (markCell
+        (factorRows (Cfg.ofChain lo segLen segCount tableHi).table)
+        (s.regs rR -
+            (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+          s.regs rW)))
+    (hn : 0 < s.regs rR -
+        (Cfg.ofChain lo segLen segCount tableHi).markSteps + s.regs rW)
+    (hN : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps + s.regs rW ≤
+        100000000)
+    (hphase : s.regs 10 = 0) (hclass : s.regs 11 = 1)
+    (hT : (Cfg.ofChain lo segLen segCount tableHi).markSteps ≤ s.regs rR)
+    (hR : s.regs rR < M)
+    (hsum : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps + s.regs rW < M)
+    (h1 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps + segLen < M)
+    (h2 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        2 * segLen < M)
+    (h3 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        3 * segLen < M)
+    (h4 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        4 * segLen < M)
+    (h5 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        5 * segLen < M)
+    (h6 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        6 * segLen < M)
+    (hviol : s.regs rViol < M)
+    (hvshape : s.regs rVShape < M)
+    (hseen : s.regs rSeen + 1 < M) :
+    let c := Cfg.ofChain lo segLen segCount tableHi
+    ClassCounterResult s (arun k s c.classBody) := by
+  let c := Cfg.ofChain lo segLen segCount tableHi
+  let j := s.regs rR - c.markSteps
+  let n := j + s.regs rW
+  let offset := arun k s (lift c.classOffsetBody)
+  let indexed := arun k s c.classIndexBody
+  have ho := c.classOffsetBody_run k s hclass hT hR
+  dsimp only at ho
+  have hindex := c.classIndexBody_run k s hclass hT hR hsum
+  dsimp only at hindex
+  have hI131 : indexed.regs 131 = j := by
+    have hframe :
+        (arun k offset (lift Cfg.classCandidateBody)).regs 131 =
+          offset.regs 131 :=
+      arun_frame k 131 (lift Cfg.classCandidateBody) (by rfl) offset
+    change (arun k s
+      (lift c.classOffsetBody ++ lift Cfg.classCandidateBody)).regs 131 = j
+    rw [arun_append]
+    exact hframe.trans ho.2.1
+  have hI132 : indexed.regs 132 = n := hindex.1
+  have indexFrame (r : Nat) (hw : writes r c.classIndexBody = false) :
+      indexed.regs r = s.regs r :=
+    arun_frame k r c.classIndexBody hw s
+  have hI10 : indexed.regs 10 = 0 :=
+    (indexFrame 10 (by rfl)).trans hphase
+  have hI11 : indexed.regs 11 = 1 := hindex.2.1
+  have hrel' : CellRel (c.readPlaneCell j indexed)
+      (markCell (factorRows c.table) n) := by
+    rw [c.readPlaneCell_congr j indexed s hindex.2.2]
+    exact hrel
+  have hIViol : indexed.regs rViol = s.regs rViol :=
+    indexFrame rViol (by rfl)
+  have hIVShape : indexed.regs rVShape = s.regs rVShape :=
+    indexFrame rVShape (by rfl)
+  have hISeen : indexed.regs rSeen = s.regs rSeen :=
+    indexFrame rSeen (by rfl)
+  have hout := ofChain_classPostCandidateBody_counters
+    lo segLen segCount tableHi k indexed j n hrel' hn hN hI10 hI11
+    hI132 hI131 h1 h2 h3 h4 h5 h6
+    (hIViol.symm ▸ hviol) (hIVShape.symm ▸ hvshape)
+    (hISeen.symm ▸ hseen)
+  dsimp only at hout
+  have houtViol :
+      (arun k indexed c.classPostCandidateBody).regs rViol =
+        s.regs rViol := hout.viol.trans hIViol
+  have houtVShape :
+      (arun k indexed c.classPostCandidateBody).regs rVShape =
+        s.regs rVShape := hout.vshape.trans hIVShape
+  have houtSeen :
+      (arun k indexed c.classPostCandidateBody).regs rSeen =
+        s.regs rSeen + 1 :=
+    hout.seen.trans (congrArg (· + 1) hISeen)
+  simp only [Cfg.classBody, arun_append]
+  exact {
+    viol := houtViol
+    vshape := houtVShape
+    seen := houtSeen }
+
+/-! ## Literal complete-body counter effect -/
+
+/-- Counter effect of one complete emitted body in the classification phase.
+-/
+structure BodyClassCounterResult (before out : AState) : Prop where
+  viol : out.regs rViol = before.regs rViol
+  vmark : out.regs rVMark = before.regs rVMark
+  vshape : out.regs rVShape = before.regs rVShape
+  seen : out.regs rSeen = before.regs rSeen + 1
+
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 3000 in
+/-- The inactive mark block, live classifier, position tail, and complete
+log/lambda/psi arithmetic compose to one exact classification counter step.
+The arithmetic suffix is framed syntactically, so this theorem does not need
+`ArithmeticPre`. -/
+theorem ofChain_body_classification_counters
+    (lo segLen segCount tableHi k : Nat)
+    (logs : List LogCell) (s : AState)
+    (hTpos : 0 <
+      (Cfg.ofChain lo segLen segCount tableHi).markSteps)
+    (hclass :
+      (Cfg.ofChain lo segLen segCount tableHi).markSteps ≤ s.regs rR)
+    (hrel :
+      let shape := Cfg.ofChain lo segLen segCount tableHi
+      let marked := arun k s shape.markBody
+      CellRel
+        (shape.readPlaneCell
+          (marked.regs rR - shape.markSteps) marked)
+        (markCell (factorRows shape.table)
+          (marked.regs rR - shape.markSteps + marked.regs rW)))
+    (hn : 0 < s.regs rR -
+        (Cfg.ofChain lo segLen segCount tableHi).markSteps + s.regs rW)
+    (hN : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps + s.regs rW ≤
+        100000000)
+    (hR : s.regs rR < M)
+    (hsum : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps + s.regs rW < M)
+    (h1 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps + segLen < M)
+    (h2 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        2 * segLen < M)
+    (h3 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        3 * segLen < M)
+    (h4 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        4 * segLen < M)
+    (h5 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        5 * segLen < M)
+    (h6 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        6 * segLen < M)
+    (hviol : s.regs rViol < M) (hvmark : s.regs rVMark < M)
+    (hvshape : s.regs rVShape < M)
+    (hseen : s.regs rSeen + 1 < M) :
+    let shape := Cfg.ofChain lo segLen segCount tableHi
+    let c : LambdaPsiSweep.Cfg := { shape, logs }
+    BodyClassCounterResult s (arun k s (LambdaPsiSweep.body c)) := by
+  let shape := Cfg.ofChain lo segLen segCount tableHi
+  let c : LambdaPsiSweep.Cfg := { shape, logs }
+  let marked := arun k s shape.markBody
+  let classified := arun k marked shape.classBody
+  let tailed := arun k classified shape.tailBody
+  let out := arun k tailed (LambdaPsiSweep.arithmeticBody c)
+  dsimp only at hrel
+  have hTM : shape.markSteps < M :=
+    Cfg.ofChain_markSteps_lt_word lo segLen segCount tableHi
+  have hclassShape : shape.markSteps ≤ s.regs rR := hclass
+  have hmark := shape.markBody_class_counter_frame k s hTpos hclass hTM
+    hviol hvmark
+  dsimp only at hmark
+  have hphase := shape.markBody_phase_run k s hTM
+  dsimp only at hphase
+  have hm10 : marked.regs 10 = 0 := by
+    rw [hphase.1, if_neg (by omega : ¬s.regs rR < shape.markSteps)]
+  have hm11 : marked.regs 11 = 1 := by
+    rw [hphase.2, if_pos hclass]
+  have hmR : marked.regs rR = s.regs rR :=
+    arun_frame k rR shape.markBody (by rfl) s
+  have hmW : marked.regs rW = s.regs rW :=
+    arun_frame k rW shape.markBody (by rfl) s
+  have hmVShape : marked.regs rVShape = s.regs rVShape :=
+    arun_frame k rVShape shape.markBody (by rfl) s
+  have hmSeen : marked.regs rSeen = s.regs rSeen := hmark.2.2
+  have hclassRun := ofChain_classBody_counters
+    lo segLen segCount tableHi k marked hrel
+    (by simpa only [hmR, hmW] using hn)
+    (by simpa only [hmR, hmW] using hN)
+    hm10 hm11 (by simpa only [hmR] using hclass)
+    (by simpa only [hmR] using hR)
+    (by simpa only [hmR, hmW] using hsum)
+    (by simpa only [hmR] using h1)
+    (by simpa only [hmR] using h2)
+    (by simpa only [hmR] using h3)
+    (by simpa only [hmR] using h4)
+    (by simpa only [hmR] using h5)
+    (by simpa only [hmR] using h6)
+    (hmark.1.symm ▸ hviol) (hmVShape.symm ▸ hvshape)
+    (hmSeen.symm ▸ hseen)
+  dsimp only at hclassRun
+  have tailFrame (r : Nat) (hw : writes r shape.tailBody = false) :
+      tailed.regs r = classified.regs r :=
+    arun_frame k r shape.tailBody hw classified
+  have arithFrame (r : Nat)
+      (hw : writes r (LambdaPsiSweep.arithmeticBody c) = false) :
+      out.regs r = tailed.regs r :=
+    arun_frame k r (LambdaPsiSweep.arithmeticBody c) hw tailed
+  have houtEq : arun k s (LambdaPsiSweep.body c) = out := by
+    rw [BodyRefinement.body_eq_mark_class_tail_arithmetic c]
+    simp only [arun_append]
+    rfl
+  refine {
+    viol := by
+      rw [houtEq, arithFrame rViol (by rfl), tailFrame rViol (by rfl),
+        hclassRun.viol, hmark.1]
+    vmark := by
+      rw [houtEq, arithFrame rVMark (by rfl), tailFrame rVMark (by rfl),
+        arun_frame k rVMark shape.classBody (by rfl) marked, hmark.2.1]
+    vshape := by
+      rw [houtEq, arithFrame rVShape (by rfl),
+        tailFrame rVShape (by rfl), hclassRun.vshape, hmVShape]
+    seen := by
+      rw [houtEq, arithFrame rSeen (by rfl), tailFrame rSeen (by rfl),
+        hclassRun.seen, hmSeen] }
+
+end LeanCompCert.Ports.RamareCombined100M.ShapeSieve
