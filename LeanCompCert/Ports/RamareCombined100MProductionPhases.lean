@@ -1,4 +1,4 @@
-import LeanCompCert.Ports.RamareCombined100MCursorMachine
+import LeanCompCert.Ports.RamareCombined100MCellBounds
 
 /-!
 # Exact production phase witness for the Ramaré 100-million cursor
