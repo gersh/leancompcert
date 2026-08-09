@@ -134,15 +134,24 @@ boundaries.  Its `program_compiled` theorem covers the extended program, while
 kernel controls compare both carried outputs against direct folds of
 `incLWord` and `incUWord` over `[11,30]`.
 
-The physical suffix is now factored without changing its emitted instruction
+The physical suffix is factored without changing its emitted instruction
 sequence into the named `lowerScalarBody`, `upperScalarBody`, and
-`commitScalarBody` blocks.  The lower correction bound and exact syntactic
-identification with `incLWord` are proved separately, so the remaining source
-refinement can be elaborated per block instead of expanding all 26
-instructions at once.  A capped source compile of this staged file took
-**78.03 wall-seconds**, **2,476,376 KiB peak RSS**, and zero swap; its live
-lambda/psi consumer compiled in **43.60 wall-seconds** at **3,094,436 KiB**
-and zero swap under the same 22,528,000 KiB virtual-memory limit.
+`commitScalarBody` blocks.  The lower block is further split into arithmetic
+stages of at most four instructions.  `lowerNumeratorBody_run`,
+`lowerCorrectionBody_run`, and `lowerFinalizeBody_run` compose kernel-small
+per-instruction proofs, and `lowerScalarBody_run` proves that all nine emitted
+instructions compute exactly `incLWord` while preserving the candidate and
+array.  This avoids expanding all 26 candidate instructions in one proof.
+
+A capped source compile of the completed lower semantics took **77.10
+wall-seconds**, **2,492,960 KiB peak RSS**, and zero swap; its live lambda/psi
+consumer compiled in **43.47 wall-seconds** at **3,096,476 KiB** and zero swap
+under the same 22,528,000 KiB virtual-memory limit.  During development, one
+unresolved simplifier goal involving the literal `1 % 2^64` grew to
+**20,021,928 KiB RSS** before Lean reported its internal out-of-memory
+condition.  The virtual-memory cap contained that failure.  Supplying the
+one-line modular fact explicitly restored the 2.49-GiB source compile; this is
+the concrete failure mode behind the earlier high-memory behavior.
 
 The exact production run starts from the kernel-certified `prefixState10`
 endpoints and returns:
