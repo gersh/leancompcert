@@ -189,7 +189,13 @@ are likewise named blocks with exact run theorems
 `copyLowerEndpointBody_run`/`copyUpperEndpointBody_run` and
 `commitLowerEndpointBody_run`/`commitUpperEndpointBody_run`.  Their explicit
 word and remainder guards are the invariants required by the future
-whole-loop refinement.
+whole-loop refinement.  `lowerEndpointBody_run` and
+`upperEndpointBody_run` compose each copy/advance/commit shell.  Finally,
+`candidateBody_run` composes the selector, both sums, and both endpoint shells
+into one source-shaped `candidateArithmetic` transition.  It proves all four
+output components and the complete array frame under explicit word,
+initialized-table, no-wrap, and quotient-transition hypotheses; no emitted
+arithmetic is left opaque inside the candidate suffix.
 
 The production artifact used the exact `[10001, 100000000]` configuration,
 the certified prefix-through-10 state, and denominator `100000001`.  It
@@ -227,17 +233,17 @@ control binary  3a5f3bbd1d035556861e5631004d02b2f41532d9d3def0b13813c525f4633815
 All phases were run without swap.  Emission used `MemoryHigh=9G` and
 `MemoryMax=10G`, CompCert used `4G`/`5G`, and execution used `768M`/`1G`.
 The source file containing the embedded-block, sum-stage, lambda-selection,
-copy, and commit semantics compiled from source in **42.75 wall-seconds** with
-**3,065,324 KiB peak RSS**,
+copy, commit, endpoint-shell, and whole-candidate semantics compiled from
+source in **43.06 wall-seconds** with **3,095,868 KiB peak RSS**,
 serialized under a **22,528,000 KiB virtual-memory hard cap** and with zero
 swap.
 
-This completes the production runtime composition and the exact local
-semantics of the lambda selector, quotient sums, both quotient sub-blocks, and
-their endpoint commits.  It does not yet retire the closed carrier: the
-remaining proof obligation is their whole-candidate composition and the
-whole-program number-theoretic refinement from the seven sieve planes and log
-cells to the unchanged source fold.
+This completes the production runtime composition and the exact
+whole-candidate semantics of the lambda selector, quotient sums, both quotient
+sub-blocks, and their endpoint commits.  It does not yet retire the closed
+carrier: the remaining proof obligation is the whole-loop number-theoretic
+refinement from the seven sieve planes and log cells to the unchanged source
+fold, including discharge of the candidate theorem's explicit invariants.
 
 ## Build-memory measurements
 
