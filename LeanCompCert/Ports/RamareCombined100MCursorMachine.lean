@@ -2245,6 +2245,16 @@ theorem Cfg.markResetBody_machinePowerCursor
 def resetPowerCellState (c : Cfg) (i : Nat) (s : AState) : PowerCellState :=
   ⟨resetPowerCursor c s, c.readPlaneCell i s⟩
 
+/-- Away from a window boundary the reset projection is exactly the ordinary
+machine cursor/cell projection. -/
+theorem resetPowerCellState_eq_machinePowerCellState
+    (c : Cfg) (i : Nat) (s : AState) (hround : s.regs rR ≠ 0) :
+    resetPowerCellState c i s = machinePowerCellState c i s := by
+  apply PowerCellState.ext
+  · simp [resetPowerCellState, resetPowerCursor, machinePowerCellState,
+      hround]
+  · rfl
+
 /-- Reset is an array frame as well as the exact cursor reset. -/
 theorem Cfg.markResetBody_machinePowerCellState
     (c : Cfg) (k : Nat) (s : AState) (i : Nat)
