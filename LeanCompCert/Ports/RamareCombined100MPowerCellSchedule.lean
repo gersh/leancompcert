@@ -18,6 +18,42 @@ def cursorPhasesFold (segLen w i : Nat) (phases : List PowerPhase)
   phases.foldl
     (fun q phase => cursorPowerFold segLen w i phase.pow phase.base q) x
 
+/-- A bounded final cell bounds the cell at the start of every positive-base
+phase list.  The proof runs backwards over the compact phase descriptors,
+not over the millions of cursor rounds they denote. -/
+theorem PlaneCellProductionBounds.of_cursorPhasesFold
+    (segLen w i : Nat) (phases : List PowerPhase) (x : PlaneCell)
+    (hbase : ∀ phase ∈ phases, 1 ≤ phase.base)
+    (hfinal : PlaneCellProductionBounds
+      (cursorPhasesFold segLen w i phases x)) :
+    PlaneCellProductionBounds x := by
+  induction phases generalizing x with
+  | nil => simpa [cursorPhasesFold] using hfinal
+  | cons phase phases ih =>
+      simp only [cursorPhasesFold, List.foldl_cons] at hfinal
+      have htail := ih
+        (cursorPowerFold segLen w i phase.pow phase.base x)
+        (fun q hq => hbase q (by simp [hq])) hfinal
+      exact PlaneCellProductionBounds.of_cursorPowerFold
+        segLen w i phase.pow phase.base x
+        (hbase phase (by simp)) htail
+
+/-- Every phase-prefix state is bounded whenever the closed full phase fold is
+bounded.  This is the form consumed by the emitted-loop induction. -/
+theorem PlaneCellProductionBounds.cursorPhasesFold_prefix
+    (segLen w i : Nat) (pre suf : List PowerPhase) (x : PlaneCell)
+    (hbase : ∀ phase ∈ pre ++ suf, 1 ≤ phase.base)
+    (hfinal : PlaneCellProductionBounds
+      (cursorPhasesFold segLen w i (pre ++ suf) x)) :
+    PlaneCellProductionBounds (cursorPhasesFold segLen w i pre x) := by
+  have hsuffix : PlaneCellProductionBounds
+      (cursorPhasesFold segLen w i suf
+        (cursorPhasesFold segLen w i pre x)) := by
+    simpa [cursorPhasesFold, List.foldl_append] using hfinal
+  exact PlaneCellProductionBounds.of_cursorPhasesFold
+    segLen w i suf (cursorPhasesFold segLen w i pre x)
+    (fun phase hphase => hbase phase (by simp [hphase])) hsuffix
+
 theorem powerEventCellFold_powerPhaseEvents
     (segLen w i : Nat) (phase : PowerPhase) (x : PlaneCell) :
     powerEventCellFold i (powerPhaseEvents segLen w phase) x =
@@ -160,6 +196,53 @@ theorem cursorPhasesFold_tablePowerPhases
     hi hnpos hnglobal
   rw [List.zipIdx_map_fst] at hrows
   simpa [cursorRowsFold, factorRows, List.foldl_map, factorRow] using hrows
+
+/-- Phase flattening does not invent bases: every descriptor base came from
+the finite input table. -/
+theorem tablePowerPhases_base_mem
+    {global : Nat} {ps : List Nat} {phase : PowerPhase}
+    (hphase : phase ∈ tablePowerPhases global ps) : phase.base ∈ ps := by
+  rw [tablePowerPhases, List.mem_flatMap] at hphase
+  obtain ⟨row, hrow, hbounded⟩ := hphase
+  have hrowBase : row.1 ∈ ps := by
+    have hmapped : row.1 ∈ ps.zipIdx.map Prod.fst :=
+      List.mem_map.mpr ⟨row, hrow, rfl⟩
+    simpa [List.zipIdx_map_fst] using hmapped
+  unfold boundedPowerPhases at hbounded
+  simp only [List.mem_map] at hbounded
+  obtain ⟨j, hj, hphaseEq⟩ := hbounded
+  subst phase
+  exact hrowBase
+
+/-- Every production phase has a genuine positive prime-table base. -/
+theorem productionPowerPhases_base_two_le
+    (phase : PowerPhase) (hphase : phase ∈ productionPowerPhases) :
+    2 ≤ phase.base := by
+  apply trialPrimesBelow_two_le _ phase.base
+  have hmem := tablePowerPhases_base_mem hphase
+  simpa [productionPowerPhases, productionCursorCfg, Cfg.ofChain] using hmem
+
+/-- Once the final selected production cell is source-bounded, every compact
+phase-prefix cell is source-bounded as well. -/
+theorem productionPowerPhases_prefix_bounds
+    (w i : Nat) (pre suf : List PowerPhase)
+    (hphases : productionPowerPhases = pre ++ suf)
+    (hfinal : PlaneCellProductionBounds
+      (cursorPhasesFold productionCursorCfg.segLen w i
+        productionPowerPhases emptyPlaneCell)) :
+    PlaneCellProductionBounds
+      (cursorPhasesFold productionCursorCfg.segLen w i pre emptyPlaneCell) := by
+  have hbase : ∀ phase ∈ pre ++ suf, 1 ≤ phase.base := by
+    intro phase hphase
+    have hphase' : phase ∈ productionPowerPhases := by
+      rw [hphases]
+      exact hphase
+    have := productionPowerPhases_base_two_le phase hphase'
+    omega
+  rw [hphases] at hfinal
+  exact PlaneCellProductionBounds.cursorPhasesFold_prefix
+    productionCursorCfg.segLen w i pre suf emptyPlaneCell
+    hbase hfinal
 
 /-- Closed production phase enumeration has the same selected-cell result as
 the exact production table-row fold for every live window cell. -/
