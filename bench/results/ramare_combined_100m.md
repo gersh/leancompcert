@@ -203,6 +203,13 @@ few-thousand closed production descriptors; it does not reduce the
 wall-seconds**, **12,051,732 KiB peak RSS**, and zero swap.  This is the
 intentionally isolated high-water kernel check and remains below the
 documented 20/22 GiB build limits.
+`RamareCombined100MPowerCellSchedule.lean` then turns that checked descriptor
+into the exact selected-cell table-row fold: powers above the global endpoint
+are proved unable to divide any represented positive candidate, and phase
+events are folded without replaying the physical rounds.  Its incremental
+capped module build took **0.31 wall-seconds**; the Goldbach-side source
+consumer, which composes the schedule with the paper-facing `markCell`
+refinement, took **2.32 wall-seconds**.
 Regenerating the production C
 after this refactor gives the same SHA-256 `aa222123bc751266392d65d92b99fbc02c82fb36cb674b8610bcd704f99fb224`;
 the full run still reports `guards 0 seen 99990000 mark 0 shape 0`.
