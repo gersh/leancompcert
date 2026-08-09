@@ -1,5 +1,7 @@
 import LeanCompCert.Ports.RamareCombined100MShapeSieve
 import LeanCompCert.Ports.RS62Increments
+import LeanCompCert.Verified.ArrayScalarBlock
+import LeanCompCert.Verified.RegFrame
 
 /-!
 # Log-ladder carry on the segmented Ramaré sweep
@@ -22,6 +24,9 @@ namespace LeanCompCert.Ports.RamareCombined100M.LogSweep
 open LeanCompCert
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
+open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.ArrayScalarBlock
+open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.PsiSegSieve (storeLit storeLits seedRegs)
 open LeanCompCert.Ports.RS62 (fpD incLWord incUWord)
@@ -46,39 +51,79 @@ def rB : Nat := 185
 def rC : Nat := 186
 def regCount : Nat := 200
 
+/-- The nine physical instructions computing `incLWord n`. -/
+def lowerScalarBody : List Instr :=
+  [ .binop rA .mul (.reg 132) (.lit 2)
+  , .binop rA .add (.reg rA) (.lit (3 * fpD))
+  , .binop rB .udiv (.lit (fpD - 1)) (.reg 132)
+  , .binop rA .add (.reg rA) (.reg rB)
+  , .binop rB .mul (.reg 132) (.lit 2)
+  , .binop rA .udiv (.reg rA) (.reg rB)
+  , .binop rA .sub (.lit fpD) (.reg rA)
+  , .binop rB .sub (.reg 132) (.lit 1)
+  , .binop rIL .udiv (.reg rA) (.reg rB) ]
+
+/-- The thirteen physical instructions computing `incUWord n`. -/
+def upperScalarBody : List Instr :=
+  [ .binop rA .mul (.reg 132) (.lit 2)
+  , .binop rA .add (.reg rA) (.lit (3 * fpD))
+  , .binop rB .add (.reg 132) (.lit (3 * fpD))
+  , .binop rB .sub (.reg rB) (.lit 1)
+  , .binop rB .udiv (.reg rB) (.reg 132)
+  , .binop rA .sub (.reg rA) (.reg rB)
+  , .binop rB .mul (.reg 132) (.lit 2)
+  , .binop rA .udiv (.reg rA) (.reg rB)
+  , .binop rB .add (.reg 132) (.lit fpD)
+  , .binop rB .sub (.reg rB) (.lit 1)
+  , .binop rA .sub (.reg rB) (.reg rA)
+  , .binop rB .sub (.reg 132) (.lit 1)
+  , .binop rIU .udiv (.reg rA) (.reg rB) ]
+
+/-- The four-instruction phase-gated log commit. -/
+def commitScalarBody : List Instr :=
+  [ .binop rA .mul (.reg 11) (.reg rIL)
+  , .binop rLogL .add (.reg rLogL) (.reg rA)
+  , .binop rB .mul (.reg 11) (.reg rIU)
+  , .binop rLogU .add (.reg rLogU) (.reg rB) ]
+
 /-- `incLWord n` and `incUWord n`, followed by a phase-gated commit.  Register
 `132` is the candidate retained by `Shape.classBody`; register `11` is its
 classification-phase gate. -/
 def candidateBody : List AInstr :=
-  [ -- lower increment
-    .scalar (.binop rA .mul (.reg 132) (.lit 2))
-  , .scalar (.binop rA .add (.reg rA) (.lit (3 * fpD)))
-  , .scalar (.binop rB .udiv (.lit (fpD - 1)) (.reg 132))
-  , .scalar (.binop rA .add (.reg rA) (.reg rB))
-  , .scalar (.binop rB .mul (.reg 132) (.lit 2))
-  , .scalar (.binop rA .udiv (.reg rA) (.reg rB))
-  , .scalar (.binop rA .sub (.lit fpD) (.reg rA))
-  , .scalar (.binop rB .sub (.reg 132) (.lit 1))
-  , .scalar (.binop rIL .udiv (.reg rA) (.reg rB))
-    -- upper increment
-  , .scalar (.binop rA .mul (.reg 132) (.lit 2))
-  , .scalar (.binop rA .add (.reg rA) (.lit (3 * fpD)))
-  , .scalar (.binop rB .add (.reg 132) (.lit (3 * fpD)))
-  , .scalar (.binop rB .sub (.reg rB) (.lit 1))
-  , .scalar (.binop rB .udiv (.reg rB) (.reg 132))
-  , .scalar (.binop rA .sub (.reg rA) (.reg rB))
-  , .scalar (.binop rB .mul (.reg 132) (.lit 2))
-  , .scalar (.binop rA .udiv (.reg rA) (.reg rB))
-  , .scalar (.binop rB .add (.reg 132) (.lit fpD))
-  , .scalar (.binop rB .sub (.reg rB) (.lit 1))
-  , .scalar (.binop rA .sub (.reg rB) (.reg rA))
-  , .scalar (.binop rB .sub (.reg 132) (.lit 1))
-  , .scalar (.binop rIU .udiv (.reg rA) (.reg rB))
-    -- candidate-only commit
-  , .scalar (.binop rA .mul (.reg 11) (.reg rIL))
-  , .scalar (.binop rLogL .add (.reg rLogL) (.reg rA))
-  , .scalar (.binop rB .mul (.reg 11) (.reg rIU))
-  , .scalar (.binop rLogU .add (.reg rLogU) (.reg rB)) ]
+  lift lowerScalarBody ++ lift upperScalarBody ++ lift commitScalarBody
+
+private theorem wordSub_eq_sub {x y : Nat} (hyx : y ≤ x) (hx : x < M) :
+    (x + (M - y)) % M = x - y := by
+  have hrew : x + (M - y) = M + (x - y) := by omega
+  rw [hrew, Nat.add_mod_left, Nat.mod_eq_of_lt]
+  exact Nat.lt_of_le_of_lt (Nat.sub_le x y) hx
+
+private theorem lowerCorrection_le (n : Nat) (hn : 2 ≤ n) :
+    (n * 2 + 3 * fpD + (fpD - 1) / n) / (n * 2) ≤ fpD := by
+  have hraw :
+      (n + n + 3 * fpD + (fpD - 1) / n) / (n + n) ≤ fpD := by
+    refine Nat.le_of_lt_succ (Nat.div_lt_of_lt_mul ?_)
+    have h1 : (fpD - 1) / n ≤ fpD - 1 := Nat.div_le_self _ _
+    have hf4 : 4 * fpD ≤ (n + n) * fpD :=
+      Nat.mul_le_mul_right fpD (by omega)
+    have hmul : (n + n) * (fpD + 1) =
+        (n + n) * fpD + (n + n) := by rw [Nat.mul_add, Nat.mul_one]
+    have hmul' : (fpD + 1) * (n + n) =
+        (n + n) * fpD + (n + n) := by
+      rw [Nat.mul_comm (fpD + 1) (n + n)]
+      exact hmul
+    have hmul'' : (n + n) * Nat.succ fpD =
+        (n + n) * fpD + (n + n) := Nat.mul_succ _ _
+    have hpos : 0 < fpD := by decide
+    omega
+  simpa [Nat.mul_two] using hraw
+
+private theorem lowerShape (n : Nat) :
+    (fpD - (n * 2 + 3 * fpD + (fpD - 1) / n) / (n * 2)) /
+        (n - 1) = incLWord n := by
+  unfold incLWord
+  rw [show n * 2 + 3 * fpD = 3 * fpD + 2 * n by omega,
+    show n * 2 = 2 * n by omega]
 
 def init (c : ShapeCfg) (s : Seed) : List AInstr :=
   c.init ++ seedRegs [(rLogL, s.logL), (rLogU, s.logU)]

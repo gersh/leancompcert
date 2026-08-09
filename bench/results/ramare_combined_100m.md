@@ -134,6 +134,16 @@ boundaries.  Its `program_compiled` theorem covers the extended program, while
 kernel controls compare both carried outputs against direct folds of
 `incLWord` and `incUWord` over `[11,30]`.
 
+The physical suffix is now factored without changing its emitted instruction
+sequence into the named `lowerScalarBody`, `upperScalarBody`, and
+`commitScalarBody` blocks.  The lower correction bound and exact syntactic
+identification with `incLWord` are proved separately, so the remaining source
+refinement can be elaborated per block instead of expanding all 26
+instructions at once.  A capped source compile of this staged file took
+**78.03 wall-seconds**, **2,476,376 KiB peak RSS**, and zero swap; its live
+lambda/psi consumer compiled in **43.60 wall-seconds** at **3,094,436 KiB**
+and zero swap under the same 22,528,000 KiB virtual-memory limit.
+
 The exact production run starts from the kernel-certified `prefixState10`
 endpoints and returns:
 
