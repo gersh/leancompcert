@@ -190,8 +190,13 @@ machine needed for the emitted marking loop.  It proves exact live-prefix,
 power-bump, next-table-row, terminal-sentinel, and slack behavior, then
 composes those cases over an explicit phase chain.  It also proves that the
 complete emitted advance block implements one pure power-cursor transition,
-with its table and word-safety premises explicit.  The generic source check
-remains below one second.  The separate
+with its table and word-safety premises explicit.  It now also composes the
+live-hit, live-other-offset, and exhausted cases through the complete emitted
+address/load/cell/advance iteration; proves that the mark-phase classifier
+clears only sink cells; frames the classifier and loop tail around the
+selected cell and cursor; and proves the emitted phase/reset semantics.  This
+expanded generic source check took **7.01 wall-seconds**, **768,776 KiB peak
+RSS**, and zero swap.  The separate
 `RamareCombined100MProductionPhases.lean` checker evaluates only the
 few-thousand closed production descriptors; it does not reduce the
 3.26-million-round mark loop.  Its capped module build took **46.89

@@ -19,6 +19,7 @@ namespace LeanCompCert.Ports.RamareCombined100M.ShapeSieve
 
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Verified.ArrayRegFrame
 open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Verified.Reflect
@@ -892,6 +893,308 @@ theorem Cfg.markAddressLoadCellBody_exhausted_frame
   simp only [arun_append]
   exact ⟨hcell, hcursorM.trans (hcursorL.trans hcursorA)⟩
 
+/-! ## Mark-phase classifier framing -/
+
+/-- With the classification gate disabled, its offset calculation selects
+offset zero independently of the (wrapped) scratch subtraction. -/
+theorem Cfg.classOffsetBody_mark_run (c : Cfg) (k : Nat) (s : AState)
+    (hclass : s.regs 11 = 0) :
+    let out := arun k s (lift c.classOffsetBody)
+    out.regs 131 = 0 ∧ out.regs 10 = s.regs 10 ∧
+      out.regs 11 = 0 ∧ out.arr = s.arr := by
+  rw [arun_lift]
+  simp [Cfg.classOffsetBody, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, hclass]
+
+/-- During a mark round the classifier's sink shifter moves the seven
+zero-based plane addresses to the seven dedicated sink planes. -/
+theorem Cfg.classSinkBody_mark_run (c : Cfg) (k : Nat) (s : AState)
+    (hphase : s.regs 10 = 1)
+    (h131 : s.regs 131 = 0)
+    (h133 : s.regs 133 = c.segLen)
+    (h134 : s.regs 134 = 2 * c.segLen)
+    (h135 : s.regs 135 = 3 * c.segLen)
+    (h136 : s.regs 136 = 4 * c.segLen)
+    (h137 : s.regs 137 = 5 * c.segLen)
+    (h138 : s.regs 138 = 6 * c.segLen)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M) :
+    let out := arun k s (lift c.classSinkBody)
+    out.regs 131 = 7 * c.segLen ∧
+      out.regs 133 = 8 * c.segLen ∧
+      out.regs 134 = 9 * c.segLen ∧
+      out.regs 135 = 10 * c.segLen ∧
+    out.regs 136 = 11 * c.segLen ∧
+      out.regs 137 = 12 * c.segLen ∧
+      out.regs 138 = 13 * c.segLen ∧ out.arr = s.arr := by
+  have h8raw : (c.segLen + 7 * c.segLen) % M = 8 * c.segLen := by
+    rw [show c.segLen + 7 * c.segLen = 8 * c.segLen by omega,
+      Nat.mod_eq_of_lt h8]
+  have h9raw : (2 * c.segLen + 7 * c.segLen) % M = 9 * c.segLen := by
+    rw [show 2 * c.segLen + 7 * c.segLen = 9 * c.segLen by omega,
+      Nat.mod_eq_of_lt h9]
+  have h10raw : (3 * c.segLen + 7 * c.segLen) % M = 10 * c.segLen := by
+    rw [show 3 * c.segLen + 7 * c.segLen = 10 * c.segLen by omega,
+      Nat.mod_eq_of_lt h10]
+  have h11raw : (4 * c.segLen + 7 * c.segLen) % M = 11 * c.segLen := by
+    rw [show 4 * c.segLen + 7 * c.segLen = 11 * c.segLen by omega,
+      Nat.mod_eq_of_lt h11]
+  have h12raw : (5 * c.segLen + 7 * c.segLen) % M = 12 * c.segLen := by
+    rw [show 5 * c.segLen + 7 * c.segLen = 12 * c.segLen by omega,
+      Nat.mod_eq_of_lt h12]
+  have h13raw : (6 * c.segLen + 7 * c.segLen) % M = 13 * c.segLen := by
+    rw [show 6 * c.segLen + 7 * c.segLen = 13 * c.segLen by omega,
+      Nat.mod_eq_of_lt h13]
+  rw [arun_lift]
+  simp [Cfg.classSinkBody, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, hphase, h131, h133, h134, h135, h136, h137, h138,
+    Nat.mod_eq_of_lt h7, h8raw, h9raw, h10raw, h11raw, h12raw, h13raw]
+
+/-- Store-free classifier prefix through the final sink-address selection. -/
+def Cfg.classAddressBody (c : Cfg) : List AInstr :=
+  c.classIndexBody ++ lift c.classPlaneBody ++ lift c.classSinkBody
+
+/-- All classifier instructions before its seven clearing stores. -/
+def Cfg.classAfterAddressBody : List AInstr :=
+  Cfg.classLoadBody ++ lift Cfg.classDecodeBody
+
+def Cfg.classBeforeClearBody (c : Cfg) : List AInstr :=
+  c.classAddressBody ++ Cfg.classAfterAddressBody
+
+theorem Cfg.classBody_eq_beforeClear_append (c : Cfg) :
+    c.classBody = c.classBeforeClearBody ++ Cfg.classClearBody := by
+  simp [Cfg.classBody, Cfg.classPostCandidateBody, Cfg.classBeforeClearBody,
+    Cfg.classAfterAddressBody, Cfg.classAddressBody, List.append_assoc]
+
+/-- The complete store-free address prefix selects precisely sink planes
+`7..13` during a mark round. -/
+theorem Cfg.classAddressBody_mark_run (c : Cfg) (k : Nat) (s : AState)
+    (hphase : s.regs 10 = 1) (hclass : s.regs 11 = 0)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M) :
+    let out := arun k s c.classAddressBody
+    out.regs 131 = 7 * c.segLen ∧
+      out.regs 133 = 8 * c.segLen ∧
+      out.regs 134 = 9 * c.segLen ∧
+      out.regs 135 = 10 * c.segLen ∧
+      out.regs 136 = 11 * c.segLen ∧
+      out.regs 137 = 12 * c.segLen ∧
+      out.regs 138 = 13 * c.segLen ∧ out.arr = s.arr := by
+  let offset := arun k s (lift c.classOffsetBody)
+  have ho := c.classOffsetBody_mark_run k s hclass
+  dsimp only at ho
+  let indexed := arun k offset (lift Cfg.classCandidateBody)
+  have hi131 : indexed.regs 131 = offset.regs 131 :=
+    arun_frame k 131 _ (by rfl) offset
+  have hi10 : indexed.regs 10 = offset.regs 10 :=
+    arun_frame k 10 _ (by rfl) offset
+  have hi11 : indexed.regs 11 = offset.regs 11 :=
+    arun_frame k 11 _ (by rfl) offset
+  have hiarr : indexed.arr = offset.arr := arun_lift_arr k _ offset
+  have hi131zero : indexed.regs 131 = 0 := hi131.trans ho.1
+  have hi10one : indexed.regs 10 = 1 := by rw [hi10, ho.2.1, hphase]
+  have hL1 : indexed.regs 131 + c.segLen < M := by rw [hi131zero]; omega
+  have hL2 : indexed.regs 131 + 2 * c.segLen < M := by rw [hi131zero]; omega
+  have hL3 : indexed.regs 131 + 3 * c.segLen < M := by rw [hi131zero]; omega
+  have hL4 : indexed.regs 131 + 4 * c.segLen < M := by rw [hi131zero]; omega
+  have hL5 : indexed.regs 131 + 5 * c.segLen < M := by rw [hi131zero]; omega
+  have hL6 : indexed.regs 131 + 6 * c.segLen < M := by rw [hi131zero]; omega
+  let planed := arun k indexed (lift c.classPlaneBody)
+  have hp := c.classPlaneBody_run k indexed hL1 hL2 hL3 hL4 hL5 hL6
+  dsimp only at hp
+  have hp10 : planed.regs 10 = indexed.regs 10 :=
+    arun_frame k 10 _ (by rfl) indexed
+  have hp133 : planed.regs 133 = c.segLen := by
+    rw [hp.1, hi131zero, Nat.zero_add]
+  have hp134 : planed.regs 134 = 2 * c.segLen := by
+    rw [hp.2.1, hi131zero, Nat.zero_add]
+  have hp135 : planed.regs 135 = 3 * c.segLen := by
+    rw [hp.2.2.1, hi131zero, Nat.zero_add]
+  have hp136 : planed.regs 136 = 4 * c.segLen := by
+    rw [hp.2.2.2.1, hi131zero, Nat.zero_add]
+  have hp137 : planed.regs 137 = 5 * c.segLen := by
+    rw [hp.2.2.2.2.1, hi131zero, Nat.zero_add]
+  have hp138 : planed.regs 138 = 6 * c.segLen := by
+    rw [hp.2.2.2.2.2.1, hi131zero, Nat.zero_add]
+  have hs := c.classSinkBody_mark_run k planed
+    (hp10.trans hi10one) (hp.2.2.2.2.2.2.1.trans hi131zero)
+    hp133 hp134 hp135 hp136 hp137 hp138
+    h7 h8 h9 h10 h11 h12 h13
+  dsimp only at hs
+  rw [Cfg.classAddressBody, Cfg.classIndexBody, arun_append, arun_append,
+    arun_append]
+  exact ⟨hs.1, hs.2.1, hs.2.2.1, hs.2.2.2.1,
+    hs.2.2.2.2.1, hs.2.2.2.2.2.1, hs.2.2.2.2.2.2.1,
+    hs.2.2.2.2.2.2.2.trans (hp.2.2.2.2.2.2.2.trans
+      (hiarr.trans ho.2.2.2))⟩
+
+/-- Loads and scalar decoding preserve the selected sink addresses and the
+array, so the complete pre-clear prefix exposes the same sink selection. -/
+theorem Cfg.classBeforeClearBody_mark_run (c : Cfg) (k : Nat) (s : AState)
+    (hphase : s.regs 10 = 1) (hclass : s.regs 11 = 0)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M) :
+    let out := arun k s c.classBeforeClearBody
+    out.regs 131 = 7 * c.segLen ∧
+      out.regs 133 = 8 * c.segLen ∧
+      out.regs 134 = 9 * c.segLen ∧
+      out.regs 135 = 10 * c.segLen ∧
+      out.regs 136 = 11 * c.segLen ∧
+      out.regs 137 = 12 * c.segLen ∧
+      out.regs 138 = 13 * c.segLen ∧ out.arr = s.arr := by
+  let addressed := arun k s c.classAddressBody
+  have ha := c.classAddressBody_mark_run k s hphase hclass
+    h7 h8 h9 h10 h11 h12 h13
+  dsimp only at ha
+  have frame (r : Nat) (h : writes r Cfg.classAfterAddressBody = false) :
+      (arun k addressed Cfg.classAfterAddressBody).regs r = addressed.regs r :=
+    arun_frame k r Cfg.classAfterAddressBody h addressed
+  have harr : (arun k addressed Cfg.classAfterAddressBody).arr = addressed.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k Cfg.classAfterAddressBody addressed (by rfl)
+  rw [Cfg.classBeforeClearBody, arun_append]
+  exact ⟨(frame 131 (by rfl)).trans ha.1,
+    (frame 133 (by rfl)).trans ha.2.1,
+    (frame 134 (by rfl)).trans ha.2.2.1,
+    (frame 135 (by rfl)).trans ha.2.2.2.1,
+    (frame 136 (by rfl)).trans ha.2.2.2.2.1,
+    (frame 137 (by rfl)).trans ha.2.2.2.2.2.1,
+    (frame 138 (by rfl)).trans ha.2.2.2.2.2.2.1,
+    harr.trans ha.2.2.2.2.2.2.2⟩
+
+/-- The seven clearing stores alter only their selected addresses. -/
+theorem Cfg.classClearBody_arr_frame (k : Nat) (s : AState) (q : Nat)
+    (h131 : q ≠ s.regs 131) (h133 : q ≠ s.regs 133)
+    (h134 : q ≠ s.regs 134) (h135 : q ≠ s.regs 135)
+    (h136 : q ≠ s.regs 136) (h137 : q ≠ s.regs 137)
+    (h138 : q ≠ s.regs 138) :
+    (arun k s Cfg.classClearBody).arr q = s.arr q := by
+  simp [Cfg.classClearBody, arun, astep, AState.writeArr,
+    h131, h133, h134, h135, h136, h137, h138]
+
+/-- During a mark round the complete classifier can modify only the seven
+sink cells. -/
+theorem Cfg.classBody_mark_arr_frame (c : Cfg) (k : Nat) (s : AState)
+    (q : Nat) (hphase : s.regs 10 = 1) (hclass : s.regs 11 = 0)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M)
+    (hq7 : q ≠ 7 * c.segLen) (hq8 : q ≠ 8 * c.segLen)
+    (hq9 : q ≠ 9 * c.segLen) (hq10 : q ≠ 10 * c.segLen)
+    (hq11 : q ≠ 11 * c.segLen) (hq12 : q ≠ 12 * c.segLen)
+    (hq13 : q ≠ 13 * c.segLen) :
+    (arun k s c.classBody).arr q = s.arr q := by
+  let before := arun k s c.classBeforeClearBody
+  have hb := c.classBeforeClearBody_mark_run k s hphase hclass
+    h7 h8 h9 h10 h11 h12 h13
+  dsimp only at hb
+  have hc := Cfg.classClearBody_arr_frame k before q
+    (by rw [hb.1]; exact hq7)
+    (by rw [hb.2.1]; exact hq8)
+    (by rw [hb.2.2.1]; exact hq9)
+    (by rw [hb.2.2.2.1]; exact hq10)
+    (by rw [hb.2.2.2.2.1]; exact hq11)
+    (by rw [hb.2.2.2.2.2.1]; exact hq12)
+    (by rw [hb.2.2.2.2.2.2.1]; exact hq13)
+  rw [c.classBody_eq_beforeClear_append, arun_append]
+  exact hc.trans (congrFun hb.2.2.2.2.2.2.2 q)
+
+/-- A cell in any live plane is distinct from every sink-plane cell at the
+same segment width. -/
+theorem livePlaneCell_ne_sink (segLen i a b : Nat)
+    (hi : i < segLen) (ha : a ≤ 6) (hb : b ≤ 6) :
+    i + a * segLen ≠ (7 + b) * segLen := by
+  intro heq
+  have hleft : i + a * segLen < (a + 1) * segLen := by
+    simpa [Nat.add_mul, Nat.add_comm] using
+      Nat.add_lt_add_right hi (a * segLen)
+  have hright : (a + 1) * segLen ≤ (7 + b) * segLen := by
+    calc
+      (a + 1) * segLen ≤ 7 * segLen :=
+        Nat.mul_le_mul_right segLen (by omega)
+      _ ≤ (7 + b) * segLen :=
+        Nat.mul_le_mul_right segLen (by omega)
+  exact (Nat.not_lt_of_ge hright) (heq ▸ hleft)
+
+/-- The complete classifier is a frame for every selected live cell and for
+the persistent power cursor while the machine is in its mark phase. -/
+theorem Cfg.classBody_mark_planeCursor_frame
+    (c : Cfg) (k : Nat) (s : AState) (i : Nat)
+    (hi : i < c.segLen) (hphase : s.regs 10 = 1)
+    (hclass : s.regs 11 = 0)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M) :
+    let out := arun k s c.classBody
+    c.readPlaneCell i out = c.readPlaneCell i s ∧
+      machinePowerCursor out = machinePowerCursor s := by
+  let out := arun k s c.classBody
+  have frameAt (a : Nat) (ha : a ≤ 6) :
+      out.arr (i + a * c.segLen) = s.arr (i + a * c.segLen) := by
+    apply c.classBody_mark_arr_frame k s
+      (i + a * c.segLen) hphase hclass h7 h8 h9 h10 h11 h12 h13
+    · simpa using livePlaneCell_ne_sink c.segLen i a 0 hi ha (by omega)
+    · simpa using livePlaneCell_ne_sink c.segLen i a 1 hi ha (by omega)
+    · simpa using livePlaneCell_ne_sink c.segLen i a 2 hi ha (by omega)
+    · simpa using livePlaneCell_ne_sink c.segLen i a 3 hi ha (by omega)
+    · simpa using livePlaneCell_ne_sink c.segLen i a 4 hi ha (by omega)
+    · simpa using livePlaneCell_ne_sink c.segLen i a 5 hi ha (by omega)
+    · simpa using livePlaneCell_ne_sink c.segLen i a 6 hi ha (by omega)
+  have hcell : c.readPlaneCell i out = c.readPlaneCell i s := by
+    apply PlaneCell.ext
+    · change out.arr i = s.arr i
+      have hf := frameAt 0 (by omega)
+      simpa using hf
+    · change out.arr (i + c.segLen) = s.arr (i + c.segLen)
+      have hf := frameAt 1 (by omega)
+      simpa using hf
+    · exact frameAt 2 (by omega)
+    · exact frameAt 3 (by omega)
+    · exact frameAt 4 (by omega)
+    · exact frameAt 5 (by omega)
+    · exact frameAt 6 (by omega)
+  have frameReg (r : Nat) (h : writes r c.classBody = false) :
+      out.regs r = s.regs r := arun_frame k r c.classBody h s
+  have hcursor : machinePowerCursor out = machinePowerCursor s := by
+    apply PowerCursor.ext
+    · exact frameReg rPi (by rfl)
+    · exact frameReg rPow (by rfl)
+    · exact frameReg rBase (by rfl)
+    · exact frameReg rJ (by rfl)
+  exact ⟨hcell, hcursor⟩
+
+/-- The scalar loop tail changes only round/window bookkeeping, hence frames
+all seven plane cells and the persistent power cursor. -/
+theorem Cfg.tailBody_planeCursor_frame
+    (c : Cfg) (k : Nat) (s : AState) (i : Nat) :
+    let out := arun k s c.tailBody
+    c.readPlaneCell i out = c.readPlaneCell i s ∧
+      machinePowerCursor out = machinePowerCursor s := by
+  let out := arun k s c.tailBody
+  have harr : out.arr = s.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.tailBody s (by rfl)
+  have hcell : c.readPlaneCell i out = c.readPlaneCell i s := by
+    unfold Cfg.readPlaneCell
+    rw [harr]
+  have frameReg (r : Nat) (h : writes r c.tailBody = false) :
+      out.regs r = s.regs r := arun_frame k r c.tailBody h s
+  have hcursor : machinePowerCursor out = machinePowerCursor s := by
+    apply PowerCursor.ext
+    · exact frameReg rPi (by rfl)
+    · exact frameReg rPow (by rfl)
+    · exact frameReg rBase (by rfl)
+    · exact frameReg rJ (by rfl)
+  exact ⟨hcell, hcursor⟩
+
 /-- Explicit no-wrap conditions for one logical seven-plane update. -/
 structure PlaneCellMarkPre (pow base : Nat) (x : PlaneCell) : Prop where
   base_ne_zero : base ≠ 0
@@ -1001,6 +1304,80 @@ theorem Cfg.markAddressLoadCellBody_live_run
         rw [hcell, hloadedPow, hloadedBase]
   · exact hcursorOut.trans hcursor
 
+/-- A live mark for one offset frames every other selected offset.  Reducing
+the physical addresses modulo the segment width makes cross-plane aliasing
+impossible without expanding the store block. -/
+theorem Cfg.markAddressLoadCellBody_live_other_frame
+    (c : Cfg) (k : Nat) (s : AState) (i : Nat)
+    (hphase : s.regs 10 = 1) (hlive : s.regs rJ < c.segLen)
+    (hi : i < c.segLen) (hne : i ≠ s.regs rJ)
+    (h0 : s.regs rJ < M)
+    (h1 : s.regs rJ + c.segLen < M)
+    (h2 : s.regs rJ + 2 * c.segLen < M)
+    (h3 : s.regs rJ + 3 * c.segLen < M)
+    (h4 : s.regs rJ + 4 * c.segLen < M)
+    (h5 : s.regs rJ + 5 * c.segLen < M)
+    (h6 : s.regs rJ + 6 * c.segLen < M) :
+    let out := arun k s
+      ((c.markAddressBody ++ Cfg.markLoadBody) ++ Cfg.markCellBody)
+    c.readPlaneCell i out = c.readPlaneCell i s ∧
+      machinePowerCursor out = machinePowerCursor s := by
+  let loaded := arun k s (c.markAddressBody ++ Cfg.markLoadBody)
+  have hp := c.markAddressLoadBody_live_run k s hphase hlive
+    h0 h1 h2 h3 h4 h5 h6
+  dsimp only at hp
+  rcases hp with
+    ⟨h30, h31, h32, h33, h34, h35, h36, _hcell, hcursor, harr⟩
+  have selectedNe (a b : Nat) :
+      i + a * c.segLen ≠ s.regs rJ + b * c.segLen := by
+    intro heq
+    have hm := congrArg (fun z => z % c.segLen) heq
+    simp only [Nat.add_mul_mod_self_right] at hm
+    rw [Nat.mod_eq_of_lt hi, Nat.mod_eq_of_lt hlive] at hm
+    exact hne hm
+  let out := arun k loaded Cfg.markCellBody
+  have frameAt (a : Nat) (ha : a ≤ 6) :
+      out.arr (i + a * c.segLen) = loaded.arr (i + a * c.segLen) := by
+    apply Cfg.markCellBody_arr_frame
+    · rw [h30]; simpa using selectedNe a 0
+    · rw [h31]; simpa using selectedNe a 1
+    · rw [h32]; simpa using selectedNe a 2
+    · rw [h33]; simpa using selectedNe a 3
+    · rw [h34]; simpa using selectedNe a 4
+    · rw [h35]; simpa using selectedNe a 5
+    · rw [h36]; simpa using selectedNe a 6
+  have harrS : loaded.arr = s.arr := harr
+  have hcell : c.readPlaneCell i out = c.readPlaneCell i s := by
+    apply PlaneCell.ext
+    · change out.arr i = s.arr i
+      have hf := frameAt 0 (by omega)
+      simp only [Nat.zero_mul, Nat.add_zero] at hf
+      exact hf.trans (congrFun harrS i)
+    · change out.arr (i + c.segLen) = s.arr (i + c.segLen)
+      have hf := frameAt 1 (by omega)
+      simp only [Nat.one_mul] at hf
+      exact hf.trans (congrFun harrS (i + c.segLen))
+    · exact (frameAt 2 (by omega)).trans
+        (congrFun harrS (i + 2 * c.segLen))
+    · exact (frameAt 3 (by omega)).trans
+        (congrFun harrS (i + 3 * c.segLen))
+    · exact (frameAt 4 (by omega)).trans
+        (congrFun harrS (i + 4 * c.segLen))
+    · exact (frameAt 5 (by omega)).trans
+        (congrFun harrS (i + 5 * c.segLen))
+    · exact (frameAt 6 (by omega)).trans
+        (congrFun harrS (i + 6 * c.segLen))
+  have frameReg (r : Nat) (h : writes r Cfg.markCellBody = false) :
+      out.regs r = loaded.regs r := arun_frame k r Cfg.markCellBody h loaded
+  have hcursorOut : machinePowerCursor out = machinePowerCursor loaded := by
+    apply PowerCursor.ext
+    · exact frameReg rPi (by rfl)
+    · exact frameReg rPow (by rfl)
+    · exact frameReg rBase (by rfl)
+    · exact frameReg rJ (by rfl)
+  simp only [arun_append]
+  exact ⟨hcell, hcursorOut.trans hcursor⟩
+
 /-- Once the mark selector and exhausted-offset bit have been established,
 the complete emitted advance block realizes the pure power-cursor
 transition.  All word-safety assumptions remain explicit; the production
@@ -1100,5 +1477,388 @@ theorem Cfg.markAdvanceBody_machinePowerCursor
             Cfg.powerFits, Cfg.bumpPower, Cfg.stepPrime, nextPowValue,
             nextBaseValue, nextOffset, hclamp, hload, Cfg.selectedOffset,
             hterminal]
+
+/-! ## Complete emitted mark iteration -/
+
+def Cfg.markCellPrefix (c : Cfg) : List AInstr :=
+  (c.markAddressBody ++ Cfg.markLoadBody) ++ Cfg.markCellBody
+
+structure PowerCellState where
+  cursor : PowerCursor
+  cell : PlaneCell
+  deriving Repr, DecidableEq
+
+@[ext] theorem PowerCellState.ext {a b : PowerCellState}
+    (hcursor : a.cursor = b.cursor) (hcell : a.cell = b.cell) : a = b := by
+  cases a
+  cases b
+  simp_all
+
+def machinePowerCellState (c : Cfg) (i : Nat) (s : AState) :
+    PowerCellState :=
+  ⟨machinePowerCursor s, c.readPlaneCell i s⟩
+
+def powerCellStep (c : Cfg) (w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState) : PowerCellState :=
+  let cell :=
+    if st.cursor.j < c.segLen ∧ st.cursor.j = i then
+      st.cell.markPower st.cursor.pow st.cursor.base
+    else st.cell
+  ⟨powerCursorStep c.segLen w c.hi c.tableLen table st.cursor, cell⟩
+
+/-- Word-safety and table premises used by the already-proved emitted
+advance block, packaged separately from its current cursor relation. -/
+structure AdvanceWordPre (c : Cfg) (s : AState) (table : Nat → Nat) : Prop where
+  table : ∀ pi, pi ≤ c.tableLen → s.arr (pi + c.tableBase) = table pi
+  values : CursorValuePre c s
+  pow_ne_zero :
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let piOut := clampPi c.tableLen (s.regs rPi + step)
+    let nextPrime := s.arr (piOut + c.tableBase)
+    nextPowValue (advanceActive (s.regs 10) (s.regs 25))
+      (c.bumpPower (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)) step
+      (s.regs rPow) (s.regs rPow * s.regs rBase) nextPrime ≠ 0
+  seg_sentinel : c.segLen + 1 < M
+  mark_steps : c.markSteps < M
+  viol :
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let piOut := clampPi c.tableLen (s.regs rPi + step)
+    s.regs rViol + c.budgetFailure (s.regs rR) piOut < M
+  vmark :
+    let step := c.stepPrime (s.regs 10) (s.regs 25)
+      (s.regs rPow) (s.regs rBase)
+    let piOut := clampPi c.tableLen (s.regs rPi + step)
+    s.regs rVMark + c.budgetFailure (s.regs rR) piOut < M
+
+theorem Cfg.markAdvanceBody_machinePowerCursor_of_pre
+    (c : Cfg) (k : Nat) (s : AState) (table : Nat → Nat)
+    (cur : PowerCursor) (hcur : machinePowerCursor s = cur)
+    (hphase : s.regs 10 = 1)
+    (hpast : s.regs 25 = if cur.j < c.segLen then 0 else 1)
+    (hpre : AdvanceWordPre c s table) (hpi : cur.pi ≤ c.tableLen) :
+    machinePowerCursor (arun k s c.markAdvanceBody) =
+      powerCursorStep c.segLen (s.regs rW) c.hi c.tableLen table cur :=
+  c.markAdvanceBody_machinePowerCursor k s table cur hcur hphase hpast
+    hpre.table hpre.values hpre.pow_ne_zero hpre.seg_sentinel
+    hpre.mark_steps hpre.viol hpre.vmark hpi
+
+/-- One complete emitted address/load/cell/advance iteration is exactly one
+pure cursor/cell step.  The theorem branches on live-hit, live-other, and
+exhausted cases, keeping all production word bounds explicit. -/
+theorem Cfg.markCellPrefixAdvance_run
+    (c : Cfg) (k : Nat) (s : AState) (table : Nat → Nat) (i : Nat)
+    (cur : PowerCursor) (hcur : machinePowerCursor s = cur)
+    (hphase : s.regs 10 = 1) (hi : i < c.segLen)
+    (hliveBounds : cur.j < c.segLen →
+      cur.j < M ∧ cur.j + c.segLen < M ∧
+      cur.j + 2 * c.segLen < M ∧ cur.j + 3 * c.segLen < M ∧
+      cur.j + 4 * c.segLen < M ∧ cur.j + 5 * c.segLen < M ∧
+      cur.j + 6 * c.segLen < M)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M)
+    (hmark : cur.j < c.segLen → cur.j = i →
+      PlaneCellMarkPre (s.regs rPow) (s.regs rBase)
+        (c.readPlaneCell (s.regs rJ) s))
+    (hadvance : AdvanceWordPre c (arun k s c.markCellPrefix) table)
+    (hpi : cur.pi ≤ c.tableLen) :
+    machinePowerCellState c i
+        (arun k s (c.markCellPrefix ++ c.markAdvanceBody)) =
+      powerCellStep c (s.regs rW) i table (machinePowerCellState c i s) := by
+  let marked := arun k s c.markCellPrefix
+  have hsJ : s.regs rJ = cur.j := congrArg PowerCursor.j hcur
+  have hsWMarked : marked.regs rW = s.regs rW :=
+    arun_frame k rW c.markCellPrefix (by rfl) s
+  have hsPhaseMarked : marked.regs 10 = 1 := by
+    exact (arun_frame k 10 c.markCellPrefix (by rfl) s).trans hphase
+  have hmarkedEq : marked = arun k s
+      (c.markAddressBody ++ (Cfg.markLoadBody ++ Cfg.markCellBody)) := by
+    dsimp [marked, Cfg.markCellPrefix]
+    symm
+    simp only [arun_append]
+  have selectorFrame : marked.regs 25 =
+      (arun k s c.markAddressBody).regs 25 := by
+    let addressed := arun k s c.markAddressBody
+    have hload :
+        (arun k addressed Cfg.markLoadBody).regs 25 = addressed.regs 25 :=
+      arun_frame k 25 Cfg.markLoadBody (by rfl) addressed
+    let loaded := arun k addressed Cfg.markLoadBody
+    have hcell : (arun k loaded Cfg.markCellBody).regs 25 = loaded.regs 25 :=
+      arun_frame k 25 Cfg.markCellBody (by rfl) loaded
+    rw [hmarkedEq, arun_append, arun_append]
+    exact hcell.trans hload
+  have prefixEffect :
+      c.readPlaneCell i marked =
+          (if cur.j < c.segLen ∧ cur.j = i then
+            (c.readPlaneCell i s).markPower cur.pow cur.base
+          else c.readPlaneCell i s) ∧
+        machinePowerCursor marked = cur ∧
+        marked.regs 25 = if cur.j < c.segLen then 0 else 1 := by
+    by_cases hlive : cur.j < c.segLen
+    · rcases hliveBounds hlive with ⟨h0, h1, h2, h3, h4, h5, h6⟩
+      have hliveS : s.regs rJ < c.segLen := by simpa [hsJ] using hlive
+      have h0S : s.regs rJ < M := by simpa [hsJ] using h0
+      have h1S : s.regs rJ + c.segLen < M := by simpa [hsJ] using h1
+      have h2S : s.regs rJ + 2 * c.segLen < M := by simpa [hsJ] using h2
+      have h3S : s.regs rJ + 3 * c.segLen < M := by simpa [hsJ] using h3
+      have h4S : s.regs rJ + 4 * c.segLen < M := by simpa [hsJ] using h4
+      have h5S : s.regs rJ + 5 * c.segLen < M := by simpa [hsJ] using h5
+      have h6S : s.regs rJ + 6 * c.segLen < M := by simpa [hsJ] using h6
+      have ha := c.markAddressBody_live_run k s hphase hliveS
+        h0S h1S h2S h3S h4S h5S h6S
+      dsimp only at ha
+      by_cases heq : cur.j = i
+      · have hrun := c.markAddressLoadCellBody_live_run k s hphase hliveS
+          (by omega) h0S h1S h2S h3S h4S h5S h6S
+          (hmark hlive heq)
+        dsimp only at hrun
+        have hsPow : s.regs rPow = cur.pow :=
+          congrArg PowerCursor.pow hcur
+        have hsBase : s.regs rBase = cur.base :=
+          congrArg PowerCursor.base hcur
+        have hsJi : s.regs rJ = i := hsJ.trans heq
+        have hread : c.readPlaneCell i marked =
+            (c.readPlaneCell i s).markPower cur.pow cur.base := by
+          rw [hmarkedEq]
+          simpa [hsJi, hsPow, hsBase] using hrun.1
+        refine ⟨?_, ?_, ?_⟩
+        · rw [if_pos ⟨hlive, heq⟩]
+          exact hread
+        · rw [hmarkedEq]
+          exact hrun.2.trans hcur
+        rw [selectorFrame, ha.2.1]
+        simp [hlive]
+      · have hrun := c.markAddressLoadCellBody_live_other_frame k s i
+          hphase hliveS hi (by
+            intro his
+            exact heq (hsJ.symm.trans his.symm))
+          h0S h1S h2S h3S h4S h5S h6S
+        dsimp only at hrun
+        refine ⟨?_, ?_, ?_⟩
+        · rw [if_neg (fun h => heq h.2), hmarkedEq]
+          exact hrun.1
+        · rw [hmarkedEq]
+          exact hrun.2.trans hcur
+        rw [selectorFrame, ha.2.1]
+        simp [hlive]
+    · have hdoneS : ¬s.regs rJ < c.segLen := by simpa [hsJ] using hlive
+      have hrun := c.markAddressLoadCellBody_exhausted_frame k s i
+        hphase hdoneS hi h7 h8 h9 h10 h11 h12 h13
+      dsimp only at hrun
+      have ha := c.markAddressBody_exhausted_run k s hphase hdoneS
+        h7 h8 h9 h10 h11 h12 h13
+      dsimp only at ha
+      refine ⟨?_, ?_, ?_⟩
+      · rw [if_neg (fun h => hlive h.1), hmarkedEq]
+        exact hrun.1
+      · rw [hmarkedEq]
+        exact hrun.2.trans hcur
+      rw [selectorFrame, ha.2.1]
+      simp [hlive]
+  have hadv := c.markAdvanceBody_machinePowerCursor_of_pre k marked table cur
+    prefixEffect.2.1 hsPhaseMarked prefixEffect.2.2 hadvance hpi
+  have harrAdvance : (arun k marked c.markAdvanceBody).arr = marked.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markAdvanceBody marked (by rfl)
+  rw [arun_append]
+  apply PowerCellState.ext
+  · simpa [machinePowerCellState, powerCellStep, hsWMarked, hcur] using hadv
+  · change c.readPlaneCell i (arun k marked c.markAdvanceBody) = _
+    rw [show c.readPlaneCell i (arun k marked c.markAdvanceBody) =
+        c.readPlaneCell i marked by unfold Cfg.readPlaneCell; rw [harrAdvance]]
+    simpa [machinePowerCellState, powerCellStep, hcur] using prefixEffect.1
+
+def Cfg.markActiveBody (c : Cfg) : List AInstr :=
+  c.markCellPrefix ++ c.markAdvanceBody
+
+def resetPowerCursor (c : Cfg) (s : AState) : PowerCursor :=
+  if s.regs rR = 0 then
+    let p0 := c.table.headD 1
+    ⟨0, p0, p0, startOffset (s.regs rW) p0⟩
+  else machinePowerCursor s
+
+/-- The emitted reset block is exactly the pure window-boundary cursor reset,
+including its first-multiple offset formula. -/
+theorem Cfg.markResetBody_machinePowerCursor
+    (c : Cfg) (k : Nat) (s : AState)
+    (hp0 : c.table.headD 1 ≠ 0) (hp0M : c.table.headD 1 < M)
+    (hPi : s.regs rR ≠ 0 → s.regs rPi < M)
+    (hPow : s.regs rR ≠ 0 → s.regs rPow < M)
+    (hBase : s.regs rR ≠ 0 → s.regs rBase < M)
+    (hJ : s.regs rR ≠ 0 → s.regs rJ < M) :
+    machinePowerCursor (arun k s c.markResetBody) = resetPowerCursor c s := by
+  by_cases hzero : s.regs rR = 0
+  · have hr := c.markResetBody_zero_run k s hzero hp0 hp0M
+    dsimp only at hr
+    apply PowerCursor.ext
+    · simp [resetPowerCursor, hzero, machinePowerCursor, hr.1]
+    · simp [resetPowerCursor, hzero, machinePowerCursor, hr.2.1]
+    · simp [resetPowerCursor, hzero, machinePowerCursor, hr.2.2.1]
+    · simp [resetPowerCursor, hzero, machinePowerCursor, startOffset,
+        hr.2.2.2.1]
+  · have hr := c.markResetBody_nonzero_run k s hzero
+      (hPi hzero) (hPow hzero) (hBase hzero) (hJ hzero)
+    dsimp only at hr
+    apply PowerCursor.ext
+    · simp [resetPowerCursor, hzero, machinePowerCursor, hr.1]
+    · simp [resetPowerCursor, hzero, machinePowerCursor, hr.2.1]
+    · simp [resetPowerCursor, hzero, machinePowerCursor, hr.2.2.1]
+    · simp [resetPowerCursor, hzero, machinePowerCursor, hr.2.2.2.1]
+
+def resetPowerCellState (c : Cfg) (i : Nat) (s : AState) : PowerCellState :=
+  ⟨resetPowerCursor c s, c.readPlaneCell i s⟩
+
+/-- Reset is an array frame as well as the exact cursor reset. -/
+theorem Cfg.markResetBody_machinePowerCellState
+    (c : Cfg) (k : Nat) (s : AState) (i : Nat)
+    (hp0 : c.table.headD 1 ≠ 0) (hp0M : c.table.headD 1 < M)
+    (hPi : s.regs rR ≠ 0 → s.regs rPi < M)
+    (hPow : s.regs rR ≠ 0 → s.regs rPow < M)
+    (hBase : s.regs rR ≠ 0 → s.regs rBase < M)
+    (hJ : s.regs rR ≠ 0 → s.regs rJ < M) :
+    machinePowerCellState c i (arun k s c.markResetBody) =
+      resetPowerCellState c i s := by
+  apply PowerCellState.ext
+  · exact c.markResetBody_machinePowerCursor k s hp0 hp0M hPi hPow hBase hJ
+  · have harr : (arun k s c.markResetBody).arr = s.arr :=
+      LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+        k c.markResetBody s (by rfl)
+    unfold machinePowerCellState resetPowerCellState Cfg.readPlaneCell
+    rw [harr]
+
+def Cfg.markPhaseResetBody (c : Cfg) : List AInstr :=
+  lift c.markPhaseBody ++ c.markResetBody
+
+/-- Phase selection changes no persistent cursor or array field, so composing
+it with reset gives the pure reset of the incoming machine state. -/
+theorem Cfg.markPhaseResetBody_machinePowerCellState
+    (c : Cfg) (k : Nat) (s : AState) (i : Nat)
+    (hT : c.markSteps < M)
+    (hp0 : c.table.headD 1 ≠ 0) (hp0M : c.table.headD 1 < M)
+    (hPi : s.regs rR ≠ 0 → s.regs rPi < M)
+    (hPow : s.regs rR ≠ 0 → s.regs rPow < M)
+    (hBase : s.regs rR ≠ 0 → s.regs rBase < M)
+    (hJ : s.regs rR ≠ 0 → s.regs rJ < M) :
+    machinePowerCellState c i (arun k s c.markPhaseResetBody) =
+      resetPowerCellState c i s := by
+  let phased := arun k s (lift c.markPhaseBody)
+  have hp := c.markPhaseBody_run k s hT
+  dsimp only at hp
+  have hR : phased.regs rR = s.regs rR := hp.2.2.1
+  have hW : phased.regs rW = s.regs rW :=
+    arun_frame k rW (lift c.markPhaseBody) (by rfl) s
+  have hPiF : phased.regs rPi = s.regs rPi :=
+    arun_frame k rPi (lift c.markPhaseBody) (by rfl) s
+  have hPowF : phased.regs rPow = s.regs rPow :=
+    arun_frame k rPow (lift c.markPhaseBody) (by rfl) s
+  have hBaseF : phased.regs rBase = s.regs rBase :=
+    arun_frame k rBase (lift c.markPhaseBody) (by rfl) s
+  have hJF : phased.regs rJ = s.regs rJ :=
+    arun_frame k rJ (lift c.markPhaseBody) (by rfl) s
+  have hreset := c.markResetBody_machinePowerCellState k phased i hp0 hp0M
+    (by intro hn; rw [hPiF]; exact hPi (by rw [← hR]; exact hn))
+    (by intro hn; rw [hPowF]; exact hPow (by rw [← hR]; exact hn))
+    (by intro hn; rw [hBaseF]; exact hBase (by rw [← hR]; exact hn))
+    (by intro hn; rw [hJF]; exact hJ (by rw [← hR]; exact hn))
+  have hpure : resetPowerCellState c i phased = resetPowerCellState c i s := by
+    apply PowerCellState.ext
+    · unfold resetPowerCellState resetPowerCursor
+      rw [hR]
+      by_cases hz : s.regs rR = 0
+      · simp [hz, hW]
+      · simp [hz, machinePowerCursor, hPiF, hPowF, hBaseF, hJF]
+    · unfold resetPowerCellState Cfg.readPlaneCell
+      rw [hp.2.2.2]
+  rw [Cfg.markPhaseResetBody, arun_append]
+  exact hreset.trans hpure
+
+theorem Cfg.markBody_eq_phase_reset_active (c : Cfg) :
+    c.markBody =
+      lift c.markPhaseBody ++ c.markResetBody ++ c.markActiveBody := by
+  simp [Cfg.markBody, Cfg.markCoreBody, Cfg.markActiveBody,
+    Cfg.markCellPrefix, List.append_assoc]
+
+/-- One complete emitted loop body in the mark phase has exactly the pure
+cell/cursor effect of the active cursor step.  The phase selector, reset,
+classifier sink traffic, and loop tail are all proved frames around that
+step; later induction can instantiate `reset` with either reset theorem. -/
+theorem Cfg.body_mark_powerCell_run
+    (c : Cfg) (k : Nat) (s : AState) (table : Nat → Nat) (i : Nat)
+    (hround : s.regs rR < c.markSteps) (hT : c.markSteps < M)
+    (hi : i < c.segLen)
+    (cur : PowerCursor)
+    (hcur :
+      let phased := arun k s (lift c.markPhaseBody)
+      let reset := arun k phased c.markResetBody
+      machinePowerCursor reset = cur)
+    (hliveBounds : cur.j < c.segLen →
+      cur.j < M ∧ cur.j + c.segLen < M ∧
+      cur.j + 2 * c.segLen < M ∧ cur.j + 3 * c.segLen < M ∧
+      cur.j + 4 * c.segLen < M ∧ cur.j + 5 * c.segLen < M ∧
+      cur.j + 6 * c.segLen < M)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M)
+    (hmark :
+      let phased := arun k s (lift c.markPhaseBody)
+      let reset := arun k phased c.markResetBody
+      cur.j < c.segLen → cur.j = i →
+        PlaneCellMarkPre (reset.regs rPow) (reset.regs rBase)
+          (c.readPlaneCell (reset.regs rJ) reset))
+    (hadvance :
+      let phased := arun k s (lift c.markPhaseBody)
+      let reset := arun k phased c.markResetBody
+      AdvanceWordPre c (arun k reset c.markCellPrefix) table)
+    (hpi : cur.pi ≤ c.tableLen) :
+    let phased := arun k s (lift c.markPhaseBody)
+    let reset := arun k phased c.markResetBody
+    machinePowerCellState c i (arun k s c.body) =
+      powerCellStep c (reset.regs rW) i table
+        (machinePowerCellState c i reset) := by
+  let phased := arun k s (lift c.markPhaseBody)
+  let reset := arun k phased c.markResetBody
+  let active := arun k reset c.markActiveBody
+  let classified := arun k active c.classBody
+  have hp := c.markPhaseBody_run k s hT
+  dsimp only at hp
+  have hp10 : phased.regs 10 = 1 := by rw [hp.1, if_pos hround]
+  have hp11 : phased.regs 11 = 0 := by
+    rw [hp.2.1, if_neg (by omega : ¬c.markSteps ≤ s.regs rR)]
+  have hr10 : reset.regs 10 = 1 :=
+    (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
+  have hr11 : reset.regs 11 = 0 :=
+    (arun_frame k 11 c.markResetBody (by rfl) phased).trans hp11
+  have hactive := c.markCellPrefixAdvance_run k reset table i cur hcur
+    hr10 hi hliveBounds h7 h8 h9 h10 h11 h12 h13 hmark hadvance hpi
+  change machinePowerCellState c i active =
+      powerCellStep c (reset.regs rW) i table
+        (machinePowerCellState c i reset) at hactive
+  have ha10 : active.regs 10 = 1 :=
+    (arun_frame k 10 c.markActiveBody (by rfl) reset).trans hr10
+  have ha11 : active.regs 11 = 0 :=
+    (arun_frame k 11 c.markActiveBody (by rfl) reset).trans hr11
+  have hclass := c.classBody_mark_planeCursor_frame k active i hi
+    ha10 ha11 h7 h8 h9 h10 h11 h12 h13
+  have htail := c.tailBody_planeCursor_frame k classified i
+  have hclassState : machinePowerCellState c i classified =
+      machinePowerCellState c i active := by
+    apply PowerCellState.ext
+    · exact hclass.2
+    · exact hclass.1
+  have htailState : machinePowerCellState c i (arun k classified c.tailBody) =
+      machinePowerCellState c i classified := by
+    apply PowerCellState.ext
+    · exact htail.2
+    · exact htail.1
+  have hbodyRun : arun k s c.body = arun k classified c.tailBody := by
+    simp [Cfg.body, c.markBody_eq_phase_reset_active, Cfg.markActiveBody,
+      phased, reset, active, classified, arun_append]
+  rw [hbodyRun, htailState, hclassState]
+  exact hactive
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve
