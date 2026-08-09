@@ -1323,6 +1323,29 @@ theorem Cfg.tailBody_planeCursor_frame
     · exact frameReg rJ (by rfl)
   exact ⟨hcell, hcursor⟩
 
+/-- Before the period boundary, the scalar loop tail advances the round once
+and leaves the current window base fixed. -/
+theorem Cfg.tailBody_mark_position
+    (c : Cfg) (k : Nat) (s : AState) (r w : Nat)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hnext : r + 1 < c.period) (hperiodM : c.period < M)
+    (hwM : w < M) :
+    let out := arun k s c.tailBody
+    out.regs rR = r + 1 ∧ out.regs rW = w := by
+  have hrM : r + 1 < M := Nat.lt_trans hnext hperiodM
+  have hnextNe : r + 1 ≠ c.period := Nat.ne_of_lt hnext
+  have hrMod : (r + 1) % 18446744073709551616 = r + 1 :=
+    Nat.mod_eq_of_lt (by simpa [M] using hrM)
+  have hperiodMod : c.period % 18446744073709551616 = c.period :=
+    Nat.mod_eq_of_lt (by simpa [M] using hperiodM)
+  have hwMod : w % 18446744073709551616 = w :=
+    Nat.mod_eq_of_lt (by simpa [M] using hwM)
+  change s.regs 5 = r at hR
+  change s.regs 6 = w at hW
+  simp [Cfg.tailBody, arun, astep, AState.writeReg, sdest, sval,
+    denoteOperand, denoteOp, hR, hW, rR, rW, hrMod, hperiodMod,
+    hwMod, hnextNe, M]
+
 /-- Explicit no-wrap conditions for one logical seven-plane update. -/
 structure PlaneCellMarkPre (pow base : Nat) (x : PlaneCell) : Prop where
   base_ne_zero : base ≠ 0
@@ -1610,6 +1633,126 @@ theorem Cfg.markAdvanceBody_machinePowerCursor
 
 def Cfg.markCellPrefix (c : Cfg) : List AInstr :=
   (c.markAddressBody ++ Cfg.markLoadBody) ++ Cfg.markCellBody
+
+/-- Marking writes only to the seven live/sink planes below `tableBase`, so
+the complete address/load/cell prefix preserves every table-or-later cell. -/
+theorem Cfg.markCellPrefix_table_frame
+    (c : Cfg) (k : Nat) (s : AState) (q : Nat)
+    (hphase : s.regs 10 = 1) (hLPos : 0 < c.segLen)
+    (hliveBounds : s.regs rJ < c.segLen →
+      s.regs rJ < M ∧ s.regs rJ + c.segLen < M ∧
+      s.regs rJ + 2 * c.segLen < M ∧
+      s.regs rJ + 3 * c.segLen < M ∧
+      s.regs rJ + 4 * c.segLen < M ∧
+      s.regs rJ + 5 * c.segLen < M ∧
+      s.regs rJ + 6 * c.segLen < M)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M)
+    (hq : c.tableBase ≤ q) :
+    (arun k s c.markCellPrefix).arr q = s.arr q := by
+  let addressed := arun k s c.markAddressBody
+  let loaded := arun k addressed Cfg.markLoadBody
+  have harrAddress : addressed.arr = s.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markAddressBody s (by rfl)
+  have harrLoad : loaded.arr = addressed.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k Cfg.markLoadBody addressed (by rfl)
+  have loadFrame (r : Nat) (hr : writes r Cfg.markLoadBody = false) :
+      loaded.regs r = addressed.regs r :=
+    arun_frame k r Cfg.markLoadBody hr addressed
+  have finish
+      (h30 : q ≠ loaded.regs 30) (h31 : q ≠ loaded.regs 31)
+      (h32 : q ≠ loaded.regs 32) (h33 : q ≠ loaded.regs 33)
+      (h34 : q ≠ loaded.regs 34) (h35 : q ≠ loaded.regs 35)
+      (h36 : q ≠ loaded.regs 36) :
+      (arun k s c.markCellPrefix).arr q = s.arr q := by
+    have hc := Cfg.markCellBody_arr_frame k loaded q
+      h30 h31 h32 h33 h34 h35 h36
+    rw [Cfg.markCellPrefix, arun_append, arun_append]
+    exact hc.trans ((congrFun harrLoad q).trans (congrFun harrAddress q))
+  by_cases hlive : s.regs rJ < c.segLen
+  · rcases hliveBounds hlive with ⟨h0, h1, h2, h3, h4, h5, h6⟩
+    have ha := c.markAddressBody_live_run k s hphase hlive
+      h0 h1 h2 h3 h4 h5 h6
+    dsimp only at ha
+    have ha30 : addressed.regs 30 = s.regs rJ := by
+      simpa [addressed] using ha.2.2.1
+    have ha31 : addressed.regs 31 = s.regs rJ + c.segLen := by
+      simpa [addressed] using ha.2.2.2.1
+    have ha32 : addressed.regs 32 = s.regs rJ + 2 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.1
+    have ha33 : addressed.regs 33 = s.regs rJ + 3 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.2.1
+    have ha34 : addressed.regs 34 = s.regs rJ + 4 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.2.2.1
+    have ha35 : addressed.regs 35 = s.regs rJ + 5 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.2.2.2.1
+    have ha36 : addressed.regs 36 = s.regs rJ + 6 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.2.2.2.2.1
+    apply finish
+    · rw [loadFrame 30 (by rfl), ha30]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 31 (by rfl), ha31]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 32 (by rfl), ha32]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 33 (by rfl), ha33]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 34 (by rfl), ha34]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 35 (by rfl), ha35]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 36 (by rfl), ha36]
+      unfold Cfg.tableBase at hq
+      omega
+  · have ha := c.markAddressBody_exhausted_run k s hphase hlive
+      h7 h8 h9 h10 h11 h12 h13
+    dsimp only at ha
+    have ha30 : addressed.regs 30 = 7 * c.segLen := by
+      simpa [addressed] using ha.2.2.1
+    have ha31 : addressed.regs 31 = 8 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.1
+    have ha32 : addressed.regs 32 = 9 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.1
+    have ha33 : addressed.regs 33 = 10 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.2.1
+    have ha34 : addressed.regs 34 = 11 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.2.2.1
+    have ha35 : addressed.regs 35 = 12 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.2.2.2.1
+    have ha36 : addressed.regs 36 = 13 * c.segLen := by
+      simpa [addressed] using ha.2.2.2.2.2.2.2.2.1
+    apply finish
+    · rw [loadFrame 30 (by rfl), ha30]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 31 (by rfl), ha31]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 32 (by rfl), ha32]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 33 (by rfl), ha33]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 34 (by rfl), ha34]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 35 (by rfl), ha35]
+      unfold Cfg.tableBase at hq
+      omega
+    · rw [loadFrame 36 (by rfl), ha36]
+      unfold Cfg.tableBase at hq
+      omega
 
 structure PowerCellState where
   cursor : PowerCursor
@@ -2090,5 +2233,136 @@ theorem Cfg.body_mark_powerCell_run
       phased, reset, active, classified, arun_append]
   rw [hbodyRun, htailState, hclassState]
   exact hactive
+
+/-- In a marking round the complete emitted body preserves every initialized
+table cell.  The proof follows the actual phase/reset/mark/advance/class/tail
+composition and needs no reduction of the surrounding production loop. -/
+theorem Cfg.body_mark_table_frame
+    (c : Cfg) (k : Nat) (s : AState) (q : Nat)
+    (hround : s.regs rR < c.markSteps)
+    (hT : c.markSteps < M) (hLPos : 0 < c.segLen)
+    (cur : PowerCursor)
+    (hcur :
+      let phased := arun k s (lift c.markPhaseBody)
+      let reset := arun k phased c.markResetBody
+      machinePowerCursor reset = cur)
+    (hliveBounds : cur.j < c.segLen →
+      cur.j < M ∧ cur.j + c.segLen < M ∧
+      cur.j + 2 * c.segLen < M ∧ cur.j + 3 * c.segLen < M ∧
+      cur.j + 4 * c.segLen < M ∧ cur.j + 5 * c.segLen < M ∧
+      cur.j + 6 * c.segLen < M)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M)
+    (hq : c.tableBase ≤ q) :
+    (arun k s c.body).arr q = s.arr q := by
+  let phased := arun k s (lift c.markPhaseBody)
+  let reset := arun k phased c.markResetBody
+  let marked := arun k reset c.markCellPrefix
+  let active := arun k marked c.markAdvanceBody
+  let classified := arun k active c.classBody
+  have hp := c.markPhaseBody_run k s hT
+  dsimp only at hp
+  have hp10 : phased.regs 10 = 1 := by
+    rw [hp.1, if_pos hround]
+  have hp11 : phased.regs 11 = 0 := by
+    rw [hp.2.1, if_neg (by omega : ¬c.markSteps ≤ s.regs rR)]
+  have hr10 : reset.regs 10 = 1 :=
+    (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
+  have hr11 : reset.regs 11 = 0 :=
+    (arun_frame k 11 c.markResetBody (by rfl) phased).trans hp11
+  have hrJ : reset.regs rJ = cur.j :=
+    congrArg PowerCursor.j hcur
+  have hprefix : marked.arr q = reset.arr q := by
+    apply c.markCellPrefix_table_frame k reset q hr10 hLPos
+    · intro hlive
+      have hb := hliveBounds (by simpa [hrJ] using hlive)
+      simpa [hrJ] using hb
+    · exact h7
+    · exact h8
+    · exact h9
+    · exact h10
+    · exact h11
+    · exact h12
+    · exact h13
+    · exact hq
+  have hadv : active.arr = marked.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markAdvanceBody marked (by rfl)
+  have hm10 : marked.regs 10 = 1 :=
+    (arun_frame k 10 c.markCellPrefix (by rfl) reset).trans hr10
+  have hm11 : marked.regs 11 = 0 :=
+    (arun_frame k 11 c.markCellPrefix (by rfl) reset).trans hr11
+  have ha10 : active.regs 10 = 1 :=
+    (arun_frame k 10 c.markAdvanceBody (by rfl) marked).trans hm10
+  have ha11 : active.regs 11 = 0 :=
+    (arun_frame k 11 c.markAdvanceBody (by rfl) marked).trans hm11
+  have hq7 : q ≠ 7 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq8 : q ≠ 8 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq9 : q ≠ 9 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq10 : q ≠ 10 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq11 : q ≠ 11 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq12 : q ≠ 12 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq13 : q ≠ 13 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hclass : classified.arr q = active.arr q :=
+    c.classBody_mark_arr_frame k active q ha10 ha11
+      h7 h8 h9 h10 h11 h12 h13
+      hq7 hq8 hq9 hq10 hq11 hq12 hq13
+  have htail : (arun k classified c.tailBody).arr = classified.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.tailBody classified (by rfl)
+  have hreset : reset.arr = phased.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markResetBody phased (by rfl)
+  have hphase : phased.arr = s.arr := hp.2.2.2
+  have hbodyRun : arun k s c.body = arun k classified c.tailBody := by
+    simp [Cfg.body, c.markBody_eq_phase_reset_active, Cfg.markActiveBody,
+      phased, reset, marked, active, classified, arun_append]
+  rw [hbodyRun]
+  exact (congrFun htail q).trans
+    (hclass.trans ((congrFun hadv q).trans
+      (hprefix.trans ((congrFun hreset q).trans (congrFun hphase q)))))
+
+/-- A complete body in the mark phase advances the round exactly once and
+does not move the window base. -/
+theorem Cfg.body_mark_position
+    (c : Cfg) (k : Nat) (s : AState)
+    (hround : s.regs rR < c.markSteps) (hLPos : 0 < c.segLen)
+    (hperiodM : c.period < M) (hwM : s.regs rW < M) :
+    let out := arun k s c.body
+    out.regs rR = s.regs rR + 1 ∧ out.regs rW = s.regs rW := by
+  let marked := arun k s c.markBody
+  let classified := arun k marked c.classBody
+  have hmR : marked.regs rR = s.regs rR :=
+    arun_frame k rR c.markBody (by rfl) s
+  have hmW : marked.regs rW = s.regs rW :=
+    arun_frame k rW c.markBody (by rfl) s
+  have hcR : classified.regs rR = marked.regs rR :=
+    arun_frame k rR c.classBody (by rfl) marked
+  have hcW : classified.regs rW = marked.regs rW :=
+    arun_frame k rW c.classBody (by rfl) marked
+  have hnext : s.regs rR + 1 < c.period := by
+    unfold Cfg.period
+    omega
+  have htail := c.tailBody_mark_position k classified
+    (s.regs rR) (s.regs rW)
+    (hcR.trans hmR) (hcW.trans hmW) hnext hperiodM hwM
+  rw [Cfg.body, arun_append, arun_append]
+  simpa only [marked, classified] using htail
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve
