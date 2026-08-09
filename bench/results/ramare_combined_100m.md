@@ -141,15 +141,18 @@ stages of at most four instructions.  `lowerNumeratorBody_run`,
 `lowerCorrectionBody_run`, and `lowerFinalizeBody_run` compose kernel-small
 per-instruction proofs, and `lowerScalarBody_run` proves that all nine emitted
 instructions compute exactly `incLWord` while preserving the candidate and
-array.  The upper path now uses the same method: `upperNumeratorBody_run`
-proves the first six instructions and `upperCorrectionBody_run` proves the
-following division by `2n`.  This avoids expanding the candidate instructions
-in one proof.
+array.  The upper path now uses the same method: `upperScalarBody_run` proves
+all thirteen instructions compute exactly `incUWord`.  Four single-instruction
+commit proofs compose into `commitScalarBody_run`, and `candidateBody_run`
+joins both increments with the exact classification-gated updates of the two
+carried log endpoints.  The theorem preserves the candidate and complete
+array and keeps every no-wrap condition explicit.  No instruction in the
+26-instruction suffix remains semantically opaque.
 
-A capped source compile through the first eight upper instructions took
-**77.38 wall-seconds**, **2,505,724 KiB peak RSS**, and zero swap; its live
-lambda/psi consumer compiled in **43.13 wall-seconds** at **3,094,872 KiB**
-and zero swap under a 20/22-GiB physical-memory cgroup.  During development, one
+A capped source compile of the complete candidate semantics took **71.99
+wall-seconds**, **2,536,088 KiB peak RSS**, and zero swap; its live lambda/psi
+consumer compiled in **40.09 wall-seconds** at **3,095,376 KiB** and zero swap
+under a 20/22-GiB physical-memory cgroup.  During development, one
 unresolved simplifier goal involving the literal `1 % 2^64` grew to
 **20,021,928 KiB RSS** before Lean reported its internal out-of-memory
 condition.  The virtual-memory cap contained that failure.  Supplying the
