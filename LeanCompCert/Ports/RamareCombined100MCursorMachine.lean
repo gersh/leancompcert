@@ -1892,6 +1892,51 @@ def powerCellStep (c : Cfg) (w i : Nat) (table : Nat → Nat)
     else st.cell
   ⟨powerCursorStep c.segLen w c.hi c.tableLen table st.cursor, cell⟩
 
+/-- Pure selected-cell state after a finite number of complete marking
+rounds. -/
+def powerCellRun (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState) : PowerCellState :=
+  Nat.rec st (fun _ q => powerCellStep c w i table q) fuel
+
+@[simp] theorem powerCellRun_zero
+    (c : Cfg) (w i : Nat) (table : Nat → Nat) (st : PowerCellState) :
+    powerCellRun c 0 w i table st = st := rfl
+
+@[simp] theorem powerCellRun_succ
+    (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState) :
+    powerCellRun c (fuel + 1) w i table st =
+      powerCellStep c w i table (powerCellRun c fuel w i table st) := rfl
+
+/-- Cursor bounds survive every finite selected-cell run. -/
+theorem powerCellRun_cursor_bounds
+    (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState)
+    (h : PowerCursorBounds c.segLen c.hi c.tableLen table st.cursor)
+    (hhi : 0 < c.hi) :
+    PowerCursorBounds c.segLen c.hi c.tableLen table
+      (powerCellRun c fuel w i table st).cursor := by
+  induction fuel with
+  | zero => exact h
+  | succ fuel ih =>
+      change PowerCursorBounds c.segLen c.hi c.tableLen table
+        (powerCursorStep c.segLen w c.hi c.tableLen table
+          (powerCellRun c fuel w i table st).cursor)
+      exact ih.step hhi
+
+/-- Actual machine state after a finite number of complete emitted bodies. -/
+def emittedBodyRun (k : Nat) (c : Cfg) (fuel : Nat) (s : AState) : AState :=
+  Nat.rec s (fun _ q => arun k q c.body) fuel
+
+@[simp] theorem emittedBodyRun_zero
+    (k : Nat) (c : Cfg) (s : AState) :
+    emittedBodyRun k c 0 s = s := rfl
+
+@[simp] theorem emittedBodyRun_succ
+    (k : Nat) (c : Cfg) (fuel : Nat) (s : AState) :
+    emittedBodyRun k c (fuel + 1) s =
+      arun k (emittedBodyRun k c fuel s) c.body := rfl
+
 /-- Word-safety and table premises used by the already-proved emitted
 advance block, packaged separately from its current cursor relation. -/
 structure AdvanceWordPre (c : Cfg) (s : AState) (table : Nat → Nat) : Prop where
