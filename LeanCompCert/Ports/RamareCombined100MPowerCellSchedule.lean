@@ -11,6 +11,7 @@ descriptors, never over the millions of emitted marking rounds.
 namespace LeanCompCert.Ports.RamareCombined100M.ShapeSieve
 
 open LeanCompCert.Ports.ArraySegMobiusScheduleFold (liveCount cursorLiveEvents)
+open LeanCompCert.Verified.Reflect (M)
 
 /-- Selected-cell fold of a finite list of power-phase descriptors. -/
 def cursorPhasesFold (segLen w i : Nat) (phases : List PowerPhase)
@@ -316,6 +317,40 @@ theorem productionPowerPhases_prefix_markPre
       hi hnpos hnglobal hphases)
     (productionPowerPhases_base_two_le phase hphase)
     (productionPowerPhases_base_le_10000 phase hphase)
+
+/-- All seven live-plane addresses fit in one word for every live production
+cursor offset. -/
+theorem productionLivePlaneWordBounds {j : Nat}
+    (hj : j < productionCursorCfg.segLen) :
+    j < M ∧ j + productionCursorCfg.segLen < M ∧
+      j + 2 * productionCursorCfg.segLen < M ∧
+      j + 3 * productionCursorCfg.segLen < M ∧
+      j + 4 * productionCursorCfg.segLen < M ∧
+      j + 5 * productionCursorCfg.segLen < M ∧
+      j + 6 * productionCursorCfg.segLen < M := by
+  change j < M ∧ j + 999900 < M ∧ j + 2 * 999900 < M ∧
+    j + 3 * 999900 < M ∧ j + 4 * 999900 < M ∧
+    j + 5 * 999900 < M ∧ j + 6 * 999900 < M
+  change j < 999900 at hj
+  have hM : 7 * 999900 < M := by decide
+  constructor <;> omega
+
+/-- The seven live planes and seven sink planes all fit below the `u64`
+modulus, as does the exhausted-cursor sentinel. -/
+theorem productionStaticPlaneWordBounds :
+    productionCursorCfg.segLen + 1 < M ∧
+      7 * productionCursorCfg.segLen < M ∧
+      8 * productionCursorCfg.segLen < M ∧
+      9 * productionCursorCfg.segLen < M ∧
+      10 * productionCursorCfg.segLen < M ∧
+      11 * productionCursorCfg.segLen < M ∧
+      12 * productionCursorCfg.segLen < M ∧
+      13 * productionCursorCfg.segLen < M := by
+  change 999900 + 1 < M ∧ 7 * 999900 < M ∧
+    8 * 999900 < M ∧ 9 * 999900 < M ∧
+    10 * 999900 < M ∧ 11 * 999900 < M ∧
+    12 * 999900 < M ∧ 13 * 999900 < M
+  decide
 
 /-- Closed production phase enumeration has the same selected-cell result as
 the exact production table-row fold for every live window cell. -/
