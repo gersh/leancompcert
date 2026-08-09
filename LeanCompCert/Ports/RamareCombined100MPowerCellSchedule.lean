@@ -222,6 +222,47 @@ theorem productionPowerPhases_base_two_le
   have hmem := tablePowerPhases_base_mem hphase
   simpa [productionPowerPhases, productionCursorCfg, Cfg.ofChain] using hmem
 
+theorem productionPowerPhases_base_le_10000
+    (phase : PowerPhase) (hphase : phase ∈ productionPowerPhases) :
+    phase.base ≤ 10000 := by
+  have hmem := tablePowerPhases_base_mem hphase
+  change phase.base ∈
+    trialPrimesBelow (Nat.sqrt 100000000 + 1) at hmem
+  have hsqrt : Nat.sqrt 100000000 = 10000 := by decide +kernel
+  have htable : phase.base ∈ trialPrimesBelow 10001 := by
+    simpa [hsqrt] using hmem
+  have hrange := (List.mem_filter.mp htable).1
+  rw [List.mem_range] at hrange
+  omega
+
+/-- The complete compact production phase fold is bounded directly from the
+source cell's divisor invariant and the symbolic coprimality proof for the
+trial-prime table. -/
+theorem productionCursorPhasesFold_bounds
+    (w i : Nat) (hi : i < productionCursorCfg.segLen)
+    (hnpos : 0 < w + i) (hnglobal : w + i ≤ productionCursorCfg.hi) :
+    PlaneCellProductionBounds
+      (cursorPhasesFold productionCursorCfg.segLen w i
+        productionPowerPhases emptyPlaneCell) := by
+  have hpos : ∀ p ∈ productionCursorCfg.table, 0 < p := by
+    intro p hp
+    have hp2 : 2 ≤ p := by
+      apply trialPrimesBelow_two_le _ p
+      simpa [productionCursorCfg, Cfg.ofChain] using hp
+    omega
+  have hfold := cursorPhasesFold_tablePowerPhases
+    productionCursorCfg.segLen w i productionCursorCfg.hi
+    productionCursorCfg.table emptyPlaneCell hpos hi hnpos hnglobal
+  have hrel := ofChain_cursorRows_refines
+    10001 999900 100 100000000 w i hi
+  have hcell := ofChain_markCell_productionBounds
+    10001 999900 100 100000000 (w + i) hnpos (by
+      simpa [productionCursorCfg, Cfg.hi, Cfg.ofChain] using hnglobal)
+  have hbounds := hrel.productionBounds hcell
+  rw [productionPowerPhases]
+  rw [hfold]
+  simpa [productionCursorCfg, Cfg.ofChain] using hbounds
+
 /-- Once the final selected production cell is source-bounded, every compact
 phase-prefix cell is source-bounded as well. -/
 theorem productionPowerPhases_prefix_bounds
@@ -243,6 +284,38 @@ theorem productionPowerPhases_prefix_bounds
   exact PlaneCellProductionBounds.cursorPhasesFold_prefix
     productionCursorCfg.segLen w i pre suf emptyPlaneCell
     hbase hfinal
+
+/-- Fully discharged prefix form: every phase-prefix cell in every live
+production window satisfies the compact machine word invariant. -/
+theorem productionPowerPhases_prefix_bounds_closed
+    (w i : Nat) (pre suf : List PowerPhase)
+    (hi : i < productionCursorCfg.segLen)
+    (hnpos : 0 < w + i) (hnglobal : w + i ≤ productionCursorCfg.hi)
+    (hphases : productionPowerPhases = pre ++ suf) :
+    PlaneCellProductionBounds
+      (cursorPhasesFold productionCursorCfg.segLen w i pre emptyPlaneCell) :=
+  productionPowerPhases_prefix_bounds w i pre suf hphases
+    (productionCursorPhasesFold_bounds w i hi hnpos hnglobal)
+
+/-- The exact cell-update premise at the start of every closed production
+phase.  A selected cell is hit at most once inside one positive progression,
+so this is the per-round premise needed by `Cfg.body_mark_powerCell_run`. -/
+theorem productionPowerPhases_prefix_markPre
+    (w i : Nat) (pre suf : List PowerPhase) (phase : PowerPhase)
+    (hi : i < productionCursorCfg.segLen)
+    (hnpos : 0 < w + i) (hnglobal : w + i ≤ productionCursorCfg.hi)
+    (hphases : productionPowerPhases = pre ++ phase :: suf) :
+    PlaneCellMarkPre phase.pow phase.base
+      (cursorPhasesFold productionCursorCfg.segLen w i pre emptyPlaneCell) := by
+  have hphase : phase ∈ productionPowerPhases := by
+    rw [hphases]
+    simp
+  exact planeCellMarkPre_of_production phase.pow phase.base
+    (cursorPhasesFold productionCursorCfg.segLen w i pre emptyPlaneCell)
+    (productionPowerPhases_prefix_bounds_closed w i pre (phase :: suf)
+      hi hnpos hnglobal hphases)
+    (productionPowerPhases_base_two_le phase hphase)
+    (productionPowerPhases_base_le_10000 phase hphase)
 
 /-- Closed production phase enumeration has the same selected-cell result as
 the exact production table-row fold for every live window cell. -/

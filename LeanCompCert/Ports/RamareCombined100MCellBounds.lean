@@ -247,6 +247,141 @@ theorem markCell_productionBounds
     CellProductionBounds (RamareCombined100MSeg.markCell rows n) :=
   (markCell_divisorBounds rows n hn hpair).productionBounds hn hN
 
+/-! ## Symbolic coprimality of the trial table -/
+
+theorem trialPrime_two_le {n : Nat} (hprime : trialPrime n = true) :
+    2 ≤ n := by
+  unfold trialPrime at hprime
+  by_cases hsmall : n < 2
+  · simp [hsmall] at hprime
+  · omega
+
+/-- The trial predicate rejects every proper divisor no larger than the
+integer square root. -/
+theorem trialPrime_not_dvd {n d : Nat}
+    (hprime : trialPrime n = true) (hd : 2 ≤ d)
+    (hroot : d ≤ Nat.sqrt n) (hproper : d ≠ n) : ¬d ∣ n := by
+  intro hdvd
+  have hn2 := trialPrime_two_le hprime
+  unfold trialPrime at hprime
+  rw [if_neg (by omega)] at hprime
+  have hall := List.all_eq_true.mp hprime d (by
+    rw [List.mem_range]
+    omega)
+  have hmod : n % d = 0 := Nat.mod_eq_zero_of_dvd hdvd
+  simp [show ¬d < 2 by omega, hmod] at hall
+  exact hproper hall.symm
+
+theorem trialPrime_coprime_of_lt {a b : Nat}
+    (ha : trialPrime a = true) (hb : trialPrime b = true)
+    (hab : a < b) : a.Coprime b := by
+  have ha2 := trialPrime_two_le ha
+  have hb2 := trialPrime_two_le hb
+  rw [Nat.coprime_iff_gcd_eq_one]
+  let g := a.gcd b
+  have hgPos : 0 < g := by
+    exact Nat.gcd_pos_of_pos_left b (by omega)
+  by_cases hgOne : g = 1
+  · simpa [g] using hgOne
+  · exfalso
+    have hg2 : 2 ≤ g := by omega
+    have hgDvdA : g ∣ a := Nat.gcd_dvd_left a b
+    have hgDvdB : g ∣ b := Nat.gcd_dvd_right a b
+    have hgLeA : g ≤ a := Nat.gcd_le_left b (by omega)
+    have hgLtB : g < b := Nat.lt_of_le_of_lt hgLeA hab
+    obtain ⟨q, hbEq⟩ := hgDvdB
+    have hqPos : 0 < q := by
+      by_cases hq0 : q = 0
+      · subst q
+        simp at hbEq
+        omega
+      · exact Nat.pos_of_ne_zero hq0
+    have hq2 : 2 ≤ q := by
+      by_cases hqTwo : 2 ≤ q
+      · exact hqTwo
+      · have hqOne : q = 1 := by omega
+        subst q
+        simp at hbEq
+        omega
+    have hqLtB : q < b := by
+      have hlt : 1 * q < g * q :=
+        Nat.mul_lt_mul_of_pos_right (by omega) hqPos
+      simpa [hbEq] using hlt
+    by_cases hgRoot : g ≤ Nat.sqrt b
+    · exact trialPrime_not_dvd hb hg2 hgRoot (by omega) ⟨q, hbEq⟩
+    · have hqRoot : q ≤ Nat.sqrt b := by
+        by_cases hqRoot : q ≤ Nat.sqrt b
+        · exact hqRoot
+        · exfalso
+          have hmul : (Nat.sqrt b + 1) * (Nat.sqrt b + 1) ≤ g * q :=
+            Nat.mul_le_mul (by omega) (by omega)
+          have hsqrt := Nat.lt_succ_sqrt b
+          have hmulB : (Nat.sqrt b + 1) * (Nat.sqrt b + 1) ≤ b :=
+            calc
+              _ ≤ g * q := hmul
+              _ = b := hbEq.symm
+          have hsqrt' : b < (Nat.sqrt b + 1) * (Nat.sqrt b + 1) := by
+            simpa [Nat.succ_eq_add_one] using hsqrt
+          omega
+      have hqDvdB : q ∣ b := ⟨g, by simpa [Nat.mul_comm] using hbEq⟩
+      exact trialPrime_not_dvd hb hq2 hqRoot (by omega) hqDvdB
+
+/-- Two distinct accepted trial-table entries are coprime.  This avoids the
+21-GiB kernel reduction needed to check all 1.5 million pairs directly. -/
+theorem trialPrime_coprime {a b : Nat}
+    (ha : trialPrime a = true) (hb : trialPrime b = true)
+    (hne : a ≠ b) : a.Coprime b := by
+  rcases Nat.lt_or_lt_of_ne hne with hab | hba
+  · exact trialPrime_coprime_of_lt ha hb hab
+  · exact Nat.coprime_comm.mp (trialPrime_coprime_of_lt hb ha hba)
+
+theorem pairwiseCoprime_of_trialPrime
+    (ps : List Nat) (hnodup : ps.Nodup)
+    (hprime : ∀ p ∈ ps, trialPrime p = true) :
+    ps.Pairwise Nat.Coprime := by
+  induction ps with
+  | nil => simp
+  | cons p ps ih =>
+      rw [List.nodup_cons] at hnodup
+      rw [List.pairwise_cons]
+      constructor
+      · intro q hq
+        exact trialPrime_coprime
+          (hprime p (by simp)) (hprime q (by simp [hq]))
+          (by intro hpq; subst q; exact hnodup.1 hq)
+      · exact ih hnodup.2 (fun q hq => hprime q (by simp [hq]))
+
+theorem trialPrimesBelow_pairwiseCoprime (bound : Nat) :
+    (trialPrimesBelow bound).Pairwise Nat.Coprime := by
+  apply pairwiseCoprime_of_trialPrime
+  · exact trialPrimesBelow_nodup bound
+  · intro p hp
+    exact (List.mem_filter.mp hp).2
+
+theorem factorRows_trialPrimesBelow_pairwiseCoprime (bound : Nat) :
+    PairwiseCoprimeRows (factorRows (trialPrimesBelow bound)) := by
+  unfold PairwiseCoprimeRows factorRows
+  exact (trialPrimesBelow_pairwiseCoprime bound).map factorRow
+    (by intro a b hab; simpa [factorRow] using hab)
+
+theorem ofChain_factorRows_pairwiseCoprime
+    (lo segLen segCount tableHi : Nat) :
+    PairwiseCoprimeRows
+      (factorRows (Cfg.ofChain lo segLen segCount tableHi).table) := by
+  simpa [Cfg.ofChain] using
+    factorRows_trialPrimesBelow_pairwiseCoprime (Nat.sqrt tableHi + 1)
+
+/-- Closed-form source bounds for every positive candidate in an `ofChain`
+window at or below the production ceiling. -/
+theorem ofChain_markCell_productionBounds
+    (lo segLen segCount tableHi n : Nat)
+    (hn : 0 < n) (hN : n ≤ 100000000) :
+    CellProductionBounds
+      (RamareCombined100MSeg.markCell
+        (factorRows (Cfg.ofChain lo segLen segCount tableHi).table) n) :=
+  markCell_productionBounds _ n hn hN
+    (ofChain_factorRows_pairwiseCoprime lo segLen segCount tableHi)
+
 /-- Replacing the raw zero sentinel by the mathematical empty product
 preserves every production-scale upper bound. -/
 theorem nonzeroProduct_le_production {x : Nat}
