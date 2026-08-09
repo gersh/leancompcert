@@ -238,9 +238,9 @@ theorem CellRel.decodePlaneCell_markCell {x : PlaneCell}
 open LeanCompCert
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState (AState)
-open LeanCompCert.Verified.ArrayFoldBridge (arun astep)
+open LeanCompCert.Verified.ArrayFoldBridge (arun arun_append astep)
 open LeanCompCert.Verified.ArrayScalarBlock (lift arun_lift)
-open LeanCompCert.Verified.ArrayRegFrame (arun_frame)
+open LeanCompCert.Verified.ArrayRegFrame (writes arun_frame)
 open LeanCompCert.Verified.InstrBlock
 
 /-- Read the stable six-register shape convention from a machine state. -/
@@ -413,5 +413,326 @@ theorem ofChain_classDecodeBody_run
   have hpure : decodePlaneCell n x = finish n cell :=
     hrel.decodePlaneCell_markCell rows n hn hvalid hpair
   exact hrun.trans hpure
+
+/-! ## Live plane loads and clearing -/
+
+/-- When the seven classifier address registers select one live plane cell,
+the store-only clear stage is exactly a write of the physical empty cell at
+that offset. -/
+theorem clearClassCells_eq_writePlaneCell (c : Cfg) (j : Nat) (s : AState)
+    (h131 : s.regs 131 = j)
+    (h133 : s.regs 133 = j + c.segLen)
+    (h134 : s.regs 134 = j + 2 * c.segLen)
+    (h135 : s.regs 135 = j + 3 * c.segLen)
+    (h136 : s.regs 136 = j + 4 * c.segLen)
+    (h137 : s.regs 137 = j + 5 * c.segLen)
+    (h138 : s.regs 138 = j + 6 * c.segLen) :
+    clearClassCells s = c.writePlaneCell j s emptyPlaneCell := by
+  simp only [clearClassCells, Cfg.writePlaneCell, emptyPlaneCell]
+  rw [h131]
+  simp only [LeanCompCert.Verified.ArrayState.AState.writeArr_regs]
+  rw [h133]
+  rw [h134]
+  rw [h135]
+  rw [h136]
+  rw [h137]
+  rw [h138]
+
+/-- Starting after address selection, the emitted seven loads, scalar
+decoder, and seven clears both expose the exact source `finish` record and
+consume precisely the selected live cell.  This is the first theorem that
+composes the source classifier refinement with actual array-machine loads and
+stores. -/
+theorem ofChain_classAfterAddressClear_run
+    (lo segLen segCount tableHi k : Nat) (s : AState)
+    (j n : Nat)
+    (hL : 0 < segLen)
+    (hrel : CellRel
+      ((Cfg.ofChain lo segLen segCount tableHi).readPlaneCell j s)
+      (markCell
+        (factorRows (Cfg.ofChain lo segLen segCount tableHi).table) n))
+    (hn : 0 < n) (hN : n ≤ 100000000)
+    (hzero : s.regs 0 = 0)
+    (h132 : s.regs 132 = n)
+    (h131 : s.regs 131 = j)
+    (h133 : s.regs 133 = j + segLen)
+    (h134 : s.regs 134 = j + 2 * segLen)
+    (h135 : s.regs 135 = j + 3 * segLen)
+    (h136 : s.regs 136 = j + 4 * segLen)
+    (h137 : s.regs 137 = j + 5 * segLen)
+    (h138 : s.regs 138 = j + 6 * segLen) :
+    let c := Cfg.ofChain lo segLen segCount tableHi
+    let out := arun k s
+      (Cfg.classAfterAddressBody ++ Cfg.classClearBody)
+    shapeRegs out =
+        finish n (markCell (factorRows c.table) n) ∧
+      c.readPlaneCell j out = emptyPlaneCell := by
+  let c := Cfg.ofChain lo segLen segCount tableHi
+  let x := c.readPlaneCell j s
+  let loaded := arun k s Cfg.classLoadBody
+  let decoded := arun k loaded (lift Cfg.classDecodeBody)
+  have hload := Cfg.classLoadBody_run k s
+  dsimp only at hload
+  have h140 : loaded.regs 140 = x.prod := by
+    rw [hload.1, h131]
+    rfl
+  have h141 : loaded.regs 141 = x.p := by
+    rw [hload.2.1, h133]
+    rfl
+  have h142 : loaded.regs 142 = x.pe := by
+    rw [hload.2.2.1, h134]
+    rfl
+  have h143 : loaded.regs 143 = x.pProd := by
+    rw [hload.2.2.2.1, h135]
+    rfl
+  have h144 : loaded.regs 144 = x.q := by
+    rw [hload.2.2.2.2.1, h136]
+    rfl
+  have h145 : loaded.regs 145 = x.qe := by
+    rw [hload.2.2.2.2.2.1, h137]
+    rfl
+  have h146 : loaded.regs 146 = x.qProd := by
+    rw [hload.2.2.2.2.2.2.1, h138]
+    rfl
+  have loadedFrame (r : Nat) (hw : writes r Cfg.classLoadBody = false) :
+      loaded.regs r = s.regs r :=
+    arun_frame k r Cfg.classLoadBody hw s
+  have decodedFrame (r : Nat)
+      (hw : writes r (lift Cfg.classDecodeBody) = false) :
+      decoded.regs r = loaded.regs r :=
+    arun_frame k r (lift Cfg.classDecodeBody) hw loaded
+  have h132' : loaded.regs 132 = n :=
+    (loadedFrame 132 (by rfl)).trans h132
+  have hshape : shapeRegs decoded =
+      finish n (markCell (factorRows c.table) n) := by
+    exact ofChain_classDecodeBody_run lo segLen segCount tableHi k loaded
+      n x hrel hn hN h132' h140 h141 h142 h143 h144 h145 h146
+  have hD0 : decoded.regs 0 = 0 :=
+    (decodedFrame 0 (by rfl)).trans
+      ((loadedFrame 0 (by rfl)).trans hzero)
+  have hD131 : decoded.regs 131 = j :=
+    (decodedFrame 131 (by rfl)).trans
+      ((loadedFrame 131 (by rfl)).trans h131)
+  have hD133 : decoded.regs 133 = j + c.segLen :=
+    (decodedFrame 133 (by rfl)).trans
+      ((loadedFrame 133 (by rfl)).trans h133)
+  have hD134 : decoded.regs 134 = j + 2 * c.segLen :=
+    (decodedFrame 134 (by rfl)).trans
+      ((loadedFrame 134 (by rfl)).trans h134)
+  have hD135 : decoded.regs 135 = j + 3 * c.segLen :=
+    (decodedFrame 135 (by rfl)).trans
+      ((loadedFrame 135 (by rfl)).trans h135)
+  have hD136 : decoded.regs 136 = j + 4 * c.segLen :=
+    (decodedFrame 136 (by rfl)).trans
+      ((loadedFrame 136 (by rfl)).trans h136)
+  have hD137 : decoded.regs 137 = j + 5 * c.segLen :=
+    (decodedFrame 137 (by rfl)).trans
+      ((loadedFrame 137 (by rfl)).trans h137)
+  have hD138 : decoded.regs 138 = j + 6 * c.segLen :=
+    (decodedFrame 138 (by rfl)).trans
+      ((loadedFrame 138 (by rfl)).trans h138)
+  have hshapeClear :
+      shapeRegs (arun k decoded Cfg.classClearBody) = shapeRegs decoded := by
+    unfold shapeRegs
+    rw [arun_frame k rShapeP Cfg.classClearBody (by rfl) decoded,
+      arun_frame k rShapePE Cfg.classClearBody (by rfl) decoded,
+      arun_frame k rShapeRest Cfg.classClearBody (by rfl) decoded,
+      arun_frame k rShapeQ Cfg.classClearBody (by rfl) decoded,
+      arun_frame k rShapeQE Cfg.classClearBody (by rfl) decoded,
+      arun_frame k rShapeTail Cfg.classClearBody (by rfl) decoded]
+  have hcleared :
+      c.readPlaneCell j (arun k decoded Cfg.classClearBody) =
+        emptyPlaneCell := by
+    rw [Cfg.classClearBody_run k decoded hD0]
+    rw [clearClassCells_eq_writePlaneCell c j decoded
+      hD131 hD133 hD134 hD135 hD136 hD137 hD138]
+    exact c.readPlaneCell_writePlaneCell j decoded emptyPlaneCell hL
+  simp only [Cfg.classAfterAddressBody, arun_append]
+  exact ⟨hshapeClear.trans hshape, hcleared⟩
+
+/-- On a live classification round, the emitted plane-address and sink
+stages select the source cell at offset `j`; composing those stages with the
+load/decode/clear theorem returns its source `finish` record and consumes the
+cell. -/
+theorem ofChain_classPostCandidateBody_run
+    (lo segLen segCount tableHi k : Nat) (s : AState)
+    (j n : Nat)
+    (hL : 0 < segLen)
+    (hrel : CellRel
+      ((Cfg.ofChain lo segLen segCount tableHi).readPlaneCell j s)
+      (markCell
+        (factorRows (Cfg.ofChain lo segLen segCount tableHi).table) n))
+    (hn : 0 < n) (hN : n ≤ 100000000)
+    (hzero : s.regs 0 = 0)
+    (hphase : s.regs 10 = 0)
+    (h132 : s.regs 132 = n)
+    (h131 : s.regs 131 = j)
+    (h1 : j + segLen < M)
+    (h2 : j + 2 * segLen < M)
+    (h3 : j + 3 * segLen < M)
+    (h4 : j + 4 * segLen < M)
+    (h5 : j + 5 * segLen < M)
+    (h6 : j + 6 * segLen < M) :
+    let c := Cfg.ofChain lo segLen segCount tableHi
+    let out := arun k s c.classPostCandidateBody
+    shapeRegs out =
+        finish n (markCell (factorRows c.table) n) ∧
+      c.readPlaneCell j out = emptyPlaneCell := by
+  let c := Cfg.ofChain lo segLen segCount tableHi
+  let planed := arun k s (lift c.classPlaneBody)
+  let sinked := arun k planed (lift c.classSinkBody)
+  have hp := c.classPlaneBody_run k s
+    (by simpa [c, Cfg.ofChain, h131] using h1)
+    (by simpa [c, Cfg.ofChain, h131] using h2)
+    (by simpa [c, Cfg.ofChain, h131] using h3)
+    (by simpa [c, Cfg.ofChain, h131] using h4)
+    (by simpa [c, Cfg.ofChain, h131] using h5)
+    (by simpa [c, Cfg.ofChain, h131] using h6)
+  dsimp only at hp
+  have planeFrame (r : Nat)
+      (hw : writes r (lift c.classPlaneBody) = false) :
+      planed.regs r = s.regs r :=
+    arun_frame k r (lift c.classPlaneBody) hw s
+  have hp10 : planed.regs 10 = 0 :=
+    (planeFrame 10 (by rfl)).trans hphase
+  have hs := c.classSinkBody_run k planed hp10
+    (by rw [hp.2.2.2.2.2.2.1, h131]; omega)
+    (by rw [hp.1, h131]; simpa [c, Cfg.ofChain] using h1)
+    (by rw [hp.2.1, h131]; simpa [c, Cfg.ofChain] using h2)
+    (by rw [hp.2.2.1, h131]; simpa [c, Cfg.ofChain] using h3)
+    (by rw [hp.2.2.2.1, h131]; simpa [c, Cfg.ofChain] using h4)
+    (by rw [hp.2.2.2.2.1, h131]; simpa [c, Cfg.ofChain] using h5)
+    (by rw [hp.2.2.2.2.2.1, h131]; simpa [c, Cfg.ofChain] using h6)
+  dsimp only at hs
+  have sinkFrame (r : Nat)
+      (hw : writes r (lift c.classSinkBody) = false) :
+      sinked.regs r = planed.regs r :=
+    arun_frame k r (lift c.classSinkBody) hw planed
+  have hS0 : sinked.regs 0 = 0 :=
+    (sinkFrame 0 (by rfl)).trans
+      ((planeFrame 0 (by rfl)).trans hzero)
+  have hS132 : sinked.regs 132 = n :=
+    (sinkFrame 132 (by rfl)).trans
+      ((planeFrame 132 (by rfl)).trans h132)
+  have hS131 : sinked.regs 131 = j := by
+    rw [hs.2.1, hp.2.2.2.2.2.2.1, h131]
+  have hS133 : sinked.regs 133 = j + segLen := by
+    rw [hs.2.2.1, hp.1, h131]
+    rfl
+  have hS134 : sinked.regs 134 = j + 2 * segLen := by
+    rw [hs.2.2.2.1, hp.2.1, h131]
+    rfl
+  have hS135 : sinked.regs 135 = j + 3 * segLen := by
+    rw [hs.2.2.2.2.1, hp.2.2.1, h131]
+    rfl
+  have hS136 : sinked.regs 136 = j + 4 * segLen := by
+    rw [hs.2.2.2.2.2.1, hp.2.2.2.1, h131]
+    rfl
+  have hS137 : sinked.regs 137 = j + 5 * segLen := by
+    rw [hs.2.2.2.2.2.2.1, hp.2.2.2.2.1, h131]
+    rfl
+  have hS138 : sinked.regs 138 = j + 6 * segLen := by
+    rw [hs.2.2.2.2.2.2.2.1, hp.2.2.2.2.2.1, h131]
+    rfl
+  have harr : sinked.arr = s.arr :=
+    hs.2.2.2.2.2.2.2.2.trans hp.2.2.2.2.2.2.2
+  have hrel' : CellRel (c.readPlaneCell j sinked)
+      (markCell (factorRows c.table) n) := by
+    rw [c.readPlaneCell_congr j sinked s harr]
+    exact hrel
+  have hout := ofChain_classAfterAddressClear_run
+    lo segLen segCount tableHi k sinked j n hL hrel' hn hN
+    hS0 hS132 hS131 hS133 hS134 hS135 hS136 hS137 hS138
+  dsimp only at hout
+  simp only [Cfg.classPostCandidateBody, arun_append]
+  exact hout
+
+/-- The complete emitted classifier, from the live offset calculation through
+the final seven clears, returns the source `finish` record for the selected
+production cell and consumes that exact physical cell. -/
+theorem ofChain_classBody_run
+    (lo segLen segCount tableHi k : Nat) (s : AState)
+    (hL : 0 < segLen)
+    (hrel : CellRel
+      ((Cfg.ofChain lo segLen segCount tableHi).readPlaneCell
+        (s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps) s)
+      (markCell
+        (factorRows (Cfg.ofChain lo segLen segCount tableHi).table)
+        (s.regs rR -
+            (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+          s.regs rW)))
+    (hn : 0 < s.regs rR -
+        (Cfg.ofChain lo segLen segCount tableHi).markSteps + s.regs rW)
+    (hN : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps + s.regs rW ≤
+        100000000)
+    (hzero : s.regs 0 = 0)
+    (hphase : s.regs 10 = 0)
+    (hclass : s.regs 11 = 1)
+    (hT : (Cfg.ofChain lo segLen segCount tableHi).markSteps ≤ s.regs rR)
+    (hR : s.regs rR < M)
+    (hsum : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps + s.regs rW < M)
+    (h1 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps + segLen < M)
+    (h2 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        2 * segLen < M)
+    (h3 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        3 * segLen < M)
+    (h4 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        4 * segLen < M)
+    (h5 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        5 * segLen < M)
+    (h6 : s.regs rR -
+          (Cfg.ofChain lo segLen segCount tableHi).markSteps +
+        6 * segLen < M) :
+    let c := Cfg.ofChain lo segLen segCount tableHi
+    let j := s.regs rR - c.markSteps
+    let n := j + s.regs rW
+    let out := arun k s c.classBody
+    shapeRegs out =
+        finish n (markCell (factorRows c.table) n) ∧
+      c.readPlaneCell j out = emptyPlaneCell := by
+  let c := Cfg.ofChain lo segLen segCount tableHi
+  let j := s.regs rR - c.markSteps
+  let n := j + s.regs rW
+  let offset := arun k s (lift c.classOffsetBody)
+  let indexed := arun k s c.classIndexBody
+  have ho := c.classOffsetBody_run k s hclass hT hR
+  dsimp only at ho
+  have hindex := c.classIndexBody_run k s hclass hT hR hsum
+  dsimp only at hindex
+  have hI131 : indexed.regs 131 = j := by
+    have hframe :
+        (arun k offset (lift Cfg.classCandidateBody)).regs 131 =
+          offset.regs 131 :=
+      arun_frame k 131 (lift Cfg.classCandidateBody) (by rfl) offset
+    change (arun k s
+      (lift c.classOffsetBody ++ lift Cfg.classCandidateBody)).regs 131 = j
+    rw [arun_append]
+    exact hframe.trans ho.2.1
+  have hI132 : indexed.regs 132 = n := hindex.1
+  have indexFrame (r : Nat) (hw : writes r c.classIndexBody = false) :
+      indexed.regs r = s.regs r :=
+    arun_frame k r c.classIndexBody hw s
+  have hI0 : indexed.regs 0 = 0 :=
+    (indexFrame 0 (by rfl)).trans hzero
+  have hI10 : indexed.regs 10 = 0 :=
+    (indexFrame 10 (by rfl)).trans hphase
+  have hrel' : CellRel (c.readPlaneCell j indexed)
+      (markCell (factorRows c.table) n) := by
+    rw [c.readPlaneCell_congr j indexed s hindex.2.2]
+    exact hrel
+  have hout := ofChain_classPostCandidateBody_run
+    lo segLen segCount tableHi k indexed j n hL hrel' hn hN
+    hI0 hI10 hI132 hI131 h1 h2 h3 h4 h5 h6
+  dsimp only at hout
+  simp only [Cfg.classBody, arun_append]
+  exact hout
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve
