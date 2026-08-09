@@ -282,6 +282,13 @@ theorem productionPowerPhases_base_le_10000
   rw [List.mem_range] at hrange
   omega
 
+theorem productionPowerPhases_nonempty : productionPowerPhases ≠ [] := by
+  decide +kernel
+
+theorem productionPowerTable_sentinel :
+    productionPowerTable productionCursorCfg.tableLen = 1 := by
+  simp [productionPowerTable, productionCursorCfg, Cfg.tableLen]
+
 /-- Every physical table load, including the explicit sentinel at
 `tableLen`, returns a positive value. -/
 theorem productionPowerTable_pos (pi : Nat) :
@@ -538,6 +545,237 @@ theorem productionPowerPhases_prefix_markPre
       hi hnpos hnglobal hphases)
     (productionPowerPhases_base_two_le phase hphase)
     (productionPowerPhases_base_le_10000 phase hphase)
+
+/-- Production bounds can be read backwards across one selected-cell cursor
+round whenever its base is positive. -/
+theorem PlaneCellProductionBounds.of_powerCellStep
+    (c : Cfg) (w i : Nat) (table : Nat → Nat) (st : PowerCellState)
+    (hbase : 1 ≤ st.cursor.base)
+    (hnext : PlaneCellProductionBounds
+      (powerCellStep c w i table st).cell) :
+    PlaneCellProductionBounds st.cell := by
+  by_cases hmark : st.cursor.j < c.segLen ∧ st.cursor.j = i
+  · rcases hmark with ⟨hj, hji⟩
+    subst i
+    simp only [powerCellStep, hj, true_and, if_true] at hnext
+    exact PlaneCellProductionBounds.of_markPower hbase hnext
+  · simpa [powerCellStep, hmark] using hnext
+
+/-- A bounded final selected cell bounds the initial cell of every finite
+symbolic selected-cell run. -/
+theorem PlaneCellProductionBounds.of_powerCellRun
+    (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState)
+    (hcursor : PowerCursorBounds c.segLen c.hi c.tableLen table st.cursor)
+    (hhi : 0 < c.hi)
+    (hfinal : PlaneCellProductionBounds
+      (powerCellRun c fuel w i table st).cell) :
+    PlaneCellProductionBounds st.cell := by
+  induction fuel with
+  | zero => simpa using hfinal
+  | succ fuel ih =>
+      have hbounds := powerCellRun_cursor_bounds c fuel w i table st
+        hcursor hhi
+      have hprev := PlaneCellProductionBounds.of_powerCellStep c w i table
+        (powerCellRun c fuel w i table st) hbounds.base_pos hfinal
+      exact ih hprev
+
+/-- Consequently, a bounded complete run bounds the selected cell at any
+symbolic prefix. -/
+theorem PlaneCellProductionBounds.powerCellRun_prefix
+    (c : Cfg) (a b w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState)
+    (hcursor : PowerCursorBounds c.segLen c.hi c.tableLen table st.cursor)
+    (hhi : 0 < c.hi)
+    (hfinal : PlaneCellProductionBounds
+      (powerCellRun c (a + b) w i table st).cell) :
+    PlaneCellProductionBounds (powerCellRun c a w i table st).cell := by
+  rw [powerCellRun_add] at hfinal
+  exact PlaneCellProductionBounds.of_powerCellRun c b w i table
+    (powerCellRun c a w i table st)
+    (powerCellRun_cursor_bounds c a w i table st hcursor hhi) hhi hfinal
+
+/-- Selected-cell initial state of the closed production cursor. -/
+def productionInitialPowerCell (w : Nat) : PowerCellState :=
+  let first := productionPowerPhases.headD ⟨0, 1, 1⟩
+  ⟨⟨first.pi, first.pow, first.base, startOffset w first.pow⟩,
+    emptyPlaneCell⟩
+
+theorem productionInitialPowerCell_cursor_bounds (w : Nat) :
+    PowerCursorBounds productionCursorCfg.segLen productionCursorCfg.hi
+      productionCursorCfg.tableLen productionPowerTable
+      (productionInitialPowerCell w).cursor := by
+  cases hphases : productionPowerPhases with
+  | nil => exact (productionPowerPhases_nonempty hphases).elim
+  | cons phase phases =>
+      have hphase : phase ∈ productionPowerPhases := by
+        rw [hphases]
+        simp
+      simpa [productionInitialPowerCell, hphases] using
+        productionPowerPhase_cursor_bounds w phase hphase
+
+theorem productionInitialPowerCell_base_le_10000 (w : Nat) :
+    (productionInitialPowerCell w).cursor.base ≤ 10000 := by
+  cases hphases : productionPowerPhases with
+  | nil => exact (productionPowerPhases_nonempty hphases).elim
+  | cons phase phases =>
+      have hphase : phase ∈ productionPowerPhases := by
+        rw [hphases]
+        simp
+      simpa [productionInitialPowerCell, hphases] using
+        productionPowerPhases_base_le_10000 phase hphase
+
+/-- The selected cell at the exact compact-chain endpoint has the closed
+source production bounds. -/
+theorem productionPowerCellRun_phase_bounds
+    (w i : Nat) (hi : i < productionCursorCfg.segLen)
+    (hnpos : 0 < w + i) (hnglobal : w + i ≤ productionCursorCfg.hi) :
+    PlaneCellProductionBounds
+      (powerCellRun productionCursorCfg
+        (powerPhaseChainFuel productionCursorCfg.segLen w
+          productionPowerPhases)
+        w i productionPowerTable (productionInitialPowerCell w)).cell := by
+  cases hphases : productionPowerPhases with
+  | nil => exact (productionPowerPhases_nonempty hphases).elim
+  | cons phase phases =>
+      let st : PowerScheduleState :=
+        ⟨⟨phase.pi, phase.pow, phase.base, startOffset w phase.pow⟩,
+          emptyPlaneCell⟩
+      have hrun := powerScheduleRun_phase_chain_cell
+        productionCursorCfg.segLen w productionCursorCfg.hi
+        productionCursorCfg.tableLen i productionPowerTable st
+        productionPowerPhases productionPowerPhaseChain
+        ⟨phase, phases, hphases, rfl⟩
+      have hbridge := powerCellRun_cell_eq_powerScheduleRun
+        productionCursorCfg
+        (powerPhaseChainFuel productionCursorCfg.segLen w
+          productionPowerPhases)
+        w i productionPowerTable (productionInitialPowerCell w)
+      have hfinal := productionCursorPhasesFold_bounds w i hi hnpos hnglobal
+      have hbounded : PlaneCellProductionBounds
+          (powerScheduleRun
+            (powerPhaseChainFuel productionCursorCfg.segLen w
+              productionPowerPhases)
+            productionCursorCfg.segLen w productionCursorCfg.hi
+            productionCursorCfg.tableLen i productionPowerTable st).cell := by
+        rw [hrun]
+        simpa [st] using hfinal
+      rw [← hphases]
+      rw [hbridge]
+      simpa [productionInitialPowerCell, hphases, st] using hbounded
+
+/-- The exact compact-chain endpoint is the explicit fixed-point sentinel. -/
+theorem productionPowerCellRun_phase_terminal
+    (w i : Nat) :
+    (powerCellRun productionCursorCfg
+      (powerPhaseChainFuel productionCursorCfg.segLen w
+        productionPowerPhases)
+      w i productionPowerTable (productionInitialPowerCell w)).cursor =
+        { pi := productionCursorCfg.tableLen, pow := 1, base := 1,
+          j := productionCursorCfg.segLen + 1 } := by
+  cases hphases : productionPowerPhases with
+  | nil => exact (productionPowerPhases_nonempty hphases).elim
+  | cons phase phases =>
+      let st : PowerScheduleState :=
+        ⟨⟨phase.pi, phase.pow, phase.base, startOffset w phase.pow⟩,
+          emptyPlaneCell⟩
+      let fuel := powerPhaseChainFuel productionCursorCfg.segLen w
+        productionPowerPhases
+      have htrace := tracedPowerScheduleRun_phase_chain
+        productionCursorCfg.segLen w productionCursorCfg.hi
+        productionCursorCfg.tableLen i productionPowerTable st
+        productionPowerPhases productionPowerPhaseChain
+        ⟨phase, phases, hphases, rfl⟩
+      have hstate := tracedPowerScheduleRun_state fuel
+        productionCursorCfg.segLen w productionCursorCfg.hi
+        productionCursorCfg.tableLen i productionPowerTable st
+      have hsched :
+          (powerScheduleRun fuel productionCursorCfg.segLen w
+            productionCursorCfg.hi productionCursorCfg.tableLen i
+            productionPowerTable st).cursor =
+            { pi := productionCursorCfg.tableLen,
+              pow := productionPowerTable productionCursorCfg.tableLen,
+              base := productionPowerTable productionCursorCfg.tableLen,
+              j := productionCursorCfg.segLen + 1 } := by
+        rw [← hstate]
+        exact htrace.2
+      rw [← hphases]
+      rw [powerCellRun_cursor_eq_powerScheduleRun]
+      simpa [productionInitialPowerCell, hphases, st, fuel,
+        productionPowerTable_sentinel] using hsched
+
+/-- Every live selected round of the production cursor has the exact local
+word precondition needed by the emitted cell update.  Rounds beyond the
+compact phase-chain endpoint are the non-live sentinel, so the proof remains
+symbolic even when `round` ranges over the larger fixed marking budget. -/
+theorem productionPowerCellRun_markPre
+    (w i round : Nat)
+    (hi : i < productionCursorCfg.segLen)
+    (hnpos : 0 < w + i) (hnglobal : w + i ≤ productionCursorCfg.hi) :
+    let pure := powerCellRun productionCursorCfg round w i
+      productionPowerTable (productionInitialPowerCell w)
+    pure.cursor.j < productionCursorCfg.segLen → pure.cursor.j = i →
+      PlaneCellMarkPre pure.cursor.pow pure.cursor.base pure.cell := by
+  dsimp only
+  let total := powerPhaseChainFuel productionCursorCfg.segLen w
+    productionPowerPhases
+  let initial := productionInitialPowerCell w
+  let pure := powerCellRun productionCursorCfg round w i
+    productionPowerTable initial
+  intro hlive _hji
+  have hinitial : PowerCursorBounds productionCursorCfg.segLen
+      productionCursorCfg.hi productionCursorCfg.tableLen
+      productionPowerTable initial.cursor := by
+    simpa [initial] using productionInitialPowerCell_cursor_bounds w
+  have hpure : PowerCursorBounds productionCursorCfg.segLen
+      productionCursorCfg.hi productionCursorCfg.tableLen
+      productionPowerTable pure.cursor := by
+    exact powerCellRun_cursor_bounds productionCursorCfg round w i
+      productionPowerTable initial hinitial (by
+        change 0 < 100000000
+        omega)
+  have hbaseMax : pure.cursor.base ≤ 10000 := by
+    exact powerCellRun_base_le productionCursorCfg round w i 10000
+      productionPowerTable initial
+      (by simpa [initial] using productionInitialPowerCell_base_le_10000 w)
+      (fun pi _hpi => productionPowerTable_le_10000 pi)
+  by_cases hbefore : round ≤ total
+  · have hsum : round + (total - round) = total := by omega
+    have hfinal := productionPowerCellRun_phase_bounds w i hi hnpos hnglobal
+    have hcell := PlaneCellProductionBounds.powerCellRun_prefix
+      productionCursorCfg round (total - round) w i productionPowerTable
+      initial hinitial (by change 0 < 100000000; omega) (by
+        rw [hsum]
+        simpa [total, initial] using hfinal)
+    exact PlaneCellMarkPre.of_productionBounds hcell
+      (Nat.ne_of_gt hpure.base_pos) hbaseMax
+  · have hafter : total < round := Nat.lt_of_not_ge hbefore
+    have hsplit : round = total + (round - total) := by omega
+    let endpoint := powerCellRun productionCursorCfg total w i
+      productionPowerTable initial
+    have hterminal : endpoint.cursor =
+        { pi := productionCursorCfg.tableLen, pow := 1, base := 1,
+          j := productionCursorCfg.segLen + 1 } := by
+      simpa [endpoint, total, initial] using
+        productionPowerCellRun_phase_terminal w i
+    have hslack := powerCellRun_terminal_slack productionCursorCfg
+      (round - total) w i productionPowerTable endpoint (by
+        change 1 ≤ 100000000
+        omega) hterminal
+    have hpureTerminal : pure.cursor =
+        { pi := productionCursorCfg.tableLen, pow := 1, base := 1,
+          j := productionCursorCfg.segLen + 1 } := by
+      change (powerCellRun productionCursorCfg round w i
+        productionPowerTable initial).cursor = _
+      rw [hsplit, powerCellRun_add]
+      rw [hslack]
+      exact hterminal
+    have hjterminal := congrArg PowerCursor.j hpureTerminal
+    change pure.cursor.j = productionCursorCfg.segLen + 1 at hjterminal
+    have hnot : ¬pure.cursor.j < productionCursorCfg.segLen := by
+      rw [hjterminal]
+      omega
+    exact (hnot hlive).elim
 
 /-- All seven live-plane addresses fit in one word for every live production
 cursor offset. -/
@@ -902,6 +1140,24 @@ theorem productionMarkStateInv_run
         (hmark fuel (Nat.lt_succ_self fuel))
       simpa using hnext
 
+/-- Closed production specialization: the compact phase-chain/source proof
+discharges every per-round cell-update premise, including fixed-budget slack
+after the sentinel. -/
+theorem productionMarkStateInv_run_closed
+    (k w i fuel : Nat) (s : AState)
+    (hi : i < productionCursorCfg.segLen) (hwM : w < M)
+    (hnpos : 0 < w + i) (hnglobal : w + i ≤ productionCursorCfg.hi)
+    (hfuel : fuel ≤ productionCursorCfg.markSteps)
+    (h0 : ProductionMarkStateInv w i 0
+      (productionInitialPowerCell w) s) :
+    ProductionMarkStateInv w i fuel (productionInitialPowerCell w)
+      (emittedBodyRun k productionCursorCfg fuel s) := by
+  exact productionMarkStateInv_run k w i fuel
+    (productionInitialPowerCell w) s hi hwM hfuel
+    (productionInitialPowerCell_cursor_bounds w) h0
+    (fun round _hround =>
+      productionPowerCellRun_markPre w i round hi hnpos hnglobal)
+
 /-- Closed production phase enumeration has the same selected-cell result as
 the exact production table-row fold for every live window cell. -/
 theorem productionPowerSchedule_cell_eq_cursorRows
@@ -918,7 +1174,7 @@ theorem productionPowerSchedule_cell_eq_cursorRows
         productionCursorCfg.tableLen i productionPowerTable st).cell =
       cursorRowsFold productionCursorCfg.segLen w i
         (factorRows productionCursorCfg.table) emptyPlaneCell := by
-  have hnonempty : productionPowerPhases ≠ [] := by decide +kernel
+  have hnonempty : productionPowerPhases ≠ [] := productionPowerPhases_nonempty
   cases hphases : productionPowerPhases with
   | nil => exact (hnonempty hphases).elim
   | cons phase phases =>

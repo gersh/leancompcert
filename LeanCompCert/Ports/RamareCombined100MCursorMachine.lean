@@ -1908,6 +1908,129 @@ def powerCellRun (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
     powerCellRun c (fuel + 1) w i table st =
       powerCellStep c w i table (powerCellRun c fuel w i table st) := rfl
 
+/-- The selected-cell fold splits at an arbitrary symbolic prefix. -/
+theorem powerCellRun_add
+    (c : Cfg) (a b w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState) :
+    powerCellRun c (a + b) w i table st =
+      powerCellRun c b w i table (powerCellRun c a w i table st) := by
+  induction b with
+  | zero => rfl
+  | succ b ih =>
+      change powerCellStep c w i table
+          (powerCellRun c (a + b) w i table st) =
+        powerCellStep c w i table
+          (powerCellRun c b w i table (powerCellRun c a w i table st))
+      rw [ih]
+
+/-- A uniform bound on the current base is preserved by cursor transitions
+when it holds for every table load. -/
+theorem powerCursorStep_base_le
+    (segLen w hi limit bound : Nat) (table : Nat → Nat)
+    (cur : PowerCursor) (hbase : cur.base ≤ bound)
+    (htable : ∀ pi, pi ≤ limit → table pi ≤ bound) :
+    (powerCursorStep segLen w hi limit table cur).base ≤ bound := by
+  by_cases hj : cur.j < segLen
+  · simpa [powerCursorStep, hj] using hbase
+  · by_cases hfit : cur.pow * cur.base ≤ hi
+    · simpa [powerCursorStep, hj, hfit] using hbase
+    · simpa [powerCursorStep, hj, hfit] using
+        htable (min (cur.pi + 1) limit) (Nat.min_le_right _ _)
+
+/-- The base bound survives an arbitrary symbolic selected-cell run. -/
+theorem powerCellRun_base_le
+    (c : Cfg) (fuel w i bound : Nat) (table : Nat → Nat)
+    (st : PowerCellState) (hbase : st.cursor.base ≤ bound)
+    (htable : ∀ pi, pi ≤ c.tableLen → table pi ≤ bound) :
+    (powerCellRun c fuel w i table st).cursor.base ≤ bound := by
+  induction fuel with
+  | zero => exact hbase
+  | succ fuel ih =>
+      exact powerCursorStep_base_le c.segLen w c.hi c.tableLen bound table
+        (powerCellRun c fuel w i table st).cursor ih htable
+
+/-- Once the explicit sentinel is reached, every padding round is an exact
+fixed point of the selected-cell model. -/
+theorem powerCellRun_terminal_slack
+    (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState) (hhi : 1 ≤ c.hi)
+    (hcursor : st.cursor =
+      { pi := c.tableLen, pow := 1, base := 1, j := c.segLen + 1 }) :
+    powerCellRun c fuel w i table st = st := by
+  induction fuel with
+  | zero => rfl
+  | succ fuel ih =>
+      change powerCellStep c w i table
+          (powerCellRun c fuel w i table st) = st
+      rw [ih]
+      cases st with
+      | mk cursor cell =>
+          simp only at hcursor
+          subst cursor
+          have hdone : ¬c.segLen + 1 < c.segLen := by omega
+          simp [powerCellStep, powerCursorStep, hdone, hhi]
+
+/-- The cursor component of `PowerCellState` is exactly the cursor of the
+earlier pure schedule model. -/
+theorem powerCellRun_cursor_eq_powerScheduleRun
+    (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState) :
+    (powerCellRun c fuel w i table st).cursor =
+      (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+        ⟨st.cursor, st.cell⟩).cursor := by
+  induction fuel with
+  | zero => rfl
+  | succ fuel ih =>
+      change (powerCursorStep c.segLen w c.hi c.tableLen table
+          (powerCellRun c fuel w i table st).cursor) =
+        powerCursorStep c.segLen w c.hi c.tableLen table
+          (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+            ⟨st.cursor, st.cell⟩).cursor
+      rw [ih]
+
+/-- The selected-cell component agrees with the earlier pure schedule model. -/
+theorem powerCellRun_cell_eq_powerScheduleRun
+    (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
+    (st : PowerCellState) :
+    (powerCellRun c fuel w i table st).cell =
+      (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+        ⟨st.cursor, st.cell⟩).cell := by
+  induction fuel with
+  | zero => rfl
+  | succ fuel ih =>
+      have hcur := powerCellRun_cursor_eq_powerScheduleRun
+        c fuel w i table st
+      change (if (powerCellRun c fuel w i table st).cursor.j < c.segLen ∧
+            (powerCellRun c fuel w i table st).cursor.j = i then
+          (powerCellRun c fuel w i table st).cell.markPower
+            (powerCellRun c fuel w i table st).cursor.pow
+            (powerCellRun c fuel w i table st).cursor.base
+        else (powerCellRun c fuel w i table st).cell) =
+        (if (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+              ⟨st.cursor, st.cell⟩).cursor.j < c.segLen then
+          if (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+                ⟨st.cursor, st.cell⟩).cursor.j = i then
+            (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+                ⟨st.cursor, st.cell⟩).cell.markPower
+              (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+                ⟨st.cursor, st.cell⟩).cursor.pow
+              (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+                ⟨st.cursor, st.cell⟩).cursor.base
+          else (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+                ⟨st.cursor, st.cell⟩).cell
+        else (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+              ⟨st.cursor, st.cell⟩).cell)
+      rw [hcur, ih]
+      by_cases hj :
+          (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+            ⟨st.cursor, st.cell⟩).cursor.j < c.segLen
+      · by_cases hji :
+          (powerScheduleRun fuel c.segLen w c.hi c.tableLen i table
+            ⟨st.cursor, st.cell⟩).cursor.j = i
+        · simp [hji]
+        · simp [hj, hji]
+      · simp [hj]
+
 /-- Cursor bounds survive every finite selected-cell run. -/
 theorem powerCellRun_cursor_bounds
     (c : Cfg) (fuel w i : Nat) (table : Nat → Nat)
