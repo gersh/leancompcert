@@ -26,6 +26,10 @@ theorem productionCursorCfg_markSteps_lt_word :
     productionCursorCfg.markSteps < LeanCompCert.Verified.Reflect.M := by
   exact Cfg.ofChain_markSteps_lt_word 10001 999900 100 100000000
 
+theorem productionCursorCfg_period_lt_word :
+    productionCursorCfg.period < LeanCompCert.Verified.Reflect.M := by
+  exact Cfg.ofChain_period_lt_word 10001 999900 100 100000000 (by decide)
+
 set_option maxRecDepth 20000 in
 /-- Kernel-checked finite witness that the exact production phase list takes
 only the emitted bump/load branches and ends at the explicit sentinel.  This

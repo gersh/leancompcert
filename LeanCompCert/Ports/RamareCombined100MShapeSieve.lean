@@ -43,7 +43,8 @@ open LeanCompCert.Verified.ArrayRegFrame
 open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.PsiSegSieve (storeLit storeLits seedRegs)
-open LeanCompCert.Ports.R2SegSieve (markBudget markBudget_lt_word)
+open LeanCompCert.Ports.R2SegSieve
+  (markBudget markBudget_lt_word markBudget_add_len_lt_word)
 
 structure Cfg where
   lo : Nat
@@ -87,6 +88,15 @@ theorem Cfg.ofChain_markSteps_lt_word
     (Cfg.ofChain lo segLen segCount tableHi).markSteps < M := by
   simp only [Cfg.ofChain]
   exact markBudget_lt_word _ _ _
+
+/-- Generated chain configurations also carry a representable complete
+marking period. -/
+theorem Cfg.ofChain_period_lt_word
+    (lo segLen segCount tableHi : Nat) (hlen : segLen < M) :
+    (Cfg.ofChain lo segLen segCount tableHi).period < M := by
+  simpa [Cfg.period, Cfg.ofChain] using
+    markBudget_add_len_lt_word (Nat.sqrt tableHi)
+      (lo + segLen * segCount - 1) segLen hlen
 
 /-! ## Array layout
 

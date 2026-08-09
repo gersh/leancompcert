@@ -251,17 +251,31 @@ def rawMarkBudget (root hi len : Nat) : Nat :=
   16 + (primesBelow (root + 1)).foldl
     (fun acc p => acc + powerMarkBudgetAux hi len p p (hi + 1)) 0
 
-/-- The emitted machine stores the round counter in one 64-bit word.  Clamp
-the emit-time estimate to the largest representable counter; every consumer
-also checks the budget-failure flag, so a genuinely oversized configuration
-fails closed instead of wrapping. -/
+/-- The emitted machine stores the round counter and the complete loop period
+in 64-bit words.  Clamp the estimate so the marking budget plus its segment
+tail fits below the modulus; every consumer also checks the budget-failure
+flag, so a genuinely oversized configuration fails closed instead of
+wrapping. -/
 def markBudget (root hi len : Nat) : Nat :=
-  min (rawMarkBudget root hi len) (M - 1)
+  min (rawMarkBudget root hi len) (M - len - 1)
 
 theorem markBudget_lt_word (root hi len : Nat) :
     markBudget root hi len < M := by
   have hM : 0 < M := by decide +kernel
-  exact Nat.lt_of_le_of_lt (Nat.min_le_right _ _) (Nat.sub_lt hM (by omega))
+  have hle := Nat.min_le_right (rawMarkBudget root hi len) (M - len - 1)
+  unfold markBudget
+  by_cases hlen : len < M
+  · omega
+  · have hz : M - len - 1 = 0 := by omega
+    simp [hz, hM]
+
+/-- A representable segment length gives a representable complete mark
+period without evaluating the budget. -/
+theorem markBudget_add_len_lt_word (root hi len : Nat) (hlen : len < M) :
+    markBudget root hi len + len < M := by
+  have hle := Nat.min_le_right (rawMarkBudget root hi len) (M - len - 1)
+  unfold markBudget
+  omega
 
 /-! ### Classification, at emit time
 
