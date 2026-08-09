@@ -215,6 +215,48 @@ theorem tablePowerPhases_base_mem
   subst phase
   exact hrowBase
 
+/-- A flattened phase retains the in-range index of its source table row. -/
+theorem tablePowerPhases_pi_lt
+    {global : Nat} {ps : List Nat} {phase : PowerPhase}
+    (hphase : phase ∈ tablePowerPhases global ps) : phase.pi < ps.length := by
+  rw [tablePowerPhases, List.mem_flatMap] at hphase
+  obtain ⟨row, hrow, hbounded⟩ := hphase
+  have hidx := List.mem_zipIdx hrow
+  unfold boundedPowerPhases at hbounded
+  simp only [List.mem_map] at hbounded
+  obtain ⟨j, hj, hphaseEq⟩ := hbounded
+  subst phase
+  simpa using hidx.2.1
+
+/-- Every flattened phase power passed the defining global-endpoint filter. -/
+theorem tablePowerPhases_pow_le
+    {global : Nat} {ps : List Nat} {phase : PowerPhase}
+    (hphase : phase ∈ tablePowerPhases global ps) : phase.pow ≤ global := by
+  rw [tablePowerPhases, List.mem_flatMap] at hphase
+  obtain ⟨row, _hrow, hbounded⟩ := hphase
+  unfold boundedPowerPhases at hbounded
+  simp only [List.mem_map] at hbounded
+  obtain ⟨j, hj, hphaseEq⟩ := hbounded
+  subst phase
+  exact of_decide_eq_true (List.mem_filter.mp hj).2
+
+/-- Positive table bases make every flattened power positive. -/
+theorem tablePowerPhases_pow_pos
+    {global : Nat} {ps : List Nat} {phase : PowerPhase}
+    (hpos : ∀ p ∈ ps, 0 < p)
+    (hphase : phase ∈ tablePowerPhases global ps) : 0 < phase.pow := by
+  rw [tablePowerPhases, List.mem_flatMap] at hphase
+  obtain ⟨row, hrow, hbounded⟩ := hphase
+  have hrowBase : row.1 ∈ ps := by
+    have hmapped : row.1 ∈ ps.zipIdx.map Prod.fst :=
+      List.mem_map.mpr ⟨row, hrow, rfl⟩
+    simpa [List.zipIdx_map_fst] using hmapped
+  unfold boundedPowerPhases at hbounded
+  simp only [List.mem_map] at hbounded
+  obtain ⟨j, _hj, hphaseEq⟩ := hbounded
+  subst phase
+  exact Nat.pow_pos (hpos row.1 hrowBase)
+
 /-- Every production phase has a genuine positive prime-table base. -/
 theorem productionPowerPhases_base_two_le
     (phase : PowerPhase) (hphase : phase ∈ productionPowerPhases) :
@@ -235,6 +277,116 @@ theorem productionPowerPhases_base_le_10000
   have hrange := (List.mem_filter.mp htable).1
   rw [List.mem_range] at hrange
   omega
+
+/-- Every physical table load, including the explicit sentinel at
+`tableLen`, returns a positive value. -/
+theorem productionPowerTable_pos (pi : Nat) :
+    0 < productionPowerTable pi := by
+  by_cases hlt : pi < productionCursorCfg.table.length
+  · have hget := List.getElem?_eq_getElem
+      (l := productionCursorCfg.table) hlt
+    have hmem := List.getElem_mem
+      (l := productionCursorCfg.table) hlt
+    change productionCursorCfg.table[pi] ∈
+      trialPrimesBelow (Nat.sqrt 100000000 + 1) at hmem
+    have hp2 : 2 ≤ productionCursorCfg.table[pi] := by
+      exact trialPrimesBelow_two_le _ _ hmem
+    simp only [productionPowerTable, hget, Option.getD_some]
+    omega
+  · have hlen : productionCursorCfg.table.length ≤ pi :=
+      Nat.le_of_not_gt hlt
+    have hget := List.getElem?_eq_none
+      (l := productionCursorCfg.table) hlen
+    simp [productionPowerTable, hget]
+
+/-- Every physical table load is at most the production square-root bound;
+the sentinel value is one. -/
+theorem productionPowerTable_le_10000 (pi : Nat) :
+    productionPowerTable pi ≤ 10000 := by
+  by_cases hlt : pi < productionCursorCfg.table.length
+  · have hget := List.getElem?_eq_getElem
+      (l := productionCursorCfg.table) hlt
+    have hmem := List.getElem_mem
+      (l := productionCursorCfg.table) hlt
+    change productionCursorCfg.table[pi] ∈
+      trialPrimesBelow (Nat.sqrt 100000000 + 1) at hmem
+    have hsqrt : Nat.sqrt 100000000 = 10000 := by decide +kernel
+    have htable : productionCursorCfg.table[pi] ∈ trialPrimesBelow 10001 := by
+      simpa [hsqrt] using hmem
+    have hrange := (List.mem_filter.mp htable).1
+    rw [List.mem_range] at hrange
+    simp only [productionPowerTable, hget, Option.getD_some]
+    omega
+  · have hlen : productionCursorCfg.table.length ≤ pi :=
+      Nat.le_of_not_gt hlt
+    have hget := List.getElem?_eq_none
+      (l := productionCursorCfg.table) hlen
+    simp [productionPowerTable, hget]
+
+/-- Every compact production descriptor supplies a valid initial cursor for
+its phase.  This is the bridge from finite phase membership to the generic
+round-prefix invariant, and performs no production-fuel reduction. -/
+theorem productionPowerPhase_cursor_bounds
+    (w : Nat) (phase : PowerPhase) (hphase : phase ∈ productionPowerPhases) :
+    PowerCursorBounds productionCursorCfg.segLen productionCursorCfg.hi
+      productionCursorCfg.tableLen productionPowerTable
+      ⟨phase.pi, phase.pow, phase.base, startOffset w phase.pow⟩ := by
+  have hpiLt : phase.pi < productionCursorCfg.table.length := by
+    apply tablePowerPhases_pi_lt
+    simpa [productionPowerPhases] using hphase
+  have hpowPos : 0 < phase.pow := by
+    apply tablePowerPhases_pow_pos
+      (ps := productionCursorCfg.table)
+    · intro p hp
+      have hp2 : 2 ≤ p := by
+        apply trialPrimesBelow_two_le _ p
+        simpa [productionCursorCfg, Cfg.ofChain] using hp
+      omega
+    · simpa [productionPowerPhases] using hphase
+  have hpowLe : phase.pow ≤ productionCursorCfg.hi := by
+    apply tablePowerPhases_pow_le
+    simpa [productionPowerPhases] using hphase
+  have hbaseTwo := productionPowerPhases_base_two_le phase hphase
+  have hbase10000 := productionPowerPhases_base_le_10000 phase hphase
+  refine ⟨?_, hpowPos, hpowLe, ?_, ?_, ?_, ?_, ?_⟩
+  · simpa [Cfg.tableLen] using Nat.le_of_lt hpiLt
+  · change 0 < phase.base
+    omega
+  · change phase.base ≤ 100000000
+    omega
+  · have hoff : startOffset w phase.pow < phase.pow :=
+      Nat.mod_lt _ hpowPos
+    change startOffset w phase.pow ≤ 999900 + 100000000
+    have hp : phase.pow ≤ 100000000 := by
+      simpa [productionCursorCfg, Cfg.hi, Cfg.ofChain] using hpowLe
+    omega
+  · intro pi _hpi
+    exact productionPowerTable_pos pi
+  · intro pi _hpi
+    have hp := productionPowerTable_le_10000 pi
+    change productionPowerTable pi ≤ 100000000
+    omega
+
+/-- Every finite round prefix started at a compact production phase retains
+the cursor arithmetic invariant.  Specializing `fuel` to 3,260,306 does not
+evaluate that many rounds in the kernel. -/
+theorem productionPowerScheduleRun_cursor_bounds
+    (fuel w i : Nat) (phase : PowerPhase) (st : PowerScheduleState)
+    (hphase : phase ∈ productionPowerPhases)
+    (hcursor : st.cursor =
+      ⟨phase.pi, phase.pow, phase.base, startOffset w phase.pow⟩) :
+    PowerCursorBounds productionCursorCfg.segLen productionCursorCfg.hi
+      productionCursorCfg.tableLen productionPowerTable
+      (powerScheduleRun fuel productionCursorCfg.segLen w
+        productionCursorCfg.hi productionCursorCfg.tableLen i
+        productionPowerTable st).cursor := by
+  apply powerScheduleRun_cursor_bounds fuel productionCursorCfg.segLen w
+    productionCursorCfg.hi productionCursorCfg.tableLen i
+    productionPowerTable st
+  · rw [hcursor]
+    exact productionPowerPhase_cursor_bounds w phase hphase
+  · change 0 < 100000000
+    omega
 
 /-- The complete compact production phase fold is bounded directly from the
 source cell's divisor invariant and the symbolic coprimality proof for the

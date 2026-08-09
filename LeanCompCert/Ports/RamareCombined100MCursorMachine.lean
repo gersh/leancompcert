@@ -61,6 +61,83 @@ def powerCursorStep (segLen w hi limit : Nat) (table : Nat → Nat)
       { pi := pi', pow := base', base := base'
         j := if pi' = limit then segLen + 1 else startOffset w base' }
 
+/-- Small persistent bounds sufficient for all cursor arithmetic to remain in
+one machine word.  This invariant is intentionally independent of the array
+and selected cell, so it can be carried by an ordinary induction on the pure
+cursor without expanding the emitted mark body. -/
+structure PowerCursorBounds (segLen hi limit : Nat) (table : Nat → Nat)
+    (cur : PowerCursor) : Prop where
+  pi_le : cur.pi ≤ limit
+  pow_pos : 0 < cur.pow
+  pow_le : cur.pow ≤ hi
+  base_pos : 0 < cur.base
+  base_le : cur.base ≤ hi
+  j_le : cur.j ≤ segLen + hi
+  table_pos : ∀ pi, pi ≤ limit → 0 < table pi
+  table_le : ∀ pi, pi ≤ limit → table pi ≤ hi
+
+/-- One pure power-cursor transition preserves the compact arithmetic
+invariant.  In particular this proof is constant in the production round
+count; only the later `Nat.rec` induction uses it. -/
+theorem PowerCursorBounds.step
+    {segLen w hi limit : Nat} {table : Nat → Nat} {cur : PowerCursor}
+    (h : PowerCursorBounds segLen hi limit table cur) (hhi : 0 < hi) :
+    PowerCursorBounds segLen hi limit table
+      (powerCursorStep segLen w hi limit table cur) := by
+  by_cases hj : cur.j < segLen
+  · rw [show powerCursorStep segLen w hi limit table cur =
+        { cur with j := cur.j + cur.pow } by
+      simp [powerCursorStep, hj]]
+    refine ⟨h.pi_le, h.pow_pos, h.pow_le, h.base_pos, h.base_le, ?_,
+      h.table_pos, h.table_le⟩
+    change cur.j + cur.pow ≤ segLen + hi
+    have hpowLe : cur.pow ≤ hi := h.pow_le
+    omega
+  · by_cases hfit : cur.pow * cur.base ≤ hi
+    · by_cases hterminal : cur.pi = limit
+      · rw [show powerCursorStep segLen w hi limit table cur =
+            { pi := cur.pi, pow := cur.pow * cur.base, base := cur.base,
+              j := segLen + 1 } by
+          simp [powerCursorStep, hj, hfit, hterminal]]
+        refine ⟨h.pi_le, Nat.mul_pos h.pow_pos h.base_pos, hfit,
+          h.base_pos, h.base_le, ?_, h.table_pos, h.table_le⟩
+        change segLen + 1 ≤ segLen + hi
+        omega
+      · rw [show powerCursorStep segLen w hi limit table cur =
+            { pi := cur.pi, pow := cur.pow * cur.base, base := cur.base,
+              j := startOffset w (cur.pow * cur.base) } by
+          simp [powerCursorStep, hj, hfit, hterminal]]
+        refine ⟨h.pi_le, Nat.mul_pos h.pow_pos h.base_pos, hfit,
+          h.base_pos, h.base_le, ?_, h.table_pos, h.table_le⟩
+        have hoff : startOffset w (cur.pow * cur.base) <
+            cur.pow * cur.base := by
+          exact Nat.mod_lt _ (Nat.mul_pos h.pow_pos h.base_pos)
+        change startOffset w (cur.pow * cur.base) ≤ segLen + hi
+        omega
+    · let pi' := min (cur.pi + 1) limit
+      have hpi' : pi' ≤ limit := Nat.min_le_right _ _
+      have hbasePos : 0 < table pi' := h.table_pos pi' hpi'
+      have hbaseLe : table pi' ≤ hi := h.table_le pi' hpi'
+      by_cases hterminal : pi' = limit
+      · rw [show powerCursorStep segLen w hi limit table cur =
+            { pi := pi', pow := table pi', base := table pi',
+              j := segLen + 1 } by
+          simp [powerCursorStep, hj, hfit, pi', hterminal]]
+        refine ⟨hpi', hbasePos, hbaseLe, hbasePos, hbaseLe, ?_,
+          h.table_pos, h.table_le⟩
+        change segLen + 1 ≤ segLen + hi
+        omega
+      · rw [show powerCursorStep segLen w hi limit table cur =
+            { pi := pi', pow := table pi', base := table pi',
+              j := startOffset w (table pi') } by
+          simp [powerCursorStep, hj, hfit, pi', hterminal]]
+        refine ⟨hpi', hbasePos, hbaseLe, hbasePos, hbaseLe, ?_,
+          h.table_pos, h.table_le⟩
+        have hoff : startOffset w (table pi') < table pi' := by
+          exact Nat.mod_lt _ hbasePos
+        change startOffset w (table pi') ≤ segLen + hi
+        omega
+
 /-- One selected-cell event.  All other live offsets are exact frames. -/
 def powerScheduleStep (segLen w hi limit i : Nat) (table : Nat → Nat)
     (st : PowerScheduleState) : PowerScheduleState :=
@@ -75,6 +152,24 @@ def powerScheduleRun (fuel segLen w hi limit i : Nat)
     (table : Nat → Nat) (st : PowerScheduleState) : PowerScheduleState :=
   Nat.rec st
     (fun _ q => powerScheduleStep segLen w hi limit i table q) fuel
+
+/-- The compact cursor bounds survive every finite pure schedule prefix.  The
+proof is an induction on symbolic fuel and therefore remains small when later
+specialized to the production loop count. -/
+theorem powerScheduleRun_cursor_bounds
+    (fuel segLen w hi limit i : Nat) (table : Nat → Nat)
+    (st : PowerScheduleState)
+    (h : PowerCursorBounds segLen hi limit table st.cursor)
+    (hhi : 0 < hi) :
+    PowerCursorBounds segLen hi limit table
+      (powerScheduleRun fuel segLen w hi limit i table st).cursor := by
+  induction fuel with
+  | zero => exact h
+  | succ fuel ih =>
+      change PowerCursorBounds segLen hi limit table
+        (powerCursorStep segLen w hi limit table
+          (powerScheduleRun fuel segLen w hi limit i table st).cursor)
+      exact ih.step hhi
 
 /-- A trace records only live physical writes. -/
 structure TracedPowerScheduleState where
