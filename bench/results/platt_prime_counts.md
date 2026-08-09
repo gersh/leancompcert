@@ -34,3 +34,30 @@ ccomp -O2 -o /tmp/platt-prime-count-29301 /tmp/platt-prime-count-29301.c
 Every command was run under a no-swap user cgroup.  Lean emission and CompCert
 compilation used `MemoryHigh=2G`, `MemoryMax=3G`, and one Lean worker.  Runtime
 used `MemoryHigh=256M`, `MemoryMax=512M`.
+
+## Weighted marking-budget receipts
+
+The two final root-table marking budgets use
+`ArraySieveWeightedSum.sieveWeightedProgram`, whose symbolic denotation theorem
+proves that the compiled result is
+`Σ_{p < 87904} (weight / p + 2)`.  Its inactive rows divide through an explicit
+positive clamp, so neither receipt relies on division-by-zero behavior.
+
+| weight | bonus | machine iterations | expected/returned | emit wall | emit peak RSS | `ccomp -O2` wall | run wall | run peak RSS | C bytes |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 29,301 | 2 | 26,019,584 | 91,668 | 0.22 s | 521,224 KiB | 0.02 s | 0.12 s | 1,896 KiB | 2,250 |
+| 3 | 2 | 26,019,584 | 17,070 | 0.24 s | 531,560 KiB | 0.03 s | 0.12 s | 1,896 KiB | 2,234 |
+
+These totals are only 16 below the production budgets 91,684 and 17,086.
+They replace a direct kernel reduction that was stopped after 3 minutes 33
+seconds under a 2 GiB hard cap without producing a result.
+
+```bash
+lake env lean --run bench/ArraySieveWeightedSumEmit.lean 295 87904 29301 2 91668 /tmp/platt-first-budget.c
+ccomp -O2 -o /tmp/platt-first-budget /tmp/platt-first-budget.c
+/tmp/platt-first-budget
+
+lake env lean --run bench/ArraySieveWeightedSumEmit.lean 295 87904 3 2 17070 /tmp/platt-tail-budget.c
+ccomp -O2 -o /tmp/platt-tail-budget /tmp/platt-tail-budget.c
+/tmp/platt-tail-budget
+```

@@ -1,5 +1,6 @@
 import LeanCompCert.Ports.ArraySegMobiusPlattSchedule
 import LeanCompCert.Ports.ArraySieveCount
+import LeanCompCert.Ports.ArraySieveWeightedSum
 import LeanCompCert.Verified.ArrayComputation
 
 /-!
@@ -22,6 +23,7 @@ open LeanCompCert.Verified.PackedSieve
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayComputation
 open LeanCompCert.Ports.ArraySieveCount
+open LeanCompCert.Ports.ArraySieveWeightedSum
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusPrimeTable
 open LeanCompCert.Ports.ArraySegMobiusRootCellFold
@@ -76,6 +78,55 @@ theorem plattCrossingPrimeCount_eq : primeCount 29301 = 3183 := by
     hDenote plattCrossingPrimeCount_compcert_run
   omega
 
+/-! ## Compiled final-table marking budgets
+
+The root marking loop needs the tight finite sum
+`Σ_{p ≤ 87903} (segLen / p + 2)`.  Reducing the final table directly in the
+Lean kernel is intentionally avoided: the proved weighted-sieve program
+computes exactly this quantity, with an explicit nonzero divisor clamp on
+inactive rows.
+-/
+
+def plattFirstMarkBudgetComputation : AComputation where
+  program := sieveWeightedProgram 295 87904 29301 2
+  wellFormed := sieveWeightedProgram_wf 295 87904 29301 2
+  base := 0
+  baseOk := ⟨by decide, by decide⟩
+  name := "platt-first-mark-budget"
+
+axiom plattFirstMarkBudget_compcert_run :
+  plattFirstMarkBudgetComputation.Returns ((91668 : Nat) : Int)
+
+def plattTailMarkBudgetComputation : AComputation where
+  program := sieveWeightedProgram 295 87904 3 2
+  wellFormed := sieveWeightedProgram_wf 295 87904 3 2
+  base := 0
+  baseOk := ⟨by decide, by decide⟩
+  name := "platt-tail-mark-budget"
+
+axiom plattTailMarkBudget_compcert_run :
+  plattTailMarkBudgetComputation.Returns ((17070 : Nat) : Int)
+
+theorem plattFirstMarkBudget_eq : primeWeightedSum 87904 29301 2 = 91668 := by
+  have hDenote : plattFirstMarkBudgetComputation.program.denote =
+      some (primeWeightedSum 87904 29301 2) := by
+    exact sieveWeightedProgram_denote 295 87904 29301 2
+      (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)
+  have h := AComputation.value_of_returns plattFirstMarkBudgetComputation
+    hDenote plattFirstMarkBudget_compcert_run
+  omega
+
+theorem plattTailMarkBudget_eq : primeWeightedSum 87904 3 2 = 17070 := by
+  have hDenote : plattTailMarkBudgetComputation.program.denote =
+      some (primeWeightedSum 87904 3 2) := by
+    exact sieveWeightedProgram_denote 295 87904 3 2
+      (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)
+  have h := AComputation.value_of_returns plattTailMarkBudgetComputation
+    hDenote plattTailMarkBudget_compcert_run
+  omega
+
 /-- The predicate counted by `ArraySieveCount` is the package's finite prime
 predicate. -/
 theorem countedPrime_iff (n : Nat) :
@@ -90,6 +141,57 @@ theorem countedPrime_iff (n : Nat) :
     refine ⟨hn2, (leastFactor_eq_self_iff n hn2).mpr ?_⟩
     intro d hd2 hdLt hdmod
     exact hn d hdLt hd2 (Nat.dvd_of_mod_eq_zero hdmod)
+
+private theorem perm_sum {xs ys : List Nat} (h : xs.Perm ys) : xs.sum = ys.sum := by
+  induction h with
+  | nil => rfl
+  | cons x h ih => simp [ih]
+  | swap x y xs => simp [Nat.add_assoc, Nat.add_left_comm, Nat.add_comm]
+  | trans h₁ h₂ ih₁ ih₂ => exact ih₁.trans ih₂
+
+set_option maxRecDepth 100000 in
+/-- An exact prime table through `87903` has the same weighted sum as the
+canonical finite predicate evaluated by the compiled sieve. -/
+theorem primeTable_weightedSum_eq {ps : List Nat} (h : PrimeTableInv ps 87903)
+    (weight bonus : Nat) :
+    (ps.map (rowWeight weight bonus)).sum =
+      primeWeightedSum 87904 weight bonus := by
+  let pred : Nat → Bool :=
+    fun n => decide (2 ≤ n ∧ Sieve.leastFactor n = n)
+  let canonical := (List.range 87904).filter pred
+  have hpsNodup : ps.Nodup := h.ordered.imp (by intro a b hab; omega)
+  have hcanonicalNodup : canonical.Nodup := List.nodup_range.filter pred
+  have hmem : ∀ n, n ∈ ps ↔ n ∈ canonical := by
+    intro n
+    simp only [canonical, List.mem_filter, List.mem_range, pred,
+      decide_eq_true_eq]
+    constructor
+    · intro hn
+      exact ⟨by have := h.upper n hn; omega,
+        (countedPrime_iff n).mpr (h.sound n hn)⟩
+    · rintro ⟨hnBound, hnPrime⟩
+      exact h.complete n ((countedPrime_iff n).mp hnPrime) (by omega)
+  have hperm : List.Perm ps canonical := by
+    rw [List.perm_iff_count]
+    intro n
+    rw [hpsNodup.count, hcanonicalNodup.count]
+    simp only [hmem n]
+  rw [primeWeightedSum_eq]
+  exact perm_sum (hperm.map (rowWeight weight bonus))
+
+theorem plattFirstMarkBudget_of_primeTable {ps : List Nat}
+    (h : PrimeTableInv ps 87903) :
+    (ps.map fun p => 29301 / p + 2).sum ≤ 91684 := by
+  rw [show (fun p => 29301 / p + 2) = rowWeight 29301 2 from rfl,
+    primeTable_weightedSum_eq h, plattFirstMarkBudget_eq]
+  omega
+
+theorem plattTailMarkBudget_of_primeTable {ps : List Nat}
+    (h : PrimeTableInv ps 87903) :
+    (ps.map fun p => 3 / p + 2).sum ≤ 17086 := by
+  rw [show (fun p => 3 / p + 2) = rowWeight 3 2 from rfl,
+    primeTable_weightedSum_eq h, plattTailMarkBudget_eq]
+  omega
 
 /-- Every exact finite prime table has the length counted by the verified
 sieve program at the successor of its bound. -/

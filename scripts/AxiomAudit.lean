@@ -932,6 +932,11 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedFull.rootLaterWindows_has_prefix
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedFull.finalRootTable_has_boot_prefix
 #print axioms LeanCompCert.Ports.ArraySegMobiusIndexedFull.finalRootTable_shape
+#print axioms LeanCompCert.Ports.ArraySieveWeightedSum.sieveWeightedProgram_denote
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattFiniteEvidence.plattFirstMarkBudget_eq
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattFiniteEvidence.plattTailMarkBudget_eq
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattFiniteEvidence.plattFirstMarkBudget_of_primeTable
+#print axioms LeanCompCert.Ports.ArraySegMobiusPlattFiniteEvidence.plattTailMarkBudget_of_primeTable
 #print axioms LeanCompCert.Ports.ArraySegMobiusPlattFiniteEvidence.plattAlignedFirst_finalPrime
 #print axioms LeanCompCert.Ports.ArraySegMobiusPlattFiniteEvidence.plattAlignedTail_finalPrime
 #print axioms LeanCompCert.Verified.ArrayComputation.AComputation.withOutput_denotes_of_denotes
