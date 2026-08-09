@@ -1045,6 +1045,22 @@ def neBit (x y : Nat) : Nat := if x ≠ y then 1 else 0
 def Cfg.budgetFailure (c : Cfg) (round pi : Nat) : Nat :=
   eqBit round (c.markSteps - 1) * neBit pi c.tableLen
 
+theorem Cfg.budgetFailure_le_one (c : Cfg) (round pi : Nat) :
+    c.budgetFailure round pi ≤ 1 := by
+  by_cases hr : round = c.markSteps - 1 <;>
+    by_cases hp : pi = c.tableLen <;>
+      simp [Cfg.budgetFailure, eqBit, neBit, hr, hp]
+
+/-- A failure counter bounded by the current round can absorb the current
+Boolean failure without wrapping.  This is the counter premise used by the
+whole mark-loop induction. -/
+theorem Cfg.budgetFailure_add_lt_word (c : Cfg) (round pi counter : Nat)
+    (hcounter : counter ≤ round) (hround : round < c.markSteps)
+    (hsteps : c.markSteps < M) :
+    counter + c.budgetFailure round pi < M := by
+  have hfailure := c.budgetFailure_le_one round pi
+  omega
+
 def advanceActive (inMark pastWindow : Nat) : Nat := inMark * pastWindow
 
 def Cfg.powerFits (c : Cfg) (pow base : Nat) : Nat :=
@@ -1115,6 +1131,10 @@ theorem Cfg.markAdvancePowerBody_run (c : Cfg) (k : Nat) (s : AState)
 
 def clampPi (K candidate : Nat) : Nat :=
   if candidate > K then K else candidate
+
+theorem clampPi_le (K candidate : Nat) : clampPi K candidate ≤ K := by
+  unfold clampPi
+  split <;> omega
 
 /-- The prime-table index advances by the selected bit and clamps exactly at
 the sentinel row `tableLen`. -/

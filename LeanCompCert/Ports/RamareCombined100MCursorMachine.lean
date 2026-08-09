@@ -61,6 +61,39 @@ def powerCursorStep (segLen w hi limit : Nat) (table : Nat → Nat)
       { pi := pi', pow := base', base := base'
         j := if pi' = limit then segLen + 1 else startOffset w base' }
 
+/-- The source-shaped mux expressions used by the emitted advance block are
+exactly the next pure cursor's power and base. -/
+theorem powerCursorStep_value_eq
+    (segLen w hi limit : Nat) (table : Nat → Nat) (cur : PowerCursor)
+    (hpi : cur.pi ≤ limit) :
+    let past := if cur.j < segLen then 0 else 1
+    let active := advanceActive 1 past
+    let bump := active * if cur.pow * cur.base ≤ hi then 1 else 0
+    let step := active - bump
+    let piOut := clampPi limit (cur.pi + step)
+    nextPowValue active bump step cur.pow (cur.pow * cur.base) (table piOut) =
+        (powerCursorStep segLen w hi limit table cur).pow ∧
+      nextBaseValue step cur.base (table piOut) =
+        (powerCursorStep segLen w hi limit table cur).base := by
+  dsimp only
+  by_cases hj : cur.j < segLen
+  · have hclamp : clampPi limit cur.pi = cur.pi := by
+      simp [clampPi, Nat.not_lt.mpr hpi]
+    simp [powerCursorStep, hj, advanceActive, hclamp, nextPowValue,
+      nextBaseValue]
+  · by_cases hfit : cur.pow * cur.base ≤ hi
+    · have hclamp : clampPi limit cur.pi = cur.pi := by
+        simp [clampPi, Nat.not_lt.mpr hpi]
+      simp [powerCursorStep, hj, hfit, advanceActive, hclamp,
+        nextPowValue, nextBaseValue]
+    · have hclamp : clampPi limit (cur.pi + 1) =
+          min (cur.pi + 1) limit := by
+        unfold clampPi
+        rw [Nat.min_def]
+        split <;> split <;> omega
+      simp [powerCursorStep, hj, hfit, advanceActive, hclamp,
+        nextPowValue, nextBaseValue]
+
 /-- Small persistent bounds sufficient for all cursor arithmetic to remain in
 one machine word.  This invariant is intentionally independent of the array
 and selected cell, so it can be carried by an ordinary induction on the pure
@@ -1627,6 +1660,108 @@ structure AdvanceWordPre (c : Cfg) (s : AState) (table : Nat → Nat) : Prop whe
       (s.regs rPow) (s.regs rBase)
     let piOut := clampPi c.tableLen (s.regs rPi + step)
     s.regs rVMark + c.budgetFailure (s.regs rR) piOut < M
+
+/-- Assemble the emitted advance block's word premises from the compact pure
+cursor invariant and two round-indexed failure-counter bounds. -/
+theorem AdvanceWordPre.of_cursorBounds
+    (c : Cfg) (s : AState) (table : Nat → Nat) (cur : PowerCursor)
+    (hcur : machinePowerCursor s = cur)
+    (hphase : s.regs 10 = 1)
+    (hpast : s.regs 25 = if cur.j < c.segLen then 0 else 1)
+    (hbounds : PowerCursorBounds c.segLen c.hi c.tableLen table cur)
+    (htable : ∀ pi, pi ≤ c.tableLen →
+      s.arr (pi + c.tableBase) = table pi)
+    (hhiPos : 0 < c.hi) (hhiWord : c.hi < M)
+    (hhiSq : c.hi * c.hi < M)
+    (hK1 : c.tableLen + 1 < M)
+    (haddr : c.tableLen + c.tableBase < M)
+    (hjpow : c.segLen + 2 * c.hi < M)
+    (hseg : c.segLen + 1 < M) (hsteps : c.markSteps < M)
+    (hround : s.regs rR < c.markSteps)
+    (hviol : s.regs rViol ≤ s.regs rR)
+    (hvmark : s.regs rVMark ≤ s.regs rR) :
+    AdvanceWordPre c s table := by
+  have hsPi : s.regs rPi = cur.pi := congrArg PowerCursor.pi hcur
+  have hsPow : s.regs rPow = cur.pow := congrArg PowerCursor.pow hcur
+  have hsBase : s.regs rBase = cur.base := congrArg PowerCursor.base hcur
+  have hsJ : s.regs rJ = cur.j := congrArg PowerCursor.j hcur
+  have hmodes :
+      advanceActive (s.regs 10) (s.regs 25) ≤ 1 ∧
+      c.bumpPower (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase) ≤ 1 ∧
+      c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase) ≤ 1 ∧
+      c.bumpPower (s.regs 10) (s.regs 25)
+          (s.regs rPow) (s.regs rBase) +
+        c.stepPrime (s.regs 10) (s.regs 25)
+          (s.regs rPow) (s.regs rBase) =
+        advanceActive (s.regs 10) (s.regs 25) := by
+    rw [hphase, hpast, hsPow, hsBase]
+    by_cases hj : cur.j < c.segLen <;>
+      by_cases hfit : cur.pow * cur.base ≤ c.hi <;>
+        simp [advanceActive, Cfg.bumpPower, Cfg.stepPrime, Cfg.powerFits,
+          hj, hfit]
+  let next := powerCursorStep c.segLen (s.regs rW) c.hi c.tableLen table cur
+  have hnext : PowerCursorBounds c.segLen c.hi c.tableLen table next :=
+    hbounds.step hhiPos
+  have hvalueEq := powerCursorStep_value_eq c.segLen (s.regs rW) c.hi
+    c.tableLen table cur hbounds.pi_le
+  have hpowEq :
+      let step := c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)
+      let piOut := clampPi c.tableLen (s.regs rPi + step)
+      let nextPrime := s.arr (piOut + c.tableBase)
+      nextPowValue (advanceActive (s.regs 10) (s.regs 25))
+        (c.bumpPower (s.regs 10) (s.regs 25)
+          (s.regs rPow) (s.regs rBase)) step
+        (s.regs rPow) (s.regs rPow * s.regs rBase) nextPrime = next.pow := by
+    dsimp only
+    rw [htable _ (clampPi_le _ _), hphase, hpast, hsPi, hsPow, hsBase]
+    simpa [next, Cfg.bumpPower, Cfg.stepPrime, Cfg.powerFits] using hvalueEq.1
+  have hbaseEq :
+      let step := c.stepPrime (s.regs 10) (s.regs 25)
+        (s.regs rPow) (s.regs rBase)
+      let piOut := clampPi c.tableLen (s.regs rPi + step)
+      let nextPrime := s.arr (piOut + c.tableBase)
+      nextBaseValue step (s.regs rBase) nextPrime = next.base := by
+    dsimp only
+    rw [htable _ (clampPi_le _ _), hphase, hpast, hsPi, hsPow, hsBase]
+    simpa [next, Cfg.bumpPower, Cfg.stepPrime, Cfg.powerFits] using hvalueEq.2
+  refine ⟨htable, ?_, ?_, hseg, hsteps, ?_, ?_⟩
+  · refine ⟨?_, ?_, ?_, hhiWord, ?_, ?_, ?_, hmodes.1, hmodes.2.1,
+      hmodes.2.2.1, hmodes.2.2.2, ?_, ?_, ?_⟩
+    · rw [hphase]
+      omega
+    · rw [hpast]
+      split <;> omega
+    · rw [hsPow, hsBase]
+      exact Nat.lt_of_le_of_lt
+        (Nat.mul_le_mul hbounds.pow_le hbounds.base_le) hhiSq
+    · rw [hsPi]
+      have hstep := hmodes.2.2.1
+      have hpi := hbounds.pi_le
+      omega
+    · exact Nat.lt_of_le_of_lt (Nat.le_add_right _ _) hK1
+    · have hclamp := clampPi_le c.tableLen
+        (s.regs rPi + c.stepPrime (s.regs 10) (s.regs 25)
+          (s.regs rPow) (s.regs rBase))
+      exact Nat.lt_of_le_of_lt (Nat.add_le_add_right hclamp c.tableBase)
+        haddr
+    · rw [hsJ, hsPow]
+      have hjle := hbounds.j_le
+      have hpowle := hbounds.pow_le
+      omega
+    · dsimp only
+      rw [hpowEq]
+      exact Nat.lt_of_le_of_lt hnext.pow_le hhiWord
+    · dsimp only
+      rw [hbaseEq]
+      exact Nat.lt_of_le_of_lt hnext.base_le hhiWord
+  · dsimp only
+    rw [hpowEq]
+    exact Nat.ne_of_gt hnext.pow_pos
+  · exact c.budgetFailure_add_lt_word _ _ _ hviol hround hsteps
+  · exact c.budgetFailure_add_lt_word _ _ _ hvmark hround hsteps
 
 theorem Cfg.markAdvanceBody_machinePowerCursor_of_pre
     (c : Cfg) (k : Nat) (s : AState) (table : Nat → Nat)

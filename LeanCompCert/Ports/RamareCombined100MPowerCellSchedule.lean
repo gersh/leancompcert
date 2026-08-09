@@ -12,6 +12,7 @@ namespace LeanCompCert.Ports.RamareCombined100M.ShapeSieve
 
 open LeanCompCert.Ports.ArraySegMobiusScheduleFold (liveCount cursorLiveEvents)
 open LeanCompCert.Verified.Reflect (M)
+open LeanCompCert.Verified.ArrayState (AState)
 
 /-- Selected-cell fold of a finite list of power-phase descriptors. -/
 def cursorPhasesFold (segLen w i : Nat) (phases : List PowerPhase)
@@ -387,6 +388,71 @@ theorem productionPowerScheduleRun_cursor_bounds
     exact productionPowerPhase_cursor_bounds w phase hphase
   · change 0 < 100000000
     omega
+
+theorem productionCursorCfg_tableLen_le_10001 :
+    productionCursorCfg.tableLen ≤ 10001 := by
+  have hsqrt : Nat.sqrt 100000000 = 10000 := by decide +kernel
+  change (trialPrimesBelow (Nat.sqrt 100000000 + 1)).length ≤ 10001
+  rw [hsqrt]
+  change ((List.range 10001).filter trialPrime).length ≤ 10001
+  simpa only [List.length_range] using
+    List.length_filter_le trialPrime (List.range 10001)
+
+/-- Closed production-scale word facts that do not require evaluating the
+prime table or mark budget. -/
+theorem productionCursorStaticWordBounds :
+    0 < productionCursorCfg.hi ∧
+      productionCursorCfg.hi < M ∧
+      productionCursorCfg.hi * productionCursorCfg.hi < M ∧
+      productionCursorCfg.tableLen + 1 < M ∧
+      productionCursorCfg.tableLen + productionCursorCfg.tableBase < M ∧
+      productionCursorCfg.segLen + 2 * productionCursorCfg.hi < M := by
+  have hlen := productionCursorCfg_tableLen_le_10001
+  have hM : M = 18446744073709551616 := rfl
+  constructor
+  · change 0 < 100000000
+    omega
+  constructor
+  · change 100000000 < M
+    omega
+  constructor
+  · change 100000000 * 100000000 < M
+    omega
+  constructor
+  · omega
+  constructor
+  · change productionCursorCfg.tableLen + 14 * 999900 < M
+    omega
+  · change 999900 + 2 * 100000000 < M
+    omega
+
+/-- Production specialization of the generic advance-premise constructor.
+The caller supplies only the live whole-state facts: cursor agreement,
+initialized table memory, round position, and the two counter invariants. -/
+theorem productionAdvanceWordPre_of_cursorBounds
+    (s : AState) (cur : PowerCursor)
+    (hcur : machinePowerCursor s = cur)
+    (hphase : s.regs 10 = 1)
+    (hpast : s.regs 25 =
+      if cur.j < productionCursorCfg.segLen then 0 else 1)
+    (hbounds : PowerCursorBounds productionCursorCfg.segLen
+      productionCursorCfg.hi productionCursorCfg.tableLen
+      productionPowerTable cur)
+    (htable : ∀ pi, pi ≤ productionCursorCfg.tableLen →
+      s.arr (pi + productionCursorCfg.tableBase) = productionPowerTable pi)
+    (hround : s.regs rR < productionCursorCfg.markSteps)
+    (hviol : s.regs rViol ≤ s.regs rR)
+    (hvmark : s.regs rVMark ≤ s.regs rR) :
+    AdvanceWordPre productionCursorCfg s productionPowerTable := by
+  rcases productionCursorStaticWordBounds with
+    ⟨hhiPos, hhiWord, hhiSq, hK1, haddr, hjpow⟩
+  have hseg : productionCursorCfg.segLen + 1 < M := by
+    change 999900 + 1 < M
+    decide
+  exact AdvanceWordPre.of_cursorBounds productionCursorCfg s
+    productionPowerTable cur hcur hphase hpast hbounds htable hhiPos
+    hhiWord hhiSq hK1 haddr hjpow hseg
+    productionCursorCfg_markSteps_lt_word hround hviol hvmark
 
 /-- The complete compact production phase fold is bounded directly from the
 source cell's divisor invariant and the symbolic coprimality proof for the
