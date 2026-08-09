@@ -1861,6 +1861,12 @@ compiled-evidence portion of the two-link chain.  Relating the retained
 accumulator prefix to the Mathlib Möbius/fixed-point sweep remains a separate
 paper-level theorem obligation.
 
+The structural theorems `squaredResRunFrom_viol_le` and
+`squaredResRunFrom_cel_safe` discharge the shifted soundness theorem's counter
+and ceiling side conditions.  Their source check is below one second and about
+650 MiB RSS under the 1/2 GiB no-swap profile; neither theorem evaluates the
+production range.
+
 The first attempt at that last relation exposed a logical, not computational,
 cycle in the historical transparent soundness theorem: it assumed
 `|accTrue| ≤ 2^(62+k)` at every prefix before using a passing artifact to

@@ -916,6 +916,8 @@ fails elaboration, so an entry cannot silently audit nothing.
 #print axioms LeanCompCert.Ports.MobiusSquaredResidueRealisation.resInv_squaredStep_of_pass
 #print axioms LeanCompCert.Ports.MobiusSquaredResidueRealisation.squaredResRunFrom_inv_of_final_zero
 #print axioms LeanCompCert.Ports.MobiusSquaredResidueRealisation.squaredResRunFrom_zero_sound
+#print axioms LeanCompCert.Ports.MobiusSquaredResidueRealisation.squaredResRunFrom_viol_le
+#print axioms LeanCompCert.Ports.MobiusSquaredResidueRealisation.squaredResRunFrom_cel_safe
 #print axioms LeanCompCert.Ports.ArraySegMobiusResidueFold.combinedSignals_add
 #print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.consecutiveMuSignals_schedule
 #print axioms LeanCompCert.Ports.ArraySegMobiusSquaredFold.consecutiveMuSignals_eq_map_range

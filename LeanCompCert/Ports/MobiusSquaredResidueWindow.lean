@@ -28,6 +28,12 @@ def squaredResRunFrom (k : Nat) (mu : Nat → Int) (lo : Nat)
   | j + 1 => squaredResStep k (muSig mu (lo + j + 1))
       (squaredResRunFrom k mu lo r0 j)
 
+private theorem squaredViolStep_le_add_one (k n absV gate viol : Nat)
+    (hgate : gate ≤ 1) : squaredViolStep k n absV gate viol ≤ viol + 1 := by
+  unfold squaredViolStep
+  refine Nat.le_trans (Nat.mod_le _ M) ?_
+  split <;> omega
+
 /-- Peeling the first row from a shifted consecutive run retargets the
 remaining run to the next certified prefix. -/
 theorem squaredResRunFrom_succ_shift
@@ -46,6 +52,71 @@ theorem squaredResRunFrom_succ_shift
       rw [ih]
       congr 3
       omega
+
+/-- The transparent violation counter grows by at most one per active row,
+even before no-wrap is known.  This elementary bound discharges the no-wrap
+premise for every practical finite campaign. -/
+theorem squaredResRunFrom_viol_le (k : Nat) (mu : Nat → Int) (lo : Nat)
+    (r0 : Res) : ∀ j,
+    (squaredResRunFrom k mu lo r0 j).viol ≤ r0.viol + j := by
+  intro j
+  induction j with
+  | zero => exact Nat.le_refl _
+  | succ j ih =>
+      simp only [squaredResRunFrom]
+      unfold squaredResStep
+      dsimp only
+      have hstep := squaredViolStep_le_add_one k
+        (muSig mu (lo + j + 1)).n
+        (absBias
+          (vBias k
+            (accStep (muSig mu (lo + j + 1)).pos
+              (muSig mu (lo + j + 1)).neg
+              (wPair k (muSig mu (lo + j + 1)).n).1
+              (wPair k (muSig mu (lo + j + 1)).n).2
+              (squaredResRunFrom k mu lo r0 j).tLo
+              (squaredResRunFrom k mu lo r0 j).tHi).1
+            (accStep (muSig mu (lo + j + 1)).pos
+              (muSig mu (lo + j + 1)).neg
+              (wPair k (muSig mu (lo + j + 1)).n).1
+              (wPair k (muSig mu (lo + j + 1)).n).2
+              (squaredResRunFrom k mu lo r0 j).tLo
+              (squaredResRunFrom k mu lo r0 j).tHi).2))
+        (muSig mu (lo + j + 1)).gate
+        (squaredResRunFrom k mu lo r0 j).viol (by simp [muSig])
+      omega
+
+/-- The ceiling fields of a shifted transparent run remain exact and below
+the 32-bit boundary whenever the finite endpoint is below the explicit square
+cap.  This is structural bookkeeping, independent of the Möbius values and
+of whether the squared predicate passes. -/
+theorem squaredResRunFrom_cel_safe (k : Nat) (mu : Nat → Int) (lo : Nat)
+    (r0 : Res) (N : Nat)
+    (hceil : CeilInv r0.cel (lo + 1))
+    (hsq : r0.celSq = r0.cel * r0.cel)
+    (hlt : r0.cel + 1 < 2 ^ 32)
+    (hend : lo + N + 1 < (2 ^ 32 - 2) * (2 ^ 32 - 2)) :
+    ∀ j, j ≤ N →
+      CeilInv (squaredResRunFrom k mu lo r0 j).cel (lo + j + 1) ∧
+      (squaredResRunFrom k mu lo r0 j).celSq =
+        (squaredResRunFrom k mu lo r0 j).cel *
+          (squaredResRunFrom k mu lo r0 j).cel ∧
+      (squaredResRunFrom k mu lo r0 j).cel + 1 < 2 ^ 32 := by
+  intro j hj
+  induction j with
+  | zero => simpa only [squaredResRunFrom, Nat.zero_add] using ⟨hceil, hsq, hlt⟩
+  | succ j ih =>
+      have hjN : j < N := by omega
+      obtain ⟨hjceil, hjsq, hjlt⟩ := ih (by omega)
+      let r := squaredResRunFrom k mu lo r0 j
+      have hn : lo + j + 1 < (2 ^ 32 - 2) * (2 ^ 32 - 2) := by omega
+      have hsafe := celStep_fst_add_one_lt_of_bound (lo + j + 1) r.cel
+        hjlt hn
+      have hnext := celStep_invariant (lo + j + 1) r.cel hjceil hjlt
+      dsimp only [r] at hsafe hnext
+      rw [← hjsq] at hsafe hnext
+      simpa only [squaredResRunFrom, squaredResStep, muSig, Nat.add_assoc]
+        using ⟨hnext.1, hnext.2, hsafe⟩
 
 /-- The accumulator/ceiling invariant is insensitive to the choice of
 violation predicate. -/
