@@ -916,6 +916,24 @@ theorem productionTableHead_word :
     have hM : 10000 < M := by decide
     omega
 
+/-- The production mark budget is nonzero.  This is proved from the symbolic
+`16 + ...` lower bound and the positive word-cap branch, without evaluating
+the multi-million-round budget. -/
+theorem productionCursorCfg_markSteps_pos :
+    0 < productionCursorCfg.markSteps := by
+  change 0 < LeanCompCert.Ports.R2SegSieve.markBudget
+    (Nat.sqrt 100000000) (10001 + 999900 * 100 - 1) 999900
+  have hraw : 0 < LeanCompCert.Ports.R2SegSieve.rawMarkBudget
+      (Nat.sqrt 100000000) (10001 + 999900 * 100 - 1) 999900 := by
+    unfold LeanCompCert.Ports.R2SegSieve.rawMarkBudget
+    omega
+  have hcap : 0 < M - 999900 - 1 := by
+    have hword : 999901 < M := by decide
+    omega
+  unfold LeanCompCert.Ports.R2SegSieve.markBudget
+  rw [Nat.min_def]
+  split <;> assumption
+
 /-- Simultaneous machine invariant for one production marking window.  The
 reset projection makes round zero and all later nonzero rounds uniform. -/
 structure ProductionMarkStateInv
@@ -929,6 +947,10 @@ structure ProductionMarkStateInv
   window_eq : s.regs rW = w
   viol_le : s.regs rViol ≤ round
   vmark_le : s.regs rVMark ≤ round
+  last_failure_le : 0 < round →
+    productionCursorCfg.budgetFailure (round - 1)
+      (powerCellRun productionCursorCfg round w i
+        productionPowerTable initial).cursor.pi ≤ s.regs rVMark
 
 /-- The emitted phase/reset prefix realizes the reset projection recorded by
 the simultaneous invariant. -/
@@ -1071,6 +1093,10 @@ theorem ProductionMarkStateInv.step
   have hbodyState : machinePowerCellState c i out =
       powerCellStep c w i productionPowerTable pure := by
     simpa [out, phased, reset, hresetW, hresetState] using hbody
+  have houtPi : out.regs rPi =
+      (powerCellStep c w i productionPowerTable pure).cursor.pi := by
+    have heq := congrArg (fun st => st.cursor.pi) hbodyState
+    simpa [machinePowerCellState, machinePowerCursor] using heq
   have hpos := c.body_mark_position k s hroundS (by
       change 0 < 999900
       omega) productionCursorCfg_period_lt_word (by simpa [h.window_eq] using hwM)
@@ -1085,6 +1111,10 @@ theorem ProductionMarkStateInv.step
     (by simpa [h.window_eq] using hwM) hviolS hvmarkS
     (by simpa [phased, reset] using hadvance)
   dsimp only at hcounter
+  have hvmarkEq : out.regs rVMark = s.regs rVMark +
+      c.budgetFailure round
+        (powerCellStep c w i productionPowerTable pure).cursor.pi := by
+    rw [hcounter.2.2, h.round_eq, houtPi]
   have houtReset : resetPowerCellState c i out =
       powerCellRun c (round + 1) w i productionPowerTable initial := by
     rw [resetPowerCellState_eq_machinePowerCellState c i out (by
@@ -1099,7 +1129,8 @@ theorem ProductionMarkStateInv.step
     round_eq := houtR
     window_eq := houtW
     viol_le := ?_
-    vmark_le := ?_ }
+    vmark_le := ?_
+    last_failure_le := ?_ }
   · exact houtReset
   · intro pi hpi
     have hframe := c.body_mark_table_frame k s
@@ -1111,7 +1142,15 @@ theorem ProductionMarkStateInv.step
   · rw [hpos.1, h.round_eq] at hcounter
     exact hcounter.1
   · rw [hpos.1, h.round_eq] at hcounter
-    exact hcounter.2
+    exact hcounter.2.1
+  · intro _hpositive
+    have hfailure : c.budgetFailure round
+        (powerCellStep c w i productionPowerTable pure).cursor.pi ≤
+        out.regs rVMark := by
+      rw [hvmarkEq]
+      omega
+    simpa only [Nat.add_sub_cancel, powerCellRun_succ, c, out, pure]
+      using hfailure
 
 /-- Simultaneous invariant for every symbolic prefix of the emitted
 production marking loop.  Specializing `fuel` to the production budget does
@@ -1157,6 +1196,29 @@ theorem productionMarkStateInv_run_closed
     (productionInitialPowerCell_cursor_bounds w) h0
     (fun round _hround =>
       productionPowerCellRun_markPre w i round hi hnpos hnglobal)
+
+/-- A zero compiled marking-failure result proves that the final pure cursor
+reached the prime-table sentinel.  The proof uses only the last emitted
+round's exact failure bit; it does not normalize the production loop. -/
+theorem ProductionMarkStateInv.cursor_exhausted_of_vmark_zero
+    {w i : Nat} {initial : PowerCellState} {s : AState}
+    (h : ProductionMarkStateInv w i productionCursorCfg.markSteps initial s)
+    (hzero : s.regs rVMark = 0) :
+    (powerCellRun productionCursorCfg productionCursorCfg.markSteps w i
+      productionPowerTable initial).cursor.pi =
+        productionCursorCfg.tableLen := by
+  let pi := (powerCellRun productionCursorCfg
+    productionCursorCfg.markSteps w i productionPowerTable initial).cursor.pi
+  have hfailure := h.last_failure_le productionCursorCfg_markSteps_pos
+  change productionCursorCfg.budgetFailure
+    (productionCursorCfg.markSteps - 1) pi ≤ s.regs rVMark at hfailure
+  by_cases heq : pi = productionCursorCfg.tableLen
+  · simpa only [pi] using heq
+  · have hone : productionCursorCfg.budgetFailure
+        (productionCursorCfg.markSteps - 1) pi = 1 := by
+      simp [Cfg.budgetFailure, eqBit, neBit, heq]
+    rw [hone, hzero] at hfailure
+    omega
 
 /-- Closed production phase enumeration has the same selected-cell result as
 the exact production table-row fold for every live window cell. -/

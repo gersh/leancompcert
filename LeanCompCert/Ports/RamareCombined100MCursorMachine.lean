@@ -2660,7 +2660,9 @@ theorem Cfg.body_mark_position
 
 /-- The only mark-phase counter update is the final budget-failure bit.  Since
 that bit is at most one, counters bounded by the incoming round remain bounded
-by the exactly incremented outgoing round. -/
+by the exactly incremented outgoing round.  The exact `rVMark` equation is
+retained so the production invariant can turn a compiled zero result into a
+proof that the final cursor reached the table sentinel. -/
 theorem Cfg.body_mark_counter_bounds
     (c : Cfg) (k : Nat) (s : AState) (table : Nat → Nat)
     (hround : s.regs rR < c.markSteps) (hT : c.markSteps < M)
@@ -2675,7 +2677,9 @@ theorem Cfg.body_mark_counter_bounds
       AdvanceWordPre c marked table) :
     let out := arun k s c.body
     out.regs rViol ≤ out.regs rR ∧
-      out.regs rVMark ≤ out.regs rR := by
+      out.regs rVMark ≤ out.regs rR ∧
+      out.regs rVMark = s.regs rVMark +
+        c.budgetFailure (s.regs rR) (out.regs rPi) := by
   let phased := arun k s (lift c.markPhaseBody)
   let reset := arun k phased c.markResetBody
   let marked := arun k reset c.markCellPrefix
@@ -2697,7 +2701,7 @@ theorem Cfg.body_mark_counter_bounds
     hadvance.mark_steps hadvance.viol hadvance.vmark
   dsimp only at hrun
   rcases hrun with
-    ⟨_hPi, _hPow, _hBase, _hJ, haViol, haVMark, _haR, _haW, _haArr⟩
+    ⟨haPi, _hPow, _hBase, _hJ, haViol, haVMark, _haR, _haW, _haArr⟩
   let failure := c.budgetFailure (marked.regs rR)
     (clampPi c.tableLen
       (marked.regs rPi + c.stepPrime (marked.regs 10) (marked.regs 25)
@@ -2737,18 +2741,25 @@ theorem Cfg.body_mark_counter_bounds
   have htVMark :
       (arun k classified c.tailBody).regs rVMark = classified.regs rVMark :=
     arun_frame k rVMark c.tailBody (by rfl) classified
+  have hcPi : classified.regs rPi = active.regs rPi :=
+    arun_frame k rPi c.classBody (by rfl) active
+  have htPi :
+      (arun k classified c.tailBody).regs rPi = classified.regs rPi :=
+    arun_frame k rPi c.tailBody (by rfl) classified
   have hbodyRun : arun k s c.body = arun k classified c.tailBody := by
     simp [Cfg.body, c.markBody_eq_phase_reset_active, Cfg.markActiveBody,
       phased, reset, marked, active, classified, arun_append]
   have hpos := c.body_mark_position k s hround hLPos hperiodM hwM
   dsimp only at hpos
   rw [hbodyRun]
-  constructor
+  refine ⟨?_, ?_, ?_⟩
   · rw [htViol, hclass.1]
     rw [hbodyRun] at hpos
     omega
   · rw [htVMark, hclass.2]
     rw [hbodyRun] at hpos
     omega
+  · rw [htVMark, hclass.2, haVMarkEq, hmVMark, htPi, hcPi, haPi]
+    simp only [failure, hmR]
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve

@@ -323,7 +323,8 @@ theorem productionInitState_markInv
       (by decide) (by decide) (by decide)
     window_eq := productionInitState_window
     viol_le := ?_
-    vmark_le := ?_ }
+    vmark_le := ?_
+    last_failure_le := ?_ }
   · intro pi hpi
     simpa [Nat.add_comm] using productionInitState_table pi hpi
   · rw [productionInitState_regs_zero rViol
@@ -332,6 +333,7 @@ theorem productionInitState_markInv
   · rw [productionInitState_regs_zero rVMark
       (by decide) (by decide) (by decide)]
     exact Nat.zero_le _
+  · omega
 
 /-- The complete emitted marking budget for the first production window now
 follows from the actual initializer with no per-round hypotheses. -/
@@ -353,5 +355,19 @@ theorem productionFirstWindow_markInv
     omega
   · exact Nat.le_refl _
   · exact productionInitState_markInv i hi
+
+/-- For the actual emitted initializer and full first-window marking run, a
+zero compiled failure word certifies exact exhaustion of the prime-power
+cursor. -/
+theorem productionFirstWindow_cursor_exhausted
+    (k i : Nat) (hi : i < productionCursorCfg.segLen)
+    (hzero : (emittedBodyRun k productionCursorCfg
+      productionCursorCfg.markSteps productionInitState).regs rVMark = 0) :
+    (powerCellRun productionCursorCfg productionCursorCfg.markSteps
+      productionCursorCfg.lo i productionPowerTable
+      (productionInitialPowerCell productionCursorCfg.lo)).cursor.pi =
+        productionCursorCfg.tableLen := by
+  exact (productionFirstWindow_markInv k i hi).cursor_exhausted_of_vmark_zero
+    hzero
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve
