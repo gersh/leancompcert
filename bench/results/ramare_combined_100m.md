@@ -390,15 +390,24 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | literal full-body arbitrary-window invariant, live module build | 15.80 s | 789,288 KiB | 0 | success |
 | literal physical initializer plus whole-sweep invariant, direct source check | 16.35 s | 3,994,116 KiB | 0 | success |
 | literal physical initializer plus whole-sweep invariant, module build | 16.73 s | 4,012,428 KiB | 0 | success |
+| exact dual marking-counter update, direct source check | 10.42 s | 1,524,920 KiB | 0 | success |
+| exact dual marking-counter update, module build | 10.67 s | 1,569,736 KiB | 0 | success |
+| marking invariant with `rVMark ≤ rViol`, direct source check | 1:06.25 | 5,132,252 KiB | 0 | success |
+| marking invariant with `rVMark ≤ rViol`, module build | 1:10.20 | 5,157,712 KiB | 0 | success |
+| initializer consumer with counter relation, direct source check | 1:41.63 | 4,508,332 KiB | 0 | success |
+| initializer consumer with counter relation, module build | 1:43.45 | 4,635,528 KiB | 0 | success |
+| public-result marking exhaustion, direct source check | 17.17 s | 3,986,476 KiB | 0 | success |
+| public-result marking exhaustion, live module build | 32.05 s | 3,992,084 KiB | 0 | success; rebuilt body refinements |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
 proves that the inactive log/lambda/psi suffix preserves the complete marking
 state, so `productionWindow_cell_eq_cursorRows` applies to the literal
-`LambdaPsiSweep.body` at any production window.  It remains conditional on
-zero incoming and outgoing failure counters; carrying or deriving those facts
-through classification, together with `ArithmeticPre`, is the next whole-loop
-obligation.
+`LambdaPsiSweep.body` at any production window.  The dedicated marking counter
+is now proved no larger than the public violation counter, so an outgoing
+`rViol = 0` result supplies marking exhaustion directly.  Carrying that public
+zero result backward from the complete run and establishing `ArithmeticPre`
+remain the next whole-loop obligations.
 
 The literal initializer is now covered as well.  Generic finite-store frame
 lemmas prove that all positional log-table stores lie above the shape array,

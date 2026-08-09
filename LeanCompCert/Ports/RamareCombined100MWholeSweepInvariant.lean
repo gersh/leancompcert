@@ -214,6 +214,7 @@ theorem ProductionMarkStateInv.arithmetic_frame
     window_eq := ?_
     viol_le := ?_
     vmark_le := ?_
+    vmark_le_viol := ?_
     last_failure_le := ?_ }
   · have hreset : resetPowerCellState productionCursorCfg i out =
         resetPowerCellState productionCursorCfg i s := by
@@ -233,6 +234,8 @@ theorem ProductionMarkStateInv.arithmetic_frame
     exact h.viol_le
   · rw [hreg rVMark (by rfl)]
     exact h.vmark_le
+  · rw [hreg rVMark (by rfl), hreg rViol (by rfl)]
+    exact h.vmark_le_viol
   · intro hpositive
     rw [hreg rVMark (by rfl)]
     exact h.last_failure_le hpositive
@@ -333,7 +336,7 @@ theorem productionWindow_cell_eq_cursorRows
     (hzero :
       let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
       (BodyRefinement.bodyRun k c productionCursorCfg.markSteps s).regs
-        rVMark = 0) :
+        rViol = 0) :
     let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
     productionCursorCfg.readPlaneCell i
         (BodyRefinement.bodyRun k c productionCursorCfg.markSteps s) =
@@ -354,6 +357,9 @@ theorem productionWindow_cell_eq_cursorRows
   rw [hcell]
   apply productionPowerCellRun_cell_eq_cursorRows_of_exhausted
     productionCursorCfg.markSteps w i hi hnpos hnglobal
-  exact hinv.cursor_exhausted_of_vmark_zero hzero
+  apply hinv.cursor_exhausted_of_vmark_zero
+  have hle := hinv.vmark_le_viol
+  rw [hzero] at hle
+  exact Nat.le_zero.mp hle
 
 end LeanCompCert.Ports.RamareCombined100M.WholeSweepInvariant

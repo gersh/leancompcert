@@ -1038,6 +1038,7 @@ structure ProductionMarkStateInv
   window_eq : s.regs rW = w
   viol_le : s.regs rViol ≤ round
   vmark_le : s.regs rVMark ≤ round
+  vmark_le_viol : s.regs rVMark ≤ s.regs rViol
   last_failure_le : 0 < round →
     productionCursorCfg.budgetFailure (round - 1)
       (powerCellRun productionCursorCfg round w i
@@ -1065,6 +1066,7 @@ theorem productionWindowStart_markInv
     window_eq := hwindow
     viol_le := ?_
     vmark_le := ?_
+    vmark_le_viol := ?_
     last_failure_le := ?_ }
   · apply PowerCellState.ext
     · simp only [resetPowerCellState, resetPowerCursor, hround, if_pos,
@@ -1072,6 +1074,7 @@ theorem productionWindowStart_markInv
       rw [productionPowerPhases_head, productionTable_head, hwindow]
       rfl
     · exact hempty
+  · omega
   · omega
   · omega
   · omega
@@ -1238,7 +1241,11 @@ theorem ProductionMarkStateInv.step
   have hvmarkEq : out.regs rVMark = s.regs rVMark +
       c.budgetFailure round
         (powerCellStep c w i productionPowerTable pure).cursor.pi := by
-    rw [hcounter.2.2, h.round_eq, houtPi]
+    rw [hcounter.2.2.2, h.round_eq, houtPi]
+  have hviolEq : out.regs rViol = s.regs rViol +
+      c.budgetFailure round
+        (powerCellStep c w i productionPowerTable pure).cursor.pi := by
+    rw [hcounter.2.2.1, h.round_eq, houtPi]
   have houtReset : resetPowerCellState c i out =
       powerCellRun c (round + 1) w i productionPowerTable initial := by
     rw [resetPowerCellState_eq_machinePowerCellState c i out (by
@@ -1254,6 +1261,7 @@ theorem ProductionMarkStateInv.step
     window_eq := houtW
     viol_le := ?_
     vmark_le := ?_
+    vmark_le_viol := ?_
     last_failure_le := ?_ }
   · exact houtReset
   · intro pi hpi
@@ -1267,6 +1275,8 @@ theorem ProductionMarkStateInv.step
     exact hcounter.1
   · rw [hpos.1, h.round_eq] at hcounter
     exact hcounter.2.1
+  · rw [hvmarkEq, hviolEq]
+    exact Nat.add_le_add_right h.vmark_le_viol _
   · intro _hpositive
     have hfailure : c.budgetFailure round
         (powerCellStep c w i productionPowerTable pure).cursor.pi ≤

@@ -317,6 +317,7 @@ theorem productionInitState_markInv
     window_eq := productionInitState_window
     viol_le := ?_
     vmark_le := ?_
+    vmark_le_viol := ?_
     last_failure_le := ?_ }
   · intro pi hpi
     simpa [Nat.add_comm] using productionInitState_table pi hpi
@@ -325,6 +326,11 @@ theorem productionInitState_markInv
     exact Nat.zero_le _
   · rw [productionInitState_regs_zero rVMark
       (by decide) (by decide) (by decide)]
+    exact Nat.zero_le _
+  · rw [productionInitState_regs_zero rVMark
+      (by decide) (by decide) (by decide),
+      productionInitState_regs_zero rViol
+        (by decide) (by decide) (by decide)]
     exact Nat.zero_le _
   · omega
 

@@ -2726,6 +2726,8 @@ theorem Cfg.body_mark_counter_bounds
     let out := arun k s c.body
     out.regs rViol ≤ out.regs rR ∧
       out.regs rVMark ≤ out.regs rR ∧
+      out.regs rViol = s.regs rViol +
+        c.budgetFailure (s.regs rR) (out.regs rPi) ∧
       out.regs rVMark = s.regs rVMark +
         c.budgetFailure (s.regs rR) (out.regs rPi) := by
   let phased := arun k s (lift c.markPhaseBody)
@@ -2800,13 +2802,15 @@ theorem Cfg.body_mark_counter_bounds
   have hpos := c.body_mark_position k s hround hLPos hperiodM hwM
   dsimp only at hpos
   rw [hbodyRun]
-  refine ⟨?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_⟩
   · rw [htViol, hclass.1]
     rw [hbodyRun] at hpos
     omega
   · rw [htVMark, hclass.2]
     rw [hbodyRun] at hpos
     omega
+  · rw [htViol, hclass.1, haViolEq, hmViol, htPi, hcPi, haPi]
+    simp only [failure, hmR]
   · rw [htVMark, hclass.2, haVMarkEq, hmVMark, htPi, hcPi, haPi]
     simp only [failure, hmR]
 
