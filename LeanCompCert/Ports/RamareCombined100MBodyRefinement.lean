@@ -42,6 +42,102 @@ theorem body_eq_mark_class_tail_arithmetic (c : LambdaPsiSweep.Cfg) :
     ShapeSieve.Cfg.body, LambdaPsiSweep.arithmeticBody,
     List.append_assoc]
 
+/-- Exact round/window effect of the six-instruction tail, including the
+period boundary.  The boundary branch resets the round and advances the
+window by one segment; every other branch increments only the round. -/
+theorem tailBody_position_run
+    (shape : ShapeSieve.Cfg) (k : Nat) (s : AState) (r w : Nat)
+    (hR : s.regs ShapeSieve.rR = r)
+    (hW : s.regs ShapeSieve.rW = w)
+    (hnext : r + 1 ≤ shape.period)
+    (hperiodM : shape.period < M)
+    (hwindowM : w + shape.segLen < M) :
+    let out := arun k s shape.tailBody
+    out.regs ShapeSieve.rR =
+        (if r + 1 = shape.period then 0 else r + 1) ∧
+      out.regs ShapeSieve.rW =
+        (if r + 1 = shape.period then w + shape.segLen else w) := by
+  have hrM : r + 1 < M := Nat.lt_of_le_of_lt hnext hperiodM
+  have hwM : w < M := Nat.lt_of_le_of_lt (Nat.le_add_right w shape.segLen)
+    hwindowM
+  have hsegM : shape.segLen < M :=
+    Nat.lt_of_le_of_lt (Nat.le_add_left shape.segLen w) hwindowM
+  have hrMod : (r + 1) % 18446744073709551616 = r + 1 :=
+    Nat.mod_eq_of_lt (by simpa [M] using hrM)
+  have hperiodMod : shape.period % 18446744073709551616 = shape.period :=
+    Nat.mod_eq_of_lt (by simpa [M] using hperiodM)
+  have hwMod : w % 18446744073709551616 = w :=
+    Nat.mod_eq_of_lt (by simpa [M] using hwM)
+  have hsegMod : shape.segLen % 18446744073709551616 = shape.segLen :=
+    Nat.mod_eq_of_lt (by simpa [M] using hsegM)
+  have hwindowMod : (w + shape.segLen) % 18446744073709551616 =
+      w + shape.segLen :=
+    Nat.mod_eq_of_lt (by simpa [M] using hwindowM)
+  change s.regs 5 = r at hR
+  change s.regs 6 = w at hW
+  by_cases hb : r + 1 = shape.period
+  · simp [ShapeSieve.Cfg.tailBody, arun,
+      LeanCompCert.Verified.ArrayFoldBridge.astep,
+      LeanCompCert.Verified.ArrayState.AState.writeReg,
+      LeanCompCert.Verified.InstrBlock.sdest,
+      LeanCompCert.Verified.InstrBlock.sval,
+      LeanCompCert.Verified.Reflect.denoteOperand,
+      LeanCompCert.Verified.Reflect.denoteOp,
+      hR, hW, ShapeSieve.rR, ShapeSieve.rW, hperiodMod,
+      hsegMod, hwindowMod, hb, M]
+  · simp [ShapeSieve.Cfg.tailBody, arun,
+      LeanCompCert.Verified.ArrayFoldBridge.astep,
+      LeanCompCert.Verified.ArrayState.AState.writeReg,
+      LeanCompCert.Verified.InstrBlock.sdest,
+      LeanCompCert.Verified.InstrBlock.sval,
+      LeanCompCert.Verified.Reflect.denoteOperand,
+      LeanCompCert.Verified.Reflect.denoteOp,
+      hR, hW, ShapeSieve.rR, ShapeSieve.rW, hrMod, hperiodMod,
+      hwMod, hsegMod, hb, M]
+
+/-- The literal complete lambda/psi body has the same exact position effect
+as its scalar tail.  Marking, classification, and candidate arithmetic are
+all framed without inspecting a specialized production table. -/
+theorem body_position_run
+    (c : LambdaPsiSweep.Cfg) (k : Nat) (s : AState) (r w : Nat)
+    (hR : s.regs ShapeSieve.rR = r)
+    (hW : s.regs ShapeSieve.rW = w)
+    (hnext : r + 1 ≤ c.shape.period)
+    (hperiodM : c.shape.period < M)
+    (hwindowM : w + c.shape.segLen < M) :
+    let out := arun k s (LambdaPsiSweep.body c)
+    out.regs ShapeSieve.rR =
+        (if r + 1 = c.shape.period then 0 else r + 1) ∧
+      out.regs ShapeSieve.rW =
+        (if r + 1 = c.shape.period then w + c.shape.segLen else w) := by
+  let marked := arun k s c.shape.markBody
+  let classified := arun k marked c.shape.classBody
+  let tailed := arun k classified c.shape.tailBody
+  let out := arun k tailed (LambdaPsiSweep.arithmeticBody c)
+  have hmark := markBody_position_zero_frame c.shape k s
+  dsimp only at hmark
+  have hcR : classified.regs ShapeSieve.rR = r :=
+    (arun_frame k ShapeSieve.rR c.shape.classBody (by rfl) marked).trans
+      (hmark.1.trans hR)
+  have hcW : classified.regs ShapeSieve.rW = w :=
+    (arun_frame k ShapeSieve.rW c.shape.classBody (by rfl) marked).trans
+      (hmark.2.1.trans hW)
+  have htail := tailBody_position_run c.shape k classified r w
+    hcR hcW hnext hperiodM hwindowM
+  dsimp only at htail
+  have houtR : out.regs ShapeSieve.rR = tailed.regs ShapeSieve.rR :=
+    arun_frame k ShapeSieve.rR (LambdaPsiSweep.arithmeticBody c)
+      (by rfl) tailed
+  have houtW : out.regs ShapeSieve.rW = tailed.regs ShapeSieve.rW :=
+    arun_frame k ShapeSieve.rW (LambdaPsiSweep.arithmeticBody c)
+      (by rfl) tailed
+  have hbody : arun k s (LambdaPsiSweep.body c) = out := by
+    rw [body_eq_mark_class_tail_arithmetic c]
+    simp only [out, tailed, classified, marked, arun_append]
+  dsimp only
+  rw [hbody, houtR, houtW]
+  exact htail
+
 set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 30000 in
 /-- One complete emitted classification-phase body has the exact source
