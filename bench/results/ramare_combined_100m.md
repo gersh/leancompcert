@@ -223,7 +223,11 @@ whole-loop refinement.  `lowerEndpointBody_run` and
 into one source-shaped `candidateArithmetic` transition.  It proves all four
 output components and the complete array frame under explicit word,
 initialized-table, no-wrap, and quotient-transition hypotheses; no emitted
-arithmetic is left opaque inside the candidate suffix.
+arithmetic is left opaque inside the candidate suffix.  `arithmeticBody_run`
+now composes this theorem with the complete 26-instruction log suffix.  It
+derives the selector's old-endpoint subtraction guards from the proved log
+update and returns both carried logs, the four candidate projection fields,
+and the complete array frame in one theorem.
 
 The production artifact used the exact `[10001, 100000000]` configuration,
 the certified prefix-through-10 state, and denominator `100000001`.  It
@@ -261,17 +265,17 @@ control binary  3a5f3bbd1d035556861e5631004d02b2f41532d9d3def0b13813c525f4633815
 All phases were run without swap.  Emission used `MemoryHigh=9G` and
 `MemoryMax=10G`, CompCert used `4G`/`5G`, and execution used `768M`/`1G`.
 The source file containing the embedded-block, sum-stage, lambda-selection,
-copy, commit, endpoint-shell, and whole-candidate semantics compiled from
-source in **43.06 wall-seconds** with **3,095,868 KiB peak RSS**,
-serialized under a **22,528,000 KiB virtual-memory hard cap** and with zero
+copy, commit, endpoint-shell, whole-candidate, and composed-log semantics
+compiled from source in **40.30 wall-seconds** with **3,099,260 KiB peak
+RSS**, serialized under a **20/22 GiB physical-memory cgroup**, with zero
 swap.
 
 This completes the production runtime composition and the exact
 whole-candidate semantics of the lambda selector, quotient sums, both quotient
 sub-blocks, and their endpoint commits.  It does not yet retire the closed
 carrier: the remaining proof obligation is the whole-loop number-theoretic
-refinement from the seven sieve planes and log cells to the unchanged source
-fold, including discharge of the candidate theorem's explicit invariants.
+refinement from the seven sieve planes to the unchanged source fold, including
+discharge of the composed theorem's explicit word/table invariants.
 
 ## Build-memory measurements
 

@@ -962,6 +962,8 @@ theorem candidateBody_run (k : Nat) (s : AState)
         s.regs rLogL + s.regs 11 * incLWord (s.regs 132) ∧
       out.regs rLogU =
         s.regs rLogU + s.regs 11 * incUWord (s.regs 132) ∧
+      out.regs rIL = incLWord (s.regs 132) ∧
+      out.regs rIU = incUWord (s.regs 132) ∧
       out.regs 132 = s.regs 132 ∧ out.arr = s.arr := by
   let l := arun k s (lift lowerScalarBody)
   let u := arun k l (lift upperScalarBody)
@@ -993,15 +995,22 @@ theorem candidateBody_run (k : Nat) (s : AState)
   change out.regs rLogL = u.regs rLogL + u.regs 11 * u.regs rIL ∧
     out.regs rLogU = u.regs rLogU + u.regs 11 * u.regs rIU ∧
     out.regs 132 = u.regs 132 ∧ out.arr = u.arr at hc
+  have houtIL : out.regs rIL = u.regs rIL :=
+    scalarBody_frame k rIL commitScalarBody (by decide) u
+  have houtIU : out.regs rIU = u.regs rIU :=
+    scalarBody_frame k rIU commitScalarBody (by decide) u
   have hout :
       out.regs rLogL =
           s.regs rLogL + s.regs 11 * incLWord (s.regs 132) ∧
         out.regs rLogU =
           s.regs rLogU + s.regs 11 * incUWord (s.regs 132) ∧
+        out.regs rIL = incLWord (s.regs 132) ∧
+        out.regs rIU = incUWord (s.regs 132) ∧
         out.regs 132 = s.regs 132 ∧ out.arr = s.arr := by
     rw [hc.1, huLogL, huGate, huIL, hc.2.1, huLogU, huGate, huIU,
-      hc.2.2.1, hu.2.1, hl.2.1, hc.2.2.2, hu.2.2, hl.2.2]
-    exact ⟨rfl, rfl, rfl, rfl⟩
+      houtIL, huIL, houtIU, huIU, hc.2.2.1, hu.2.1, hl.2.1,
+      hc.2.2.2, hu.2.2, hl.2.2]
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   simpa only [candidateBody, arun_append] using hout
 
 def init (c : ShapeCfg) (s : Seed) : List AInstr :=
