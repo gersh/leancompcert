@@ -180,7 +180,16 @@ The surrounding seven-instruction quotient-sum stage is now also isolated and
 proved exact by `sumBody_run`: under explicit no-wrap and positive-denominator
 hypotheses it returns the model's floor and ceiling updates, using the proved
 `ceilDiv_eq_div_add_modBit` identity.  `sumBody_inputs` proves the candidate,
-both lambda endpoints, and the full array are unchanged.
+both lambda endpoints, and the full array are unchanged.  The 30-instruction
+selection prefix is isolated as `selectionBody`; `selectionBody_run` proves
+that its emitted instructions recover both old log endpoints, perform both
+clamped table reads, choose the exact prime-power/table lambda endpoints, and
+preserve the complete array.  The endpoint copies and both quotient commits
+are likewise named blocks with exact run theorems
+`copyLowerEndpointBody_run`/`copyUpperEndpointBody_run` and
+`commitLowerEndpointBody_run`/`commitUpperEndpointBody_run`.  Their explicit
+word and remainder guards are the invariants required by the future
+whole-loop refinement.
 
 The production artifact used the exact `[10001, 100000000]` configuration,
 the certified prefix-through-10 state, and denominator `100000001`.  It
@@ -217,16 +226,18 @@ control binary  3a5f3bbd1d035556861e5631004d02b2f41532d9d3def0b13813c525f4633815
 
 All phases were run without swap.  Emission used `MemoryHigh=9G` and
 `MemoryMax=10G`, CompCert used `4G`/`5G`, and execution used `768M`/`1G`.
-The source file containing the embedded-block and sum-stage semantics compiled
-from source in **40.10 wall-seconds** with **3,035,736 KiB peak RSS**,
+The source file containing the embedded-block, sum-stage, lambda-selection,
+copy, and commit semantics compiled from source in **42.75 wall-seconds** with
+**3,065,324 KiB peak RSS**,
 serialized under a **22,528,000 KiB virtual-memory hard cap** and with zero
 swap.
 
-This completes the production runtime composition and the exact semantics of
-both quotient sub-blocks and the intervening quotient sums.  It does not yet
-retire the closed carrier: the remaining proof obligation is the lambda
-selection/commit shell and the whole-program number-theoretic refinement from
-the seven sieve planes and log cells to the unchanged source fold.
+This completes the production runtime composition and the exact local
+semantics of the lambda selector, quotient sums, both quotient sub-blocks, and
+their endpoint commits.  It does not yet retire the closed carrier: the
+remaining proof obligation is their whole-candidate composition and the
+whole-program number-theoretic refinement from the seven sieve planes and log
+cells to the unchanged source fold.
 
 ## Build-memory measurements
 
