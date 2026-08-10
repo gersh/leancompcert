@@ -601,3 +601,31 @@ source check of the certificate took 0.23 s, peaked at 528,460 KiB RSS, and
 used no swap under the same cap.  The LeanCompCert umbrella build, including
 this certificate and the Ramaré maximum-headroom slice, passed serialized
 under a 10 GiB hard cap.
+
+## 9. Literal outer-body accumulation proof
+
+`LeanCompCert/Ports/CDEMAbelOuter.lean` now composes the actual emitted body,
+not an isolated model of the accumulator.  In an accumulation round it proves
+that the selector enables the accumulator, the inactive sieve and marking
+stages can write only to the scratch sink, the marking stage preserves the
+live cell and violation counters, and the middle accumulator step satisfies
+its arithmetic contract before the tail executes.  The resulting theorem is
+`body_middle_live_run`; its array contract deliberately says that the scratch
+sink is cleared while every live cell is preserved.
+
+A fresh `#print axioms` reports `[propext, Classical.choice, Quot.sound]` for
+`body_middle_live_run` and `[propext, Quot.sound]` for its prefix-latch lemma.
+There is no computation oracle or project trust declaration in either proof.
+
+The proof is intentionally isolated behind local heartbeat and recursion-depth
+options so importing the module does not relax limits elsewhere.  With one
+Lean worker, no swap, `MemoryHigh=1536M`, and a hard `MemoryMax=2G`:
+
+| check | elapsed | peak RSS | swap |
+| --- | ---: | ---: | ---: |
+| fresh source compilation | 36.18 s | 678,552 KiB | 0 |
+| `lake build LeanCompCert.Ports.CDEMAbelOuter` | 36.87 s | 689,964 KiB | 0 |
+
+This closes the literal middle-round composition.  Literal first and final
+rounds and the finite outer iterator remain to be composed before the retained
+production trace has a complete denotation proof.
