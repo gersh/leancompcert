@@ -1063,3 +1063,26 @@ The readiness capstones print only `[propext, Quot.sound]` (the finite
 three-code range lemma needs only `propext`). Remaining marking work is the
 finite resident-table construction, the `markBudget` terminal bound, and the
 identification of the completed executable plane with `Ref.deltaF`.
+
+`CDEMAbelSieve.lean` starts the resident-table construction at the actual
+emitted store.  The final-prime suffix is decomposed into six scalar/mux
+address blocks, the single array store, and four scalar cursor blocks.
+`sieveBody_last_computed_store` proves that a complete literal active sieve
+body commits its computed code at `muBase+n`, preserves every other cell, and
+advances `(primeIndex,n)` to `(0,n+1)`.  The first monolithic normalization
+was stopped after reclaim pressure approached the 1.5 GiB hard cap; the
+factored source stays below 168 MB.
+
+These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh active sieve-store source | 0.66 s | 602,292 KiB | 167,276,544 B | 0 |
+| active sieve-store module build | 0.74 s | 577,328 KiB | 162,377,728 B | 0 |
+| fresh three-capstone axiom print | 0.16 s | 529,888 KiB | 94,445,568 B | 0 |
+| cached umbrella consumer build | 0.94 s | 1,730,656 KiB | 218,214,400 B | 0 |
+
+All three capstones print only `[propext, Quot.sound]`. The remaining table
+work is to refine the 29-instruction trial/code prefix to a pure finite row
+model, telescope the prime and candidate cursors, and prove that the resulting
+resident code equals `Ref.muCode`.
