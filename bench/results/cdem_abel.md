@@ -723,3 +723,8 @@ Fresh axiom prints use only `[propext]` or `[propext, Quot.sound]`. What remains
 is to discharge each per-step contract from the production arithmetic
 invariant, selecting continue for all nonterminal iterations and wrap at the
 end of a full window.
+
+After adding the readiness module to the umbrella import, a serialized
+`lake build LeanCompCert` completed in 0.63 s at 1,730,380 KiB peak RSS with
+zero swap under the same 2 GiB hard cap. The high cached-import footprint is
+below the cap but confirms that umbrella checks must remain serialized.
