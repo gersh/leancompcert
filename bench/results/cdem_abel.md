@@ -181,16 +181,19 @@ literal selector/load/clear/scalar sequence reads and re-clears only the zero
 sink cell, leaves the array and carried `F`, `k`, square-root, increment,
 violation, bracket, cell, and round state unchanged, computes the exact
 ceiling/floor reciprocals of `k`, and sets both `U` product gates to zero.
-This is the complete head contract for the 60 interior production rounds;
-the first-round window-cell transition and final-round selector remain to be
-composed separately.  The proof is split into pre-load, scalar front, latch,
-and reciprocal stages.  Its fresh source check under the one-thread 2 GiB
-zero-swap cap took `7.25 s` and peaked at `625604 KiB`; its module build took
-`7.16 s` and peaked at `636888 KiB`.  Fresh axiom prints use only `propext`
-and `Quot.sound` (the structural and scalar-stage theorems use only
-`propext`).
+This is the complete head contract for the 60 interior production rounds.
+`accHead_last_run` now supplies the corresponding final-round contract: the
+last selector is one, the bisection selector remains one, the sink clear is
+again inert, the carried state and bracket are preserved, and both `U`
+product gates stay zero.  Thus only the first-round window-cell transition
+remains.  The proof is split into pre-load, scalar front, latch, and reciprocal
+stages.  After the final-round addition, a fresh source check under the
+one-thread 2 GiB zero-swap cap took `7.46 s` and peaked at `630436 KiB`; its
+module build took `7.94 s` and peaked at `656320 KiB`.  Fresh axiom prints use
+only `propext` and `Quot.sound` (the structural and scalar-stage theorems use
+only `propext`).
 
-Still not proved: the first/final `accHead` transitions and their composition
+Still not proved: the first `accHead` transition and its composition
 with the bisection schedule, then the μ-table build, window marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement

@@ -105,6 +105,22 @@ theorem headPre_middle_run (c : Cfg) (idx : Nat) (r : RegState)
     hkr0', hkrLast', hgate, hzero', h0M, h1M,
     Nat.mod_eq_of_lt hbsM, Nat.mod_eq_of_lt hsink]
 
+theorem headPre_last_run (c : Cfg) (idx : Nat) (r : RegState)
+    (hkrLast : r rKr = c.bsSteps) (hbsPos : 0 < c.bsSteps)
+    (hgate : r 43 = 1) (hzero : r rZero = 0) (hbsM : c.bsSteps < M)
+    (hsink : c.sink < M) :
+    let out := srun idx r (headPreS c)
+    out 140 = 0 ∧ out 141 = 1 ∧ out 142 = 1 ∧ out 144 = c.sink := by
+  have h0M : (0 : Nat) % M = 0 := by decide
+  have h1M : (1 : Nat) % M = 1 := by decide
+  have hkrLast' : r 14 = c.bsSteps := by simpa [rKr] using hkrLast
+  have hbs0 : c.bsSteps ≠ 0 := Nat.ne_of_gt hbsPos
+  have hzero' : r 1 = 0 := by simpa [rZero] using hzero
+  simp [headPreS, Section413G1Denote.muxS, srun, sdest, sval,
+    denoteOperand, denoteOp, RegState.set, rKr, rC, rZero,
+    hkrLast', hbs0, hgate, hzero', h0M, h1M,
+    Nat.mod_eq_of_lt hbsM, Nat.mod_eq_of_lt hsink]
+
 def headFrontS (_c : Cfg) : List Instr :=
   [ .binop 149 .mul (.reg 148) (.reg 140)
   , .binop rF .add (.reg rF) (.reg 149)
@@ -464,6 +480,163 @@ theorem accHead_middle_run (c : Cfg) (idx : Nat) (st : AState)
     rw [hPCeil, hloadedK]
   · change post 168 = c.wScale / st.regs rK
     rw [hPFloor, hloadedK]
+  · change post rSl = st.regs rSl
+    rw [postKeep rSl (by rfl),
+      loadedToBefore rSl (by simp [rSl]) (by rfl)]
+  · change post rSh = st.regs rSh
+    rw [postKeep rSh (by rfl),
+      loadedToBefore rSh (by simp [rSh]) (by rfl)]
+  · change post rC = st.regs rC
+    rw [postKeep rC (by rfl),
+      loadedToBefore rC (by simp [rC]) (by rfl)]
+  · change post rKr = st.regs rKr
+    rw [postKeep rKr (by rfl),
+      loadedToBefore rKr (by simp [rKr]) (by rfl)]
+
+structure LastHeadSpec (before after : AState) : Prop where
+  arr : after.arr = before.arr
+  round0 : after.regs 140 = 0
+  last : after.regs 141 = 1
+  bisect : after.regs 142 = 1
+  f : after.regs rF = before.regs rF
+  k : after.regs rK = before.regs rK
+  t : after.regs rT = before.regs rT
+  t2 : after.regs rT2 = before.regs rT2
+  viol : after.regs rViol = before.regs rViol
+  vSqrt : after.regs rVSqrt = before.regs rVSqrt
+  dPos : after.regs rDp = before.regs rDp
+  dNeg : after.regs rDn = before.regs rDn
+  e : after.regs rE = before.regs rE
+  tv : after.regs rTv = before.regs rTv
+  posGate : after.regs 169 = 0
+  negGate : after.regs 170 = 0
+  low : after.regs rSl = before.regs rSl
+  high : after.regs rSh = before.regs rSh
+  cell : after.regs rC = before.regs rC
+  round : after.regs rKr = before.regs rKr
+
+set_option maxRecDepth 2048 in
+theorem accHead_last_run (c : Cfg) (idx : Nat) (st : AState)
+    (hkrLast : st.regs rKr = c.bsSteps) (hbsPos : 0 < c.bsSteps)
+    (hgate : st.regs 43 = 1) (hzero : st.regs rZero = 0)
+    (hbsM : c.bsSteps < M) (hsinkM : c.sink < M)
+    (hsink0 : st.arr c.sink = 0) (hword : ∀ j, st.regs j < M)
+    (harrword : ∀ j, st.arr j < M) (hk : 0 < st.regs rK)
+    (hWM : c.wScale < M) (hsum : st.regs rDp + st.regs rDn < M)
+    (hceilFit : c.wScale - 1 + st.regs rK < M) :
+    LastHeadSpec st (arun idx st c.accHead) := by
+  let pre := srun idx st.regs (headPreS c)
+  let loaded := RegState.set pre 148 (st.arr (pre 144))
+  let cleared := fun j => if j = loaded 144 then loaded rZero else st.arr j
+  let post := srun idx loaded (headPostS c)
+  let out : AState := ⟨post, cleared⟩
+  have ha := accHead_arun c idx st
+  dsimp only at ha
+  change arun idx st c.accHead = out at ha
+  have hp := headPre_last_run c idx st.regs hkrLast hbsPos hgate hzero
+    hbsM hsinkM
+  dsimp only at hp
+  change pre 140 = 0 ∧ pre 141 = 1 ∧ pre 142 = 1 ∧
+    pre 144 = c.sink at hp
+  have preKeep (j : Nat) (hw : RegFrame.writes j (headPreS c) = false) :
+      pre j = st.regs j :=
+    RegFrame.srun_frame idx j (headPreS c) hw st.regs
+  have hpreword : ∀ j, pre j < M := srun_lt_of_lt idx _ st.regs hword
+  have loadedKeep (j : Nat) (hj : j ≠ 148) : loaded j = pre j := by
+    simp [loaded, RegState.set, hj]
+  have hloaded144 : loaded 144 = c.sink := by
+    rw [loadedKeep 144 (by decide), hp.2.2.2]
+  have hloadedZero : loaded rZero = 0 := by
+    rw [loadedKeep rZero (by simp [rZero]), preKeep rZero (by rfl), hzero]
+  have hloadedword : ∀ j, loaded j < M := by
+    intro j
+    by_cases hj : j = 148
+    · subst j
+      simp [loaded, RegState.set]
+      exact harrword (pre 144)
+    · rw [loadedKeep j hj]
+      exact hpreword j
+  have hcleared : cleared = st.arr := by
+    funext j
+    simp only [cleared, hloaded144, hloadedZero]
+    by_cases hj : j = c.sink
+    · rw [if_pos hj, hj, hsink0]
+    · rw [if_neg hj]
+  have loadedToBefore (j : Nat) (hj148 : j ≠ 148)
+      (hw : RegFrame.writes j (headPreS c) = false) :
+      loaded j = st.regs j := by rw [loadedKeep j hj148, preKeep j hw]
+  have hloaded140 : loaded 140 = 0 := by
+    rw [loadedKeep 140 (by decide), hp.1]
+  have hloadedK : loaded rK = st.regs rK :=
+    loadedToBefore rK (by simp [rK]) (by rfl)
+  have hloadedDp : loaded rDp = st.regs rDp :=
+    loadedToBefore rDp (by simp [rDp]) (by rfl)
+  have hloadedDn : loaded rDn = st.regs rDn :=
+    loadedToBefore rDn (by simp [rDn]) (by rfl)
+  have hpost := headPost_middle_run c idx loaded hloaded140
+    (by rw [hloadedK]; exact hk) hloadedword hWM
+    (by rw [hloadedDp, hloadedDn]; exact hsum)
+    (by rw [hloadedK]; exact hceilFit)
+  dsimp only at hpost
+  change post rF = loaded rF ∧ post rK = loaded rK ∧
+    post rT = loaded rT ∧ post rT2 = loaded rT2 ∧
+    post rViol = loaded rViol ∧ post rVSqrt = loaded rVSqrt ∧
+    post rDp = loaded rDp ∧ post rDn = loaded rDn ∧
+    post rE = loaded rE ∧ post rTv = loaded rTv ∧
+    post 165 = loaded rDp + loaded rDn ∧
+    post 167 = (c.wScale - 1 + loaded rK) / loaded rK ∧
+    post 168 = c.wScale / loaded rK ∧ post 169 = 0 ∧
+    post 170 = 0 ∧ post 140 = 0 at hpost
+  rcases hpost with ⟨hPF, hPK, hPT, hPT2, hPV, hPVS, hPDp, hPDn,
+    hPE, hPTv, _, _, _, hPPos, hPNeg, hP140⟩
+  have postKeep (j : Nat) (hw : RegFrame.writes j (headPostS c) = false) :
+      post j = loaded j := RegFrame.srun_frame idx j (headPostS c) hw loaded
+  rw [ha]
+  refine
+    { arr := hcleared
+      round0 := hP140
+      last := ?_
+      bisect := ?_
+      f := ?_
+      k := ?_
+      t := ?_
+      t2 := ?_
+      viol := ?_
+      vSqrt := ?_
+      dPos := ?_
+      dNeg := ?_
+      e := ?_
+      tv := ?_
+      posGate := hPPos
+      negGate := hPNeg
+      low := ?_
+      high := ?_
+      cell := ?_
+      round := ?_ }
+  · change post 141 = 1
+    rw [postKeep 141 (by rfl), loadedKeep 141 (by decide), hp.2.1]
+  · change post 142 = 1
+    rw [postKeep 142 (by rfl), loadedKeep 142 (by decide), hp.2.2.1]
+  · change post rF = st.regs rF
+    rw [hPF, loadedToBefore rF (by simp [rF]) (by rfl)]
+  · change post rK = st.regs rK
+    rw [hPK, hloadedK]
+  · change post rT = st.regs rT
+    rw [hPT, loadedToBefore rT (by simp [rT]) (by rfl)]
+  · change post rT2 = st.regs rT2
+    rw [hPT2, loadedToBefore rT2 (by simp [rT2]) (by rfl)]
+  · change post rViol = st.regs rViol
+    rw [hPV, loadedToBefore rViol (by simp [rViol]) (by rfl)]
+  · change post rVSqrt = st.regs rVSqrt
+    rw [hPVS, loadedToBefore rVSqrt (by simp [rVSqrt]) (by rfl)]
+  · change post rDp = st.regs rDp
+    rw [hPDp, hloadedDp]
+  · change post rDn = st.regs rDn
+    rw [hPDn, hloadedDn]
+  · change post rE = st.regs rE
+    rw [hPE, loadedToBefore rE (by simp [rE]) (by rfl)]
+  · change post rTv = st.regs rTv
+    rw [hPTv, loadedToBefore rTv (by simp [rTv]) (by rfl)]
   · change post rSl = st.regs rSl
     rw [postKeep rSl (by rfl),
       loadedToBefore rSl (by simp [rSl]) (by rfl)]
