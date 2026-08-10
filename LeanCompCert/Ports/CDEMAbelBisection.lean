@@ -326,6 +326,8 @@ theorem initial_budget_exact (w k : Nat) (hw : 0 < w) (hk : 0 < k) :
 open LeanCompCert
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.InstrBlock
+open LeanCompCert.Verified.ArrayState
+open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Ports.CDEMAbelScan
 open LeanCompCert.Ports.CDEMAbelPrimitives
@@ -595,6 +597,19 @@ theorem okClassify_gate0_counters (idx : Nat) (r : RegState)
   simp [okClassifyS, srun, sdest, sval, denoteOperand, denoteOp,
     RegState.set, rViol, rVDiv, hgate, h0M, hviolM, hdivM]
 
+theorem okClassify_safe_counters (idx : Nat) (r : RegState) (a : Nat)
+    (ha : r 101 = a) (haLe : a ≤ 2147483648)
+    (hword : ∀ j, r j < M) :
+    let out := srun idx r okClassifyS
+    out rViol = r rViol ∧ out rVDiv = r rVDiv := by
+  have h0M : (0 : Nat) % M = 0 := by decide
+  have hcut : 2147483648 % M = 2147483648 := by decide
+  have hnot : ¬2147483648 < a := by omega
+  have hviolM : r 22 % M = r 22 := Nat.mod_eq_of_lt (hword 22)
+  have hdivM : r 245 % M = r 245 := Nat.mod_eq_of_lt (hword 245)
+  simp [okClassifyS, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, rViol, rVDiv, ha, hcut, hnot, h0M, hviolM, hdivM]
+
 theorem productionOkS_gate0_counters (c : CDEMAbelScan.Cfg)
     (idx : Nat) (r : RegState) (hgate : r 142 = 0)
     (hword : ∀ j, r j < M) :
@@ -616,6 +631,40 @@ theorem productionOkS_gate0_counters (c : CDEMAbelScan.Cfg)
     exact RegFrame.srun_frame idx rViol (okAfterClassifyS c) (by rfl) cl
   have houtDiv : out rVDiv = cl rVDiv := by
     exact RegFrame.srun_frame idx rVDiv (okAfterClassifyS c) (by rfl) cl
+  have hall : out rViol = r rViol ∧ out rVDiv = r rVDiv := by
+    constructor
+    · rw [houtViol, hc.1, qFrame rViol (by simp [rViol])
+        (by simp [rViol]) (by simp [rViol])]
+    · rw [houtDiv, hc.2, qFrame rVDiv (by simp [rVDiv])
+        (by simp [rVDiv]) (by simp [rVDiv])]
+  simpa [productionOkS_decomp, srun_append, q, cl, out] using hall
+
+theorem productionOkS_safe_counters (c : CDEMAbelScan.Cfg)
+    (idx : Nat) (r : RegState) (s : Nat) (hs : r 194 = s)
+    (hspos : 0 < s) (hW : c.wScale < M)
+    (haLe : c.wScale / s ≤ 2147483648)
+    (hword : ∀ j, r j < M) :
+    let out := srun idx r (okS c 194 142 197)
+    out rViol = r rViol ∧ out rVDiv = r rVDiv := by
+  let q := srun idx r (okQuotS c 194)
+  let cl := srun idx q okClassifyS
+  let out := srun idx cl (okAfterClassifyS c)
+  have hsM : s < M := by rw [← hs]; exact hword 194
+  have hq := okQuot_run c idx r 194 (by decide)
+    (by simpa [hs] using hspos) (by simpa [hs] using hsM) hW
+  dsimp only at hq
+  have hq101 : q 101 = c.wScale / s := by simpa [q, hs] using hq.2.1
+  have hqword : ∀ j, q j < M := srun_lt_of_lt idx _ r hword
+  have hc := okClassify_safe_counters idx q (c.wScale / s) hq101 haLe hqword
+  dsimp only at hc
+  change cl rViol = q rViol ∧ cl rVDiv = q rVDiv at hc
+  have qFrame (j : Nat) (h100 : j ≠ 100) (h101 : j ≠ 101)
+      (h102 : j ≠ 102) : q j = r j := by
+    simpa [q] using okQuot_frame c idx r 194 j h100 h101 h102
+  have houtViol : out rViol = cl rViol :=
+    RegFrame.srun_frame idx rViol (okAfterClassifyS c) (by rfl) cl
+  have houtDiv : out rVDiv = cl rVDiv :=
+    RegFrame.srun_frame idx rVDiv (okAfterClassifyS c) (by rfl) cl
   have hall : out rViol = r rViol ∧ out rVDiv = r rVDiv := by
     constructor
     · rw [houtViol, hc.1, qFrame rViol (by simp [rViol])
@@ -777,6 +826,37 @@ structure RoundFit (c : Cfg) (k : Nat) (p : Bracket) : Prop where
   two_ab_word : 2 * (c.wScale / midpoint p) *
     (c.wScale % midpoint p) < M
   midpoint_succ_word : midpoint p + 1 < M
+
+theorem round_safe_counters (c : Cfg) (idx : Nat) (r : RegState)
+    (lo hi : Nat) (hword : ∀ j, r j < M)
+    (hlo : r rSl = lo) (hhi : r rSh = hi)
+    (hgate : r 142 = 1) (hlohi : lo ≤ hi) (hhiM : hi < M)
+    (hmidpos : 0 < midpoint ⟨lo, hi⟩) (hW : c.wScale < M)
+    (haLe : c.wScale / midpoint ⟨lo, hi⟩ ≤ 2147483648) :
+    let out := srun idx r (roundS c)
+    out rViol = r rViol ∧ out rVDiv = r rVDiv := by
+  let p := srun idx r probeS
+  let q := srun idx p (okS c 194 142 197)
+  let out := srun idx q updateS
+  have hp := probe_run idx r lo hi hlo hhi hgate hlohi hhiM
+  dsimp only at hp
+  have hpword : ∀ j, p j < M := srun_lt_of_lt idx _ r hword
+  have hp194 : p 194 = midpoint ⟨lo, hi⟩ := by simpa [p] using hp.2.1
+  have hc := productionOkS_safe_counters c idx p (midpoint ⟨lo, hi⟩)
+    hp194 hmidpos hW haLe hpword
+  dsimp only at hc
+  change q rViol = p rViol ∧ q rVDiv = p rVDiv at hc
+  have hpViol : p rViol = r rViol := probe_frame idx r rViol
+    (by simp [rViol]) (by simp [rViol]) (by simp [rViol]) (by simp [rViol])
+  have hpDiv : p rVDiv = r rVDiv := probe_frame idx r rVDiv
+    (by simp [rVDiv]) (by simp [rVDiv]) (by simp [rVDiv]) (by simp [rVDiv])
+  have houtViol : out rViol = r rViol := by
+    rw [show out rViol = q rViol from
+      RegFrame.srun_frame idx rViol updateS (by rfl) q, hc.1, hpViol]
+  have houtDiv : out rVDiv = r rVDiv := by
+    rw [show out rVDiv = q rVDiv from
+      RegFrame.srun_frame idx rVDiv updateS (by rfl) q, hc.2, hpDiv]
+  simpa [roundS, srun_append, p, q, out] using ⟨houtViol, houtDiv⟩
 
 def roundsS (c : Cfg) : Nat → List Instr
   | 0 => []
@@ -1143,6 +1223,21 @@ theorem accBisect_decomp (c : Cfg) :
     Section413G1Denote.mulWideBody_lift, CDEMAbelPrimitives.addWideBody_lift,
     lift_append]
 
+def accBisectScalarS (c : Cfg) : List Instr :=
+  openS c ++ roundS c ++ closeS
+
+attribute [irreducible] accBisectScalarS
+
+theorem accBisect_lift (c : Cfg) :
+    c.accBisect = lift (accBisectScalarS c) := by
+  rw [accBisect_decomp]
+  simp only [accBisectScalarS, lift_append]
+
+theorem accBisect_arun (c : Cfg) (idx : Nat) (st : AState) :
+    arun idx st c.accBisect =
+      ⟨srun idx st.regs (accBisectScalarS c), st.arr⟩ := by
+  rw [accBisect_lift, arun_lift]
+
 
 /-! ## Initial-bracket machine prefix -/
 
@@ -1194,6 +1289,46 @@ theorem openPre_run (c : Cfg) (idx : Nat) (r : RegState) (t : Nat)
     rfl
   · intro j h189 h190 h191
     simp [h189, h190, h191]
+
+theorem open_gate0_run (c : Cfg) (idx : Nat) (r : RegState)
+    (h140 : r 140 = 0) (hword : ∀ j, r j < M) :
+    let out := srun idx r (openS c)
+    out rSl = r rSl ∧ out rSh = r rSh ∧ out 140 = 0 := by
+  let q := srun idx r (openPreS c)
+  let q1 := srun idx q (Section413G1Denote.muxS rSl 140 190 rSl 192)
+  let out := srun idx q1 (Section413G1Denote.muxS rSh 140 191 rSh 192)
+  have hqword : ∀ j, q j < M := srun_lt_of_lt idx _ r hword
+  have qKeep (j : Nat) (hw : RegFrame.writes j (openPreS c) = false) :
+      q j = r j := RegFrame.srun_frame idx j (openPreS c) hw r
+  have hq140 : q 140 = 0 := by rw [qKeep 140 (by rfl), h140]
+  have hqLo : q rSl = r rSl := qKeep rSl (by rfl)
+  have hqHi : q rSh = r rSh := qKeep rSh (by rfl)
+  have h1 := Section413G1Denote.muxS_spec idx q rSl 140 190 rSl 192
+    (by simp [rSl]) (by decide) (by decide) (by simp [rSl])
+    (by rw [hq140]; omega) hqword
+  have hq1word : ∀ j, q1 j < M := srun_lt_of_lt idx _ q hqword
+  have q1Keep (j : Nat) (hlo : j ≠ rSl) (h192 : j ≠ 192) :
+      q1 j = q j := by
+    simpa [q1] using Section413G1Denote.muxS_frame idx q
+      rSl 140 190 rSl 192 j hlo h192
+  have hq1Lo : q1 rSl = r rSl := by simpa [q1, hq140, hqLo] using h1
+  have hq1Hi : q1 rSh = r rSh := by
+    rw [q1Keep rSh (by simp [rSl, rSh]) (by simp [rSh]), hqHi]
+  have hq1gate : q1 140 = 0 := by
+    rw [q1Keep 140 (by simp [rSl]) (by decide), hq140]
+  have h2 := Section413G1Denote.muxS_spec idx q1 rSh 140 191 rSh 192
+    (by simp [rSh]) (by decide) (by decide) (by simp [rSh])
+    (by rw [hq1gate]; omega) hq1word
+  have houtHi : out rSh = r rSh := by
+    simpa [out, hq1gate, hq1Hi] using h2
+  have houtLo : out rSl = r rSl := by
+    rw [show out rSl = q1 rSl from Section413G1Denote.muxS_frame idx q1
+      rSh 140 191 rSh 192 rSl (by simp [rSl, rSh]) (by simp [rSl]), hq1Lo]
+  have houtGate : out 140 = 0 := by
+    rw [show out 140 = q1 140 from Section413G1Denote.muxS_frame idx q1
+      rSh 140 191 rSh 192 140 (by simp [rSh]) (by decide), hq1gate]
+  simpa [openS_decomp, srun_append, q, q1, out] using
+    ⟨houtLo, houtHi, houtGate⟩
 
 theorem open_run (c : Cfg) (idx : Nat) (r : RegState) (t : Nat)
     (hrt : r rT = t) (h140 : r 140 = 1) (htpos : 0 < t)
@@ -1563,6 +1698,235 @@ theorem accBisectS_gate0_run (c : Cfg) (idx : Nat) (r : RegState)
       by rw [hc.2.2.2.1, hrdKr, hrd43],
       by rw [hc.2.2.2.2.1, hrdC]⟩
   simpa [srun_append, o, rd, out] using hall
+
+structure FirstBisectSpec (c : Cfg) (k : Nat)
+    (before after : AState) : Prop where
+  arr : after.arr = before.arr
+  low : after.regs rSl = (initial c.wScale k).lo
+  high : after.regs rSh = (initial c.wScale k).hi
+  viol : after.regs rViol = before.regs rViol
+  vDiv : after.regs rVDiv = before.regs rVDiv
+  vBisect : after.regs rVBisect = before.regs rVBisect
+  v : AddWide.wval (after.regs rVLo, after.regs rVHi) =
+    AddWide.wval (before.regs rVLo, before.regs rVHi)
+  round : after.regs rKr = before.regs rKr + before.regs 43
+  cell : after.regs rC = before.regs rC
+
+theorem accBisect_gate0_run (c : Cfg) (idx : Nat) (st : AState)
+    (k : Nat) (hT : st.regs rT = Nat.sqrt k) (h140 : st.regs 140 = 1)
+    (h142 : st.regs 142 = 0) (h141 : st.regs 141 = 0)
+    (htpos : 0 < Nat.sqrt k) (hWpos : 0 < c.wScale)
+    (hWtM : c.wScale + Nat.sqrt k < M)
+    (hkrFit : st.regs rKr + st.regs 43 < M)
+    (hword : ∀ j, st.regs j < M) :
+    FirstBisectSpec c k st (arun idx st c.accBisect) := by
+  have hs := accBisectS_gate0_run c idx st.regs k hT h140 h142 h141
+    htpos hWpos hWtM hkrFit hword
+  dsimp only at hs
+  have hs' :
+      let out := srun idx st.regs (accBisectScalarS c)
+      out rSl = (initial c.wScale k).lo ∧
+        out rSh = (initial c.wScale k).hi ∧
+        out rViol = st.regs rViol ∧ out rVDiv = st.regs rVDiv ∧
+        out rVBisect = st.regs rVBisect ∧
+        AddWide.wval (out rVLo, out rVHi) =
+          AddWide.wval (st.regs rVLo, st.regs rVHi) ∧
+        out rKr = st.regs rKr + st.regs 43 ∧ out rC = st.regs rC := by
+    simpa only [accBisectScalarS] using hs
+  dsimp only at hs'
+  rcases hs' with ⟨hsLo, hsHi, hsViol, hsDiv, hsBis, hsV, hsKr, hsC⟩
+  rw [accBisect_arun]
+  exact
+    { arr := rfl
+      low := hsLo
+      high := hsHi
+      viol := hsViol
+      vDiv := hsDiv
+      vBisect := hsBis
+      v := hsV
+      round := hsKr
+      cell := hsC }
+
+theorem accBisectS_middle_bracket_run (c : Cfg) (idx : Nat)
+    (r : RegState) (lo hi k : Nat)
+    (h140 : r 140 = 0) (h142 : r 142 = 1) (h141 : r 141 = 0)
+    (hlo : r rSl = lo) (hhi : r rSh = hi) (hk : r rK = k)
+    (hlohi : lo ≤ hi) (hhiM : hi < M) (hfit : RoundFit c k ⟨lo, hi⟩)
+    (hkrFit : r rKr + r 43 < M) (hword : ∀ j, r j < M) :
+    let out := srun idx r (openS c ++ roundS c ++ closeS)
+    out rSl = (step c.wScale k ⟨lo, hi⟩).lo ∧
+      out rSh = (step c.wScale k ⟨lo, hi⟩).hi ∧
+      out rKr = r rKr + r 43 ∧ out rC = r rC := by
+  let o := srun idx r (openS c)
+  let rd := srun idx o (roundS c)
+  let out := srun idx rd closeS
+  have ho := open_gate0_run c idx r h140 hword
+  dsimp only at ho
+  change o rSl = r rSl ∧ o rSh = r rSh ∧ o 140 = 0 at ho
+  have howord : ∀ j, o j < M := srun_lt_of_lt idx _ r hword
+  have openKeep (j : Nat) (hw : RegFrame.writes j (openS c) = false) :
+      o j = r j := RegFrame.srun_frame idx j (openS c) hw r
+  have hoLo : o rSl = lo := by rw [ho.1, hlo]
+  have hoHi : o rSh = hi := by rw [ho.2.1, hhi]
+  have hoK : o rK = k := by rw [openKeep rK (by rfl), hk]
+  have ho142 : o 142 = 1 := by rw [openKeep 142 (by rfl), h142]
+  have hr := round_run c idx o lo hi k howord hoLo hoHi hoK ho142
+    hlohi hhiM hfit.midpoint_pos hfit.wScale_word hfit.k_word
+    hfit.a_sq_word hfit.two_a_word hfit.residual_word hfit.ab_word
+    hfit.two_ab_word hfit.midpoint_succ_word
+  dsimp only at hr
+  change rd rSl = (step c.wScale k ⟨lo, hi⟩).lo ∧
+    rd rSh = (step c.wScale k ⟨lo, hi⟩).hi at hr
+  have hrdword : ∀ j, rd j < M := srun_lt_of_lt idx _ o howord
+  have roundKeep (j : Nat) (hw : RegFrame.writes j (roundS c) = false) :
+      rd j = o j := RegFrame.srun_frame idx j (roundS c) hw o
+  have hrd141 : rd 141 = 0 := by
+    rw [roundKeep 141 (by rfl), openKeep 141 (by rfl), h141]
+  have hrdKr : rd rKr = r rKr := by
+    rw [roundKeep rKr (by rfl), openKeep rKr (by rfl)]
+  have hrd43 : rd 43 = r 43 := by
+    rw [roundKeep 43 (by rfl), openKeep 43 (by rfl)]
+  have hc := close_gate0_run idx rd hrd141
+    (by rw [hrdKr, hrd43]; exact hkrFit) hrdword
+  dsimp only at hc
+  change out rViol = rd rViol ∧ out rVBisect = rd rVBisect ∧
+    AddWide.wval (out rVLo, out rVHi) =
+      AddWide.wval (rd rVLo, rd rVHi) ∧
+    out rKr = rd rKr + rd 43 ∧ out rC = rd rC ∧
+    out rSl = rd rSl ∧ out rSh = rd rSh at hc
+  have hrdC : rd rC = r rC := by
+    rw [roundKeep rC (by rfl), openKeep rC (by rfl)]
+  have hall : out rSl = (step c.wScale k ⟨lo, hi⟩).lo ∧
+      out rSh = (step c.wScale k ⟨lo, hi⟩).hi ∧
+      out rKr = r rKr + r 43 ∧ out rC = r rC :=
+    ⟨by rw [hc.2.2.2.2.2.1, hr.1],
+      by rw [hc.2.2.2.2.2.2, hr.2],
+      by rw [hc.2.2.2.1, hrdKr, hrd43],
+      by rw [hc.2.2.2.2.1, hrdC]⟩
+  simpa [srun_append, o, rd, out] using hall
+
+theorem accBisectS_middle_counters_run (c : Cfg) (idx : Nat)
+    (r : RegState) (lo hi : Nat)
+    (h140 : r 140 = 0) (h142 : r 142 = 1) (h141 : r 141 = 0)
+    (hlo : r rSl = lo) (hhi : r rSh = hi)
+    (hlohi : lo ≤ hi) (hhiM : hi < M)
+    (hmidpos : 0 < midpoint ⟨lo, hi⟩) (hW : c.wScale < M)
+    (haLe : c.wScale / midpoint ⟨lo, hi⟩ ≤ 2147483648)
+    (hkrFit : r rKr + r 43 < M) (hword : ∀ j, r j < M) :
+    let out := srun idx r (openS c ++ roundS c ++ closeS)
+    out rViol = r rViol ∧ out rVDiv = r rVDiv ∧
+      out rVBisect = r rVBisect ∧
+      AddWide.wval (out rVLo, out rVHi) =
+        AddWide.wval (r rVLo, r rVHi) := by
+  let o := srun idx r (openS c)
+  let rd := srun idx o (roundS c)
+  let out := srun idx rd closeS
+  have ho := open_gate0_run c idx r h140 hword
+  dsimp only at ho
+  change o rSl = r rSl ∧ o rSh = r rSh ∧ o 140 = 0 at ho
+  have howord : ∀ j, o j < M := srun_lt_of_lt idx _ r hword
+  have openKeep (j : Nat) (hw : RegFrame.writes j (openS c) = false) :
+      o j = r j := RegFrame.srun_frame idx j (openS c) hw r
+  have hoLo : o rSl = lo := by rw [ho.1, hlo]
+  have hoHi : o rSh = hi := by rw [ho.2.1, hhi]
+  have ho142 : o 142 = 1 := by rw [openKeep 142 (by rfl), h142]
+  have hr := round_safe_counters c idx o lo hi howord hoLo hoHi ho142
+    hlohi hhiM hmidpos hW haLe
+  dsimp only at hr
+  change rd rViol = o rViol ∧ rd rVDiv = o rVDiv at hr
+  have hrdword : ∀ j, rd j < M := srun_lt_of_lt idx _ o howord
+  have roundKeep (j : Nat) (hw : RegFrame.writes j (roundS c) = false) :
+      rd j = o j := RegFrame.srun_frame idx j (roundS c) hw o
+  have hrd141 : rd 141 = 0 := by
+    rw [roundKeep 141 (by rfl), openKeep 141 (by rfl), h141]
+  have hrdKr : rd rKr = r rKr := by
+    rw [roundKeep rKr (by rfl), openKeep rKr (by rfl)]
+  have hrd43 : rd 43 = r 43 := by
+    rw [roundKeep 43 (by rfl), openKeep 43 (by rfl)]
+  have hc := close_gate0_run idx rd hrd141
+    (by rw [hrdKr, hrd43]; exact hkrFit) hrdword
+  dsimp only at hc
+  change out rViol = rd rViol ∧ out rVBisect = rd rVBisect ∧
+    AddWide.wval (out rVLo, out rVHi) =
+      AddWide.wval (rd rVLo, rd rVHi) ∧
+    out rKr = rd rKr + rd 43 ∧ out rC = rd rC ∧
+    out rSl = rd rSl ∧ out rSh = rd rSh at hc
+  have hrdBis : rd rVBisect = r rVBisect := by
+    rw [roundKeep rVBisect (by rfl), openKeep rVBisect (by rfl)]
+  have hrdVLo : rd rVLo = r rVLo := by
+    rw [roundKeep rVLo (by rfl), openKeep rVLo (by rfl)]
+  have hrdVHi : rd rVHi = r rVHi := by
+    rw [roundKeep rVHi (by rfl), openKeep rVHi (by rfl)]
+  have houtDiv : out rVDiv = r rVDiv := by
+    rw [show out rVDiv = rd rVDiv from
+      RegFrame.srun_frame idx rVDiv closeS (by rfl) rd,
+      hr.2, openKeep rVDiv (by rfl)]
+  have hall : out rViol = r rViol ∧ out rVDiv = r rVDiv ∧
+      out rVBisect = r rVBisect ∧
+      AddWide.wval (out rVLo, out rVHi) =
+        AddWide.wval (r rVLo, r rVHi) :=
+    ⟨by rw [hc.1, hr.1, openKeep rViol (by rfl)],
+      houtDiv,
+      by rw [hc.2.1, hrdBis],
+      by rw [hc.2.2.1, hrdVLo, hrdVHi]⟩
+  simpa [srun_append, o, rd, out] using hall
+
+structure MiddleBisectSpec (c : Cfg) (k : Nat) (p : Bracket)
+    (before after : AState) : Prop where
+  arr : after.arr = before.arr
+  low : after.regs rSl = (step c.wScale k p).lo
+  high : after.regs rSh = (step c.wScale k p).hi
+  viol : after.regs rViol = before.regs rViol
+  vDiv : after.regs rVDiv = before.regs rVDiv
+  vBisect : after.regs rVBisect = before.regs rVBisect
+  v : AddWide.wval (after.regs rVLo, after.regs rVHi) =
+    AddWide.wval (before.regs rVLo, before.regs rVHi)
+  round : after.regs rKr = before.regs rKr + before.regs 43
+  cell : after.regs rC = before.regs rC
+
+theorem accBisect_middle_run (c : Cfg) (idx : Nat) (st : AState)
+    (lo hi k : Nat) (h140 : st.regs 140 = 0) (h142 : st.regs 142 = 1)
+    (h141 : st.regs 141 = 0) (hlo : st.regs rSl = lo)
+    (hhi : st.regs rSh = hi) (hk : st.regs rK = k)
+    (hlohi : lo ≤ hi) (hhiM : hi < M) (hfit : RoundFit c k ⟨lo, hi⟩)
+    (haLe : c.wScale / midpoint ⟨lo, hi⟩ ≤ 2147483648)
+    (hkrFit : st.regs rKr + st.regs 43 < M)
+    (hword : ∀ j, st.regs j < M) :
+    MiddleBisectSpec c k ⟨lo, hi⟩ st (arun idx st c.accBisect) := by
+  have hb := accBisectS_middle_bracket_run c idx st.regs lo hi k
+    h140 h142 h141 hlo hhi hk hlohi hhiM hfit hkrFit hword
+  dsimp only at hb
+  have hc := accBisectS_middle_counters_run c idx st.regs lo hi
+    h140 h142 h141 hlo hhi hlohi hhiM hfit.midpoint_pos
+    hfit.wScale_word haLe hkrFit hword
+  dsimp only at hc
+  have hb' :
+      let out := srun idx st.regs (accBisectScalarS c)
+      out rSl = (step c.wScale k ⟨lo, hi⟩).lo ∧
+        out rSh = (step c.wScale k ⟨lo, hi⟩).hi ∧
+        out rKr = st.regs rKr + st.regs 43 ∧ out rC = st.regs rC := by
+    simpa only [accBisectScalarS] using hb
+  have hc' :
+      let out := srun idx st.regs (accBisectScalarS c)
+      out rViol = st.regs rViol ∧ out rVDiv = st.regs rVDiv ∧
+        out rVBisect = st.regs rVBisect ∧
+        AddWide.wval (out rVLo, out rVHi) =
+          AddWide.wval (st.regs rVLo, st.regs rVHi) := by
+    simpa only [accBisectScalarS] using hc
+  dsimp only at hb' hc'
+  rcases hb' with ⟨hbLo, hbHi, hbKr, hbC⟩
+  rcases hc' with ⟨hcViol, hcDiv, hcBis, hcV⟩
+  rw [accBisect_arun]
+  exact
+    { arr := rfl
+      low := hbLo
+      high := hbHi
+      viol := hcViol
+      vDiv := hcDiv
+      vBisect := hcBis
+      v := hcV
+      round := hbKr
+      cell := hbC }
 
 theorem close_run_mod (idx : Nat) (r : RegState) (s d : Nat)
     (hlo : r rSl = s) (hhi : r rSh = s) (h141 : r 141 = 1)

@@ -176,10 +176,24 @@ prints contain only Lean's ordinary foundations.
 
 A deliberately rejected array-state wrapper around the same theorem hit
 Lean's deterministic heartbeat limit after about 95 seconds at `770632 KiB`.
-It duplicated the large lifted equality but proved no additional semantics,
-so the retained route uses `accBisect_decomp` one stage at a time together
-with the compact scalar schedule theorem. This is the required composition
-shape for the 378-instruction body.
+It duplicated the large lifted equality but proved no additional semantics.
+The retained route names the combined scalar block with an irreducible
+interface, proves the production array block is its lift, and then uses
+`arun_lift`; this keeps theorem types compact while the explicit defining
+equation remains available to scalar proofs.
+
+That interface now supports both array-level schedules.
+`accBisect_gate0_run` is the first-iteration contract.
+`open_gate0_run`, `productionOkS_safe_counters`, and
+`round_safe_counters` separately prove that an interior iteration leaves the
+open bracket untouched, satisfies the quotient guard, and preserves both
+failure counters. `accBisect_middle_run` then composes one exact active
+bisection step, the zero-product close, round advance, array frame, and exact
+`V` frame. The enlarged source check took `5.40 s` at `760068 KiB` and the
+module build took `5.74 s` at `790764 KiB`, under the same one-worker 2 GiB
+zero-swap cap. Fresh axiom prints contain only Lean's ordinary foundations.
+This compact lifted interface is the required composition shape for the
+378-instruction body.
 
 `LeanCompCert/Ports/CDEMAbelAccumulation.lean` closes the next interleaved
 stage.  `mulAdd_run_mod` proves the reusable literal 64-by-64 multiply followed
