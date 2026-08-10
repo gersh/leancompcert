@@ -1257,3 +1257,33 @@ These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
 The prime-store and selected-state representation theorems print only
 `[propext, Quot.sound]`; the initialized finite table theorem additionally
 uses `Classical.choice`.
+
+`CDEMAbelSieveSchedule.lean` now verifies one iteration of the actual emitted
+whole body during the sieve phase.  It runs the changing loop index through
+the selectors and active sieve core, then proves that inactive marking and
+accumulation can change only the explicit scratch sink.  The post-state is
+resynchronized at that sink; the prime cells, resident table, sieve cursor,
+and word bounds remain exact.
+
+`CDEMAbelSieveScheduledTable.lean` telescopes those steps over
+`List.range c.sieveLen`, exactly the index fold used by the array program.
+`initialized_scheduled_sieve_full_muCodeFor` begins at the emitted initializer
+and proves every resident cell below `K+1` contains the finite runnable
+`Ref.muCodeFor` computation after the real scheduled prefix.
+
+These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh whole-body sieve-step source | 88.70 s | 634,436 KiB | 198,483,968 B | 0 |
+| whole-body sieve-step module build | 88.04 s | 634,280 KiB | 219,963,392 B | 0 |
+| fresh changing-index telescope source | 36.58 s | 593,420 KiB | 152,518,656 B | 0 |
+| changing-index telescope module build | 35.63 s | 606,316 KiB | 183,267,328 B | 0 |
+| fresh three-capstone axiom print | 0.14 s | 528,712 KiB | 88,600,576 B | 0 |
+| cached umbrella consumer build | 0.74 s | 1,742,152 KiB | 220,164,096 B | 0 |
+
+The large emitted suffix initially exhausted deterministic heartbeat budgets,
+not memory.  Factoring it into an opaque combined frame reduced normalization
+and kept all measured cgroup peaks below 220 MB.
+The scheduled step prints `[propext, Quot.sound]`; the finite telescope and
+initialized table theorem additionally use `Classical.choice`.

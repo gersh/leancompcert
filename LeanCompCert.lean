@@ -162,6 +162,8 @@ import LeanCompCert.Ports.CDEMAbelSieveReady
 import LeanCompCert.Ports.CDEMAbelSieveSource
 import LeanCompCert.Ports.CDEMAbelSieveTable
 import LeanCompCert.Ports.CDEMAbelSieveInit
+import LeanCompCert.Ports.CDEMAbelSieveSchedule
+import LeanCompCert.Ports.CDEMAbelSieveScheduledTable
 import LeanCompCert.Ports.CDEMAbelSourceReady
 import LeanCompCert.Ports.CDEMAbelSourceTelescope
 import LeanCompCert.Ports.RamareMStar140MCore
