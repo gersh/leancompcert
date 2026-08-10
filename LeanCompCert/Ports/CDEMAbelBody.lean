@@ -35,6 +35,35 @@ structure ZeroProdSpec (before after : AState) : Prop where
     j ≠ rUpLo → j ≠ rUpHi → j ≠ rUnLo → j ≠ rUnHi →
     j ≠ 188 → after.regs j = before.regs j
 
+structure ExactProdSpec (before after : AState) : Prop where
+  arr : after.arr = before.arr
+  uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
+    AddWide.wval (before.regs rUpLo, before.regs rUpHi) +
+      before.regs 169 * before.regs 167
+  uNeg : AddWide.wval (after.regs rUnLo, after.regs rUnHi) =
+    AddWide.wval (before.regs rUnLo, before.regs rUnHi) +
+      before.regs 170 * before.regs 168
+  frame : ∀ j, j ≠ 171 → j ≠ 172 → j ≠ 173 → j ≠ 174 →
+    Section413G1Denote.NotIn8 j 180 181 182 183 184 185 186 187 →
+    j ≠ rUpLo → j ≠ rUpHi → j ≠ rUnLo → j ≠ rUnHi →
+    j ≠ 188 → after.regs j = before.regs j
+
+theorem accProd_exact_frame_run (c : Cfg) (idx : Nat) (st : AState)
+    (hword : ∀ j, st.regs j < M)
+    (hfitPos : AddWide.wval (st.regs rUpLo, st.regs rUpHi) +
+      st.regs 169 * st.regs 167 < AddWide.B128)
+    (hfitNeg : AddWide.wval (st.regs rUnLo, st.regs rUnHi) +
+      st.regs 170 * st.regs 168 < AddWide.B128) :
+    ExactProdSpec st (arun idx st c.accProd) := by
+  have he := accProd_run_exact c idx st hword hfitPos hfitNeg
+  have hm := accProd_run_mod c idx st hword
+  dsimp only at he hm
+  exact
+    { arr := he.2.2
+      uPos := he.1
+      uNeg := he.2.1
+      frame := hm.2.2.2 }
+
 theorem accProd_zero_run (c : Cfg) (idx : Nat) (st : AState)
     (hword : ∀ j, st.regs j < M) (hpos : st.regs 169 = 0)
     (hneg : st.regs 170 = 0) :
