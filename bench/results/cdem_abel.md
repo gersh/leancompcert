@@ -1214,3 +1214,25 @@ seconds at 136,183,808 bytes, five fresh axiom prints took 0.16 seconds at
 `propext`; the `kBound` wrapper additionally uses `Classical.choice` and
 `Quot.sound`. Remaining table work is to carry the fold invariant across the
 prime/candidate cursor trace and connect emitted initialization/scheduling.
+
+`CDEMAbelSieveTable.lean` now carries that fold invariant through the entire
+finite candidate/prime cursor trace.  It keeps the emitted prime cells fixed,
+identifies the live `(m, par, sqf)` registers with the finite prime-prefix
+fold, and proves each completed resident-table cell is `Ref.muCodeWith`.
+`sieve_machine_full_muCodeFor` composes this pure invariant with the compiled
+`sieveIter` refinement and the production prime-list equality, so every
+resident machine cell below `K+1` contains the runnable `Ref.muCodeFor` value.
+
+These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh resident-table source | 0.35 s | 599,612 KiB | 154,636,288 B | 0 |
+| resident-table module build | 0.43 s | 599,660 KiB | 170,606,592 B | 0 |
+| fresh three-capstone axiom print | 0.17 s | 538,128 KiB | 100,122,624 B | 0 |
+
+The step theorem prints `[propext, Quot.sound]`; the finite full-trace and
+machine-level theorems additionally use `Classical.choice`.  The remaining
+sieve connection is emitted initialization and scheduling.  The unrelated
+2,000-shard window consumer was already undergoing a cold dependency rebuild,
+so no cached umbrella timing is claimed for this increment.
