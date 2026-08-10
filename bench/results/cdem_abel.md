@@ -1197,3 +1197,20 @@ with no swap; the resumed incremental pass completed all 278 jobs in 7:34.72
 at cgroup peak 377,155,584 bytes. The 1.5 GiB hard limit was never approached.
 Fresh axiom prints for the new code-range theorem and its marking consumers
 contain only `propext`, `Classical.choice`, and `Quot.sound`.
+
+`CDEMAbelSieveSource.lean` now proves the pure compiled row arithmetic is the
+new source computation. `sieveFactorStep_source` is the exact one-prime
+correspondence, `sieveFactorFold_source` telescopes it over any finite list,
+and `sieveFactorFold_code_for` identifies the resulting decoded row with
+`Ref.muCodeFor`. Separate zero/nonzero-prime-cursor lemmas expose precisely
+how the row reset feeds that fold, while `sieveFactorStep_word` carries the
+word invariant needed for their later composition.
+
+Under the serialized one-worker 1.5 GiB zero-swap cap, the fresh source check
+took 0.20 seconds at cgroup peak 121,348,096 bytes, the module build took 0.24
+seconds at 136,183,808 bytes, five fresh axiom prints took 0.16 seconds at
+103,813,120 bytes, and the cached 279-job umbrella build took 0.63 seconds at
+224,849,920 bytes. The step, fold, and reset correspondences require only
+`propext`; the `kBound` wrapper additionally uses `Classical.choice` and
+`Quot.sound`. Remaining table work is to carry the fold invariant across the
+prime/candidate cursor trace and connect emitted initialization/scheduling.
