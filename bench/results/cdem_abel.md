@@ -162,6 +162,25 @@ stage leave both violation counters unchanged and add exactly
 under the explicit accumulator no-wrap invariant. With this addition the
 integrated source check took `4.46 s` and peaked at `696108 KiB`.
 
+The complementary round-zero path is now verified as well.
+`productionOkS_gate0_counters` proves that the full predicate preserves both
+failure counters when the bisection gate is zero; `round_gate0_run` proves the
+bracket is unchanged; and `close_gate0_run` proves the gated product is
+exactly zero, the `V` accumulator and cell cursor are unchanged, and only the
+round counter advances. `accBisectS_gate0_run` composes the literal open,
+round, and close blocks and proves that the first iteration installs the pure
+initial bracket without changing `V` or either counter. The source check took
+`4.91 s` at `736304 KiB` RSS and the module build took `5.06 s` at
+`776500 KiB`, with one worker, a 2 GiB hard cap, and no swap. Fresh axiom
+prints contain only Lean's ordinary foundations.
+
+A deliberately rejected array-state wrapper around the same theorem hit
+Lean's deterministic heartbeat limit after about 95 seconds at `770632 KiB`.
+It duplicated the large lifted equality but proved no additional semantics,
+so the retained route uses `accBisect_decomp` one stage at a time together
+with the compact scalar schedule theorem. This is the required composition
+shape for the 378-instruction body.
+
 `LeanCompCert/Ports/CDEMAbelAccumulation.lean` closes the next interleaved
 stage.  `mulAdd_run_mod` proves the reusable literal 64-by-64 multiply followed
 by two-limb addition, and `accProd_run_mod` instantiates it twice against the
