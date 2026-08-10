@@ -104,6 +104,9 @@ literal array-machine blocks used in this scan:
   `W = a*s+b`, so the rearrangement loses no cases and adds none;
 * `okQuot_arun`: the literal guard-plus-division prefix computes exactly
   `a = W/s` and `b = W%s` for the positive bisection candidates;
+* `okClassify_run`: the next 17 production instructions compute `a^2`,
+  `e = k-a^2`, and the equality and large-`e` branch flags exactly under the
+  explicit word/no-underflow bounds;
 * `okBody_defined`: the exact reciprocal-square-root predicate's two
   register-valued divisions cannot divide by zero.
 
@@ -120,8 +123,8 @@ in `0.33 s`, peaked at `572076 KiB`, and used no swap inside a stricter 2 GiB
 hard cap.  This is also the required build shape for later predicate-value
 and bisection proofs.
 
-Still not proved: transcription of the remaining predicate instructions from
-the proved quotient/remainder state to `okFormula`, followed by composition
+Still not proved: transcription of the predicate's product/comparison tail
+from the proved classification state to `okFormula`, followed by composition
 with the μ-table build, window marking,
 exact reciprocal-square-root bisection, and the outer loop to show that the
 complete `denote` *is* the residue.  That remaining refinement gap is

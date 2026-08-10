@@ -411,6 +411,87 @@ theorem okQuot_arun (c : CDEMAbelScan.Cfg) (k : Nat) (st : AState)
     denoteOp, RegState.set, hs0, hrs100, hsmod, hWmod,
     Nat.mod_eq_of_lt hdivM, Nat.mod_eq_of_lt hremM]
 
+/-- Exact non-wrapping subtraction in the fragment's modular encoding. -/
+theorem msub_exact (x y : Nat) (hyx : y ≤ x) (hx : x < M) :
+    (x + (M - y)) % M = x - y := by
+  have hyM : y ≤ M := by omega
+  have h : x + (M - y) = (x - y) + M := by omega
+  rw [h, Nat.add_mod_right]
+  exact Nat.mod_eq_of_lt (by omega)
+
+/-- The production predicate's classification stage, immediately after the
+quotient/remainder prefix.  Registers `142`, `rK`, `rViol`, and `rVDiv` are
+the literal allocation in `Cfg.accBisect`. -/
+def okClassifyS : List Instr :=
+  [ .mov 100 (.reg 101)
+  , .mov 101 (.reg 102)
+  , .binop 102 .gt (.reg 100) (.lit 2147483648)
+  , .binop 102 .mul (.reg 102) (.reg 142)
+  , .binop CDEMAbelScan.rViol .add (.reg CDEMAbelScan.rViol) (.reg 102)
+  , .binop CDEMAbelScan.rVDiv .add (.reg CDEMAbelScan.rVDiv) (.reg 102)
+  , .binop 103 .mul (.reg 100) (.reg 100)
+  , .binop 104 .lt (.reg CDEMAbelScan.rK) (.reg 103)
+  , .binop 105 .sub (.lit 1) (.reg 104)
+  , .binop 106 .eq (.reg CDEMAbelScan.rK) (.reg 103)
+  , .binop 107 .sub (.lit 1) (.reg 106)
+  , .binop 108 .eq (.reg 101) (.lit 0)
+  , .binop 109 .sub (.reg CDEMAbelScan.rK) (.reg 103)
+  , .binop 110 .mul (.reg 100) (.lit 2)
+  , .binop 110 .add (.reg 110) (.lit 1)
+  , .binop 111 .ge (.reg 109) (.reg 110)
+  , .binop 112 .sub (.lit 1) (.reg 111) ]
+
+/-- Under the exact word bounds used by the live bisection regime, the
+classification stage computes the first half of `okFormula`. -/
+theorem okClassify_run (idx : Nat) (s : RegState) (a b k : Nat)
+    (ha : s 101 = a) (hb : s 102 = b) (hk : s CDEMAbelScan.rK = k)
+    (haSqM : a * a < M) (hka : a * a ≤ k) (hkM : k < M)
+    (h2aM : 2 * a + 1 < M) :
+    let out := srun idx s okClassifyS
+    out 100 = a ∧ out 101 = b ∧ out 103 = a * a ∧
+      out 105 = 1 ∧
+      out 106 = (if k = a * a then 1 else 0) ∧
+      out 107 = (if k ≠ a * a then 1 else 0) ∧
+      out 108 = (if b = 0 then 1 else 0) ∧
+      out 109 = k - a * a ∧ out 110 = 2 * a + 1 ∧
+      out 111 = (if 2 * a + 1 ≤ k - a * a then 1 else 0) ∧
+      out 112 = (if ¬2 * a + 1 ≤ k - a * a then 1 else 0) := by
+  have h2M : (2:Nat) % M = 2 := by decide
+  have h1M : (1:Nat) % M = 1 := by decide
+  have h0M : (0:Nat) % M = 0 := by decide
+  have he : (k + (M - a * a)) % M = k - a * a :=
+    msub_exact k (a * a) hka hkM
+  have hk30 : s 30 = k := by simpa [CDEMAbelScan.rK] using hk
+  have ha2M : a * 2 < M := by omega
+  have ha2mod : a * 2 % M = a * 2 := Nat.mod_eq_of_lt ha2M
+  have ha2sum : (a * 2 + 1) % M = 2 * a + 1 := by
+    rw [Nat.mul_comm a 2, Nat.mod_eq_of_lt h2aM]
+  have hbit (P : Prop) [Decidable P] : (if P then (1:Nat) else 0) ≤ 1 := by
+    split <;> omega
+  simp only [okClassifyS, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, Option.getD_some, CDEMAbelScan.rK, CDEMAbelScan.rViol,
+    CDEMAbelScan.rVDiv, reduceIte, Nat.reduceEqDiff, ha, hb, h2M, h1M,
+    h0M, Nat.mod_eq_of_lt haSqM]
+  simp only [hk30, he, ha2mod, show ¬k < a * a from by omega,
+    if_false, Section413G1Denote.msub_bit (hbit (k = a * a))]
+  rw [ha2sum]
+  by_cases heq : k = a * a <;>
+    by_cases hbig : 2 * a + 1 ≤ k - a * a <;>
+    simp [heq, hbig, h1M]
+  all_goals decide
+
+/-- Tail after the quotient and classification stages in the one live use of
+`okBody` (`rs=194`, gate `142`, result `197`). -/
+def okAfterClassifyS (c : CDEMAbelScan.Cfg) : List Instr :=
+  (okS c 194 142 197).drop 21
+
+theorem productionOkS_decomp (c : CDEMAbelScan.Cfg) :
+    okS c 194 142 197 =
+      okQuotS c 194 ++ okClassifyS ++ okAfterClassifyS c := by
+  simp [okS, okQuotS, okGuardS, okDivS, okClassifyS, okAfterClassifyS,
+    CDEMAbelScan.okBody, CDEMAbelScan.mulWideBody,
+    Section413G1Denote.scalarOf]
+
 /-- The full literal predicate block cannot fail through division by zero.
 No semantic claim is hidden here: correctness of the Boolean result remains a
 separate refinement theorem, while this theorem closes partial definedness. -/
