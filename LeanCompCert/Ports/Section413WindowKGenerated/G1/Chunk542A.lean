@@ -1,0 +1,94 @@
+import LeanCompCert.Ports.Section413WindowRuntime
+import LeanCompCert.Ports.Section413WindowDirectTables
+
+namespace LeanCompCert.Ports.Section413WindowKGenerated.G1.Chunk542A
+
+open LeanCompCert.Ports.Section413Sweep
+open LeanCompCert.Ports.Section413WindowRuntime
+open LeanCompCert.Ports.Section413WindowDirectTables
+
+def state00 : KState := ⟨⟨362499362475804974, 362499405199996234⟩, ⟨(-784432469903796677), (-782868134107518257)⟩, true⟩
+
+def state01 : KState := ⟨⟨362479619332213713, 362479662072850753⟩, ⟨285669607456545449, 287234834696252005⟩, true⟩
+
+def words00 : List Nat := [371284961581976732, 371284961583797463, 371284961431026414, 371284961498946630, 371284961632037641, 371284961633857756, 371284961313783183, 371284960986535557, 371284960658486118, 371284960630952511]
+
+set_option maxRecDepth 100000 in
+theorem micro00 :
+    trace directG1 1 40 36393 8800000000000000 54200 10 state00 =
+      (state01, words00) := by
+  decide +kernel
+
+theorem prefix01 :
+    trace directG1 1 40 36393 8800000000000000 54200 10 state00 =
+      (state01, words00) := micro00
+
+def state02 : KState := ⟨⟨362458184938998887, 362458227695990934⟩, ⟨1447805100664588104, 1449371214594124388⟩, true⟩
+
+def words01 : List Nat := [371284960680331103, 371284960828165275, 371284960934526167, 371284960936346713, 371284960589525837, 371284960258483757, 371284959932850953, 371284959934671585, 371284959489359713, 371284958998362645]
+
+set_option maxRecDepth 100000 in
+theorem micro01 :
+    trace directG1 1 40 36393 8800000000000000 54210 10 state01 =
+      (state02, words01) := by
+  decide +kernel
+
+theorem prefix02 :
+    trace directG1 1 40 36393 8800000000000000 54200 20 state00 =
+      (state02, words00 ++ words01) := by
+  rw [show 20 = 10 + 10 by decide, trace_append, prefix01]
+  simp only [Nat.reduceAdd]
+  rw [micro01]
+
+def state03 : KState := ⟨⟨362470886943196567, 362470929716513736⟩, ⟨759076548921987007, 760643548083006663⟩, true⟩
+
+def words02 : List Nat := [371284958506592117, 371284958291162682, 371284957952889244, 371284957765847090, 371284957578236928, 371284957334619339, 371284956737639004, 371284956448035298, 371284956157541377, 371284955966708887]
+
+set_option maxRecDepth 100000 in
+theorem micro02 :
+    trace directG1 1 40 36393 8800000000000000 54220 10 state02 =
+      (state03, words02) := by
+  decide +kernel
+
+theorem prefix03 :
+    trace directG1 1 40 36393 8800000000000000 54200 30 state00 =
+      (state03, words00 ++ words01 ++ words02) := by
+  rw [show 30 = 20 + 10 by decide, trace_append, prefix02]
+  simp only [Nat.reduceAdd]
+  rw [micro02]
+
+def state04 : KState := ⟨⟨362480672411122174, 362480715201045407⟩, ⟨228387308632350846, 229955208422373996⟩, true⟩
+
+def words03 : List Nat := [371284955709432003, 371284955453370853, 371284955256891534, 371284955258920154, 371284955209438773, 371284955238078021, 371284955244985698, 371284955246807976, 371284954864103328, 371284954788221336]
+
+set_option maxRecDepth 100000 in
+theorem micro03 :
+    trace directG1 1 40 36393 8800000000000000 54230 10 state03 =
+      (state04, words03) := by
+  decide +kernel
+
+theorem prefix04 :
+    trace directG1 1 40 36393 8800000000000000 54200 40 state00 =
+      (state04, words00 ++ words01 ++ words02 ++ words03) := by
+  rw [show 40 = 30 + 10 by decide, trace_append, prefix03]
+  simp only [Nat.reduceAdd]
+  rw [micro03]
+
+def state05 : KState := ⟨⟨362462674167045498, 362462716973212231⟩, ⟨1204686216907177123, 1206254997828876355⟩, true⟩
+
+def words04 : List Nat := [371284954806176748, 371284954807999530, 371284954513470016, 371284954124323841, 371284953734514305, 371284953414164951, 371284952923026123, 371284952646271914, 371284952368904241, 371284952088379584]
+
+set_option maxRecDepth 100000 in
+theorem micro04 :
+    trace directG1 1 40 36393 8800000000000000 54240 10 state04 =
+      (state05, words04) := by
+  decide +kernel
+
+theorem prefix05 :
+    trace directG1 1 40 36393 8800000000000000 54200 50 state00 =
+      (state05, words00 ++ words01 ++ words02 ++ words03 ++ words04) := by
+  rw [show 50 = 40 + 10 by decide, trace_append, prefix04]
+  simp only [Nat.reduceAdd]
+  rw [micro04]
+
+end LeanCompCert.Ports.Section413WindowKGenerated.G1.Chunk542A

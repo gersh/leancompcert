@@ -90,3 +90,11 @@ again with the 1.5 GiB hard limit and zero swap.
 
 `Chunk527` was split by the same route; both halves and the wrapper built in
 11.47 seconds at cgroup peak 997,052,416 bytes, with zero swap.
+
+After `Chunk539` became the next outlier only twelve shards later, the
+untouched G1 suffix `539`--`999` was mechanically converted to the same
+five-plus-five layout. Validation found exactly five `micro` theorems in every
+half and one `segment` theorem in every wrapper. Building representative first
+and last wrappers (`Chunk539` and the 99-step `Chunk999`) together took 23.39
+seconds at cgroup peak 972,869,632 bytes under the same hard limit and zero
+swap. Earlier cached shards were not rewritten.

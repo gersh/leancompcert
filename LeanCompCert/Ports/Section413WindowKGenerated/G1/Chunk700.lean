@@ -1,5 +1,4 @@
-import LeanCompCert.Ports.Section413WindowRuntime
-import LeanCompCert.Ports.Section413WindowDirectTables
+import LeanCompCert.Ports.Section413WindowKGenerated.G1.Chunk700B
 
 namespace LeanCompCert.Ports.Section413WindowKGenerated.G1.Chunk700
 
@@ -7,180 +6,19 @@ open LeanCompCert.Ports.Section413Sweep
 open LeanCompCert.Ports.Section413WindowRuntime
 open LeanCompCert.Ports.Section413WindowDirectTables
 
-def state00 : KState := ⟨⟨362461541391089162, 362461614110877408⟩, ⟨1657599102212988949, 1661036961939821163⟩, true⟩
+def state00 : KState :=
+  LeanCompCert.Ports.Section413WindowKGenerated.G1.Chunk700A.state00
 
-def state01 : KState := ⟨⟨362480358710837664, 362480431452062205⟩, ⟨340345332799548145, 343784693177457265⟩, true⟩
+def state10 : KState :=
+  LeanCompCert.Ports.Section413WindowKGenerated.G1.Chunk700B.state10
 
-def words00 : List Nat := [371285342872976958, 371285342740291890, 371285342504767202, 371285342473838947, 371285342442175948, 371285342388748204, 371285342180374293, 371285342039762214, 371285341957982258, 371285341960463540]
-
-set_option maxRecDepth 100000 in
-theorem micro00 :
-    trace directG1 1 40 36393 8800000000000000 70000 10 state00 =
-      (state01, words00) := by
-  decide +kernel
-
-theorem prefix01 :
-    trace directG1 1 40 36393 8800000000000000 70000 10 state00 =
-      (state01, words00) := micro00
-
-def state02 : KState := ⟨⟨362487976062198733, 362488048825262720⟩, ⟨(-192982183429343809), (-189541293961130527)⟩, true⟩
-
-def words01 : List Nat := [371285341892134772, 371285341823384659, 371285341857458926, 371285341890906176, 371285341921781236, 371285341953592997, 371285341985110751, 371285341987519676, 371285341862938935, 371285341904568056]
-
-set_option maxRecDepth 100000 in
-theorem micro01 :
-    trace directG1 1 40 36393 8800000000000000 70010 10 state01 =
-      (state02, words01) := by
-  decide +kernel
-
-theorem prefix02 :
-    trace directG1 1 40 36393 8800000000000000 70000 20 state00 =
-      (state02, words00 ++ words01) := by
-  rw [show 20 = 10 + 10 by decide, trace_append, prefix01]
-  simp only [Nat.reduceAdd]
-  rw [micro01]
-
-def state03 : KState := ⟨⟨362479417922325545, 362479490706755047⟩, ⟨406281295018089497, 409723680610489301⟩, true⟩
-
-def words02 : List Nat := [371285342025628290, 371285342028025943, 371285341897338742, 371285341739607658, 371285341580943349, 371285341486936977, 371285341343081623, 371285341367920419, 371285341392271577, 371285341394754626]
-
-set_option maxRecDepth 100000 in
-theorem micro02 :
-    trace directG1 1 40 36393 8800000000000000 70020 10 state02 =
-      (state03, words02) := by
-  decide +kernel
-
-theorem prefix03 :
-    trace directG1 1 40 36393 8800000000000000 70000 30 state00 =
-      (state03, words00 ++ words01 ++ words02) := by
-  rw [show 30 = 20 + 10 by decide, trace_append, prefix02]
-  simp only [Nat.reduceAdd]
-  rw [micro02]
-
-def state04 : KState := ⟨⟨362496285543601272, 362496358349728500⟩, ⟨(-775047535377201695), (-771603630183791147)⟩, true⟩
-
-def words03 : List Nat := [371285341363673870, 371285341417403495, 371285341637667681, 371285341659568865, 371285341661461296, 371285341612726283, 371285341617725099, 371285341620394987, 371285341733210155, 371285341893221829]
-
-set_option maxRecDepth 100000 in
-theorem micro03 :
-    trace directG1 1 40 36393 8800000000000000 70030 10 state03 =
-      (state04, words03) := by
-  decide +kernel
-
-theorem prefix04 :
-    trace directG1 1 40 36393 8800000000000000 70000 40 state00 =
-      (state04, words00 ++ words01 ++ words02 ++ words03) := by
-  rw [show 40 = 30 + 10 by decide, trace_append, prefix03]
-  simp only [Nat.reduceAdd]
-  rw [micro03]
-
-def state05 : KState := ⟨⟨362482933468217478, 362483006296005453⟩, ⟨160194102383859640, 163639524807042398⟩, true⟩
-
-def words04 : List Nat := [371285342031799339, 371285342034239586, 371285342148683108, 371285342297395844, 371285342507103394, 371285342509501992, 371285342447953782, 371285342382099777, 371285342332164492, 371285342334903484]
-
-set_option maxRecDepth 100000 in
-theorem micro04 :
-    trace directG1 1 40 36393 8800000000000000 70040 10 state04 =
-      (state05, words04) := by
-  decide +kernel
-
-theorem prefix05 :
-    trace directG1 1 40 36393 8800000000000000 70000 50 state00 =
-      (state05, words00 ++ words01 ++ words02 ++ words03 ++ words04) := by
-  rw [show 50 = 40 + 10 by decide, trace_append, prefix04]
-  simp only [Nat.reduceAdd]
-  rw [micro04]
-
-def state06 : KState := ⟨⟨362470049409295321, 362470122258662957⟩, ⟨1062866409690902725, 1066313343877233957⟩, true⟩
-
-def words05 : List Nat := [371285342473155591, 371285342645705216, 371285342810143668, 371285342812542428, 371285342705546145, 371285342662012206, 371285342654061759, 371285342656464124, 371285342475287600, 371285342260716586]
-
-set_option maxRecDepth 100000 in
-theorem micro05 :
-    trace directG1 1 40 36393 8800000000000000 70050 10 state05 =
-      (state06, words05) := by
-  decide +kernel
-
-theorem prefix06 :
-    trace directG1 1 40 36393 8800000000000000 70000 60 state00 =
-      (state06, words00 ++ words01 ++ words02 ++ words03 ++ words04 ++ words05) := by
-  rw [show 60 = 50 + 10 by decide, trace_append, prefix05]
-  simp only [Nat.reduceAdd]
-  rw [micro05]
-
-def state07 : KState := ⟨⟨362486909000968529, 362486981871832022⟩, ⟨(-118399579241162776), (-114951138946381766)⟩, true⟩
-
-def words06 : List Nat := [371285342045104406, 371285342033786395, 371285341919476824, 371285341891563400, 371285341862889118, 371285341801361093, 371285341497129547, 371285341397368466, 371285341350666041, 371285341376635060]
-
-set_option maxRecDepth 100000 in
-theorem micro06 :
-    trace directG1 1 40 36393 8800000000000000 70060 10 state06 =
-      (state07, words06) := by
-  decide +kernel
-
-theorem prefix07 :
-    trace directG1 1 40 36393 8800000000000000 70000 70 state00 =
-      (state07, words00 ++ words01 ++ words02 ++ words03 ++ words04 ++ words05 ++ words06) := by
-  rw [show 70 = 60 + 10 by decide, trace_append, prefix06]
-  simp only [Nat.reduceAdd]
-  rw [micro06]
-
-def state08 : KState := ⟨⟨362493011718736876, 362493084611459375⟩, ⟨(-546030204070086029), (-542580232007364499)⟩, true⟩
-
-def words07 : List Nat := [371285341402379026, 371285341428959687, 371285341637432720, 371285341764089249, 371285341953509466, 371285342143819772, 371285342288799143, 371285342291199868, 371285342310619094, 371285342424104638]
-
-set_option maxRecDepth 100000 in
-theorem micro07 :
-    trace directG1 1 40 36393 8800000000000000 70070 10 state07 =
-      (state08, words07) := by
-  decide +kernel
-
-theorem prefix08 :
-    trace directG1 1 40 36393 8800000000000000 70000 80 state00 =
-      (state08, words00 ++ words01 ++ words02 ++ words03 ++ words04 ++ words05 ++ words06 ++ words07) := by
-  rw [show 80 = 70 + 10 by decide, trace_append, prefix07]
-  simp only [Nat.reduceAdd]
-  rw [micro07]
-
-def state09 : KState := ⟨⟨362480528730109645, 362480601644181775⟩, ⟨328826455489685445, 332277923847565515⟩, true⟩
-
-def words08 : List Nat := [371285342596601773, 371285342599001729, 371285342528942718, 371285342453879235, 371285342377875567, 371285342349925747, 371285342273949253, 371285342331523556, 371285342373952885, 371285342376438125]
-
-set_option maxRecDepth 100000 in
-theorem micro08 :
-    trace directG1 1 40 36393 8800000000000000 70080 10 state08 =
-      (state09, words08) := by
-  decide +kernel
-
-theorem prefix09 :
-    trace directG1 1 40 36393 8800000000000000 70000 90 state00 =
-      (state09, words00 ++ words01 ++ words02 ++ words03 ++ words04 ++ words05 ++ words06 ++ words07 ++ words08) := by
-  rw [show 90 = 80 + 10 by decide, trace_append, prefix08]
-  simp only [Nat.reduceAdd]
-  rw [micro08]
-
-def state10 : KState := ⟨⟨362494669797024682, 362494742732817525⟩, ⟨(-662452669511807883), (-658999678641714693)⟩, true⟩
-
-def words09 : List Nat := [371285342310467089, 371285342261754345, 371285342313697762, 371285342316098065, 371285342167346614, 371285341986928043, 371285341809326849, 371285341812017833, 371285341878804742, 371285342015586078]
-
-set_option maxRecDepth 100000 in
-theorem micro09 :
-    trace directG1 1 40 36393 8800000000000000 70090 10 state09 =
-      (state10, words09) := by
-  decide +kernel
-
-theorem prefix10 :
-    trace directG1 1 40 36393 8800000000000000 70000 100 state00 =
-      (state10, words00 ++ words01 ++ words02 ++ words03 ++ words04 ++ words05 ++ words06 ++ words07 ++ words08 ++ words09) := by
-  rw [show 100 = 90 + 10 by decide, trace_append, prefix09]
-  simp only [Nat.reduceAdd]
-  rw [micro09]
-
-def words : List Nat := words00 ++ words01 ++ words02 ++ words03 ++ words04 ++ words05 ++ words06 ++ words07 ++ words08 ++ words09
+def words : List Nat :=
+  LeanCompCert.Ports.Section413WindowKGenerated.G1.Chunk700B.words
 
 theorem segment :
     trace directG1 1 40 36393 8800000000000000 70000 100 state00 =
       (state10, words) := by
-  simpa only [words] using prefix10
+  simpa [state00, state10, words] using
+    LeanCompCert.Ports.Section413WindowKGenerated.G1.Chunk700B.segment
 
 end LeanCompCert.Ports.Section413WindowKGenerated.G1.Chunk700
