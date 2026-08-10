@@ -183,4 +183,82 @@ theorem markBody_first_active (c : Cfg) (idx : Nat) (st : AState)
       multiple := (finishFrame rJ (by rfl)).trans hadvanced.2.2.1
       cell := (finishFrame rC (by rfl)).trans hadvanced.2.2.2 }
 
+/-- Exact resident-array effect of any active non-start iteration whose
+current multiple lies in this window.  The signed code is already the
+machine representation `1` or `M - 1`; the theorem intentionally remains
+valid for any word-sized code because the literal store is modular. -/
+structure ActiveResidentStoreSpec (c : Cfg) (cell sign : Nat)
+    (before after : AState) : Prop where
+  array : ∀ j, after.arr j =
+    if j = cell + c.winBase then
+      (before.arr (cell + c.winBase) + sign) % M
+    else before.arr j
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 1000000 in
+theorem markBody_active_resident_store (c : Cfg) (idx : Nat) (st : AState)
+    (cell sign : Nat) (hphase : st.regs 41 = 1)
+    (hgate : st.regs 42 = 1) (hR : st.regs rR ≠ 0)
+    (hzero : st.regs rZero = 0) (hcell : st.regs rJ = cell)
+    (hsign : st.regs rSg = sign) (hcellSeg : cell < c.segLen)
+    (hcellM : cell < M) (hsignM : sign < M)
+    (hsegM : c.segLen < M) (haddrM : cell + c.winBase < M) :
+    ActiveResidentStoreSpec c cell sign st (arun idx st c.markBody) := by
+  have h1M : (1 : Nat) % M = 1 := by decide
+  have hcancel : 1 + (M - 1) = M := by
+    unfold M
+    omega
+  have hcellMod : cell % M = cell := Nat.mod_eq_of_lt hcellM
+  have hsignMod : sign % M = sign := Nat.mod_eq_of_lt hsignM
+  have hsegMod : c.segLen % M = c.segLen := Nat.mod_eq_of_lt hsegM
+  have haddrMod : (cell + c.winBase) % M = cell + c.winBase :=
+    Nat.mod_eq_of_lt haddrM
+  have hR2 : st.regs 2 ≠ 0 := by simpa [rR] using hR
+  have hzero1 : st.regs 1 = 0 := by simpa [rZero] using hzero
+  have hcell6 : st.regs 6 = cell := by simpa [rJ] using hcell
+  have hsign5 : st.regs 5 = sign := by simpa [rSg] using hsign
+  let pre := arun idx st (c.markBody.take 21)
+  have hpre : pre.regs 42 = 1 ∧ pre.regs 82 = 1 ∧
+      pre.regs rJ = cell ∧ pre.regs rSg = sign ∧ pre.arr = st.arr := by
+    simp [pre, Cfg.markBody, muxBody, arun, astep, InstrBlock.sdest,
+      InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
+      rZero, rR, rC, rD, rJ, rSg, hphase, hgate, hR2, hzero1, hcell6,
+      hsign5, hcellSeg, hcellMod, hsignMod, hsegMod, h1M]
+  rcases hpre with ⟨hpre42, hpre82, hpreJ, hpreSg, hpreArr⟩
+  have hpreJ6 : pre.regs 6 = cell := by simpa [rJ] using hpreJ
+  have hpreSg5 : pre.regs 5 = sign := by simpa [rSg] using hpreSg
+  let stored := arun idx pre (markInactiveStoreBlock c)
+  have hstoredArr : ∀ j, stored.arr j =
+      if j = cell + c.winBase then
+        (st.arr (cell + c.winBase) + sign) % M else st.arr j := by
+    intro j
+    by_cases hj : j = cell + c.winBase
+    · subst j
+      simp [stored, markInactiveStoreBlock, arun, astep, InstrBlock.sdest,
+        InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
+        AState.writeArr, rJ, rSg, hpre42, hpre82, hpreJ6,
+        hpreSg5, hpreArr, haddrMod, h1M, hcancel]
+    · simp [stored, markInactiveStoreBlock, arun, astep, InstrBlock.sdest,
+        InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
+        AState.writeArr, rJ, rSg, hpre42, hpre82, hpreJ6,
+        hpreSg5, hpreArr, haddrMod, h1M, hcancel, hj]
+  have htailArr : (arun idx stored (c.markBody.drop 32)).arr = stored.arr :=
+    arun_store_free_arr idx (c.markBody.drop 32) stored (by rfl)
+  have htake32 : c.markBody.take 32 =
+      c.markBody.take 21 ++ markInactiveStoreBlock c := by
+    simp [Cfg.markBody, markInactiveStoreBlock, muxBody]
+  have hrun : arun idx st c.markBody =
+      arun idx stored (c.markBody.drop 32) := by
+    calc
+      arun idx st c.markBody = arun idx st
+          (c.markBody.take 32 ++ c.markBody.drop 32) := by
+        rw [List.take_append_drop]
+      _ = arun idx stored (c.markBody.drop 32) := by
+        rw [arun_append, htake32, arun_append]
+  rw [hrun]
+  exact
+    { array := fun j => by
+        rw [congrFun htailArr j]
+        exact hstoredArr j }
+
 end LeanCompCert.Ports.CDEMAbelMark

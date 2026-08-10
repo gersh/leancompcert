@@ -880,3 +880,24 @@ Under the serialized one-worker 2 GiB zero-swap cgroup:
 The capstone prints only `[propext, Quot.sound]`. The next marking step is to
 give the active non-start mark/cursor transition a source state and telescope
 it over the finite `markSteps` budget.
+
+The same module now proves the arbitrary active resident-store case.
+`markBody_active_resident_store` states that whenever a non-start marking
+cursor has `cell < segLen`, the complete emitted body performs exactly
+`window[cell] := window[cell] + sign (mod 2^64)` and preserves every other
+array cell. The theorem accepts any word-sized signed code, so later source
+refinement can specialize it to the resident Möbius codes `1` and `2^64-1`
+without rebuilding the instruction semantics.
+
+Under the same serialized one-worker 2 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh extended mark source | 2.45 s | 650,156 KiB | 215,531,520 B | 0 |
+| extended mark module build | 2.54 s | 681,908 KiB | 262,750,208 B | 0 |
+| fresh two-capstone axiom print | 0.17 s | 535,960 KiB | 98,861,056 B | 0 |
+| cached umbrella consumer build | 0.63 s | 1,729,928 KiB | 217,788,416 B | 0 |
+
+Both marking capstones print only `[propext, Quot.sound]`. Remaining marking
+work is the out-of-range divisor-advance transition, cursor telescoping, and
+the source identification of the resulting resident convolution window.
