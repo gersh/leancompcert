@@ -995,3 +995,26 @@ iteration now has a code-derived live-array update, exact divisor/sign/
 multiple/cell state, period cursor `1`, and unchanged window base.  The next
 marking task is to lift the three non-start mark transitions through the same
 scheduler and telescope the finite `markSteps` interval.
+
+`CDEMAbelMarkScheduleStep.lean` completes that scheduler lift. A common
+`markPrelude_run` proves the active selector and inactive-sieve state, while
+`markSuffix_run` carries an arbitrary proved mark effect through the real
+inactive accumulator and continuing period tail. The three public
+instantiations cover an in-window resident update, a live divisor advance and
+resident-code decode, and the terminal divisor park. Each preserves the zero
+accumulation cell and advances the period cursor by exactly one.
+
+Under the same serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh non-start scheduler source | 4.21 s | 654,880 KiB | 225,173,504 B | 0 |
+| non-start scheduler module build | 4.84 s | 605,532 KiB | 189,763,584 B | 0 |
+| fresh five-theorem axiom print | 0.17 s | 532,144 KiB | 91,197,440 B | 0 |
+| cached umbrella consumer build | 0.63 s | 1,731,792 KiB | 217,022,464 B | 0 |
+
+All scheduler-step capstones print only `[propext, Quot.sound]`. Every active
+marking branch now has both complete literal `markBody` semantics and an
+actual scheduled-body theorem. The remaining marking proof is the finite
+cursor trace/telescope and its identification with the source resident
+divisor convolution.
