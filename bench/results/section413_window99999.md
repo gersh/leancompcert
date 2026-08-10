@@ -61,3 +61,16 @@ compile independently by kernel decision:
 This is a proof-preserving operational split: the wrapper exports the same
 entry state, exit state, 100 event words, and source `trace` equality consumed
 by `G1.Aggregate`.
+
+The resumed cold build exposed the same shape at `Chunk384`. It is likewise
+split into two five-micro-proof modules behind an unchanged compatibility
+wrapper:
+
+| check | elapsed | cgroup `memory.peak` | hard limit | swap |
+| --- | ---: | ---: | ---: | ---: |
+| `Chunk384A` fresh source | 4.81 s | 781,299,712 B | 1.5 GiB | 0 |
+| `Chunk384A` module build | 5.24 s | 813,756,416 B | 1.5 GiB | 0 |
+| `Chunk384B` plus wrapper build | 5.44 s | 851,419,136 B | 1.5 GiB | 0 |
+
+The original ten-micro-proof shard was stopped by the cgroup before the host
+could exhaust memory; all preceding cache entries remained usable.
