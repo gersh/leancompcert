@@ -37,3 +37,27 @@ words with the source recurrences, the separate full G1/G2 table runs prove
 all 99,999 source table rows, and `windowOK_of_tables` derives the unchanged
 Section 4.1.3 window predicate. Thus the physical positive/control pair tests
 the same runtime path used by the admitted `Returns 0` proposition.
+
+## 1.5 GiB cold-rebuild sharding audit (2026-08-10)
+
+A low-level dependency change forced the 2,000 generated G1/G2 K-trace
+modules to rebuild under a serialized one-worker cgroup with a 1.5 GiB hard
+limit and no swap. Normal G1 modules completed in roughly 7--9 seconds and
+cached cleanly between timed passes. The original ten-micro-proof `Chunk304`
+crossed the hard limit; systemd killed only that compiler scope, leaving the
+host and the first 304 cached modules intact.
+
+`Chunk304` is now two five-micro-proof modules plus a compatibility wrapper
+with the unchanged aggregate API and exact `segment` theorem. Both halves
+compile independently by kernel decision:
+
+| check | elapsed | cgroup `memory.peak` | hard limit | swap |
+| --- | ---: | ---: | ---: | ---: |
+| `Chunk304A` fresh source | 4.67 s | 855,035,904 B | 1.5 GiB | 0 |
+| `Chunk304A` module build | 5.15 s | 884,580,352 B | 1.5 GiB | 0 |
+| `Chunk304B` fresh source | 4.67 s | 879,939,584 B | 1.5 GiB | 0 |
+| `Chunk304B` plus wrapper build | 5.35 s | 909,574,144 B | 1.5 GiB | 0 |
+
+This is a proof-preserving operational split: the wrapper exports the same
+entry state, exit state, 100 event words, and source `trace` equality consumed
+by `G1.Aggregate`.

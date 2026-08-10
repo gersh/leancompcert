@@ -1236,3 +1236,24 @@ machine-level theorems additionally use `Classical.choice`.  The remaining
 sieve connection is emitted initialization and scheduling.  The unrelated
 2,000-shard window consumer was already undergoing a cold dependency rebuild,
 so no cached umbrella timing is claimed for this increment.
+
+`CDEMAbelSieveInit.lean` connects the emitted initializer to that resident
+table theorem without reducing the production literal list. Generic finite
+store/seed lemmas prove the prime cells and zero cursor, the first selector
+installs the active sieve gate, and `initialized_sieve_machine_full_muCodeFor`
+starts the compiled `sieveIter` from the actual initialized/selected machine
+state. The remaining scheduler gap is the changing-index whole-body fold;
+inactive later phases may rewrite only the scratch sink, so its proof must
+resynchronize that cell explicitly.
+
+These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh emitted-initializer source | 0.89 s | 584,964 KiB | 147,251,200 B | 0 |
+| emitted-initializer module build | 0.93 s | 622,852 KiB | 201,220,096 B | 0 |
+| fresh three-capstone axiom print | 0.17 s | 532,320 KiB | 94,621,696 B | 0 |
+
+The prime-store and selected-state representation theorems print only
+`[propext, Quot.sound]`; the initialized finite table theorem additionally
+uses `Classical.choice`.
