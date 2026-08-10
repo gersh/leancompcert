@@ -301,9 +301,21 @@ at `689356 KiB`; the module build took `13.35 s` at `693572 KiB`, with one
 worker, the 2 GiB hard cap, and no swap. Thus all first, 60 interior, and final
 `accBody` regimes now have LeanCompCert execution contracts.
 
+`LeanCompCert/Ports/CDEMAbelSchedule.lean` now performs the finite scheduler
+composition. `accIter_middle_ready` turns any finite family of explicit
+`MiddleStepReady` machine states into one trace theorem, telescoping the pure
+bracket, both `U` values, `V`, all failure counters, array, cell, and round
+counter. `accSchedule_from_ready_middle` then composes the first contract,
+that interior trace, and the final contract into `FullAccSpec`.
+`final_step_exact` independently proves that `bsSteps = bsBudget` makes the
+last active step close at `exactRoot`; the singleton final premise is not an
+oracle. The source check took `0.16 s` at `584064 KiB` and the live module
+build took `0.30 s` at `596164 KiB`, with one worker, the 2 GiB hard cap, and
+no swap.
+
 Still not proved: composition of the now-complete head/product/bisection
-contracts across the full 62-round schedule, then the μ-table build, window
-marking,
+endpoint readiness and production-fit invariants for the full 62-round
+schedule, then the μ-table build and window marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.
