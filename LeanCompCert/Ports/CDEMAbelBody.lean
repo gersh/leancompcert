@@ -271,6 +271,78 @@ theorem accBody_middle_of_head (c : Cfg) (idx : Nat) (st : AState)
           (by simp [rC]) (by rfl) }
   simpa [Cfg.accBody, arun_append, h, p, out] using hall
 
+theorem arun_accBody_eq_parts (c : Cfg) (idx : Nat) (st : AState) :
+    arun idx st c.accBody =
+      arun idx (arun idx (arun idx st c.accHead) c.accProd) c.accBisect := by
+  rw [Cfg.accBody, arun_append, arun_append]
+
+set_option maxHeartbeats 2000000 in
+theorem accBody_middle_latch_of_head (c : Cfg) (idx : Nat) (st : AState)
+    (hh : MiddleHeadSpec c st (arun idx st c.accHead))
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
+    let out := arun idx
+      (arun idx (arun idx st c.accHead) c.accProd) c.accBisect
+    out.regs rK = st.regs rK ∧
+      out.regs rDp = st.regs rDp ∧
+      out.regs rDn = st.regs rDn ∧
+      out.regs 43 = st.regs 43 ∧
+      out.regs rZero = st.regs rZero := by
+  let h := arun idx st c.accHead
+  let p := arun idx h c.accProd
+  let out := arun idx p c.accBisect
+  have hh' : MiddleHeadSpec c st h := by simpa [h] using hh
+  have headKeep (j : Nat)
+      (hw : LeanCompCert.Verified.ArrayRegFrame.writes j c.accHead = false) :
+      h.regs j = st.regs j := by
+    simpa [h] using LeanCompCert.Verified.ArrayRegFrame.arun_frame
+      idx j c.accHead hw st
+  have hwordH : ∀ j, h.regs j < M :=
+    (arun_word idx c.accHead st hword harrword).1
+  have hp := accProd_run_mod c idx h hwordH
+  dsimp only at hp
+  change _ ∧ _ ∧ _ ∧ (∀ j, j ≠ 171 → j ≠ 172 → j ≠ 173 →
+    j ≠ 174 → Section413G1Denote.NotIn8 j 180 181 182 183 184 185 186 187 →
+    j ≠ rUpLo → j ≠ rUpHi → j ≠ rUnLo → j ≠ rUnHi → j ≠ 188 →
+    p.regs j = h.regs j) at hp
+  have prodKeep := hp.2.2.2
+  have hb := accBisect_latch_frame c idx p
+  dsimp only at hb
+  change out.regs rK = p.regs rK ∧ out.regs rDp = p.regs rDp ∧
+    out.regs rDn = p.regs rDn ∧ out.regs 43 = p.regs 43 ∧
+    out.regs rZero = p.regs rZero at hb
+  have hall : out.regs rK = st.regs rK ∧
+      out.regs rDp = st.regs rDp ∧ out.regs rDn = st.regs rDn ∧
+      out.regs 43 = st.regs 43 ∧ out.regs rZero = st.regs rZero := by
+    refine ⟨?_, ?_, ?_, ?_, ?_⟩
+    · rw [hb.1, prodKeep rK (by simp [rK]) (by simp [rK])
+        (by simp [rK]) (by simp [rK])
+        (by simp [rK, Section413G1Denote.NotIn8])
+        (by simp [rK, rUpLo]) (by simp [rK, rUpHi])
+        (by simp [rK, rUnLo]) (by simp [rK, rUnHi]) (by simp [rK]), hh'.k]
+    · rw [hb.2.1, prodKeep rDp (by simp [rDp]) (by simp [rDp])
+        (by simp [rDp]) (by simp [rDp])
+        (by simp [rDp, Section413G1Denote.NotIn8])
+        (by simp [rDp, rUpLo]) (by simp [rDp, rUpHi])
+        (by simp [rDp, rUnLo]) (by simp [rDp, rUnHi]) (by simp [rDp]),
+        hh'.dPos]
+    · rw [hb.2.2.1, prodKeep rDn (by simp [rDn]) (by simp [rDn])
+        (by simp [rDn]) (by simp [rDn])
+        (by simp [rDn, Section413G1Denote.NotIn8])
+        (by simp [rDn, rUpLo]) (by simp [rDn, rUpHi])
+        (by simp [rDn, rUnLo]) (by simp [rDn, rUnHi]) (by simp [rDn]),
+        hh'.dNeg]
+    · rw [hb.2.2.2.1, prodKeep 43 (by decide) (by decide) (by decide)
+        (by decide) (by simp [Section413G1Denote.NotIn8])
+        (by simp [rUpLo]) (by simp [rUpHi]) (by simp [rUnLo])
+        (by simp [rUnHi]) (by decide), headKeep 43 (by rfl)]
+    · rw [hb.2.2.2.2, prodKeep rZero (by simp [rZero]) (by simp [rZero])
+        (by simp [rZero]) (by simp [rZero])
+        (by simp [rZero, Section413G1Denote.NotIn8])
+        (by simp [rZero, rUpLo]) (by simp [rZero, rUpHi])
+        (by simp [rZero, rUnLo]) (by simp [rZero, rUnHi]) (by simp [rZero]),
+        headKeep rZero (by rfl)]
+  simpa [h, p, out] using hall
+
 theorem accBody_middle_run (c : Cfg) (idx : Nat) (st : AState)
     (hkr0 : st.regs rKr ≠ 0) (hkrLast : st.regs rKr ≠ c.bsSteps)
     (hgate : st.regs 43 = 1) (hzero : st.regs rZero = 0)

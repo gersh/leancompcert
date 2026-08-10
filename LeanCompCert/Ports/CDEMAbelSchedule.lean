@@ -41,6 +41,51 @@ theorem forward_initial_budget_exact (w k : Nat) (hw : 0 < w)
   rw [forwardIter_eq_iter]
   exact initial_budget_exact w k hw hk
 
+theorem production_forward_roundFit (c : Cfg)
+    (hc : c.wScale = productionW) (k n : Nat)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax) :
+    RoundFit c k (forwardIter c.wScale k n (initial c.wScale k)) := by
+  rw [forwardIter_eq_iter]
+  exact production_iter_roundFit c hc k n hk hkmax
+
+theorem production_forward_quotient_guard (c : Cfg)
+    (hc : c.wScale = productionW) (k n : Nat)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax) :
+    c.wScale /
+        midpoint (forwardIter c.wScale k n (initial c.wScale k)) ≤
+      2147483648 := by
+  rw [forwardIter_eq_iter]
+  exact production_iter_quotient_guard c hc k n hk hkmax
+
+theorem production_forward_bracket (c : Cfg)
+    (hc : c.wScale = productionW) (k n : Nat) (hk : 0 < k) :
+    let p := forwardIter c.wScale k n (initial c.wScale k)
+    p.lo ≤ p.hi ∧ p.hi < M := by
+  have hc0 := initial_contains productionW k (by decide) hk
+  have hcn := iter_contains productionW k hk n (initial productionW k) hc0
+  have hsub := iter_sub_initial productionW k n
+    (initial productionW k) hk hc0
+  have hsqrt : 0 < Nat.sqrt k := by
+    have hs := Nat.lt_succ_sqrt k
+    by_cases hz : Nat.sqrt k = 0
+    · rw [hz] at hs
+      simp at hs
+      omega
+    · exact Nat.pos_of_ne_zero hz
+  have hinitHi : (initial productionW k).hi ≤ productionW := by
+    change ceilDiv productionW (Nat.sqrt k) ≤ productionW
+    exact ceilDiv_le_self productionW (Nat.sqrt k) (by decide) hsqrt
+  have hp :
+      (forwardIter productionW k n (initial productionW k)).lo ≤
+          (forwardIter productionW k n (initial productionW k)).hi ∧
+        (forwardIter productionW k n (initial productionW k)).hi < M := by
+    rw [forwardIter_eq_iter]
+    constructor
+    · unfold Bracket.Contains at hcn
+      omega
+    · exact Nat.lt_of_le_of_lt (Nat.le_trans hsub.2 hinitHi) (by decide)
+  simpa only [hc] using hp
+
 theorem final_step_exact (c : Cfg) (k : Nat)
     (hsteps : c.bsSteps = CDEMAbelScan.bsBudget c.wScale)
     (hw : 0 < c.wScale) (hk : 0 < k) :

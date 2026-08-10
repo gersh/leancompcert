@@ -313,9 +313,26 @@ oracle. The source check took `0.16 s` at `584064 KiB` and the live module
 build took `0.30 s` at `596164 KiB`, with one worker, the 2 GiB hard cap, and
 no swap.
 
+The production readiness envelope is now partly discharged rather than
+postulated per round. `production_iter_quotient_guard` proves the checked
+`W/midpoint ≤ 2^31` condition throughout every production sub-bracket, and
+`production_forward_roundFit`, `production_forward_quotient_guard`, and
+`production_forward_bracket` transport the complete arithmetic, quotient,
+ordering, and word bounds to the scheduler's forward iterator.  The bisection
+block also has an explicit latch frame for `k`, `dPos`, `dNeg`, gate, and zero;
+`accBody_middle_latch_of_head` composes it through the actual head and both
+product blocks.  A fresh bisection source/build check took `5.67/6.04 s` at
+`767264/819720 KiB`.  The enlarged scheduler still checks in `0.35 s` at
+`576576 KiB`.  The companion body proof is intentionally isolated because
+normalizing its five carried projections together is expensive: its fresh
+source check took `62.13 s` at `651648 KiB`, and its module build took
+`76.72 s` at `708784 KiB` including rebuilt dependencies.  Every run used one
+worker, a 2 GiB hard cap, and no swap; no native evaluator is used.
+
 Still not proved: composition of the now-complete head/product/bisection
-endpoint readiness and production-fit invariants for the full 62-round
-schedule, then the μ-table build and window marking,
+endpoint readiness for the full 62-round schedule (the production-fit,
+quotient, bracket, and latch components are now discharged), then the
+μ-table build and window marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.

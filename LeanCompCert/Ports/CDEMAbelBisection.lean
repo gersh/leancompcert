@@ -917,6 +917,30 @@ theorem rounds_run (c : Cfg) (idx : Nat) (n : Nat) (r : RegState)
 def productionW : Nat := 1000000000000000000
 def productionKMax : Nat := 5000000000
 
+theorem production_sqrt_le (k : Nat) (hkmax : k ≤ productionKMax) :
+    Nat.sqrt k ≤ 70710 := by
+  by_cases h : Nat.sqrt k ≤ 70710
+  · exact h
+  · have hbase : 70711 ≤ Nat.sqrt k := by omega
+    have hsqbase := Nat.mul_le_mul hbase hbase
+    have hsqrtSq := Nat.sqrt_le k
+    dsimp [productionKMax] at hkmax
+    omega
+
+theorem production_quotient_guard (k s : Nat)
+    (_hk : 0 < k) (hkmax : k ≤ productionKMax)
+    (hlo : ceilDiv productionW (Nat.sqrt k + 1) ≤ s) :
+    productionW / s ≤ 2147483648 := by
+  have htpos : 0 < Nat.sqrt k + 1 := by omega
+  have hmul := le_ceilDiv_mul productionW (Nat.sqrt k + 1) htpos
+  have hWs : productionW ≤ s * (Nat.sqrt k + 1) := by
+    exact Nat.le_trans hmul (Nat.mul_le_mul_right _ hlo)
+  have ha : productionW / s ≤ Nat.sqrt k + 1 := by
+    apply Nat.div_le_of_le_mul
+    simpa [Nat.mul_comm] using hWs
+  have ht := production_sqrt_le k hkmax
+  omega
+
 theorem production_candidate_arith (k s : Nat)
     (hk : 0 < k) (hkmax : k ≤ productionKMax)
     (hlo : ceilDiv productionW (Nat.sqrt k + 1) ≤ s)
@@ -1148,6 +1172,21 @@ theorem production_iter_roundFit (c : CDEMAbelScan.Cfg)
       exact Nat.le_trans hmidHi hsub.2
   simpa only [hc] using hfit
 
+theorem production_iter_quotient_guard (c : CDEMAbelScan.Cfg)
+    (hc : c.wScale = productionW) (k n : Nat)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax) :
+    c.wScale / midpoint (iter c.wScale k n (initial c.wScale k)) ≤
+      2147483648 := by
+  have hc0 := initial_contains productionW k (by decide) hk
+  have hsub := iter_sub_initial productionW k n (initial productionW k) hk hc0
+  have hle : (iter productionW k n (initial productionW k)).lo ≤
+      midpoint (iter productionW k n (initial productionW k)) := by
+    simp [midpoint, Bracket.width]
+  have hlo : ceilDiv productionW (Nat.sqrt k + 1) ≤
+      midpoint (iter productionW k n (initial productionW k)) := by
+    exact Nat.le_trans hsub.1 hle
+  simpa only [hc] using production_quotient_guard k _ hk hkmax hlo
+
 theorem production_rounds_run (c : CDEMAbelScan.Cfg)
     (hc : c.wScale = productionW) (idx : Nat) (r : RegState) (k : Nat)
     (hkpos : 0 < k) (hkmax : k ≤ productionKMax)
@@ -1259,6 +1298,30 @@ theorem accBisect_u_frame (c : Cfg) (idx : Nat) (st : AState) :
           st.regs rUnHi :=
     ⟨frame rUpLo (by rfl), frame rUpHi (by rfl),
       frame rUnLo (by rfl), frame rUnHi (by rfl)⟩
+  dsimp only
+  rw [accBisect_arun]
+  simpa only [accBisectScalarS] using hall
+
+theorem accBisect_latch_frame (c : Cfg) (idx : Nat) (st : AState) :
+    let out := arun idx st c.accBisect
+    out.regs rK = st.regs rK ∧
+      out.regs rDp = st.regs rDp ∧
+      out.regs rDn = st.regs rDn ∧
+      out.regs 43 = st.regs 43 ∧
+      out.regs rZero = st.regs rZero := by
+  have frame (j : Nat)
+      (hw : RegFrame.writes j (openS c ++ roundS c ++ closeS) = false) :
+      srun idx st.regs (openS c ++ roundS c ++ closeS) j = st.regs j :=
+    RegFrame.srun_frame idx j _ hw st.regs
+  have hall :
+      srun idx st.regs (openS c ++ roundS c ++ closeS) rK = st.regs rK ∧
+        srun idx st.regs (openS c ++ roundS c ++ closeS) rDp = st.regs rDp ∧
+        srun idx st.regs (openS c ++ roundS c ++ closeS) rDn = st.regs rDn ∧
+        srun idx st.regs (openS c ++ roundS c ++ closeS) 43 = st.regs 43 ∧
+        srun idx st.regs (openS c ++ roundS c ++ closeS) rZero =
+          st.regs rZero :=
+    ⟨frame rK (by rfl), frame rDp (by rfl), frame rDn (by rfl),
+      frame 43 (by rfl), frame rZero (by rfl)⟩
   dsimp only
   rw [accBisect_arun]
   simpa only [accBisectScalarS] using hall
