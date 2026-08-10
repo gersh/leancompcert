@@ -901,3 +901,28 @@ Under the same serialized one-worker 2 GiB zero-swap cgroup:
 Both marking capstones print only `[propext, Quot.sound]`. Remaining marking
 work is the out-of-range divisor-advance transition, cursor telescoping, and
 the source identification of the resulting resident convolution window.
+
+The live out-of-range transition is now proved as well.
+`markBody_active_cursor_advance` follows the complete literal emitted
+`markBody` when `cell ≥ segLen` and `d < kBound`: the suppressed array write
+lands only in the sink, `d` advances to `d+1`, the resident table entry at
+`muBase+d+1` is loaded, codes `0/1/2` are decoded to `0/+1/-1`, the first
+multiple `(d+1 - W % (d+1)) % (d+1)` is selected (or `segLen` for code zero),
+and the final cursor mux commits those values. The proof splits the emitted
+middle at literal instruction boundaries into a six-instruction load/decode
+block and a thirteen-instruction offset/parking block; this avoids the
+recursive term expansion encountered by the initial monolithic proof.
+
+Under the same serialized one-worker 2 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh extended cursor source | 10.62 s | 739,648 KiB | 323,117,056 B | 0 |
+| extended cursor module build | 10.86 s | 694,128 KiB | 295,129,088 B | 0 |
+| fresh three-theorem axiom print | 0.16 s | 524,184 KiB | 87,564,288 B | 0 |
+| cached umbrella consumer build | 0.64 s | 1,732,332 KiB | 217,268,224 B | 0 |
+
+The prefix, middle, and complete transition each print only
+`[propext, Quot.sound]`. Remaining marking work is the terminal cursor case,
+the finite `markSteps` telescope, and identification of the finished resident
+window with the source divisor convolution.
