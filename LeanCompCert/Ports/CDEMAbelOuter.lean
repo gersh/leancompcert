@@ -377,6 +377,11 @@ theorem body_acc_sink_clear_of_parts (c : Cfg) (idx : Nat) (st : AState)
 structure OuterMiddleSpec (c : Cfg) (k : Nat) (p : Bracket)
     (before after : AState) : Prop where
   arr : SinkClearSpec c before after
+  key : after.regs rK = before.regs rK
+  dPos : after.regs rDp = before.regs rDp
+  dNeg : after.regs rDn = before.regs rDn
+  gate : after.regs 43 = 1
+  zero : after.regs rZero = before.regs rZero
   low : after.regs rSl = (step c.wScale k p).lo
   high : after.regs rSh = (step c.wScale k p).hi
   uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
@@ -437,6 +442,15 @@ theorem body_middle_live_run (c : Cfg) (idx : Nat) (st : AState)
     (by rw [hp.high, hhigh]; exact hhiM)
     hfitPref hquotPref
     (by rw [hp.round, hp.gate]; exact hkrFit) hwPref.1 hwPref.2
+  have hl :
+      accumulated.regs rK = prefixed.regs rK ∧
+        accumulated.regs rDp = prefixed.regs rDp ∧
+        accumulated.regs rDn = prefixed.regs rDn ∧
+        accumulated.regs 43 = prefixed.regs 43 ∧
+        accumulated.regs rZero = prefixed.regs rZero := by
+    rw [show accumulated = arun idx prefixed c.accBody from rfl,
+      arun_accBody_eq_parts]
+    exact accBody_middle_latch_of_head c idx prefixed hh hwPref.1 hwPref.2
   have hprefLive := accPrefix_live_frame c idx st hidxM hsieveM hsieve
     hmarkM hR hzero hsinkM
   have prefFrame (j : Nat)
@@ -456,6 +470,11 @@ theorem body_middle_live_run (c : Cfg) (idx : Nat) (st : AState)
             intro j hj
             rw [tailArr]
             exact (hm.arr.live j hj).trans (hprefLive j hj) }
+      key := by rw [tailFrame rK (by rfl), hl.1, hp.key]
+      dPos := by rw [tailFrame rDp (by rfl), hl.2.1, hp.dPos]
+      dNeg := by rw [tailFrame rDn (by rfl), hl.2.2.1, hp.dNeg]
+      gate := by rw [tailFrame 43 (by rfl), hl.2.2.2.1, hp.gate]
+      zero := by rw [tailFrame rZero (by rfl), hl.2.2.2.2, hp.zero]
       low := by rw [tailFrame rSl (by rfl), hm.low, hp.key, hp.low, hp.high,
         hkey, hlow, hhigh]
       high := by rw [tailFrame rSh (by rfl), hm.high, hp.key, hp.low, hp.high,

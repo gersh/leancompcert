@@ -725,6 +725,43 @@ invariant, selecting continue for all nonterminal iterations and wrap at the
 end of a full window.
 
 After adding the readiness module to the umbrella import, a serialized
-`lake build LeanCompCert` completed in 0.63 s at 1,730,380 KiB peak RSS with
-zero swap under the same 2 GiB hard cap. The high cached-import footprint is
-below the cap but confirms that umbrella checks must remain serialized.
+`lake build LeanCompCert` completed in 0.63 s with zero swap under the same
+2 GiB hard cap. GNU `time` reported 1,730,380 KiB RSS, but a later run that
+also sampled the enclosing cgroup recorded only 216,588,288 bytes at the
+kernel boundary (0.73 s, GNU `time` 1,729,056 KiB). The disparity comes from
+the imported/shared mappings counted by `time`; cgroup `memory.peak` is the
+authoritative hard-limit measurement.
+
+The production readiness gap is now closed at the literal cell-schedule
+level. `FirstStepReady` lists the finite word, square-root-step, and wide-product
+guards consumed by the emitted first accumulator round, and
+`body_first_ready_run` derives the first literal-body contract from those
+guards instead of assuming that contract. `ProductionOuterMiddleCore` carries
+the key, signed increments, round and cell counters, cursor/window position,
+and machine-word invariants. `bodyIter_production_middle_ready` proves every
+middle literal-body contract and threads that core through the actual tail
+continue branch.
+
+Finally, `bodySchedule_production_ready` composes the first, all middle, and
+final literal bodies into `OuterFullAccSpec`. Its accompanying
+`ProductionCellCursorSpec` selects the real tail branch: an interior cell
+advances the cursor, while the last cell resets it and advances the window by
+`segLen`. The proof uses the definitional production period
+`markSteps + segLen * (bsSteps + 1)`; no cursor outcome is supplied as a
+semantic assumption. A fresh axiom print for the theorem reports only
+`[propext, Classical.choice, Quot.sound]`.
+
+The kernel cgroup peak is the authoritative memory measurement here; GNU
+`time` includes imported/shared mappings and reported a larger RSS. With one
+Lean worker, no swap, `MemoryHigh=1536M`, and `MemoryMax=2G`:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh readiness source | 61.12 s | 644,860 KiB | 210,149,376 B | 0 |
+| readiness consumer build | 2 min 15.90 s | 682,880 KiB | 270,831,616 B | 0 |
+| fresh capstone axiom print | 0.14 s | 524,472 KiB | 85,983,232 B | 0 |
+
+The remaining production proof is below this scheduler boundary: establish
+`FirstStepReady` and the named first-round values from the resident Möbius
+table and streamed floor-convolution invariant, then telescope the proven
+cell theorem across all windows.
