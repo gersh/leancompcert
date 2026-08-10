@@ -414,6 +414,7 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | arithmetic constructor plus generic initializer/body word closure, direct source check | 38.99 s | 4,320,416 KiB | 0 | success |
 | arithmetic constructor plus generic initializer/body word closure, module build | 37.92 s | 4,314,408 KiB | 0 | success |
 | opaque word-state endpoint carrier, direct source check | 38.13 s | 4,332,888 KiB | 0 | success |
+| compact maximum-headroom constructor, direct source check | 0.26 s | 579,892 KiB | 0 | success under 4 GiB hard cap |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -504,6 +505,15 @@ carried log and selected positional table cell.  Both lower and upper
 candidate bounds are now proved independently of the emitted selection
 implementation, preparing uniform headroom propagation without assuming
 opaque machine values.
+The six numerical obligations are now packaged in the compact
+`ProductionArithmeticHeadroom` boundary.  Its maximum-endpoint constructor
+proves the exact emitted `ArithmeticPre`, including lower division, upper
+ceiling division, and both quotient-output bounds.  Two earlier theorem
+layouts duplicated the selected table-address expressions throughout the
+elaborated proposition and approached 6.01 GiB; both checks were stopped
+before the cgroup could OOM.  Factoring those expressions into named
+definitions and structure projections reduced the fresh source check to
+579,892 KiB RSS and 0.26 seconds, with no swap.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert
