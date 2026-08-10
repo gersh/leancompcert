@@ -1171,3 +1171,29 @@ lemmas print `[propext, Quot.sound]`; readiness additionally prints
 `Classical.choice`. Remaining resident-table work is the pure arithmetic
 identification of each completed row with `Ref.muCode`, followed by the
 emitted initialization/scheduler connection.
+
+The source computation has now been reformulated in the same finite shape as
+the compiled table builder. `Ref.muCodeWith` folds an explicit prime list by
+`Ref.primeTrialStep`, and `Ref.muCodeFor K` uses exactly
+`primesBelow (sqrt K + 1)`. Both `Ref.deltaF` and `markBudget` consume this
+configuration-shaped code. The earlier divisor-by-divisor `Ref.muCode` is
+retained as an independent audit implementation; it is no longer the live
+resident-table specification. `CDEMAbelMarkReady.muCode_cases` proves the new
+finite code is always `0`, `1`, or `2`, so the existing marking telescope now
+uses the runnable source computation directly.
+
+A complete production-domain executable audit compared all `199331` new
+codes with the retained reference and returned `true`; recomputing the
+production budget returned the unchanged numeral `8845158`. The audit took
+94.62 seconds at cgroup peak 97,837,056 bytes. This exhaustive comparison is
+an audit, not the still-required theorem identifying the prime fold with the
+paper's Möbius function.
+
+Changing the low-level scan invalidated the large downstream cache. A fresh
+scan source/module check took 11.37/12.57 seconds at cgroup peaks
+206,860,288/251,260,928 bytes. The first capped umbrella pass made progress
+through job 197 before its four-minute timeout, peaking at 1,073,823,744 bytes
+with no swap; the resumed incremental pass completed all 278 jobs in 7:34.72
+at cgroup peak 377,155,584 bytes. The 1.5 GiB hard limit was never approached.
+Fresh axiom prints for the new code-range theorem and its marking consumers
+contain only `propext`, `Classical.choice`, and `Quot.sound`.

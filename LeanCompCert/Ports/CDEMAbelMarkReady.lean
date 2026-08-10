@@ -14,24 +14,58 @@ open LeanCompCert.Ports.CDEMAbelScan
 open LeanCompCert.Ports.CDEMAbelMark
 open LeanCompCert.Ports.CDEMAbelMarkTelescope
 
-theorem muCode_cases (n : Nat) :
-    Ref.muCode n = 0 ∨ Ref.muCode n = 1 ∨ Ref.muCode n = 2 := by
-  unfold Ref.muCode
-  split
-  · simp
-  · dsimp only
-    by_cases h2 : Ref.muCodeAux n 2 (n + 2) 0 = 2
-    · left
-      simp [h2]
-    · by_cases h0 : Ref.muCodeAux n 2 (n + 2) 0 = 0
-      · right; left
-        simp [h0]
-      · right; right
-        simp [h2, h0]
+private theorem primeTrialStep_bits (s : Ref.PrimeTrial) (p : Nat)
+    (hpar : s.par ≤ 1) (hsqf : s.sqf ≤ 1) :
+    (Ref.primeTrialStep s p).par ≤ 1 ∧
+      (Ref.primeTrialStep s p).sqf ≤ 1 := by
+  rcases (by omega : s.par = 0 ∨ s.par = 1) with hp | hp <;>
+    rcases (by omega : s.sqf = 0 ∨ s.sqf = 1) with hs | hs
+  all_goals
+    by_cases hhit : s.m % p = 0
+    · by_cases hrep : s.m / p % p = 0
+      · simp [Ref.primeTrialStep, hp, hs, hhit, hrep, M]
+      · simp [Ref.primeTrialStep, hp, hs, hhit, hrep, M]
+    · simp [Ref.primeTrialStep, hp, hs, hhit, M]
+
+private theorem primeTrialFold_bits (ps : List Nat) (n : Nat) :
+    let s := ps.foldl Ref.primeTrialStep ⟨n, 0, 1⟩
+    s.par ≤ 1 ∧ s.sqf ≤ 1 := by
+  have aux : ∀ (xs : List Nat) (s : Ref.PrimeTrial),
+      s.par ≤ 1 → s.sqf ≤ 1 →
+      let out := xs.foldl Ref.primeTrialStep s
+      out.par ≤ 1 ∧ out.sqf ≤ 1 := by
+    intro xs
+    induction xs with
+    | nil =>
+        intro s hp hs
+        exact ⟨hp, hs⟩
+    | cons p ps ih =>
+        intro s hp hs
+        simp only [List.foldl_cons]
+        exact ih _ (primeTrialStep_bits s p hp hs).1
+          (primeTrialStep_bits s p hp hs).2
+  exact aux ps ⟨n, 0, 1⟩ (by simp) (by simp)
+
+private theorem decodePrimeTrial_cases (s : Ref.PrimeTrial)
+    (hpar : s.par ≤ 1) (hsqf : s.sqf ≤ 1) :
+    Ref.decodePrimeTrial s = 0 ∨ Ref.decodePrimeTrial s = 1 ∨
+      Ref.decodePrimeTrial s = 2 := by
+  rcases (by omega : s.par = 0 ∨ s.par = 1) with hp | hp <;>
+    rcases (by omega : s.sqf = 0 ∨ s.sqf = 1) with hs | hs <;>
+    simp [Ref.decodePrimeTrial, hp, hs] <;>
+    split <;> decide
+
+theorem muCode_cases (kBound n : Nat) :
+    Ref.muCodeFor kBound n = 0 ∨ Ref.muCodeFor kBound n = 1 ∨
+      Ref.muCodeFor kBound n = 2 := by
+  unfold Ref.muCodeFor Ref.muCodeWith
+  apply decodePrimeTrial_cases
+  · exact (primeTrialFold_bits _ _).1
+  · exact (primeTrialFold_bits _ _).2
 
 structure MarkInv (c : Cfg) (model : MarkState) : Prop where
   table : ∀ d, 1 ≤ d → d ≤ c.kBound →
-    model.arr (d + c.muBase) = Ref.muCode d
+    model.arr (d + c.muBase) = Ref.muCodeFor c.kBound d
   divisorPos : 1 ≤ model.divisor
   divisorBound : model.divisor ≤ c.kBound
   signWord : model.sign < M
@@ -39,7 +73,7 @@ structure MarkInv (c : Cfg) (model : MarkState) : Prop where
 
 theorem first_inv (c : Cfg) (st : AState)
     (htable : ∀ d, 1 ≤ d → d ≤ c.kBound →
-      st.arr (d + c.muBase) = Ref.muCode d)
+      st.arr (d + c.muBase) = Ref.muCodeFor c.kBound d)
     (hkPos : 0 < c.kBound) :
     MarkInv c (MarkState.first c st) := by
   exact
@@ -79,11 +113,11 @@ theorem step_inv (c : Cfg) (w : Nat) (model : MarkState)
     exact h.table d hd hdK
   · by_cases hdK : model.divisor < c.kBound
     · let code := model.arr (model.divisor + 1 + c.muBase)
-      have hcodeEq : code = Ref.muCode (model.divisor + 1) := by
+      have hcodeEq : code = Ref.muCodeFor c.kBound (model.divisor + 1) := by
         exact h.table (model.divisor + 1) (by omega) (by omega)
       have hcode : code = 0 ∨ code = 1 ∨ code = 2 := by
         rw [hcodeEq]
-        exact muCode_cases _
+        exact muCode_cases c.kBound _
       have hdNextM : model.divisor + 1 < M := by omega
       exact
         { table := by
@@ -132,7 +166,7 @@ theorem ready_of_inv (c : Cfg) (model : MarkState) (h : MarkInv c model)
       have hcodeEq := h.table (model.divisor + 1) (by omega) (by omega)
       exact .advance (Nat.not_lt.mp hcell) hdK h.multipleWord h.signWord
         (Nat.lt_trans (Nat.succ_lt_succ hdK) hkNextM) haddrM
-        (by rw [hcodeEq]; exact muCode_cases _)
+        (by rw [hcodeEq]; exact muCode_cases c.kBound _)
     · exact .terminal (Nat.not_lt.mp hcell)
         (Nat.le_antisymm h.divisorBound (Nat.le_of_not_gt hdK))
         h.multipleWord h.signWord
@@ -157,7 +191,7 @@ theorem iter_ready (c : Cfg) (w n : Nat) (model : MarkState)
 
 theorem first_iter_ready (c : Cfg) (st : AState) (w n : Nat)
     (htable : ∀ d, 1 ≤ d → d ≤ c.kBound →
-      st.arr (d + c.muBase) = Ref.muCode d)
+      st.arr (d + c.muBase) = Ref.muCodeFor c.kBound d)
     (hkPos : 0 < c.kBound) (hsegM : c.segLen < M)
     (hkNextM : c.kBound + 1 < M) (hsumM : c.segLen + c.kBound < M)
     (hsinkM : c.sink < M) :
@@ -172,7 +206,7 @@ theorem bodyIter_markState_from_start_ready (c : Cfg) (idx n : Nat)
     (hfirst : MarkStateRep c w 1 (MarkState.first c st)
       (arun idx st c.body))
     (htable : ∀ d, 1 ≤ d → d ≤ c.kBound →
-      st.arr (d + c.muBase) = Ref.muCode d)
+      st.arr (d + c.muBase) = Ref.muCodeFor c.kBound d)
     (hspan : 1 + n ≤ c.markSteps)
     (hidxM : idx < M) (hsieveM : c.sieveLen < M)
     (hsieve : c.sieveLen ≤ idx) (hmarkM : c.markSteps < M)

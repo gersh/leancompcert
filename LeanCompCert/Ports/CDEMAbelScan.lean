@@ -173,13 +173,43 @@ def muCode (n : Nat) : Nat :=
     let r := muCodeAux n 2 (n + 2) 0
     if r = 2 then 0 else if r = 0 then 1 else 2
 
+/-- The configuration-shaped finite trial state used by the compiled resident
+table. Unlike `muCodeAux`, this processes exactly the emitted prime list. -/
+structure PrimeTrial where
+  m : Nat
+  par : Nat
+  sqf : Nat
+
+def primeTrialStep (s : PrimeTrial) (p : Nat) : PrimeTrial :=
+  let hit := if s.m % p = 0 then 1 else 0
+  let m' := if hit = 1 then s.m / p else s.m
+  let par' := (s.par ^^^ hit) % M
+  let repeated := ((if m' % p = 0 then 1 else 0) * hit) % M
+  let keep := (1 + (M - repeated)) % M
+  { m := m', par := par', sqf := (s.sqf * keep) % M }
+
+def decodePrimeTrial (s : PrimeTrial) : Nat :=
+  let large := if 1 < s.m then 1 else 0
+  let sign := (s.par ^^^ large) % M
+  (((sign + 1) % M) * s.sqf) % M
+
+/-- Finite Möbius-code computation for an explicit emitted prime list. -/
+def muCodeWith (primes : List Nat) (n : Nat) : Nat :=
+  decodePrimeTrial (primes.foldl primeTrialStep ⟨n, 0, 1⟩)
+
+/-- The source computation used for a `kBound` scan. It deliberately uses the
+same finite prime list as `Cfg.ofRange`; mathematical identification with
+Möbius is a separate coverage theorem. -/
+def muCodeFor (kBound n : Nat) : Nat :=
+  muCodeWith (primesBelow (Nat.sqrt kBound + 1)) n
+
 /-- `Σ_{d ∣ k, d ≤ K} μ(d)`, as a wrapped `u64`. -/
 def deltaF (kBound k : Nat) : Nat :=
   ((List.range (kBound + 1)).drop 1).foldl
     (fun acc d =>
       if k % d ≠ 0 then acc
       else
-        let c := muCode d
+        let c := muCodeFor kBound d
         if c = 1 then (acc + 1) % M
         else if c = 2 then (acc + (M - 1)) % M else acc) 0
 
@@ -276,7 +306,7 @@ def bsBudget (w : Nat) : Nat := Nat.log2 (w + 1) + 2
 /-- Marks per window plus one cursor advance per divisor, plus slack. -/
 def markBudget (kBound segLen : Nat) : Nat :=
   let marks := ((List.range (kBound + 1)).drop 1).foldl
-    (fun acc d => if Ref.muCode d = 0 then acc else acc + segLen / d + 2) 0
+    (fun acc d => if Ref.muCodeFor kBound d = 0 then acc else acc + segLen / d + 2) 0
   marks + kBound + 16
 
 def Cfg.ofRange (wScale kBound segLen segCount : Nat) : Cfg :=
