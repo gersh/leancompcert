@@ -121,6 +121,48 @@ theorem PsiQR.advance_q_le_add (n lam : Nat) (z : PsiQR) :
       exact Nat.le_trans (Nat.sub_le _ _)
         (Nat.le_trans (Nat.sub_le _ _) hq)
 
+/-! ## Source-shaped lambda bounds -/
+
+/-- A branchless lambda selection is bounded by the larger of its carried
+and positional-table endpoints. -/
+theorem LambdaPsiSweep.selectedLambda_le_max
+    (gate rest p n old tab : Nat) :
+    LambdaPsiSweep.selectedLambda gate rest p n old tab ≤ max old tab := by
+  by_cases hg : gate = 1 ∧ rest = 1
+  · by_cases hp : p = n
+    · simp [LambdaPsiSweep.selectedLambda, hg, hp, Nat.le_max_left]
+    · simp [LambdaPsiSweep.selectedLambda, hg, hp, Nat.le_max_right]
+  · simp [LambdaPsiSweep.selectedLambda, hg]
+
+/-- The selected lower lambda is bounded by the current lower carried log or
+the selected finite table cell. -/
+theorem LambdaPsiSweep.candidateLowerLambda_le_max
+    (c : LambdaPsiSweep.Cfg) (s : AState) :
+    LambdaPsiSweep.candidateLowerLambda c s ≤
+      max (s.regs LambdaPsiSweep.lRLogL)
+        (s.arr (LambdaPsiSweep.selectedLoIndex c
+          (s.regs LambdaPsiSweep.sRP))) := by
+  unfold LambdaPsiSweep.candidateLowerLambda
+  apply Nat.le_trans (LambdaPsiSweep.selectedLambda_le_max ..)
+  apply Nat.max_le.mpr
+  constructor
+  · exact Nat.le_trans (Nat.sub_le _ _) (Nat.le_max_left ..)
+  · exact Nat.le_max_right ..
+
+/-- Upper-endpoint analogue of `candidateLowerLambda_le_max`. -/
+theorem LambdaPsiSweep.candidateUpperLambda_le_max
+    (c : LambdaPsiSweep.Cfg) (s : AState) :
+    LambdaPsiSweep.candidateUpperLambda c s ≤
+      max (s.regs LambdaPsiSweep.lRLogU)
+        (s.arr (LambdaPsiSweep.selectedHiIndex c
+          (s.regs LambdaPsiSweep.sRP))) := by
+  unfold LambdaPsiSweep.candidateUpperLambda
+  apply Nat.le_trans (LambdaPsiSweep.selectedLambda_le_max ..)
+  apply Nat.max_le.mpr
+  constructor
+  · exact Nat.le_trans (Nat.sub_le _ _) (Nat.le_max_left ..)
+  · exact Nat.le_max_right ..
+
 set_option maxRecDepth 100000 in
 /-- Construct the complete production `ArithmeticPre` from its genuinely
 cumulative no-wrap fields.  Word closure, phase/candidate range, finite log

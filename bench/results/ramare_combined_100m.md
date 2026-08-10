@@ -499,6 +499,11 @@ As with the classification endpoint, concrete finite-run word closure is now
 exported through `WordStateInv state`.  This lets downstream code specialize
 the full mark and classification fuels without forcing projections of the
 recursive state.
+The source-shaped lambda mux is also bounded by the maximum of its recovered
+carried log and selected positional table cell.  Both lower and upper
+candidate bounds are now proved independently of the emitted selection
+implementation, preparing uniform headroom propagation without assuming
+opaque machine values.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert
