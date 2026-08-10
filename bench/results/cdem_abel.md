@@ -947,6 +947,24 @@ These checks used an even stricter serialized one-worker cgroup:
 | cached umbrella consumer build | 0.63 s | 1,730,524 KiB | 219,435,008 B | 0 |
 
 All three terminal theorems print only `[propext, Quot.sound]`. Every active
-mark-body branch now has literal semantics; remaining marking work is the
-finite `markSteps` telescope and the source identification of the completed
-resident divisor-convolution window.
+out-of-window branch now has literal semantics. The in-window cursor handoff
+was the remaining per-iteration component.
+
+`markBody_active_resident_transition` now strengthens the resident-store
+contract to the complete in-window transition: after the exact modular array
+write, the divisor and wrapped sign are unchanged and the next multiple is
+`cell+d`. The nine-instruction cursor head is represented by exact literal
+2/1/2/4-instruction blocks so no simplifier invocation expands the whole
+head. These checks used the same one-worker 1.5 GiB zero-swap cap:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh complete resident transition source | 13.60 s | 716,212 KiB | 313,102,336 B | 0 |
+| complete resident transition module build | 14.16 s | 759,888 KiB | 379,219,968 B | 0 |
+| fresh capstone axiom print | 0.16 s | 528,652 KiB | 89,399,296 B | 0 |
+| cached umbrella consumer build | 0.63 s | 1,730,888 KiB | 215,240,704 B | 0 |
+
+The new capstone prints only `[propext, Quot.sound]`. Every active mark-body
+branch now has complete literal array and cursor semantics; remaining marking
+work is the finite `markSteps` telescope and source identification of the
+completed resident divisor-convolution window.

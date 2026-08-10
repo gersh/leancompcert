@@ -38,7 +38,47 @@ def markFirstCursorTail (c : Cfg) : List AInstr :=
   (c.markBody.drop 32).take 36
 
 def markFirstCursorHead (c : Cfg) : List AInstr :=
-  (markFirstCursorTail c).take 9
+  [ .scalar (.binop 89 .mul (.reg rD) (.reg 82))
+  , .scalar (.binop rJ .add (.reg rJ) (.reg 89))
+  , .scalar (.binop 90 .sub (.reg 42) (.reg 82))
+  , .scalar (.binop 91 .add (.reg rD) (.reg 90))
+  , .scalar (.binop 92 .gt (.reg 91) (.lit c.kBound)) ] ++
+    muxBody rD 92 rD 91 93
+
+def markCursorArithmetic (c : Cfg) : List AInstr :=
+  [ .scalar (.binop 89 .mul (.reg rD) (.reg 82))
+  , .scalar (.binop rJ .add (.reg rJ) (.reg 89))
+  , .scalar (.binop 90 .sub (.reg 42) (.reg 82))
+  , .scalar (.binop 91 .add (.reg rD) (.reg 90))
+  , .scalar (.binop 92 .gt (.reg 91) (.lit c.kBound)) ]
+
+def markMultipleAdvance : List AInstr :=
+  [ .scalar (.binop 89 .mul (.reg rD) (.reg 82))
+  , .scalar (.binop rJ .add (.reg rJ) (.reg 89)) ]
+
+def markDivisorTest (c : Cfg) : List AInstr :=
+  [ .scalar (.binop 90 .sub (.reg 42) (.reg 82))
+  , .scalar (.binop 91 .add (.reg rD) (.reg 90))
+  , .scalar (.binop 92 .gt (.reg 91) (.lit c.kBound)) ]
+
+def markCursorGate : List AInstr :=
+  [ .scalar (.binop 90 .sub (.reg 42) (.reg 82)) ]
+
+def markCursorBound (c : Cfg) : List AInstr :=
+  [ .scalar (.binop 91 .add (.reg rD) (.reg 90))
+  , .scalar (.binop 92 .gt (.reg 91) (.lit c.kBound)) ]
+
+theorem markDivisorTest_split (c : Cfg) :
+    markDivisorTest c = markCursorGate ++ markCursorBound c := rfl
+
+theorem markCursorArithmetic_split (c : Cfg) :
+    markCursorArithmetic c = markMultipleAdvance ++ markDivisorTest c := rfl
+
+def markCursorDivisorMux : List AInstr := muxBody rD 92 rD 91 93
+
+theorem markFirstCursorHead_split (c : Cfg) :
+    markFirstCursorHead c = markCursorArithmetic c ++
+      markCursorDivisorMux := rfl
 
 def markFirstCursorMiddle (c : Cfg) : List AInstr :=
   ((markFirstCursorTail c).drop 9).take 19
@@ -833,5 +873,175 @@ theorem markBody_active_resident_store (c : Cfg) (idx : Nat) (st : AState)
     { array := fun j => by
         rw [congrFun htailArr j]
         exact hstoredArr j }
+
+/-- Complete in-window active mark: perform the resident modular update, keep
+the divisor and sign, and advance the next multiple by exactly the divisor. -/
+structure ActiveResidentMarkSpec (c : Cfg) (d cell sign : Nat)
+    (before after : AState) extends ActiveResidentStoreSpec c cell sign before after where
+  divisor : after.regs rD = d
+  sign : after.regs rSg = sign
+  multiple : after.regs rJ = cell + d
+
+set_option maxRecDepth 8192 in
+set_option maxHeartbeats 1000000 in
+theorem markBody_active_resident_transition (c : Cfg) (idx : Nat)
+    (st : AState) (d cell sign : Nat)
+    (hphase : st.regs 41 = 1) (hgate : st.regs 42 = 1)
+    (hR : st.regs rR ≠ 0) (hzero : st.regs rZero = 0)
+    (hD : st.regs rD = d) (hJ : st.regs rJ = cell)
+    (hSg : st.regs rSg = sign) (hcellSeg : cell < c.segLen)
+    (hdK : d ≤ c.kBound) (hdM : d < M) (hcellM : cell < M)
+    (hsignM : sign < M) (hnextM : cell + d < M)
+    (hsegM : c.segLen < M) (hkM : c.kBound < M)
+    (haddrM : cell + c.winBase < M) :
+    ActiveResidentMarkSpec c d cell sign st (arun idx st c.markBody) := by
+  have harr := markBody_active_resident_store c idx st cell sign hphase
+    hgate hR hzero hJ hSg hcellSeg hcellM hsignM hsegM haddrM
+  have h1M : (1 : Nat) % M = 1 := by decide
+  have hdMod : d % M = d := Nat.mod_eq_of_lt hdM
+  have hcellMod : cell % M = cell := Nat.mod_eq_of_lt hcellM
+  have hsignMod : sign % M = sign := Nat.mod_eq_of_lt hsignM
+  have hnextMod : (cell + d) % M = cell + d := Nat.mod_eq_of_lt hnextM
+  have hsegMod : c.segLen % M = c.segLen := Nat.mod_eq_of_lt hsegM
+  have hkMod : c.kBound % M = c.kBound := Nat.mod_eq_of_lt hkM
+  have hnotGt : ¬ c.kBound < d := by omega
+  have hR2 : st.regs 2 ≠ 0 := by simpa [rR] using hR
+  have hzero1 : st.regs 1 = 0 := by simpa [rZero] using hzero
+  have hD4 : st.regs 4 = d := by simpa [rD] using hD
+  have hJ6 : st.regs 6 = cell := by simpa [rJ] using hJ
+  have hSg5 : st.regs 5 = sign := by simpa [rSg] using hSg
+  let pre := arun idx st (c.markBody.take 21)
+  have hpre : pre.regs 42 = 1 ∧ pre.regs 82 = 1 ∧
+      pre.regs rD = d ∧ pre.regs rSg = sign ∧ pre.regs rJ = cell := by
+    simp [pre, Cfg.markBody, muxBody, arun, astep, InstrBlock.sdest,
+      InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
+      rZero, rR, rC, rD, rSg, rJ, hphase, hgate, hR2, hzero1,
+      hD4, hJ6, hSg5, hdMod, hcellMod, hsignMod, hsegMod,
+      hcellSeg, h1M]
+  rcases hpre with ⟨hp42, hp82, hpD, hpSg, hpJ⟩
+  have hpD4 : pre.regs 4 = d := by simpa [rD] using hpD
+  have hpSg5 : pre.regs 5 = sign := by simpa [rSg] using hpSg
+  have hpJ6 : pre.regs 6 = cell := by simpa [rJ] using hpJ
+  let stored := arun idx pre (markInactiveStoreBlock c)
+  have hs : stored.regs 42 = 1 ∧ stored.regs 82 = 1 ∧
+      stored.regs rD = d ∧ stored.regs rSg = sign ∧
+      stored.regs rJ = cell := by
+    simp [stored, markInactiveStoreBlock, arun, astep, InstrBlock.sdest,
+      InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
+      AState.writeArr, rD, rSg, rJ, hp42, hp82, hpD4, hpSg5, hpJ6,
+      hsignMod, h1M]
+  rcases hs with ⟨hs42, hs82, hsD, hsSg, hsJ⟩
+  have hsD4 : stored.regs 4 = d := by simpa [rD] using hsD
+  have hsSg5 : stored.regs 5 = sign := by simpa [rSg] using hsSg
+  have hsJ6 : stored.regs 6 = cell := by simpa [rJ] using hsJ
+  have honePlusM : (1 + M) % M = 1 := by decide
+  have hzeroGate : (1 + (M - 1)) % M = 0 := by decide
+  let multiplied := arun idx stored markMultipleAdvance
+  have hmulJ : multiplied.regs rJ = cell + d := by
+    simp [multiplied, markMultipleAdvance, arun, astep,
+      InstrBlock.sdest, InstrBlock.sval, denoteOperand, denoteOp,
+      AState.writeReg, rD, rJ, hs82, hsD4, hsJ6, hdMod, hnextMod]
+  have hmulD : multiplied.regs rD = d := by
+    rw [show multiplied.regs rD = stored.regs rD from
+      ArrayRegFrame.arun_frame idx rD markMultipleAdvance (by rfl) stored,
+      hsD]
+  have hmulSg : multiplied.regs rSg = sign := by
+    rw [show multiplied.regs rSg = stored.regs rSg from
+      ArrayRegFrame.arun_frame idx rSg markMultipleAdvance (by rfl) stored,
+      hsSg]
+  have hmul42 : multiplied.regs 42 = 1 :=
+    (ArrayRegFrame.arun_frame idx 42 markMultipleAdvance
+      (by rfl) stored).trans hs42
+  have hmul82 : multiplied.regs 82 = 1 :=
+    (ArrayRegFrame.arun_frame idx 82 markMultipleAdvance
+      (by rfl) stored).trans hs82
+  have hmulD4 : multiplied.regs 4 = d := by simpa [rD] using hmulD
+  let gated := arun idx multiplied markCursorGate
+  have hg90 : gated.regs 90 = 0 := by
+    simp [gated, markCursorGate, arun, astep, InstrBlock.sdest,
+      InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
+      hmul42, hmul82, hzeroGate]
+  have hgD : gated.regs rD = d :=
+    (ArrayRegFrame.arun_frame idx rD markCursorGate
+      (by rfl) multiplied).trans hmulD
+  have hgD4 : gated.regs 4 = d := by simpa [rD] using hgD
+  let tested := arun idx gated (markCursorBound c)
+  have ht : tested.regs 90 = 0 ∧ tested.regs 91 = d ∧
+      tested.regs 92 = 0 := by
+    simp [tested, markCursorBound, arun, astep, InstrBlock.sdest,
+      InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
+      rD, hg90, hgD4, hdMod, hkMod, hnotGt, hdK]
+  have htD : tested.regs rD = d := by
+    rw [show tested.regs rD = gated.regs rD from
+      ArrayRegFrame.arun_frame idx rD (markCursorBound c) (by rfl) gated,
+      hgD]
+  have htSg : tested.regs rSg = sign := by
+    rw [show tested.regs rSg = gated.regs rSg from
+      ArrayRegFrame.arun_frame idx rSg (markCursorBound c) (by rfl) gated,
+      show gated.regs rSg = multiplied.regs rSg from
+        ArrayRegFrame.arun_frame idx rSg markCursorGate (by rfl) multiplied,
+      hmulSg]
+  have htJ : tested.regs rJ = cell + d := by
+    rw [show tested.regs rJ = gated.regs rJ from
+      ArrayRegFrame.arun_frame idx rJ (markCursorBound c) (by rfl) gated,
+      show gated.regs rJ = multiplied.regs rJ from
+        ArrayRegFrame.arun_frame idx rJ markCursorGate (by rfl) multiplied,
+      hmulJ]
+  have htD4 : tested.regs 4 = d := by simpa [rD] using htD
+  let headed := arun idx tested markCursorDivisorMux
+  have hhD : headed.regs rD = d := by
+    simp [headed, markCursorDivisorMux, muxBody, arun, astep,
+      InstrBlock.sdest, InstrBlock.sval, denoteOperand, denoteOp,
+      AState.writeReg, rD, ht.2.1, ht.2.2, htD4, hdMod, honePlusM]
+  have hh : headed.regs 90 = 0 ∧ headed.regs rD = d ∧
+      headed.regs rSg = sign ∧ headed.regs rJ = cell + d := by
+    refine ⟨?_, hhD, ?_, ?_⟩
+    · exact (ArrayRegFrame.arun_frame idx 90 markCursorDivisorMux
+        (by rfl) tested).trans ht.1
+    · exact (ArrayRegFrame.arun_frame idx rSg markCursorDivisorMux
+        (by rfl) tested).trans htSg
+    · exact (ArrayRegFrame.arun_frame idx rJ markCursorDivisorMux
+        (by rfl) tested).trans htJ
+  let middled := arun idx headed (markFirstCursorMiddle c)
+  have middleFrame (j : Nat)
+      (hwrites : ArrayRegFrame.writes j (markFirstCursorMiddle c) = false) :
+      middled.regs j = headed.regs j :=
+    ArrayRegFrame.arun_frame idx j (markFirstCursorMiddle c) hwrites headed
+  have hm90 : middled.regs 90 = 0 :=
+    (middleFrame 90 (by rfl)).trans hh.1
+  have hmD : middled.regs rD = d :=
+    (middleFrame rD (by rfl)).trans hh.2.1
+  have hmSg : middled.regs rSg = sign :=
+    (middleFrame rSg (by rfl)).trans hh.2.2.1
+  have hmJ : middled.regs rJ = cell + d :=
+    (middleFrame rJ (by rfl)).trans hh.2.2.2
+  have hmD4 : middled.regs 4 = d := by simpa [rD] using hmD
+  have hmSg5 : middled.regs 5 = sign := by simpa [rSg] using hmSg
+  have hmJ6 : middled.regs 6 = cell + d := by simpa [rJ] using hmJ
+  let committed := arun idx middled (markFirstCursorCommit c)
+  have hc : committed.regs rD = d ∧ committed.regs rSg = sign ∧
+      committed.regs rJ = cell + d := by
+    simp [committed, markFirstCursorCommit, markFirstCursorTail,
+      Cfg.markBody, muxBody, arun, astep, InstrBlock.sdest,
+      InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
+      rD, rSg, rJ, hm90, hmD4, hmSg5, hmJ6,
+      hsignMod, hnextMod, h1M, honePlusM, Nat.mul_mod]
+  let finished := arun idx committed (markViolationSuffix c)
+  have finishFrame (j : Nat)
+      (hwrites : ArrayRegFrame.writes j (markViolationSuffix c) = false) :
+      finished.regs j = committed.regs j :=
+    ArrayRegFrame.arun_frame idx j (markViolationSuffix c) hwrites committed
+  have hrun : arun idx st c.markBody = finished := by
+    rw [markBody_first_split, arun_append, arun_append,
+      markFirstCursorTail_split, markFirstCursorHead_split,
+      markCursorArithmetic_split, markDivisorTest_split,
+      arun_append, arun_append, arun_append, arun_append, arun_append,
+      arun_append]
+  rw [hrun] at harr ⊢
+  exact
+    { array := harr.array
+      divisor := (finishFrame rD (by rfl)).trans hc.1
+      sign := (finishFrame rSg (by rfl)).trans hc.2.1
+      multiple := (finishFrame rJ (by rfl)).trans hc.2.2 }
 
 end LeanCompCert.Ports.CDEMAbelMark
