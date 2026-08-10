@@ -1,0 +1,94 @@
+import LeanCompCert.Ports.Section413WindowRuntime
+import LeanCompCert.Ports.Section413WindowDirectTables
+
+namespace LeanCompCert.Ports.Section413WindowKGenerated.G2.Chunk554A
+
+open LeanCompCert.Ports.Section413Sweep
+open LeanCompCert.Ports.Section413WindowRuntime
+open LeanCompCert.Ports.Section413WindowDirectTables
+
+def state00 : KState := ⟨⟨360615662891347755, 360615682306666872⟩, ⟨(-1875331066707990004), (-1874604340406020908)⟩, true⟩
+
+def state01 : KState := ⟨⟨360587916512778897, 360587935935437987⟩, ⟨(-338221721844316970), (-337494588871966394)⟩, true⟩
+
+def words00 : List Nat := [360581845705383757, 360581845792237926, 360581845987731074, 360581846183452154, 360581846184108524, 360581846156166430, 360581846033779459, 360581845637999916, 360581845242087137, 360581845184704885]
+
+set_option maxRecDepth 100000 in
+theorem micro00 :
+    trace directG2 2 16 37273 0 55400 10 state00 =
+      (state01, words00) := by
+  decide +kernel
+
+theorem prefix01 :
+    trace directG2 2 16 37273 0 55400 10 state00 =
+      (state01, words00) := micro00
+
+def state02 : KState := ⟨⟨360574794719242712, 360574814149172662⟩, ⟨388997605340809211, 389725141227509215⟩, true⟩
+
+def words01 : List Nat := [360581845620121779, 360581846055684018, 360581846294391943, 360581846301480189, 360581846302125514, 360581846227402162, 360581846331298883, 360581846485698286, 360581846486401311, 360581846360309933]
+
+set_option maxRecDepth 100000 in
+theorem micro01 :
+    trace directG2 2 16 37273 0 55410 10 state01 =
+      (state02, words01) := by
+  decide +kernel
+
+theorem prefix02 :
+    trace directG2 2 16 37273 0 55400 20 state00 =
+      (state02, words00 ++ words01) := by
+  rw [show 20 = 10 + 10 by decide, trace_append, prefix01]
+  simp only [Nat.reduceAdd]
+  rw [micro01]
+
+def state03 : KState := ⟨⟨360620830596617967, 360620850033823389⟩, ⟨(-2162531607773212162), (-2161803668643750410)⟩, true⟩
+
+def words02 : List Nat := [360581846360633342, 360581846651927628, 360581847087596868, 360581847523396771, 360581847681752426, 360581847950692697, 360581848425598045, 360581848900712907, 360581849425615636, 360581850130003438]
+
+set_option maxRecDepth 100000 in
+theorem micro02 :
+    trace directG2 2 16 37273 0 55420 10 state02 =
+      (state03, words02) := by
+  decide +kernel
+
+theorem prefix03 :
+    trace directG2 2 16 37273 0 55400 30 state00 =
+      (state03, words00 ++ words01 ++ words02) := by
+  rw [show 30 = 20 + 10 by decide, trace_append, prefix02]
+  simp only [Nat.reduceAdd]
+  rw [micro02]
+
+def state04 : KState := ⟨⟨360609109594548022, 360609129039117295⟩, ⟨(-1512817681516822290), (-1512089334173125078)⟩, true⟩
+
+def words03 : List Nat := [360581850668212776, 360581851206483869, 360581851736716404, 360581852430304163, 360581853041982943, 360581853653765525, 360581854038708297, 360581854206974752, 360581854699568664, 360581855192430311]
+
+set_option maxRecDepth 100000 in
+theorem micro03 :
+    trace directG2 2 16 37273 0 55430 10 state03 =
+      (state04, words03) := by
+  decide +kernel
+
+theorem prefix04 :
+    trace directG2 2 16 37273 0 55400 40 state00 =
+      (state04, words00 ++ words01 ++ words02 ++ words03) := by
+  rw [show 40 = 30 + 10 by decide, trace_append, prefix03]
+  simp only [Nat.reduceAdd]
+  rw [micro03]
+
+def state05 : KState := ⟨⟨360599780468096128, 360599799919919706⟩, ⟨(-995514164316737758), (-994785414757042210)⟩, true⟩
+
+def words04 : List Nat := [360581856009458478, 360581856688533857, 360581857205341619, 360581857722215074, 360581858055711039, 360581858552380342, 360581859003071269, 360581859453883491, 360581859695229242, 360581860019561606]
+
+set_option maxRecDepth 100000 in
+theorem micro04 :
+    trace directG2 2 16 37273 0 55440 10 state04 =
+      (state05, words04) := by
+  decide +kernel
+
+theorem prefix05 :
+    trace directG2 2 16 37273 0 55400 50 state00 =
+      (state05, words00 ++ words01 ++ words02 ++ words03 ++ words04) := by
+  rw [show 50 = 40 + 10 by decide, trace_append, prefix04]
+  simp only [Nat.reduceAdd]
+  rw [micro04]
+
+end LeanCompCert.Ports.Section413WindowKGenerated.G2.Chunk554A

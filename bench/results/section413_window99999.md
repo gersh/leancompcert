@@ -98,3 +98,12 @@ half and one `segment` theorem in every wrapper. Building representative first
 and last wrappers (`Chunk539` and the 99-step `Chunk999`) together took 23.39
 seconds at cgroup peak 972,869,632 bytes under the same hard limit and zero
 swap. Earlier cached shards were not rewritten.
+
+The cold G2 pass reached `Chunk162` without an OOM, but one unsplit compiler
+process used about 1.4 GiB current memory and the serialized scope had already
+peaked at 1,574,961,152 bytes. To retain safe headroom below the 1.5 GiB hard
+limit, the untouched G2 suffix `163`--`999` was mechanically converted to the
+same five-plus-five layout. Validation again found exactly five `micro`
+theorems per half and one `segment` theorem per wrapper. Representative first
+and last wrappers built together in 14.17 seconds at cgroup peak 777,916,416
+bytes, with zero swap.

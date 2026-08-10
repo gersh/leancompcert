@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Split one generated 10-micro Section 4.1.3 chunk behind its old API.
 
-Use this only after a serialized 1.5 GiB build identifies an oversized shard.
+Use this after a serialized 1.5 GiB build identifies an oversized shard or a
+generated suffix whose single-shard footprint leaves unsafe headroom.
 The two generated halves retain five kernel-decided micro traces each, while
 the original module name becomes a small compatibility wrapper exporting
 `state00`, `state10`, `words`, and `segment`.
