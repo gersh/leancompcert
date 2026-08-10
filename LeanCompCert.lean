@@ -135,9 +135,11 @@ import LeanCompCert.Ports.RamareCombined100MModel
 import LeanCompCert.Ports.RamareCombined100MSegModel
 import LeanCompCert.Ports.RamareCombined100MQuotient
 import LeanCompCert.Ports.RamareCombined100MLambdaPsiSweep
+import LeanCompCert.Ports.RamareCombined100MMaxHeadroom
 import LeanCompCert.Ports.RamarePsiQRBlock
 import LeanCompCert.Ports.SigmaPrincipalHead
 import LeanCompCert.Ports.MoebiusSawtooth
+import LeanCompCert.Ports.CDEMAbelProductionCertificate
 import LeanCompCert.Ports.RamareMStar140MCore
 import LeanCompCert.Ports.RamareMStar140MPre
 import LeanCompCert.Ports.RamareMStar140MPost1

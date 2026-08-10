@@ -286,3 +286,23 @@ that is still §4's gap, closed only by §5's and §7's agreement — and, becau
 the two claims are exact equalities, nothing here has any margin.  A future
 change to the artifact's arithmetic cannot be validated by "it still passes";
 it has to reproduce these twelve integers.
+
+## 8. LeanCompCert production observation
+
+`LeanCompCert/Ports/CDEMAbelProductionCertificate.lean` now represents the
+completed execution by one exact compiled-trace proposition.  It states that
+the returned aggregate guard count is zero and that the final memory contains
+the twelve cells printed above, in their physical epilogue order.  The atom
+does not assert source definedness or an Abel inequality; those remain
+denotation/refinement obligations.
+
+The certificate uses the literal configuration printed by the retained run,
+so importing it does not re-evaluate the 199,330-row marking-budget fold.
+An independent emitter comparison evaluated both the original `Cfg.ofRange`
+configuration and the literal certificate configuration and found their
+35,064-byte rolled function sources identical.  The comparison took 3.71 s,
+peaked at 522,300 KiB RSS, and used no swap under a 4 GiB hard cap.  A fresh
+source check of the certificate took 0.23 s, peaked at 528,460 KiB RSS, and
+used no swap under the same cap.  The LeanCompCert umbrella build, including
+this certificate and the Ramaré maximum-headroom slice, passed serialized
+under a 10 GiB hard cap.
