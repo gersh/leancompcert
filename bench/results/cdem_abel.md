@@ -226,14 +226,14 @@ four public refinement theorems report only `propext`, `Classical.choice`, and
 `LeanCompCert/Ports/CDEMAbelHead.lean` then decomposes the actual mixed
 array/scalar `accHead` block without expanding it as one proof term.  For every
 non-first, non-final bisection iteration, `accHead_middle_run` proves that the
-literal selector/load/clear/scalar sequence reads and re-clears only the zero
-sink cell, leaves the array and carried `F`, `k`, square-root, increment,
+literal selector/load/clear/scalar sequence reads and clears the scratch sink
+cell, preserves every other array cell, and leaves carried `F`, `k`, square-root, increment,
 violation, bracket, cell, and round state unchanged, computes the exact
 ceiling/floor reciprocals of `k`, and sets both `U` product gates to zero.
 This is the complete head contract for the 60 interior production rounds.
-`accHead_last_run` now supplies the corresponding final-round contract: the
+`accHead_last_run` supplies the corresponding final-round contract: the
 last selector is one, the bisection selector remains one, the sink clear is
-again inert, the carried state and bracket are preserved, and both `U`
+again explicit, the carried state and bracket are preserved, and both `U`
 product gates stay zero.  Thus only the first-round window-cell transition
 remains.  The proof is split into pre-load, scalar front, latch, and reciprocal
 stages.  After the final-round addition, a fresh source check under the
@@ -348,6 +348,17 @@ Fresh axiom prints contain only `propext`, `Classical.choice`, and
 `600212/594072 KiB`. All four ran with one worker, a 2 GiB hard cap, and no
 swap.
 
+The accumulator array contract has since been strengthened to match the
+literal outer loop. `SinkClearSpec` states that the head sets `c.sink` to zero
+and preserves every other cell without assuming the incoming scratch value.
+`MiddleBodyLiveSpec` and `FinalBodyLiveSpec` carry that fact through the
+literal product and bisection blocks; the prior exact-array contracts are
+derived only when an actual zero-sink premise is available. The refactored
+body source/build checks took `111.36/112.59 s` at `710076/702300 KiB`, with
+one worker, a 2 GiB hard cap, and no swap. The schedule consumer still checks
+in `0.50 s` at `616048 KiB`. Fresh axiom prints use only `propext`,
+`Classical.choice`, and `Quot.sound`.
+
 `LeanCompCert/Ports/CDEMAbelOuter.lean` starts the literal outer-loop layer.
 `selectors_acc_run` proves the five selector instructions set the sieve and
 mark gates to zero and the accumulation gate to one in the live accumulation
@@ -358,6 +369,18 @@ terminal cursor resets to zero and advances the window base by exactly
 `588812 KiB`, and the module build took `0.33 s` at `596492 KiB`, with one
 worker, the 2 GiB hard cap, and no swap. Fresh axiom prints use only `propext`
 and `Quot.sound`.
+
+The outer layer now also proves the two inactive array stages rather than
+silently treating them as no-ops. `sieve_inactive_live_frame` and
+`mark_inactive_live_frame` split each emitted block around its single store,
+prove the inactive selector routes that store to `c.sink`, and frame every
+other cell. This matters because the sieve deliberately writes a nonzero
+squarefree code to the sink during accumulation rounds. A rejected one-shot
+symbolic simplification expanded the unrelated trial-division arithmetic and
+was interrupted; the retained store-local proofs compile with the full outer
+source in `1.89 s` at `617116 KiB`, and the live module build takes `2.54 s`
+at `641848 KiB`, under the same cap and with no swap. Their axiom prints use
+only `propext` and `Quot.sound`.
 
 Still not proved: composition of this now-complete 62-iteration accumulator
 schedule with the μ-table build and window marking, the global accumulator

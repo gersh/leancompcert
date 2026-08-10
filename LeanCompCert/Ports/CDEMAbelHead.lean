@@ -1194,8 +1194,19 @@ theorem accHead_first_run (c : Cfg) (idx : Nat) (st : AState)
     rw [postKeep rKr (by rfl),
       loadedToBefore rKr (by simp [rKr]) (by rfl)]
 
+structure SinkClearSpec (c : Cfg) (before after : AState) : Prop where
+  sink_zero : after.arr c.sink = 0
+  live : ∀ j, j ≠ c.sink → after.arr j = before.arr j
+
+theorem SinkClearSpec.arr_eq (h : SinkClearSpec c before after)
+    (hsink0 : before.arr c.sink = 0) : after.arr = before.arr := by
+  funext j
+  by_cases hj : j = c.sink
+  · rw [hj, h.sink_zero, hsink0]
+  · exact h.live j hj
+
 structure MiddleHeadSpec (c : Cfg) (before after : AState) : Prop where
-  arr : after.arr = before.arr
+  arr : SinkClearSpec c before after
   round0 : after.regs 140 = 0
   last : after.regs 141 = 0
   bisect : after.regs 142 = 1
@@ -1225,7 +1236,7 @@ theorem accHead_middle_run (c : Cfg) (idx : Nat) (st : AState)
     (hkr0 : st.regs rKr ≠ 0) (hkrLast : st.regs rKr ≠ c.bsSteps)
     (hgate : st.regs 43 = 1) (hzero : st.regs rZero = 0)
     (hbsM : c.bsSteps < M) (hsinkM : c.sink < M)
-    (hsink0 : st.arr c.sink = 0) (hword : ∀ j, st.regs j < M)
+    (hword : ∀ j, st.regs j < M)
     (harrword : ∀ j, st.arr j < M) (hk : 0 < st.regs rK)
     (hWM : c.wScale < M) (hsum : st.regs rDp + st.regs rDn < M)
     (hceilFit : c.wScale - 1 + st.regs rK < M) :
@@ -1261,12 +1272,13 @@ theorem accHead_middle_run (c : Cfg) (idx : Nat) (st : AState)
       exact harrword (pre 144)
     · rw [loadedKeep j hj]
       exact hpreword j
-  have hcleared : cleared = st.arr := by
-    funext j
-    simp only [cleared, hloaded144, hloadedZero]
-    by_cases hj : j = c.sink
-    · rw [if_pos hj, hj, hsink0]
-    · rw [if_neg hj]
+  have hcleared : SinkClearSpec c st ⟨post, cleared⟩ := by
+    constructor
+    · simp only [cleared, hloaded144, hloadedZero]
+      simp
+    · intro j hj
+      simp only [cleared, hloaded144, hloadedZero]
+      rw [if_neg hj]
   have hloaded140 : loaded 140 = 0 := by
     rw [loadedKeep 140 (by decide), hp.1]
   have hloadedK : loaded rK = st.regs rK := by
@@ -1369,8 +1381,8 @@ theorem accHead_middle_run (c : Cfg) (idx : Nat) (st : AState)
     rw [postKeep rKr (by rfl),
       loadedToBefore rKr (by simp [rKr]) (by rfl)]
 
-structure LastHeadSpec (before after : AState) : Prop where
-  arr : after.arr = before.arr
+structure LastHeadSpec (c : Cfg) (before after : AState) : Prop where
+  arr : SinkClearSpec c before after
   round0 : after.regs 140 = 0
   last : after.regs 141 = 1
   bisect : after.regs 142 = 1
@@ -1397,11 +1409,11 @@ theorem accHead_last_run (c : Cfg) (idx : Nat) (st : AState)
     (hkrLast : st.regs rKr = c.bsSteps) (hbsPos : 0 < c.bsSteps)
     (hgate : st.regs 43 = 1) (hzero : st.regs rZero = 0)
     (hbsM : c.bsSteps < M) (hsinkM : c.sink < M)
-    (hsink0 : st.arr c.sink = 0) (hword : ∀ j, st.regs j < M)
+    (hword : ∀ j, st.regs j < M)
     (harrword : ∀ j, st.arr j < M) (hk : 0 < st.regs rK)
     (hWM : c.wScale < M) (hsum : st.regs rDp + st.regs rDn < M)
     (hceilFit : c.wScale - 1 + st.regs rK < M) :
-    LastHeadSpec st (arun idx st c.accHead) := by
+    LastHeadSpec c st (arun idx st c.accHead) := by
   let pre := srun idx st.regs (headPreS c)
   let loaded := RegState.set pre 148 (st.arr (pre 144))
   let cleared := fun j => if j = loaded 144 then loaded rZero else st.arr j
@@ -1433,12 +1445,13 @@ theorem accHead_last_run (c : Cfg) (idx : Nat) (st : AState)
       exact harrword (pre 144)
     · rw [loadedKeep j hj]
       exact hpreword j
-  have hcleared : cleared = st.arr := by
-    funext j
-    simp only [cleared, hloaded144, hloadedZero]
-    by_cases hj : j = c.sink
-    · rw [if_pos hj, hj, hsink0]
-    · rw [if_neg hj]
+  have hcleared : SinkClearSpec c st ⟨post, cleared⟩ := by
+    constructor
+    · simp only [cleared, hloaded144, hloadedZero]
+      simp
+    · intro j hj
+      simp only [cleared, hloaded144, hloadedZero]
+      rw [if_neg hj]
   have loadedToBefore (j : Nat) (hj148 : j ≠ 148)
       (hw : RegFrame.writes j (headPreS c) = false) :
       loaded j = st.regs j := by rw [loadedKeep j hj148, preKeep j hw]

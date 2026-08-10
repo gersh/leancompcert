@@ -229,7 +229,7 @@ theorem productionMiddleCore_step (c : Cfg) (idx : Nat) (st : AState)
       (arun idx st c.accBody) := by
   have hh := accHead_middle_run c idx st hready.round_ne_zero
     hready.round_ne_last hready.gate hready.zero hready.steps_word
-    hready.sink_word hready.sink_zero hready.regs_word hready.arr_word
+    hready.sink_word hready.regs_word hready.arr_word
     hready.key_pos hready.scale_word hready.delta_sum_word hready.ceil_word
   have hl :
       (arun idx st c.accBody).regs rK = st.regs rK ∧

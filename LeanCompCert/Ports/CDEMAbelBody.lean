@@ -101,7 +101,24 @@ structure MiddleBodySpec (c : Cfg) (k : Nat) (p : Bracket)
   round : after.regs rKr = before.regs rKr + before.regs 43
   cell : after.regs rC = before.regs rC
 
-theorem accBody_middle_of_head (c : Cfg) (idx : Nat) (st : AState)
+structure MiddleBodyLiveSpec (c : Cfg) (k : Nat) (p : Bracket)
+    (before after : AState) : Prop where
+  arr : SinkClearSpec c before after
+  low : after.regs rSl = (step c.wScale k p).lo
+  high : after.regs rSh = (step c.wScale k p).hi
+  uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
+    AddWide.wval (before.regs rUpLo, before.regs rUpHi)
+  uNeg : AddWide.wval (after.regs rUnLo, after.regs rUnHi) =
+    AddWide.wval (before.regs rUnLo, before.regs rUnHi)
+  viol : after.regs rViol = before.regs rViol
+  vDiv : after.regs rVDiv = before.regs rVDiv
+  vBisect : after.regs rVBisect = before.regs rVBisect
+  v : AddWide.wval (after.regs rVLo, after.regs rVHi) =
+    AddWide.wval (before.regs rVLo, before.regs rVHi)
+  round : after.regs rKr = before.regs rKr + before.regs 43
+  cell : after.regs rC = before.regs rC
+
+theorem accBody_middle_live_of_head (c : Cfg) (idx : Nat) (st : AState)
     (hh : MiddleHeadSpec c st (arun idx st c.accHead))
     (hlohi : st.regs rSl ≤ st.regs rSh) (hhiM : st.regs rSh < M)
     (hfit : RoundFit c (st.regs rK) ⟨st.regs rSl, st.regs rSh⟩)
@@ -109,7 +126,7 @@ theorem accBody_middle_of_head (c : Cfg) (idx : Nat) (st : AState)
       2147483648)
     (hkrFit : st.regs rKr + st.regs 43 < M)
     (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
-    MiddleBodySpec c (st.regs rK) ⟨st.regs rSl, st.regs rSh⟩ st
+    MiddleBodyLiveSpec c (st.regs rK) ⟨st.regs rSl, st.regs rSh⟩ st
       (arun idx st c.accBody) := by
   let h := arun idx st c.accHead
   let p := arun idx h c.accProd
@@ -207,9 +224,15 @@ theorem accBody_middle_of_head (c : Cfg) (idx : Nat) (st : AState)
       p.regs j = st.regs j := by
     rw [prodKeep j h171 h172 h173 h174 hjs hupl huph hunl hunh h188,
       headKeep j hw]
-  have hall : MiddleBodySpec c (st.regs rK)
+  have hall : MiddleBodyLiveSpec c (st.regs rK)
       ⟨st.regs rSl, st.regs rSh⟩ st out :=
-    { arr := by rw [hb'.arr, hpExact.2.2, hh'.arr]
+    { arr := by
+        constructor
+        · rw [hb'.arr, hpExact.2.2]
+          exact hh'.arr.sink_zero
+        · intro j hj
+          rw [hb'.arr, hpExact.2.2]
+          exact hh'.arr.live j hj
       low := hb'.low
       high := hb'.high
       uPos := by
@@ -271,10 +294,60 @@ theorem accBody_middle_of_head (c : Cfg) (idx : Nat) (st : AState)
           (by simp [rC]) (by rfl) }
   simpa [Cfg.accBody, arun_append, h, p, out] using hall
 
+theorem accBody_middle_of_head (c : Cfg) (idx : Nat) (st : AState)
+    (hh : MiddleHeadSpec c st (arun idx st c.accHead))
+    (hsink0 : st.arr c.sink = 0)
+    (hlohi : st.regs rSl ≤ st.regs rSh) (hhiM : st.regs rSh < M)
+    (hfit : RoundFit c (st.regs rK) ⟨st.regs rSl, st.regs rSh⟩)
+    (haLe : c.wScale / midpoint ⟨st.regs rSl, st.regs rSh⟩ ≤
+      2147483648)
+    (hkrFit : st.regs rKr + st.regs 43 < M)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
+    MiddleBodySpec c (st.regs rK) ⟨st.regs rSl, st.regs rSh⟩ st
+      (arun idx st c.accBody) := by
+  have h := accBody_middle_live_of_head c idx st hh hlohi hhiM hfit haLe
+    hkrFit hword harrword
+  exact
+    { arr := h.arr.arr_eq hsink0
+      low := h.low
+      high := h.high
+      uPos := h.uPos
+      uNeg := h.uNeg
+      viol := h.viol
+      vDiv := h.vDiv
+      vBisect := h.vBisect
+      v := h.v
+      round := h.round
+      cell := h.cell }
+
 theorem arun_accBody_eq_parts (c : Cfg) (idx : Nat) (st : AState) :
     arun idx st c.accBody =
       arun idx (arun idx (arun idx st c.accHead) c.accProd) c.accBisect := by
   rw [Cfg.accBody, arun_append, arun_append]
+
+theorem accBody_sink_clear_of_head (c : Cfg) (idx : Nat) (st : AState)
+    (hh : SinkClearSpec c st (arun idx st c.accHead))
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
+    SinkClearSpec c st (arun idx st c.accBody) := by
+  let h := arun idx st c.accHead
+  let p := arun idx h c.accProd
+  let out := arun idx p c.accBisect
+  have hwordH : ∀ j, h.regs j < M :=
+    (arun_word idx c.accHead st hword harrword).1
+  have hp := accProd_run_mod c idx h hwordH
+  dsimp only at hp
+  have hpArr : p.arr = h.arr := by simpa [p] using hp.2.2.1
+  have hb := accBisect_arun c idx p
+  have hbArr : out.arr = p.arr := by simpa [out] using congrArg AState.arr hb
+  have houtArr : out.arr = h.arr := hbArr.trans hpArr
+  have hh' : SinkClearSpec c st h := by simpa [h] using hh
+  have hall : SinkClearSpec c st out :=
+    { sink_zero := by rw [houtArr]; exact hh'.sink_zero
+      live := by
+        intro j hj
+        rw [houtArr]
+        exact hh'.live j hj }
+  simpa [arun_accBody_eq_parts, h, p, out] using hall
 
 set_option maxHeartbeats 2000000 in
 theorem accBody_middle_latch_of_head (c : Cfg) (idx : Nat) (st : AState)
@@ -359,8 +432,8 @@ theorem accBody_middle_run (c : Cfg) (idx : Nat) (st : AState)
     MiddleBodySpec c (st.regs rK) ⟨st.regs rSl, st.regs rSh⟩ st
       (arun idx st c.accBody) := by
   have hh := accHead_middle_run c idx st hkr0 hkrLast hgate hzero
-    hbsM hsinkM hsink0 hword harrword hk hWM hsum hceilFit
-  exact accBody_middle_of_head c idx st hh hlohi hhiM hfit haLe
+    hbsM hsinkM hword harrword hk hWM hsum hceilFit
+  exact accBody_middle_of_head c idx st hh hsink0 hlohi hhiM hfit haLe
     hkrFit hword harrword
 
 structure FinalBodySpec (s d : Nat) (before after : AState) : Prop where
@@ -379,8 +452,25 @@ structure FinalBodySpec (s d : Nat) (before after : AState) : Prop where
   round : after.regs rKr = 0
   cell : after.regs rC = before.regs rC + 1
 
-theorem accBody_final_of_head (c : Cfg) (idx : Nat) (st : AState)
-    (s : Nat) (hh : LastHeadSpec st (arun idx st c.accHead))
+structure FinalBodyLiveSpec (c : Cfg) (s d : Nat)
+    (before after : AState) : Prop where
+  arr : SinkClearSpec c before after
+  low : after.regs rSl = s
+  high : after.regs rSh = s
+  uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
+    AddWide.wval (before.regs rUpLo, before.regs rUpHi)
+  uNeg : AddWide.wval (after.regs rUnLo, after.regs rUnHi) =
+    AddWide.wval (before.regs rUnLo, before.regs rUnHi)
+  viol : after.regs rViol = before.regs rViol
+  vDiv : after.regs rVDiv = before.regs rVDiv
+  vBisect : after.regs rVBisect = before.regs rVBisect
+  v : AddWide.wval (after.regs rVLo, after.regs rVHi) =
+    AddWide.wval (before.regs rVLo, before.regs rVHi) + d * s
+  round : after.regs rKr = 0
+  cell : after.regs rC = before.regs rC + 1
+
+theorem accBody_final_live_of_head (c : Cfg) (idx : Nat) (st : AState)
+    (s : Nat) (hh : LastHeadSpec c st (arun idx st c.accHead))
     (hlohi : st.regs rSl ≤ st.regs rSh) (hhiM : st.regs rSh < M)
     (hfit : RoundFit c (st.regs rK) ⟨st.regs rSl, st.regs rSh⟩)
     (haLe : c.wScale / midpoint ⟨st.regs rSl, st.regs rSh⟩ ≤
@@ -391,12 +481,12 @@ theorem accBody_final_of_head (c : Cfg) (idx : Nat) (st : AState)
     (haccFit : AddWide.wval (st.regs rVLo, st.regs rVHi) +
       (st.regs rDp + st.regs rDn) * s < AddWide.B128)
     (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
-    FinalBodySpec s (st.regs rDp + st.regs rDn) st
+    FinalBodyLiveSpec c s (st.regs rDp + st.regs rDn) st
       (arun idx st c.accBody) := by
   let h := arun idx st c.accHead
   let p := arun idx h c.accProd
   let out := arun idx p c.accBisect
-  have hh' : LastHeadSpec st h := by simpa [h] using hh
+  have hh' : LastHeadSpec c st h := by simpa [h] using hh
   have hwordH : ∀ j, h.regs j < M :=
     (arun_word idx c.accHead st hword harrword).1
   have harrH : ∀ j, h.arr j < M :=
@@ -482,8 +572,14 @@ theorem accBody_final_of_head (c : Cfg) (idx : Nat) (st : AState)
   have pToSt (j : Nat)
       (hj : p.regs j = h.regs j) (hhj : h.regs j = st.regs j) :
       p.regs j = st.regs j := hj.trans hhj
-  have hall : FinalBodySpec s (st.regs rDp + st.regs rDn) st out :=
-    { arr := by rw [hb'.arr, hz'.arr, hh'.arr]
+  have hall : FinalBodyLiveSpec c s (st.regs rDp + st.regs rDn) st out :=
+    { arr := by
+        constructor
+        · rw [hb'.arr, hz'.arr]
+          exact hh'.arr.sink_zero
+        · intro j hj
+          rw [hb'.arr, hz'.arr]
+          exact hh'.arr.live j hj
       low := hb'.low
       high := hb'.high
       uPos := by
@@ -522,6 +618,36 @@ theorem accBody_final_of_head (c : Cfg) (idx : Nat) (st : AState)
       cell := by rw [hb'.cell, hpC] }
   simpa [Cfg.accBody, arun_append, h, p, out] using hall
 
+theorem accBody_final_of_head (c : Cfg) (idx : Nat) (st : AState)
+    (s : Nat) (hh : LastHeadSpec c st (arun idx st c.accHead))
+    (hsink0 : st.arr c.sink = 0)
+    (hlohi : st.regs rSl ≤ st.regs rSh) (hhiM : st.regs rSh < M)
+    (hfit : RoundFit c (st.regs rK) ⟨st.regs rSl, st.regs rSh⟩)
+    (haLe : c.wScale / midpoint ⟨st.regs rSl, st.regs rSh⟩ ≤
+      2147483648)
+    (hstep : step c.wScale (st.regs rK)
+      ⟨st.regs rSl, st.regs rSh⟩ = ⟨s, s⟩)
+    (hcFit : st.regs rC + 1 < M)
+    (haccFit : AddWide.wval (st.regs rVLo, st.regs rVHi) +
+      (st.regs rDp + st.regs rDn) * s < AddWide.B128)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
+    FinalBodySpec s (st.regs rDp + st.regs rDn) st
+      (arun idx st c.accBody) := by
+  have h := accBody_final_live_of_head c idx st s hh hlohi hhiM hfit haLe
+    hstep hcFit haccFit hword harrword
+  exact
+    { arr := h.arr.arr_eq hsink0
+      low := h.low
+      high := h.high
+      uPos := h.uPos
+      uNeg := h.uNeg
+      viol := h.viol
+      vDiv := h.vDiv
+      vBisect := h.vBisect
+      v := h.v
+      round := h.round
+      cell := h.cell }
+
 theorem accBody_final_run (c : Cfg) (idx : Nat) (st : AState)
     (s : Nat) (hkrLast : st.regs rKr = c.bsSteps)
     (hbsPos : 0 < c.bsSteps) (hgate : st.regs 43 = 1)
@@ -543,8 +669,8 @@ theorem accBody_final_run (c : Cfg) (idx : Nat) (st : AState)
     FinalBodySpec s (st.regs rDp + st.regs rDn) st
       (arun idx st c.accBody) := by
   have hh := accHead_last_run c idx st hkrLast hbsPos hgate hzero hbsM
-    hsinkM hsink0 hword harrword hk hWM hsum hceilFit
-  exact accBody_final_of_head c idx st s hh hlohi hhiM hfit haLe hstep
+    hsinkM hword harrword hk hWM hsum hceilFit
+  exact accBody_final_of_head c idx st s hh hsink0 hlohi hhiM hfit haLe hstep
     hcFit haccFit hword harrword
 
 structure FirstBodySpec (c : Cfg) (k dp dn ceil floor : Nat)
