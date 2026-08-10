@@ -829,3 +829,31 @@ The source capstone still prints exactly
 known expensive elaboration unit, but its 349 MiB kernel peak is safely below
 the hard cap; it is therefore built serially and benchmarked rather than
 replaced by an opaque or native decision shortcut.
+
+`LeanCompCert/Ports/CDEMAbelSourceTelescope.lean` now closes the interior-cell
+source-state handoff. `interior_stream_step_of_full` combines the literal full
+cell and cursor contracts to prove that an interior cell keeps the next
+resident marked array value, advances `rF`, `rE`, and `rTv` exactly, and
+re-establishes `SqrtStreamInv` for the next integer. In particular its
+`nextF` equation is the source recurrence using the next pre-marked cell; no
+array value is supplied as a postcondition.
+
+The same module proves generic word and untouched-register frames for
+`bodyIter` and `bodySchedule`. `InteriorNextBounds` contains only the genuinely
+numerical next-cell guards (word-sized square cursor, deltas, reciprocals, and
+wide no-wrap bounds). `interior_firstEntry_of_full` combines that compact
+envelope with the code-derived stream/cursor/array facts to reconstruct the
+complete `FirstEntryInv` for the actual next interior cell. The remaining
+source denotation is consequently concentrated at window-start marking and at
+proving `InteriorNextBounds` from global production bounds.
+
+Under the same serialized one-worker 2 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh interior telescope source | 6.43 s | 660,460 KiB | 218,357,760 B | 0 |
+| interior telescope module build | 6.65 s | 696,952 KiB | 278,249,472 B | 0 |
+| fresh two-theorem axiom print | 0.14 s | 525,268 KiB | 86,261,760 B | 0 |
+| cached umbrella consumer build | 0.73 s | 1,729,924 KiB | 217,202,688 B | 0 |
+
+Both new capstones print only `[propext, Classical.choice, Quot.sound]`.
