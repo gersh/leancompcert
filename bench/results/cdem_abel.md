@@ -197,12 +197,18 @@ The first-round proof is now staged as well: `headPre_first_run` proves the
 literal selector and live window address, `headFK_first_run` proves the loaded
 cell is added to wrapped `F` and latches the exact integer `k`, and
 `headSqrt_noBump_run`/`headSqrt_bump_run` prove both branches of the checked
-single-step square-root update.  The remaining first-round substage is the
-signed `G` decoder, split increment, and latching tail.  The enlarged source
-check took `7.46 s`, peaked at `616704 KiB`, and used no swap under the same
-cap; fresh axiom prints use only `propext` and `Quot.sound`.
+single-step square-root update.  `headDelta_run` now proves the next literal
+stage too: the two's-complement absolute-value selector computes
+`G = |1-F|`, and the gated subtraction pair computes exactly the positive and
+negative parts of `G-E`.  This stage is itself split into the three-instruction
+sign prefix, five-instruction selector, and six-instruction increment tail so
+the compiler never elaborates the full head as one simplifier term.  The
+enlarged source check took `7.83 s`, peaked at `648144 KiB`, and used no swap;
+the module build took `7.87 s` and peaked at `672892 KiB` under the same cap.
+Fresh axiom prints use only `propext` and `Quot.sound`.
 
-Still not proved: the first `accHead` transition and its composition
+Still not proved: the first-round latch/reciprocal tail, the complete first
+`accHead` transition, and its composition
 with the bisection schedule, then the μ-table build, window marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement

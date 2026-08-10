@@ -290,6 +290,107 @@ def headDPos (g e : Nat) : Nat := if e < g then g - e else 0
 
 def headDNeg (g e : Nat) : Nat := if g < e then e - g else 0
 
+def headAbsPreS : List Instr :=
+  [ .binop 155 .sub (.lit 1) (.reg rF)
+  , .binop 156 .ge (.reg 155) (.lit 9223372036854775808)
+  , .binop 157 .sub (.lit 0) (.reg 155) ]
+
+def headIncS : List Instr :=
+  [ .binop 160 .gt (.reg 158) (.reg rE)
+  , .binop 161 .sub (.reg 158) (.reg rE)
+  , .binop 161 .mul (.reg 161) (.reg 160)
+  , .binop 162 .gt (.reg rE) (.reg 158)
+  , .binop 163 .sub (.reg rE) (.reg 158)
+  , .binop 163 .mul (.reg 163) (.reg 162) ]
+
+theorem headDeltaS_decomp : headDeltaS = headAbsPreS ++
+    Section413G1Denote.muxS 158 156 157 155 159 ++ headIncS := by
+  rfl
+
+theorem headAbsPre_run (idx : Nat) (r : RegState) (f : Nat)
+    (hF : r rF = f) :
+    let out := srun idx r headAbsPreS
+    out 155 = headX f ∧
+      out 156 = (if 9223372036854775808 ≤ headX f then 1 else 0) ∧
+      out 157 = (M - headX f) % M ∧ out rF = f := by
+  have hF' : r 12 = f := by simpa [rF] using hF
+  have hcut : 9223372036854775808 % M = 9223372036854775808 := by decide
+  simp [headAbsPreS, headX, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, rF, hF', hcut]
+
+theorem headInc_run (idx : Nat) (r : RegState) (g e : Nat)
+    (hG : r 158 = g) (hE : r rE = e) (hgM : g < M) (heM : e < M) :
+    let out := srun idx r headIncS
+    out 161 = headDPos g e ∧ out 163 = headDNeg g e ∧
+      out 158 = g ∧ out rE = e := by
+  have hG' : r 158 = g := hG
+  have hE' : r 13 = e := by simpa [rE] using hE
+  by_cases hp : e < g
+  · have hn : ¬ g < e := by omega
+    have hsub := msub_exact g e (Nat.le_of_lt hp) hgM
+    have hsubM : (g - e) % M = g - e := Nat.mod_eq_of_lt (by omega)
+    simp [headIncS, headDPos, headDNeg, srun, sdest, sval,
+      denoteOperand, denoteOp, RegState.set, rE, hG', hE', hp, hn,
+      hsub, hsubM]
+  · by_cases hn : g < e
+    · have hsub := msub_exact e g (Nat.le_of_lt hn) heM
+      have hsubM : (e - g) % M = e - g := Nat.mod_eq_of_lt (by omega)
+      simp [headIncS, headDPos, headDNeg, srun, sdest, sval,
+        denoteOperand, denoteOp, RegState.set, rE, hG', hE', hp, hn,
+        hsub, hsubM]
+    · have hEq : g = e := by omega
+      simp [headIncS, headDPos, headDNeg, srun, sdest, sval,
+        denoteOperand, denoteOp, RegState.set, rE, hG', hE', hEq]
+
+theorem headDelta_run (idx : Nat) (r : RegState) (f e : Nat)
+    (hF : r rF = f) (hE : r rE = e) (hword : ∀ j, r j < M) :
+    let out := srun idx r headDeltaS
+    out 158 = headG f ∧ out 161 = headDPos (headG f) e ∧
+      out 163 = headDNeg (headG f) e ∧ out rF = f ∧ out rE = e := by
+  let q := srun idx r headAbsPreS
+  let m := srun idx q (Section413G1Denote.muxS 158 156 157 155 159)
+  let out := srun idx m headIncS
+  have hp := headAbsPre_run idx r f hF
+  dsimp only at hp
+  change q 155 = headX f ∧
+    q 156 = (if 9223372036854775808 ≤ headX f then 1 else 0) ∧
+    q 157 = (M - headX f) % M ∧ q rF = f at hp
+  have hqword : ∀ j, q j < M := srun_lt_of_lt idx _ r hword
+  have hflag : q 156 ≤ 1 := by rw [hp.2.1]; split <;> omega
+  have hm0 := Section413G1Denote.muxS_spec idx q 158 156 157 155 159
+    (by decide) (by decide) (by decide) (by decide) hflag hqword
+  have hmG : m 158 = headG f := by
+    change srun idx q (Section413G1Denote.muxS 158 156 157 155 159) 158 = _
+    rw [hm0, hp.2.1, hp.1, hp.2.2.1]
+    by_cases hx : 9223372036854775808 ≤ headX f <;>
+      simp [headG, hx]
+  have hmword : ∀ j, m j < M := srun_lt_of_lt idx _ q hqword
+  have hqE : q rE = e := by
+    change srun idx r headAbsPreS rE = e
+    rw [RegFrame.srun_frame idx rE headAbsPreS (by rfl) r, hE]
+  have hmE : m rE = e := by
+    rw [show m rE = q rE from Section413G1Denote.muxS_frame idx q
+      158 156 157 155 159 rE (by simp [rE]) (by simp [rE]), hqE]
+  have hi := headInc_run idx m (headG f) e hmG hmE
+    (by
+      unfold headG
+      split
+      · exact Nat.mod_lt _ (by decide)
+      · exact Nat.mod_lt _ (by decide))
+    (by rw [← hmE]; exact hmword rE)
+  dsimp only at hi
+  change out 161 = headDPos (headG f) e ∧
+    out 163 = headDNeg (headG f) e ∧ out 158 = headG f ∧
+    out rE = e at hi
+  have hmF : m rF = f := by
+    rw [show m rF = q rF from Section413G1Denote.muxS_frame idx q
+      158 156 157 155 159 rF (by simp [rF]) (by simp [rF]), hp.2.2.2]
+  have houtF : out rF = f := by
+    rw [show out rF = m rF from
+      RegFrame.srun_frame idx rF headIncS (by rfl) m, hmF]
+  simpa [headDeltaS_decomp, srun_append, q, m, out] using
+    ⟨hi.2.2.1, hi.1, hi.2.1, houtF, hi.2.2.2⟩
+
 theorem headFront_middle_run (c : Cfg) (idx : Nat) (r : RegState)
     (h140 : r 140 = 0) (hword : ∀ j, r j < M) :
     let out := srun idx r (headFrontS c)
