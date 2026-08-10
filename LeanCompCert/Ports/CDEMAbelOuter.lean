@@ -227,6 +227,7 @@ def accPrefix (c : Cfg) : List AInstr :=
   c.selectors ++ c.sieveBody ++ c.markBody
 
 structure AccPrefixLatchSpec (before after : AState) : Prop where
+  phase : after.regs 41 = 1
   gate : after.regs 43 = 1
   zero : after.regs rZero = before.regs rZero
   key : after.regs rK = before.regs rK
@@ -238,6 +239,8 @@ structure AccPrefixLatchSpec (before after : AState) : Prop where
   cell : after.regs rC = before.regs rC
   viol : after.regs rViol = before.regs rViol
   vMark : after.regs rVMark = before.regs rVMark
+  cursor : after.regs rR = before.regs rR
+  window : after.regs rW = before.regs rW
 
 theorem accPrefix_latches (c : Cfg) (idx : Nat) (st : AState)
     (hidxM : idx < M) (hsieveM : c.sieveLen < M)
@@ -286,7 +289,11 @@ theorem accPrefix_latches (c : Cfg) (idx : Nat) (st : AState)
       (arun idx st (accPrefix c)).regs j = st.regs j :=
     ArrayRegFrame.arun_frame idx j (accPrefix c) hw st
   have hall : AccPrefixLatchSpec st marked :=
-    { gate := by
+    { phase := by
+        rw [show marked.regs 41 = sieved.regs 41 from
+          ArrayRegFrame.arun_frame idx 41 c.markBody (by rfl) sieved,
+          hsieved41]
+      gate := by
         rw [show marked.regs 43 = sieved.regs 43 from
           ArrayRegFrame.arun_frame idx 43 c.markBody (by rfl) sieved,
           show sieved.regs 43 = selected.regs 43 from
@@ -301,7 +308,9 @@ theorem accPrefix_latches (c : Cfg) (idx : Nat) (st : AState)
       high := frame rSh (by rfl)
       cell := hcellMarked.trans hcellSieved
       viol := hviolMarked.1.trans hviolSieved
-      vMark := hviolMarked.2.trans hvmarkSieved }
+      vMark := hviolMarked.2.trans hvmarkSieved
+      cursor := frame rR (by rfl)
+      window := frame rW (by rfl) }
   simpa [accPrefix, arun_append, selected, sieved, marked] using hall
 
 theorem accPrefix_live_frame (c : Cfg) (idx : Nat) (st : AState)
@@ -332,6 +341,11 @@ theorem accPrefix_live_frame (c : Cfg) (idx : Nat) (st : AState)
 theorem body_acc_decomp (c : Cfg) :
     c.body = accPrefix c ++ c.accBody ++ c.tailBody := by
   simp [Cfg.body, accPrefix, Cfg.accBody, List.append_assoc]
+
+theorem body_acc_run_decomp (c : Cfg) (idx : Nat) (st : AState) :
+    arun idx st c.body =
+      arun idx (arun idx (arun idx st (accPrefix c)) c.accBody) c.tailBody := by
+  rw [body_acc_decomp, arun_append, arun_append]
 
 theorem body_acc_sink_clear_of_parts (c : Cfg) (idx : Nat) (st : AState)
     (hidxM : idx < M) (hsieveM : c.sieveLen < M)

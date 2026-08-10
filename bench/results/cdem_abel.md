@@ -681,3 +681,27 @@ The remaining local scheduling obligation is now readiness: derive each
 literal body contract from a production invariant that also tracks the period
 cursor and window base. The denotation proof must then connect the resident
 Möbius table and streamed floor convolution to that invariant.
+
+The prefix contract now also exposes the accumulation phase gate, period
+cursor, and window base, and `body_acc_run_decomp` seals the large emitted-body
+decomposition behind a compiled lemma. In the scheduler module,
+`accBody_cursor_frame` proves that the accumulator sub-block preserves those
+three registers. `body_cursor_continue_run` and `body_cursor_wrap_run` then
+compose the literal body with the six-instruction tail to prove the two cursor
+branches: advance within the period, or reset the cursor and advance the
+window base by `segLen`.
+
+The repeated literal-list framing that initially exhausted local heartbeat
+limits was replaced by the prefix contract and one reusable accumulator frame.
+Only the two cursor theorems have a local three-million-heartbeat allowance;
+the global setting remains unchanged. Current capped measurements are:
+
+| check | elapsed | peak RSS | swap |
+| --- | ---: | ---: | ---: |
+| outer module build after sealed frames | 67.31 s | 742,764 KiB | 0 |
+| scheduler source with cursor branches | 71.75 s | 640,420 KiB | 0 |
+| scheduler module build | 71.42 s | 636,960 KiB | 0 |
+
+Fresh axiom prints use `[propext]` for the accumulator frame and `[propext,
+Quot.sound]` for both literal cursor branches. The next readiness step can now
+track exact cursor/window movement without unfolding the emitted body.

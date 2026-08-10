@@ -4,13 +4,121 @@ namespace LeanCompCert.Ports.CDEMAbelOuterSchedule
 
 open LeanCompCert
 open LeanCompCert.Verified
+open LeanCompCert.Verified.Reflect
+open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Ports
 open LeanCompCert.Ports.CDEMAbelScan
 open LeanCompCert.Ports.CDEMAbelBisection
 open LeanCompCert.Ports.CDEMAbelSchedule
 open LeanCompCert.Ports.CDEMAbelOuter
+
+structure AccBodyCursorFrame (before after : AState) : Prop where
+  phase : after.regs 41 = before.regs 41
+  cursor : after.regs rR = before.regs rR
+  window : after.regs rW = before.regs rW
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 3000000 in
+theorem accBody_cursor_frame (c : Cfg) (idx : Nat) (st : AState) :
+    AccBodyCursorFrame st (arun idx st c.accBody) :=
+  { phase := LeanCompCert.Verified.ArrayRegFrame.arun_frame idx 41 c.accBody
+      (by rfl) st
+    cursor := LeanCompCert.Verified.ArrayRegFrame.arun_frame idx rR c.accBody
+      (by rfl) st
+    window := LeanCompCert.Verified.ArrayRegFrame.arun_frame idx rW c.accBody
+      (by rfl) st }
+
+theorem tail_continue_window_run (c : Cfg) (idx : Nat) (st : AState)
+    (hgate : st.regs 41 = 1) (hnext : st.regs rR + 1 < c.period)
+    (hnextM : st.regs rR + 1 < M) (hperiodM : c.period < M)
+    (hsegM : c.segLen < M) (hWword : st.regs rW < M) :
+    let out := arun idx st c.tailBody
+    out.regs rR = st.regs rR + 1 ∧ out.regs rW = st.regs rW := by
+  rw [tail_lift, arun_lift]
+  have hperiodMod : c.period % M = c.period := Nat.mod_eq_of_lt hperiodM
+  have hsegMod : c.segLen % M = c.segLen := Nat.mod_eq_of_lt hsegM
+  have hwMod' : st.regs 3 % M = st.regs 3 := by
+    exact Nat.mod_eq_of_lt (by simpa [rW] using hWword)
+  have hne : st.regs rR + 1 ≠ c.period := by omega
+  have hnextM' : st.regs 2 + 1 < M := by simpa [rR] using hnextM
+  have hnextMod' : (st.regs 2 + 1) % M = st.regs 2 + 1 := by
+    exact Nat.mod_eq_of_lt hnextM'
+  have hne' : st.regs 2 + 1 ≠ c.period := by simpa [rR] using hne
+  simp [tailS, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+    rR, rW, hgate, hnextMod', hperiodMod, hsegMod, hwMod', hne']
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 3000000 in
+theorem body_cursor_continue_run (c : Cfg) (idx : Nat) (st : AState)
+    (hidxM : idx < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ idx) (hmarkM : c.markSteps < M)
+    (hmarkPos : 0 < c.markSteps) (hR : c.markSteps ≤ st.regs rR)
+    (hnext : st.regs rR + 1 < c.period)
+    (hnextM : st.regs rR + 1 < M) (hperiodM : c.period < M)
+    (hsegM : c.segLen < M) (hword : ∀ j, st.regs j < M)
+    (harrword : ∀ j, st.arr j < M) :
+    let out := arun idx st c.body
+    out.regs rR = st.regs rR + 1 ∧ out.regs rW = st.regs rW := by
+  let prefixed := arun idx st (accPrefix c)
+  let accumulated := arun idx prefixed c.accBody
+  have hp := accPrefix_latches c idx st hidxM hsieveM hsieve hmarkM
+    hmarkPos hR hword harrword
+  have hp41 : prefixed.regs 41 = 1 := by simpa [prefixed] using hp.phase
+  have ha := accBody_cursor_frame c idx prefixed
+  have ha41 : accumulated.regs 41 = 1 := by
+    rw [show accumulated.regs 41 = prefixed.regs 41 from ha.phase, hp41]
+  have prefR : prefixed.regs rR = st.regs rR := by
+    simpa [prefixed] using hp.cursor
+  have accR : accumulated.regs rR = prefixed.regs rR := ha.cursor
+  have prefW : prefixed.regs rW = st.regs rW := by
+    simpa [prefixed] using hp.window
+  have accW : accumulated.regs rW = prefixed.regs rW := ha.window
+  have haccWword : accumulated.regs rW < M := by
+    rw [accW, prefW]
+    exact hword rW
+  have ht := tail_continue_window_run c idx accumulated ha41
+    (by rw [accR, prefR]; exact hnext)
+    (by rw [accR, prefR]; exact hnextM) hperiodM hsegM haccWword
+  dsimp only at ht
+  rw [body_acc_run_decomp]
+  exact ⟨ht.1.trans (by rw [accR, prefR]),
+    ht.2.trans (accW.trans prefW)⟩
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 3000000 in
+theorem body_cursor_wrap_run (c : Cfg) (idx : Nat) (st : AState)
+    (hidxM : idx < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ idx) (hmarkM : c.markSteps < M)
+    (hmarkPos : 0 < c.markSteps) (hR : c.markSteps ≤ st.regs rR)
+    (hnext : st.regs rR + 1 = c.period)
+    (hperiodM : c.period < M) (hsegM : c.segLen < M)
+    (hWnext : st.regs rW + c.segLen < M)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
+    let out := arun idx st c.body
+    out.regs rR = 0 ∧ out.regs rW = st.regs rW + c.segLen := by
+  let prefixed := arun idx st (accPrefix c)
+  let accumulated := arun idx prefixed c.accBody
+  have hp := accPrefix_latches c idx st hidxM hsieveM hsieve hmarkM
+    hmarkPos hR hword harrword
+  have hp41 : prefixed.regs 41 = 1 := by simpa [prefixed] using hp.phase
+  have ha := accBody_cursor_frame c idx prefixed
+  have ha41 : accumulated.regs 41 = 1 := by
+    rw [show accumulated.regs 41 = prefixed.regs 41 from ha.phase, hp41]
+  have prefR : prefixed.regs rR = st.regs rR := by
+    simpa [prefixed] using hp.cursor
+  have accR : accumulated.regs rR = prefixed.regs rR := ha.cursor
+  have prefW : prefixed.regs rW = st.regs rW := by
+    simpa [prefixed] using hp.window
+  have accW : accumulated.regs rW = prefixed.regs rW := ha.window
+  have ht := tail_wrap_run c idx accumulated ha41
+    (by rw [accR, prefR]; exact hnext) hperiodM hsegM
+    (by rw [accW, prefW]; exact hWnext)
+  dsimp only at ht
+  rw [body_acc_run_decomp]
+  exact ⟨ht.1, ht.2.1.trans (by rw [accW, prefW])⟩
 
 def bodyIter (c : Cfg) (idx : Nat) : Nat → AState → AState
   | 0, st => st
