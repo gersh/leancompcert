@@ -326,6 +326,7 @@ theorem initial_budget_exact (w k : Nat) (hw : 0 < w) (hk : 0 < k) :
 open LeanCompCert
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.InstrBlock
+open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Ports.CDEMAbelScan
 open LeanCompCert.Ports.CDEMAbelPrimitives
 
@@ -671,5 +672,426 @@ theorem rounds_run (c : Cfg) (idx : Nat) (n : Nat) (r : RegState)
         srun idx q (roundsS c n) rSh = _
       simpa [iter] using hout
 
+
+/-! ## Production 64-bit envelope -/
+
+def productionW : Nat := 1000000000000000000
+def productionKMax : Nat := 5000000000
+
+theorem production_candidate_arith (k s : Nat)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax)
+    (hlo : ceilDiv productionW (Nat.sqrt k + 1) ≤ s)
+    (hhi : s ≤ ceilDiv productionW (Nat.sqrt k)) :
+    let a := productionW / s
+    a * a < M ∧ 2 * a + 1 < M ∧
+      s * (k - a * a) < M ∧
+      a * (productionW % s) < M ∧
+      2 * a * (productionW % s) < M ∧ s + 1 < M := by
+  let t := Nat.sqrt k
+  let a := productionW / s
+  have htSq : t * t ≤ k := by
+    simpa [t] using Nat.sqrt_le k
+  have hkSucc : k < (t + 1) * (t + 1) := by
+    simpa [t, Nat.succ_eq_add_one] using Nat.lt_succ_sqrt k
+  have htpos : 0 < t := by
+    by_cases hz : t = 0
+    · rw [hz] at hkSucc
+      simp at hkSucc
+      omega
+    · exact Nat.pos_of_ne_zero hz
+  have htmax : t ≤ 70710 := by
+    by_cases h : t ≤ 70710
+    · exact h
+    · have hbase : 70711 ≤ t := by omega
+      have hsqbase := Nat.mul_le_mul hbase hbase
+      have hnum : (70711 : Nat) * 70711 = 5000045521 := by decide
+      rw [hnum] at hsqbase
+      dsimp [productionKMax] at hkmax
+      omega
+  have hWbig : t * (t + 1) < productionW := by
+    have hmul := Nat.mul_le_mul htmax (Nat.add_le_add_right htmax 1)
+    have hnum : (70710 : Nat) * (70710 + 1) < productionW := by decide
+    exact Nat.lt_of_le_of_lt hmul hnum
+  have hWpos : 0 < productionW := by decide
+  have hLmul := le_ceilDiv_mul productionW (t + 1) (by omega)
+  have hWs : productionW ≤ s * (t + 1) := by
+    exact Nat.le_trans hLmul (Nat.mul_le_mul_right (t + 1) hlo)
+  have hspos : 0 < s := by
+    by_cases hz : s = 0
+    · rw [hz] at hWs
+      simp at hWs
+      omega
+    · exact Nat.pos_of_ne_zero hz
+  have htlts : t < s := by
+    by_cases h : t < s
+    · exact h
+    · have hst : s ≤ t := by omega
+      have hx := Nat.le_trans hWs (Nat.mul_le_mul_right (t + 1) hst)
+      omega
+  have haUpper : a ≤ t + 1 := by
+    dsimp only [a]
+    apply Nat.div_le_of_le_mul
+    simpa [Nat.mul_comm] using hWs
+  have hHmul : ceilDiv productionW t * t ≤ productionW + t - 1 := by
+    unfold ceilDiv
+    exact Nat.div_mul_le_self _ _
+  have hst : s * t ≤ productionW + t - 1 :=
+    Nat.le_trans (Nat.mul_le_mul_right t hhi) hHmul
+  have hWlt : productionW < (a + 1) * s := by
+    apply Nat.lt_mul_of_div_lt (c := s)
+    · exact Nat.lt_succ_self a
+    · exact hspos
+  have haLower : t ≤ a + 1 := by
+    by_cases h : t ≤ a + 1
+    · exact h
+    · have hat : a + 2 ≤ t := by omega
+      have hsum : productionW + s ≤ (a + 2) * s := by
+        have hx := Nat.add_lt_add_right hWlt s
+        have hid : (a + 1) * s + s = (a + 2) * s := by
+          simp [Nat.add_mul, Nat.add_assoc, Nat.two_mul]
+        rw [hid] at hx
+        omega
+      have hmul : (a + 2) * s ≤ t * s := Nat.mul_le_mul_right s hat
+      have hst' : t * s ≤ productionW + t - 1 := by simpa [Nat.mul_comm] using hst
+      have : s < t := by omega
+      omega
+  have haSqMax : a * a ≤ (t + 1) * (t + 1) := Nat.mul_le_mul haUpper haUpper
+  have haSqWord : a * a < M := by
+    have ht1 : t + 1 ≤ 70711 := by omega
+    have hh := Nat.mul_le_mul ht1 ht1
+    exact Nat.lt_of_le_of_lt haSqMax (Nat.lt_of_le_of_lt hh (by decide))
+  have htwoA : 2 * a + 1 < M := by
+    have hnum : 2 * 70711 + 1 < M := by decide
+    omega
+  have he : k - a * a < 4 * t := by
+    by_cases ha : a = t + 1
+    · rw [ha]
+      simp [Nat.sub_eq_zero_of_le (Nat.le_of_lt hkSucc), htpos]
+    · have hat : a ≤ t := by omega
+      have hta : t - 1 ≤ a := by omega
+      have hsqlo : (t - 1) * (t - 1) ≤ a * a := Nat.mul_le_mul hta hta
+      have hsub : k - a * a ≤ k - (t - 1) * (t - 1) :=
+        Nat.sub_le_sub_left hsqlo k
+      have hid : (t + 1) * (t + 1) =
+          (t - 1) * (t - 1) + 4 * t := by
+        have ht : t = (t - 1) + 1 := (Nat.sub_add_cancel (by omega)).symm
+        have hAlg : (((t - 1) + 1) + 1) * (((t - 1) + 1) + 1) =
+            (t - 1) * (t - 1) + 4 * ((t - 1) + 1) := by
+          simp [Nat.add_mul, Nat.mul_add]
+          omega
+        simpa only [← ht] using hAlg
+      rw [hid] at hkSucc
+      by_cases hbase : (t - 1) * (t - 1) ≤ k
+      · have hsmall : k - (t - 1) * (t - 1) < 4 * t := by
+          apply (Nat.sub_lt_iff_lt_add hbase).2
+          simpa [Nat.add_comm] using hkSucc
+        exact Nat.lt_of_le_of_lt hsub hsmall
+      · have hz : k - (t - 1) * (t - 1) = 0 := Nat.sub_eq_zero_of_le (by omega)
+        rw [hz] at hsub
+        omega
+  have hres : s * (k - a * a) < M := by
+    have hmul := Nat.mul_lt_mul_of_pos_left he hspos
+    have hid : s * (4 * t) = 4 * (s * t) := by
+      simp [Nat.mul_assoc, Nat.mul_comm]
+    rw [hid] at hmul
+    have hbound : 4 * (s * t) ≤ 4 * (productionW + t - 1) :=
+      Nat.mul_le_mul_left 4 hst
+    have htbound : productionW + t - 1 ≤ productionW + 70710 := by omega
+    have hfinal := Nat.le_trans hbound (Nat.mul_le_mul_left 4 htbound)
+    exact Nat.lt_of_lt_of_le hmul (Nat.le_of_lt
+      (Nat.lt_of_le_of_lt hfinal (by decide)))
+  have hab : a * (productionW % s) < M := by
+    have hb : productionW % s < s := Nat.mod_lt _ hspos
+    by_cases ha0 : a = 0
+    · simp [ha0, M]
+    · have hmul := Nat.mul_lt_mul_of_pos_left hb (Nat.pos_of_ne_zero ha0)
+      have haW : a * s ≤ productionW := Nat.div_mul_le_self _ _
+      exact Nat.lt_of_lt_of_le hmul (Nat.le_of_lt
+        (Nat.lt_of_le_of_lt haW (by decide)))
+  have h2ab : 2 * a * (productionW % s) < M := by
+    have hb : productionW % s < s := Nat.mod_lt _ hspos
+    by_cases ha0 : a = 0
+    · simp [ha0, M]
+    have h2apos : 0 < 2 * a := Nat.mul_pos (by decide) (Nat.pos_of_ne_zero ha0)
+    have hmul := Nat.mul_lt_mul_of_pos_left hb h2apos
+    have haW : a * s ≤ productionW := Nat.div_mul_le_self _ _
+    have hrewrite : 2 * a * s = 2 * (a * s) := by simp [Nat.mul_assoc]
+    rw [hrewrite] at hmul
+    have htwice : 2 * (a * s) ≤ 2 * productionW := Nat.mul_le_mul_left 2 haW
+    exact Nat.lt_of_lt_of_le hmul (Nat.le_of_lt
+      (Nat.lt_of_le_of_lt htwice (by decide)))
+  have hsW : s ≤ productionW := by
+    have hceil := ceilDiv_le_self productionW t hWpos htpos
+    exact Nat.le_trans hhi hceil
+  have hsSucc : s + 1 < M := by
+    exact Nat.lt_of_le_of_lt (Nat.add_le_add_right hsW 1) (by decide)
+  simpa only [a] using And.intro haSqWord
+    (And.intro htwoA (And.intro hres (And.intro hab (And.intro h2ab hsSucc))))
+
+theorem step_sub_bracket (w k : Nat) (p : Bracket) (hle : p.lo ≤ p.hi) :
+    p.lo ≤ (step w k p).lo ∧ (step w k p).hi ≤ p.hi := by
+  have hloMid : p.lo ≤ midpoint p := by
+    simp [midpoint, Bracket.width]
+  have hmidHi : midpoint p ≤ p.hi := by
+    simp only [midpoint, Bracket.width]
+    omega
+  simp only [step]
+  split <;> simp only <;> omega
+
+theorem iter_sub_initial (w k n : Nat) (p : Bracket) (hk : 0 < k)
+    (hc : p.Contains (exactRoot w k)) :
+    p.lo ≤ (iter w k n p).lo ∧ (iter w k n p).hi ≤ p.hi := by
+  induction n generalizing p with
+  | zero => simp [iter]
+  | succ n ih =>
+      have hle : p.lo ≤ p.hi := by
+        unfold Bracket.Contains at hc
+        omega
+      have hstep := step_sub_bracket w k p hle
+      have hcstep := step_contains w k hk p hc
+      have hn := ih (step w k p) hcstep
+      change p.lo ≤ (iter w k n (step w k p)).lo ∧
+        (iter w k n (step w k p)).hi ≤ p.hi
+      exact ⟨Nat.le_trans hstep.1 hn.1, Nat.le_trans hn.2 hstep.2⟩
+
+theorem production_roundFit (c : CDEMAbelScan.Cfg) (hc : c.wScale = productionW)
+    (k : Nat) (p : Bracket) (hk : 0 < k) (hkmax : k ≤ productionKMax)
+    (hlo : ceilDiv productionW (Nat.sqrt k + 1) ≤ midpoint p)
+    (hhi : midpoint p ≤ ceilDiv productionW (Nat.sqrt k)) :
+    RoundFit c k p := by
+  have harith := production_candidate_arith k (midpoint p) hk hkmax hlo hhi
+  dsimp only at harith
+  have hmidpos : 0 < midpoint p := by
+    have hmul := le_ceilDiv_mul productionW (Nat.sqrt k + 1) (by omega)
+    have hWmid : productionW ≤ midpoint p * (Nat.sqrt k + 1) :=
+      Nat.le_trans hmul (Nat.mul_le_mul_right _ hlo)
+    by_cases hz : midpoint p = 0
+    · rw [hz] at hWmid
+      simp at hWmid
+      have : 0 < productionW := by decide
+      omega
+    · exact Nat.pos_of_ne_zero hz
+  constructor
+  · exact hmidpos
+  · rw [hc]
+    decide
+  · exact Nat.lt_of_le_of_lt hkmax (by decide)
+  · simpa [hc] using harith.1
+  · simpa [hc] using harith.2.1
+  · simpa [hc] using harith.2.2.1
+  · simpa [hc] using harith.2.2.2.1
+  · simpa [hc] using harith.2.2.2.2.1
+  · exact harith.2.2.2.2.2
+
+theorem production_iter_roundFit (c : CDEMAbelScan.Cfg)
+    (hc : c.wScale = productionW) (k n : Nat)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax) :
+    RoundFit c k (iter c.wScale k n (initial c.wScale k)) := by
+  have hc0 := initial_contains productionW k (by decide) hk
+  have hsub := iter_sub_initial productionW k n (initial productionW k) hk hc0
+  have hcn := iter_contains productionW k hk n (initial productionW k) hc0
+  have hle : (iter productionW k n (initial productionW k)).lo ≤
+      (iter productionW k n (initial productionW k)).hi := by
+    unfold Bracket.Contains at hcn
+    omega
+  have hloMid : (iter productionW k n (initial productionW k)).lo ≤
+      midpoint (iter productionW k n (initial productionW k)) := by
+    simp [midpoint, Bracket.width]
+  have hmidHi : midpoint (iter productionW k n (initial productionW k)) ≤
+      (iter productionW k n (initial productionW k)).hi := by
+    simp only [midpoint, Bracket.width]
+    omega
+  have hfit : RoundFit c k (iter productionW k n (initial productionW k)) := by
+    apply production_roundFit c hc k _ hk hkmax
+    · change (initial productionW k).lo ≤ _
+      exact Nat.le_trans hsub.1 hloMid
+    · change _ ≤ (initial productionW k).hi
+      exact Nat.le_trans hmidHi hsub.2
+  simpa only [hc] using hfit
+
+theorem production_rounds_run (c : CDEMAbelScan.Cfg)
+    (hc : c.wScale = productionW) (idx : Nat) (r : RegState) (k : Nat)
+    (hkpos : 0 < k) (hkmax : k ≤ productionKMax)
+    (hword : ∀ j, r j < M)
+    (hlo : r CDEMAbelScan.rSl = (initial c.wScale k).lo)
+    (hhi : r CDEMAbelScan.rSh = (initial c.wScale k).hi)
+    (hk : r CDEMAbelScan.rK = k) (hgate : r 142 = 1) :
+    let out := srun idx r (roundsS c (CDEMAbelScan.bsBudget c.wScale))
+    out CDEMAbelScan.rSl = exactRoot c.wScale k ∧
+      out CDEMAbelScan.rSh = exactRoot c.wScale k := by
+  have hcontains := initial_contains c.wScale k (by simpa [hc] using
+    (show 0 < productionW by decide)) hkpos
+  have hle : (initial c.wScale k).lo ≤ (initial c.wScale k).hi := by
+    unfold Bracket.Contains at hcontains
+    omega
+  have hhiW := ceilDiv_le_self c.wScale (Nat.sqrt k)
+    (by simpa [hc] using (show 0 < productionW by decide))
+    (by
+      have hs : 0 < Nat.sqrt k := by
+        by_cases hz : Nat.sqrt k = 0
+        · have hsq := Nat.lt_succ_sqrt k
+          rw [hz] at hsq
+          simp at hsq
+          omega
+        · exact Nat.pos_of_ne_zero hz
+      exact hs)
+  have hhiM : (initial c.wScale k).hi < M := by
+    change ceilDiv c.wScale (Nat.sqrt k) < M
+    exact Nat.lt_of_le_of_lt hhiW (by simpa [hc] using
+      (show productionW < M by decide))
+  have hfit : ∀ i, i < CDEMAbelScan.bsBudget c.wScale →
+      RoundFit c k (iter c.wScale k i (initial c.wScale k)) := by
+    intro i _
+    exact production_iter_roundFit c hc k i hkpos hkmax
+  have hr := rounds_run c idx (CDEMAbelScan.bsBudget c.wScale) r k
+    (initial c.wScale k) hword hlo hhi hk hgate hle hhiM hkpos hcontains hfit
+  dsimp only at hr
+  have hexact := initial_budget_exact c.wScale k
+    (by simpa [hc] using (show 0 < productionW by decide)) hkpos
+  rw [hexact] at hr
+  exact hr
+
+
+/-! ## Exact location inside the array program -/
+
+def openS (c : Cfg) : List Instr :=
+  [ .binop 189 .add (.reg rT) (.lit 1)
+  , .binop 190 .add (.lit c.wScale) (.reg rT)
+  , .binop 190 .udiv (.reg 190) (.reg 189)
+  , .binop 191 .add (.lit (c.wScale - 1)) (.reg rT)
+  , .binop 191 .udiv (.reg 191) (.reg rT) ] ++
+  Section413G1Denote.muxS rSl 140 190 rSl 192 ++
+  Section413G1Denote.muxS rSh 140 191 rSh 192
+
+def closeS : List Instr :=
+  [ .binop 202 .ne (.reg rSl) (.reg rSh)
+  , .binop 202 .mul (.reg 202) (.reg 141)
+  , .binop rViol .add (.reg rViol) (.reg 202)
+  , .binop rVBisect .add (.reg rVBisect) (.reg 202)
+  , .binop 203 .mul (.reg 165) (.reg 141) ] ++
+  Section413G1Denote.mulWideG 4294967295 4294967296
+    203 rSh 204 205 180 181 182 183 184 185 186 187 ++
+  addWideS rVLo rVHi 204 205 188 ++
+  [ .binop 206 .add (.reg rKr) (.reg 43)
+  , .binop 207 .sub (.lit 1) (.reg 141)
+  , .binop rKr .mul (.reg 206) (.reg 207)
+  , .binop rC .add (.reg rC) (.reg 141) ]
+
+theorem accBisect_decomp (c : Cfg) :
+    c.accBisect = lift (openS c) ++ lift (roundS c) ++ lift closeS := by
+  simp [Cfg.accBisect, openS, closeS, roundS, probeS, updateS, updatePreS,
+    Section413G1Denote.muxBody_lift, CDEMAbelPrimitives.okBody_lift,
+    Section413G1Denote.mulWideBody_lift, CDEMAbelPrimitives.addWideBody_lift,
+    lift_append]
+
+
+/-! ## Initial-bracket machine prefix -/
+
+def openPreS (c : Cfg) : List Instr :=
+  [ .binop 189 .add (.reg rT) (.lit 1)
+  , .binop 190 .add (.lit c.wScale) (.reg rT)
+  , .binop 190 .udiv (.reg 190) (.reg 189)
+  , .binop 191 .add (.lit (c.wScale - 1)) (.reg rT)
+  , .binop 191 .udiv (.reg 191) (.reg rT) ]
+
+theorem openS_decomp (c : Cfg) :
+    openS c = openPreS c ++ Section413G1Denote.muxS rSl 140 190 rSl 192 ++
+      Section413G1Denote.muxS rSh 140 191 rSh 192 := rfl
+
+theorem openPre_run (c : Cfg) (idx : Nat) (r : RegState) (t : Nat)
+    (hrt : r rT = t) (htpos : 0 < t) (hWpos : 0 < c.wScale)
+    (hWtM : c.wScale + t < M) :
+    let out := srun idx r (openPreS c)
+    out 190 = ceilDiv c.wScale (t + 1) ∧
+      out 191 = ceilDiv c.wScale t ∧
+      ∀ j, j ≠ 189 → j ≠ 190 → j ≠ 191 → out j = r j := by
+  have h1M : (1 : Nat) % M = 1 := by decide
+  have ht1M : t + 1 < M := by omega
+  have hWsub : c.wScale - 1 + t ≤ c.wScale + t := by omega
+  have hWsubM : c.wScale - 1 + t < M := Nat.lt_of_le_of_lt hWsub hWtM
+  have hWM : c.wScale < M := by omega
+  have hW1M : c.wScale - 1 < M := by omega
+  have hq1M : (c.wScale + t) / (t + 1) < M :=
+    Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hWtM
+  have hq2M : (c.wScale - 1 + t) / t < M :=
+    Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hWsubM
+  have htne : t ≠ 0 := Nat.ne_of_gt htpos
+  have ht1ne : t + 1 ≠ 0 := by omega
+  have hrt20 : r 20 = t := by simpa [CDEMAbelScan.rT] using hrt
+  have hnum1 : c.wScale + t = c.wScale + (t + 1) - 1 := by omega
+  have hnum2 : c.wScale - 1 + t = c.wScale + t - 1 := by omega
+  simp only [openPreS, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, CDEMAbelScan.rT, hrt20, h1M, htne, ht1ne,
+    Option.getD_some, reduceIte, Nat.reduceEqDiff,
+    Nat.mod_eq_of_lt ht1M,
+    Nat.mod_eq_of_lt hWM, Nat.mod_eq_of_lt hW1M,
+    Nat.mod_eq_of_lt hWtM, Nat.mod_eq_of_lt hWsubM,
+    Nat.mod_eq_of_lt hq1M, Nat.mod_eq_of_lt hq2M]
+  constructor
+  · rw [hnum1]
+    rfl
+  constructor
+  · rw [hnum2]
+    rfl
+  · intro j h189 h190 h191
+    simp [h189, h190, h191]
+
+theorem open_run (c : Cfg) (idx : Nat) (r : RegState) (t : Nat)
+    (hrt : r rT = t) (h140 : r 140 = 1) (htpos : 0 < t)
+    (hWpos : 0 < c.wScale)
+    (hWtM : c.wScale + t < M) (hword : ∀ j, r j < M) :
+    let out := srun idx r (openS c)
+    out rSl = ceilDiv c.wScale (t + 1) ∧
+      out rSh = ceilDiv c.wScale t := by
+  let q := srun idx r (openPreS c)
+  let q1 := srun idx q (Section413G1Denote.muxS rSl 140 190 rSl 192)
+  let q2 := srun idx q1 (Section413G1Denote.muxS rSh 140 191 rSh 192)
+  have hp := openPre_run c idx r t hrt htpos hWpos hWtM
+  dsimp only at hp
+  have hqword : ∀ j, q j < M := srun_lt_of_lt idx _ r hword
+  have hqframe (j : Nat) (h189 : j ≠ 189) (h190 : j ≠ 190)
+      (h191 : j ≠ 191) : q j = r j := by
+    simpa [q] using hp.2.2 j h189 h190 h191
+  have hq140 : q 140 = 1 := by rw [hqframe 140 (by decide) (by decide) (by decide), h140]
+  have hq190 : q 190 = ceilDiv c.wScale (t + 1) := by simpa [q] using hp.1
+  have hq191 : q 191 = ceilDiv c.wScale t := by simpa [q] using hp.2.1
+  have h1 := Section413G1Denote.muxS_spec idx q rSl 140 190 rSl 192
+    (by simp [rSl]) (by decide) (by decide) (by simp [rSl])
+    (by rw [hq140]; omega) hqword
+  have hq1word : ∀ j, q1 j < M := srun_lt_of_lt idx _ q hqword
+  have hq1frame (j : Nat) (hlo : j ≠ rSl) (h192 : j ≠ 192) :
+      q1 j = q j := by
+    simpa [q1] using Section413G1Denote.muxS_frame idx q rSl 140 190 rSl 192
+      j hlo h192
+  have hq1_140 : q1 140 = 1 := by
+    rw [hq1frame 140 (by simp [rSl]) (by decide), hq140]
+  have hq1_191 : q1 191 = ceilDiv c.wScale t := by
+    rw [hq1frame 191 (by simp [rSl]) (by decide), hq191]
+  have h2 := Section413G1Denote.muxS_spec idx q1 rSh 140 191 rSh 192
+    (by simp [rSh]) (by decide) (by decide) (by simp [rSh])
+    (by rw [hq1_140]; omega) hq1word
+  have hlo : q1 rSl = ceilDiv c.wScale (t + 1) := by
+    simpa [q1, hq140, hq190] using h1
+  have hhi : q2 rSh = ceilDiv c.wScale t := by
+    simpa [q2, hq1_140, hq1_191] using h2
+  have hlo2 : q2 rSl = ceilDiv c.wScale (t + 1) := by
+    rw [show q2 rSl = q1 rSl by
+      simpa [q2] using Section413G1Denote.muxS_frame idx q1
+        rSh 140 191 rSh 192 rSl (by simp [rSl, rSh]) (by simp [rSl])]
+    exact hlo
+  rw [openS_decomp, srun_append, srun_append]
+  exact ⟨hlo2, hhi⟩
+
+/-- At the live round-zero site, where `rT = floor (sqrt k)`, the literal
+prefix installs exactly the pure model's initial bracket. -/
+theorem open_run_initial (c : Cfg) (idx : Nat) (r : RegState) (k : Nat)
+    (hrt : r rT = Nat.sqrt k) (h140 : r 140 = 1)
+    (htpos : 0 < Nat.sqrt k) (hWpos : 0 < c.wScale)
+    (hWtM : c.wScale + Nat.sqrt k < M) (hword : ∀ j, r j < M) :
+    let out := srun idx r (openS c)
+    out rSl = (initial c.wScale k).lo ∧
+      out rSh = (initial c.wScale k).hi := by
+  simpa only [initial] using
+    open_run c idx r (Nat.sqrt k) hrt h140 htpos hWpos hWtM hword
 
 end LeanCompCert.Ports.CDEMAbelBisection

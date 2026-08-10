@@ -143,12 +143,19 @@ the actual logarithmic `bsBudget` is proved sufficient; and `round_run`
 composes the literal seven-instruction probe, complete 74-instruction
 predicate, and four branchless updates.  `rounds_run` then proves any finite
 sequence of those machine rounds refines the pure iterator, with the 64-bit
-fit conditions kept explicit at each midpoint.  The integrated source check
-under the same 2 GiB, one-thread, zero-swap cap took `3.72 s` and peaked at
-`647676 KiB` RSS.
+fit conditions kept explicit at each midpoint.  The production envelope now
+discharges all of them for `1 ≤ k ≤ 5·10⁹`: quotient, square, residual,
+remainder product, doubled product, and successor are proved below `2⁶⁴` for
+every midpoint in every iterated sub-bracket.  `production_rounds_run`
+therefore proves the complete central 61-round machine sequence closes at
+`exactRoot` with no fit oracle.  `accBisect_decomp` identifies that sequence
+inside the literal array program, while `open_run_initial` proves the actual
+round-zero prefix installs the pure initial bracket.  The enlarged integrated
+source check under the same 2 GiB, one-thread, zero-swap cap took `4.29 s` and
+peaked at `669988 KiB` RSS; the module build took `4.54 s` and peaked at
+`726076 KiB`.
 
-Still not proved: discharge of those midpoint fit conditions from the
-production bracket bounds, composition through the surrounding accumulation
+Still not proved: composition through the bisection consumer and accumulation
 body, then the μ-table build, window marking, accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.
