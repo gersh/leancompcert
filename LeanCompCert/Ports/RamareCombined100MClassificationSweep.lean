@@ -20,6 +20,103 @@ open LeanCompCert.Verified.ArrayState (AState)
 open LeanCompCert.Verified.ArrayFoldBridge (arun arun_append)
 open LeanCompCert.Verified.ArrayRegFrame (arun_frame)
 
+/-! ## Mark-phase classifier-only counters -/
+
+/-- With classification disabled, the guarded commit preserves the dedicated
+shape-failure and seen counters as well as the shared violation counter. -/
+theorem Cfg.classGuardCommitBody_mark_shape_seen_frame
+    (k : Nat) (s : AState) (hphase : s.regs 11 = 0)
+    (hvshape : s.regs rVShape < M) (hseen : s.regs rSeen < M) :
+    let out := arun k s
+      (LeanCompCert.Verified.ArrayScalarBlock.lift Cfg.classGuardCommitBody)
+    out.regs rVShape = s.regs rVShape ∧
+      out.regs rSeen = s.regs rSeen := by
+  have hshapeLt : s.regs rVShape < 18446744073709551616 := by
+    simpa [M] using hvshape
+  have hseenLt : s.regs rSeen < 18446744073709551616 := by
+    simpa [M] using hseen
+  simp [Cfg.classGuardCommitBody, arun,
+    LeanCompCert.Verified.ArrayFoldBridge.astep,
+    LeanCompCert.Verified.ArrayState.AState.writeReg,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval,
+    LeanCompCert.Verified.Reflect.denoteOperand,
+    LeanCompCert.Verified.Reflect.denoteOp,
+    hphase, rViol, rVShape, rSeen, M]
+  exact ⟨by simpa [rVShape] using hshapeLt,
+    by simpa [rSeen] using hseenLt⟩
+
+/-- During a marking round the complete classifier preserves both counters
+owned exclusively by live classification. -/
+theorem Cfg.classBody_mark_shape_seen_frame
+    (c : Cfg) (k : Nat) (s : AState) (hphase : s.regs 11 = 0)
+    (hvshape : s.regs rVShape < M) (hseen : s.regs rSeen < M) :
+    let out := arun k s c.classBody
+    out.regs rVShape = s.regs rVShape ∧
+      out.regs rSeen = s.regs rSeen := by
+  let before := arun k s c.classBeforeGuardCommitBody
+  let committed := arun k before
+    (LeanCompCert.Verified.ArrayScalarBlock.lift Cfg.classGuardCommitBody)
+  have hb11 : before.regs 11 = s.regs 11 :=
+    arun_frame k 11 c.classBeforeGuardCommitBody (by rfl) s
+  have hbShape : before.regs rVShape = s.regs rVShape :=
+    arun_frame k rVShape c.classBeforeGuardCommitBody (by rfl) s
+  have hbSeen : before.regs rSeen = s.regs rSeen :=
+    arun_frame k rSeen c.classBeforeGuardCommitBody (by rfl) s
+  have hc := Cfg.classGuardCommitBody_mark_shape_seen_frame k before
+    (hb11.trans hphase) (hbShape.symm ▸ hvshape) (hbSeen.symm ▸ hseen)
+  dsimp only at hc
+  have htShape : (arun k committed Cfg.classClearBody).regs rVShape =
+      committed.regs rVShape :=
+    arun_frame k rVShape Cfg.classClearBody (by rfl) committed
+  have htSeen : (arun k committed Cfg.classClearBody).regs rSeen =
+      committed.regs rSeen :=
+    arun_frame k rSeen Cfg.classClearBody (by rfl) committed
+  rw [c.classBody_eq_beforeGuardCommit_append, arun_append, arun_append]
+  exact ⟨htShape.trans (hc.1.trans hbShape),
+    htSeen.trans (hc.2.trans hbSeen)⟩
+
+/-- A complete literal marking-phase body preserves the two counters that
+are advanced only by live classification rounds. -/
+theorem LambdaPsiSweep.body_mark_shape_seen_frame
+    (c : LambdaPsiSweep.Cfg) (k : Nat) (s : AState)
+    (hround : s.regs rR < c.shape.markSteps)
+    (hTM : c.shape.markSteps < M)
+    (hvshape : s.regs rVShape < M) (hseen : s.regs rSeen < M) :
+    let out := arun k s (LambdaPsiSweep.body c)
+    out.regs rVShape = s.regs rVShape ∧
+      out.regs rSeen = s.regs rSeen := by
+  let marked := arun k s c.shape.markBody
+  let classified := arun k marked c.shape.classBody
+  let tailed := arun k classified c.shape.tailBody
+  let out := arun k tailed (LambdaPsiSweep.arithmeticBody c)
+  have hphase := c.shape.markBody_phase_run k s hTM
+  dsimp only at hphase
+  have hm11 : marked.regs 11 = 0 := by
+    rw [hphase.2, if_neg (by omega : ¬c.shape.markSteps ≤ s.regs rR)]
+  have hmShape : marked.regs rVShape = s.regs rVShape :=
+    arun_frame k rVShape c.shape.markBody (by rfl) s
+  have hmSeen : marked.regs rSeen = s.regs rSeen :=
+    arun_frame k rSeen c.shape.markBody (by rfl) s
+  have hc := c.shape.classBody_mark_shape_seen_frame k marked hm11
+    (hmShape.symm ▸ hvshape) (hmSeen.symm ▸ hseen)
+  dsimp only at hc
+  have htShape : tailed.regs rVShape = classified.regs rVShape :=
+    arun_frame k rVShape c.shape.tailBody (by rfl) classified
+  have htSeen : tailed.regs rSeen = classified.regs rSeen :=
+    arun_frame k rSeen c.shape.tailBody (by rfl) classified
+  have haShape : out.regs rVShape = tailed.regs rVShape :=
+    arun_frame k rVShape (LambdaPsiSweep.arithmeticBody c) (by rfl) tailed
+  have haSeen : out.regs rSeen = tailed.regs rSeen :=
+    arun_frame k rSeen (LambdaPsiSweep.arithmeticBody c) (by rfl) tailed
+  have hbody : arun k s (LambdaPsiSweep.body c) = out := by
+    rw [BodyRefinement.body_eq_mark_class_tail_arithmetic c]
+    simp only [arun_append]
+    rfl
+  rw [hbody]
+  exact ⟨haShape.trans (htShape.trans (hc.1.trans hmShape)),
+    haSeen.trans (htSeen.trans (hc.2.trans hmSeen))⟩
+
 /-- One live literal body consumes its current cell.  The premise is stated
 before the inactive mark block; its live-plane frame transports the relation
 to the classifier seam.  No arithmetic precondition is needed because the
@@ -529,6 +626,76 @@ theorem BodyRefinement.bodyRun_reg_frame
         arun_frame k r (LambdaPsiSweep.body c) hw,
         ih]
 
+set_option maxRecDepth 100000 in
+/-- Every marking-only prefix preserves the counters owned by the live
+classifier.  The caller supplies the finite round bound for each strict
+prefix, keeping this lemma independent of any particular cursor schedule. -/
+theorem BodyRefinement.bodyRun_mark_shape_seen_frame
+    (c : LambdaPsiSweep.Cfg) (k fuel : Nat) (s : AState)
+    (hTM : c.shape.markSteps < M)
+    (hround : ∀ i, i < fuel →
+      (BodyRefinement.bodyRun k c i s).regs rR < c.shape.markSteps)
+    (hvshape : s.regs rVShape < M) (hseen : s.regs rSeen < M) :
+    let out := BodyRefinement.bodyRun k c fuel s
+    out.regs rVShape = s.regs rVShape ∧
+      out.regs rSeen = s.regs rSeen := by
+  induction fuel with
+  | zero => exact ⟨rfl, rfl⟩
+  | succ fuel ih =>
+      let prev := BodyRefinement.bodyRun k c fuel s
+      have hprev := ih (fun i hi => hround i (by omega))
+      dsimp only at hprev
+      have hvPrev : prev.regs rVShape < M := by
+        rw [hprev.1]
+        exact hvshape
+      have hsPrev : prev.regs rSeen < M := by
+        rw [hprev.2]
+        exact hseen
+      have hstep := LambdaPsiSweep.body_mark_shape_seen_frame c k prev
+        (hround fuel (by omega)) hTM hvPrev hsPrev
+      dsimp only at hstep
+      simpa only [BodyRefinement.bodyRun_succ, Nat.succ_eq_add_one, prev]
+        using ⟨hstep.1.trans hprev.1, hstep.2.trans hprev.2⟩
+
+/-- The complete finite production marking run preserves the two
+classification-only counters. -/
+theorem productionMarkRun_shape_seen_frame
+    (logs : List LogCell) (k w : Nat) (s : AState)
+    (hround : s.regs rR = 0) (hwindow : s.regs rW = w)
+    (hwindowM : w + productionCursorCfg.segLen < M)
+    (hvshape : s.regs rVShape < M) (hseen : s.regs rSeen < M) :
+    let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+    let out := BodyRefinement.bodyRun
+      k c productionCursorCfg.markSteps s
+    out.regs rVShape = s.regs rVShape ∧
+      out.regs rSeen = s.regs rSeen := by
+  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  apply BodyRefinement.bodyRun_mark_shape_seen_frame c k
+    productionCursorCfg.markSteps s productionCursorCfg_markSteps_lt_word
+  · intro i hi
+    have hpos := BodyRefinement.bodyRun_onePeriod_position c k i w s
+      hround hwindow
+      (by
+        change 0 < productionCursorCfg.period
+        unfold Cfg.period
+        change 0 < productionCursorCfg.markSteps + 999900
+        omega)
+      productionCursorCfg_period_lt_word
+      (by simpa only [c] using hwindowM)
+      (by
+        change i ≤ productionCursorCfg.period
+        unfold Cfg.period
+        omega)
+    dsimp only at hpos
+    have hne : i ≠ productionCursorCfg.period := by
+      unfold Cfg.period
+      omega
+    rw [if_neg hne] at hpos
+    rw [hpos.1]
+    exact hi
+  · exact hvshape
+  · exact hseen
+
 /-- The generic physical lambda/psi initializer preserves architectural
 register zero.  Staging the four initializer blocks here prevents downstream
 production specializations from reducing the concrete log table merely to
@@ -565,6 +732,56 @@ theorem productionPhysicalInitState_zero
     LambdaPsiSweep.arun_reg_frame 0 0 _ productionInitState (by rfl)
   rw [hout, hout0, hstored0, hseed0]
   exact productionInitState_regs_zero 0 (by decide) (by decide) (by decide)
+
+/-- The physical initializer leaves both classification-only counters at
+their architectural zero value.  As above, the proof is staged across the
+four initializer blocks so it never reduces the concrete log table. -/
+theorem productionPhysicalInitState_classCounters_zero
+    (logs : List LogCell) (seed : LambdaPsiSweep.Seed) :
+    let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+    s.regs rVShape = 0 ∧ s.regs rSeen = 0 := by
+  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  let logSeeded := arun 0 productionInitState
+    (LeanCompCert.Ports.PsiSegSieve.seedRegs
+      [(LambdaPsiSweep.lRLogL, seed.log.logL),
+       (LambdaPsiSweep.lRLogU, seed.log.logU)])
+  let stored := arun 0 logSeeded
+    (LeanCompCert.Ports.PsiSegSieve.storeLits c.logCells)
+  let out := arun 0 stored
+    (LeanCompCert.Ports.PsiSegSieve.seedRegs
+      [(LambdaPsiSweep.rSumL, seed.sumL),
+       (LambdaPsiSweep.rSumU, seed.sumU),
+       (LambdaPsiSweep.rPsiLQ, seed.psiL.q),
+       (LambdaPsiSweep.rPsiLR, seed.psiL.r),
+       (LambdaPsiSweep.rPsiUQ, seed.psiU.q),
+       (LambdaPsiSweep.rPsiUR, seed.psiU.r)])
+  have hout : WholeSweepInvariant.productionPhysicalInitState logs seed = out := by
+    simp only [WholeSweepInvariant.productionPhysicalInitState,
+      LambdaPsiSweep.init,
+      LeanCompCert.Ports.RamareCombined100M.LogSweep.init,
+      productionInitState, c, out, stored, logSeeded, arun_append]
+  have hz (r : Nat)
+      (houtFrame : LambdaPsiSweep.ablockWritesReg r
+        (LeanCompCert.Ports.PsiSegSieve.seedRegs
+          [(LambdaPsiSweep.rSumL, seed.sumL),
+           (LambdaPsiSweep.rSumU, seed.sumU),
+           (LambdaPsiSweep.rPsiLQ, seed.psiL.q),
+           (LambdaPsiSweep.rPsiLR, seed.psiL.r),
+           (LambdaPsiSweep.rPsiUQ, seed.psiU.q),
+           (LambdaPsiSweep.rPsiUR, seed.psiU.r)]) = false)
+      (hlogFrame : LambdaPsiSweep.ablockWritesReg r
+        (LeanCompCert.Ports.PsiSegSieve.seedRegs
+          [(LambdaPsiSweep.lRLogL, seed.log.logL),
+           (LambdaPsiSweep.lRLogU, seed.log.logU)]) = false)
+      (hrW : r ≠ rW) (hr90 : r ≠ 90) (hr91 : r ≠ 91) :
+      out.regs r = 0 := by
+    rw [LambdaPsiSweep.arun_reg_frame 0 r _ stored houtFrame,
+      arun_storeLits_regs_frame 0 r logSeeded c.logCells hr90 hr91,
+      LambdaPsiSweep.arun_reg_frame 0 r _ productionInitState hlogFrame]
+    exact productionInitState_regs_zero r hrW hr90 hr91
+  rw [hout]
+  exact ⟨hz rVShape (by rfl) (by rfl) (by decide) (by decide) (by decide),
+    hz rSeen (by rfl) (by rfl) (by decide) (by decide) (by decide)⟩
 
 set_option maxRecDepth 100000 in
 /-- The already-verified finite marking phase establishes the pending-cell
@@ -684,5 +901,108 @@ theorem productionPhysicalInit_classStart
       omega)
     hs.1 hs.2.1 (productionPhysicalInitState_zero logs seed)
     hs.2.2.1 hs.2.2.2.1 hs.2.2.2.2.1 hs.2.2.2.2.2 hmarkZero
+
+set_option maxRecDepth 100000 in
+/-- At the physical first-window classification seam every diagnostic
+counter has its exact zero value.  The mark-failure counter follows from the
+closed selected-cell invariant; the classifier-only counters follow from the
+finite mark-prefix frame above. -/
+theorem productionPhysicalInit_classStart_zeroCounters
+    (logs : List LogCell) (seed : LambdaPsiSweep.Seed)
+    (haddrM : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      x.1 < M)
+    (haddrAway : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      productionCursorCfg.arrayLen ≤ x.1)
+    (hmarkZero :
+      let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+      let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+      (BodyRefinement.bodyRun 0 c productionCursorCfg.markSteps s).regs
+        rViol = 0) :
+    let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+    let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+    let marked := BodyRefinement.bodyRun 0 c productionCursorCfg.markSteps s
+    ProductionClassSweepInv productionCursorCfg.lo 0 0 0 0 0 marked := by
+  let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  let marked := BodyRefinement.bodyRun 0 c productionCursorCfg.markSteps s
+  have hs := WholeSweepInvariant.productionPhysicalInitState_shape
+    logs seed haddrM haddrAway
+  have hinit := productionPhysicalInitState_classCounters_zero logs seed
+  dsimp only at hs hinit
+  have hframe := productionMarkRun_shape_seen_frame logs 0
+    productionCursorCfg.lo s hs.1 hs.2.1
+    (by change 10001 + 999900 < M; decide)
+    (by rw [hinit.1]; change 0 < M; decide)
+    (by rw [hinit.2]; change 0 < M; decide)
+  dsimp only at hframe
+  have hvshape0 : marked.regs rVShape = 0 := hframe.1.trans hinit.1
+  have hseen0 : marked.regs rSeen = 0 := hframe.2.trans hinit.2
+  have hselected := WholeSweepInvariant.productionWindow_markInv
+    logs 0 productionCursorCfg.lo 0 s
+    (by change 0 < 999900; omega)
+    (by change 10001 < M; decide)
+    (by change 0 < 10001 + 0; omega)
+    (by change 10001 + 0 ≤ 100000000; omega)
+    hs.1 hs.2.1 hs.2.2.1
+    (hs.2.2.2.1 0 (by change 0 < 999900; omega))
+    hs.2.2.2.2.1 hs.2.2.2.2.2
+  have hvmarkLe := hselected.vmark_le_viol
+  change marked.regs rViol = 0 at hmarkZero
+  change marked.regs rVMark ≤ marked.regs rViol at hvmarkLe
+  have hvmark0 : marked.regs rVMark = 0 := by
+    rw [hmarkZero] at hvmarkLe
+    exact Nat.le_zero.mp hvmarkLe
+  have hstart := productionPhysicalInit_classStart
+    logs seed haddrM haddrAway hmarkZero
+  dsimp only at hstart
+  rw [hmarkZero, hvmark0, hvshape0, hseen0] at hstart
+  exact hstart
+
+set_option maxRecDepth 100000 in
+/-- The literal finite first-window classification is certified by the
+symbolic sweep invariant at its exact finite endpoint.  Keeping the endpoint
+state behind the invariant avoids kernel reduction of the concrete
+999,900-step recursive term; `ProductionClassSweepInv.complete_cells` and the
+counter fields expose each checked result without native evaluation. -/
+theorem productionPhysicalInit_firstClassification_inv
+    (logs : List LogCell) (seed : LambdaPsiSweep.Seed)
+    (haddrM : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      x.1 < M)
+    (haddrAway : ∀ x ∈
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg).logCells,
+      productionCursorCfg.arrayLen ≤ x.1)
+    (hmarkZero :
+      let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+      let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+      (BodyRefinement.bodyRun 0 c productionCursorCfg.markSteps s).regs
+        rViol = 0) :
+    let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+    let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+    let marked := BodyRefinement.bodyRun 0 c productionCursorCfg.markSteps s
+    ProductionClassSweepInv productionCursorCfg.lo
+      productionCursorCfg.segLen 0 0 0 0
+      (BodyRefinement.bodyRun 0 c productionCursorCfg.segLen marked) := by
+  let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  let marked := BodyRefinement.bodyRun 0 c productionCursorCfg.markSteps s
+  have hstart := productionPhysicalInit_classStart_zeroCounters
+    logs seed haddrM haddrAway hmarkZero
+  dsimp only at hstart
+  exact productionClassSweep_run logs 0 productionCursorCfg.lo
+    productionCursorCfg.segLen marked 0 0 0 0 hstart
+    (Nat.le_refl _)
+    (by intro i hi; change 0 < 10001 + i; omega)
+    (by
+      intro i hi
+      change i < 999900 at hi
+      change 10001 + i ≤ 100000000
+      omega)
+    (by change 0 < M; decide)
+    (by change 0 < M; decide)
+    (by change 0 < M; decide)
+    (by change 0 + 999900 < M; decide)
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve

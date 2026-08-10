@@ -407,6 +407,8 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | finite production classification sweep, direct source check | 18.10 s | 717,720 KiB | 0 | success |
 | finite production classification sweep, module build | 17.93 s | 707,184 KiB | 0 | success |
 | physical initializer to classification seam, direct source check | 35.12 s | 4,188,456 KiB | 0 | success |
+| zero-counter seam and opaque full-classification endpoint, direct source check | 53.72 s | 4,353,088 KiB | 0 | success |
+| zero-counter seam and opaque full-classification endpoint, module build | 53.92 s | 4,357,624 KiB | 0 | success |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -467,6 +469,15 @@ candidate seed blocks before invoking the marking and classification
 invariants.  A concrete downstream `writes` reduction was stopped after more
 than three minutes; the generic replacement restores the Goldbach bridge to
 its prior roughly 38-second compile baseline.
+The marking prefix now proves that the classification-only shape and seen
+counters remain at their initialized zero values; the closed mark invariant
+also forces the mark-failure counter to zero from the public violation result.
+The full `999900`-candidate endpoint is intentionally exposed through
+`ProductionClassSweepInv` rather than projections of a concrete `bodyRun`.
+An eager projected wrapper hit the deterministic heartbeat limit after about
+one minute, while the opaque invariant endpoint compiles in roughly 54 seconds
+and still exposes the exact counters, cleared cells, and boundary cursor via
+proved fields.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert
