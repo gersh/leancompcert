@@ -705,3 +705,21 @@ the global setting remains unchanged. Current capped measurements are:
 Fresh axiom prints use `[propext]` for the accumulator frame and `[propext,
 Quot.sound]` for both literal cursor branches. The next readiness step can now
 track exact cursor/window movement without unfolding the emitted body.
+
+`LeanCompCert/Ports/CDEMAbelOuterReady.lean` packages the corresponding finite
+trace arithmetic. `bodyIter_succ_start` and `bodySchedule_eq_bodyIter` prove
+that a cell schedule is exactly `middleCount + 2` literal body iterations.
+`bodyIter_cursor_contracts` telescopes per-step continue contracts, and
+`bodySchedule_cursor_of_contracts` concludes exact cursor advance with an
+unchanged window base. This module imports the compiled cursor semantics and
+therefore remains cheap:
+
+| check | elapsed | peak RSS | swap |
+| --- | ---: | ---: | ---: |
+| fresh readiness source | 0.30 s | 594,740 KiB | 0 |
+| readiness module build | 0.43 s | 612,536 KiB | 0 |
+
+Fresh axiom prints use only `[propext]` or `[propext, Quot.sound]`. What remains
+is to discharge each per-step contract from the production arithmetic
+invariant, selecting continue for all nonterminal iterations and wrap at the
+end of a full window.
