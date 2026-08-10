@@ -162,9 +162,21 @@ stage leave both violation counters unchanged and add exactly
 under the explicit accumulator no-wrap invariant. With this addition the
 integrated source check took `4.46 s` and peaked at `696108 KiB`.
 
-Still not proved: preservation/composition through the `accHead` and
-`accProd` blocks interleaved between bisection rounds, then the μ-table build,
-window marking, full accumulators, and outer loop to
+`LeanCompCert/Ports/CDEMAbelAccumulation.lean` closes the next interleaved
+stage.  `mulAdd_run_mod` proves the reusable literal 64-by-64 multiply followed
+by two-limb addition, and `accProd_run_mod` instantiates it twice against the
+actual array program: `uPos` gains `r169·r167`, `uNeg` gains `r170·r168`, both
+modulo `2^128`, every unrelated register is framed, and the sieve array is
+unchanged.  `accProd_run_exact` removes both moduli under the two explicit
+no-wrap invariants.  Fresh source compilation under the same one-thread,
+2 GiB, zero-swap cap took `0.49 s` and peaked at `592612 KiB`; the live module
+build took `0.53 s` and peaked at `606240 KiB`.  Fresh axiom prints for all
+four public refinement theorems report only `propext`, `Classical.choice`, and
+`Quot.sound`.
+
+Still not proved: preservation/composition through the `accHead` block
+interleaved between bisection rounds, then the μ-table build, window marking,
+full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.
 
