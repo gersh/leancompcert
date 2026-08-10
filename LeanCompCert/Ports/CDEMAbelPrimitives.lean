@@ -186,6 +186,10 @@ def okFormula (s k a b : Nat) : Prop :=
           (2 * a * b ≤ s * (k - a * a) ∧
             b * b ≤ s * (s * (k - a * a) - 2 * a * b)))))
 
+instance (s k a b : Nat) : Decidable (okFormula s k a b) := by
+  unfold okFormula
+  infer_instance
+
 /-- `(u+t)^2`, spelled out because LeanCompCert deliberately has no `ring`
 dependency. -/
 theorem sq_add (u t : Nat) :
@@ -411,6 +415,28 @@ theorem okQuot_arun (c : CDEMAbelScan.Cfg) (k : Nat) (st : AState)
     denoteOp, RegState.set, hs0, hrs100, hsmod, hWmod,
     Nat.mod_eq_of_lt hdivM, Nat.mod_eq_of_lt hremM]
 
+theorem okQuot_run (c : CDEMAbelScan.Cfg) (idx : Nat) (r : RegState)
+    (rs : Nat) (hrs100 : rs ≠ 100) (hs : 0 < r rs)
+    (hsM : r rs < M) (hW : c.wScale < M) :
+    let out := srun idx r (okQuotS c rs)
+    out 100 = r rs ∧ out 101 = c.wScale / r rs ∧
+      out 102 = c.wScale % r rs := by
+  let st : AState := { regs := r, arr := fun _ => 0 }
+  have h := okQuot_arun c idx st rs hrs100 hs hsM hW
+  dsimp only [st] at h
+  rw [arun_lift] at h
+  exact ⟨h.1, h.2.1, h.2.2.1⟩
+
+theorem okQuot_frame (c : CDEMAbelScan.Cfg) (idx : Nat) (r : RegState)
+    (rs j : Nat) (hj100 : j ≠ 100) (hj101 : j ≠ 101) (hj102 : j ≠ 102) :
+    srun idx r (okQuotS c rs) j = r j := by
+  apply srun_untouched
+  intro i hi
+  simp only [okQuotS, okGuardS, okDivS, List.mem_append, List.mem_cons,
+    List.not_mem_nil, or_false] at hi
+  rcases hi with (rfl | rfl) | (rfl | rfl) <;>
+    simp only [sdest] <;> omega
+
 /-- Exact non-wrapping subtraction in the fragment's modular encoding. -/
 theorem msub_exact (x y : Nat) (hyx : y ≤ x) (hx : x < M) :
     (x + (M - y)) % M = x - y := by
@@ -480,10 +506,348 @@ theorem okClassify_run (idx : Nat) (s : RegState) (a b k : Nat)
     simp [heq, hbig, h1M]
   all_goals decide
 
+/-- If `k < a²`, the classification gate is zero.  No subtraction value is
+claimed in this branch; the remaining predicate is killed by this gate. -/
+theorem okClassify_false105 (idx : Nat) (r : RegState) (a k : Nat)
+    (ha : r 101 = a) (hk : r CDEMAbelScan.rK = k)
+    (haSqM : a * a < M) (hka : k < a * a) :
+    srun idx r okClassifyS 105 = 0 := by
+  have h1M : (1 : Nat) % M = 1 := by decide
+  have hzero : (1 + (M - 1)) % M = 0 := by decide
+  have hk30 : r 30 = k := by simpa [CDEMAbelScan.rK] using hk
+  simp only [okClassifyS, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, Option.getD_some, CDEMAbelScan.rK, CDEMAbelScan.rViol,
+    CDEMAbelScan.rVDiv, reduceIte, Nat.reduceEqDiff, ha,
+    Nat.mod_eq_of_lt haSqM, hk30, h1M]
+  simp [hka, hzero]
+
+theorem okClassify_frame (idx : Nat) (r : RegState) (j : Nat)
+    (hj : 112 < j)
+    (hViol : j ≠ CDEMAbelScan.rViol)
+    (hVDiv : j ≠ CDEMAbelScan.rVDiv) :
+    srun idx r okClassifyS j = r j := by
+  apply srun_untouched
+  intro i hi
+  simp only [okClassifyS, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
+    rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+    simp only [sdest] <;> omega
+
+/-! ## Exact-predicate product and comparison tail -/
+
+/-- The five scalar instructions between classification and the two wide
+products in the production predicate. -/
+def okProductPrepS : List Instr :=
+  [ .binop 113 .mul (.reg 194) (.reg 109)
+  , .binop 114 .mul (.reg 100) (.reg 101)
+  , .binop 114 .mul (.reg 114) (.lit 2)
+  , .binop 115 .ge (.reg 113) (.reg 114)
+  , .binop 116 .sub (.reg 113) (.reg 114) ]
+
+/-- The comparison flag is exact even when the following subtraction would
+wrap.  This is the branch fact used to gate the wide comparison off. -/
+theorem okProductPrep_flags (idx : Nat) (r : RegState) (s e a b : Nat)
+    (hs : r 194 = s) (he : r 109 = e) (ha : r 100 = a) (hb : r 101 = b)
+    (hseM : s * e < M) (habM : a * b < M) (h2abM : 2 * a * b < M) :
+    let out := srun idx r okProductPrepS
+    out 113 = s * e ∧ out 114 = 2 * a * b ∧
+      out 115 = (if 2 * a * b ≤ s * e then 1 else 0) := by
+  have h2M : (2 : Nat) % M = 2 := by decide
+  have hse : (s * e) % M = s * e := Nat.mod_eq_of_lt hseM
+  have hab : (a * b) % M = a * b := Nat.mod_eq_of_lt habM
+  have h2ab : (a * b * 2) % M = 2 * a * b := by
+    have hid : a * b * 2 = 2 * a * b := by
+      simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+    rw [hid, Nat.mod_eq_of_lt h2abM]
+  simp only [okProductPrepS, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, Option.getD_some, reduceIte, Nat.reduceEqDiff,
+    hs, he, ha, hb, h2M, hse, hab, h2ab]
+  by_cases hle : 2 * a * b ≤ s * e <;> simp
+
+/-- In the fine predicate branch, the product-preparation instructions are
+ordinary exact natural-number arithmetic.  The explicit bounds are the
+machine-word obligations later supplied by the bisection invariant. -/
+theorem okProductPrep_run (idx : Nat) (r : RegState) (s e a b : Nat)
+    (hs : r 194 = s) (he : r 109 = e) (ha : r 100 = a) (hb : r 101 = b)
+    (hseM : s * e < M) (habM : a * b < M) (h2abM : 2 * a * b < M)
+    (hle : 2 * a * b ≤ s * e) :
+    let out := srun idx r okProductPrepS
+    out 113 = s * e ∧ out 114 = 2 * a * b ∧ out 115 = 1 ∧
+      out 116 = s * e - 2 * a * b := by
+  have h2M : (2 : Nat) % M = 2 := by decide
+  have hse : (s * e) % M = s * e := Nat.mod_eq_of_lt hseM
+  have hab : (a * b) % M = a * b := Nat.mod_eq_of_lt habM
+  have h2ab : (a * b * 2) % M = 2 * a * b := by
+    have hid : a * b * 2 = 2 * a * b := by
+      simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+    rw [hid, Nat.mod_eq_of_lt h2abM]
+  have hsub := msub_exact (s * e) (2 * a * b) hle hseM
+  simp only [okProductPrepS, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, Option.getD_some, reduceIte, Nat.reduceEqDiff,
+    hs, he, ha, hb, h2M, hse, hab, h2ab, hsub]
+  simp [hle]
+
+theorem okProductPrep_frame (idx : Nat) (r : RegState) (j : Nat)
+    (h113 : j ≠ 113) (h114 : j ≠ 114) (h115 : j ≠ 115)
+    (h116 : j ≠ 116) :
+    srun idx r okProductPrepS j = r j := by
+  apply srun_untouched
+  intro i hi
+  simp only [okProductPrepS, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with rfl | rfl | rfl | rfl | rfl <;>
+    simp only [sdest] <;> omega
+
+/-- Lexicographic comparison of two little-endian 64-bit limb pairs. -/
+def wordGe (lo1 hi1 lo2 hi2 : Nat) : Prop :=
+  hi2 < hi1 ∨ (hi1 = hi2 ∧ lo2 ≤ lo1)
+
+/-- Lexicographic limb comparison is exactly comparison of the recombined
+128-bit naturals. -/
+theorem wordGe_iff_wval (lo1 hi1 lo2 hi2 : Nat)
+    (hlo1 : lo1 < MulWide.B64) (hlo2 : lo2 < MulWide.B64) :
+    wordGe lo1 hi1 lo2 hi2 ↔
+      lo2 + MulWide.B64 * hi2 ≤ lo1 + MulWide.B64 * hi1 := by
+  unfold wordGe
+  simp only [MulWide.B64] at hlo1 hlo2 ⊢
+  omega
+
+/-- The final twelve scalar instructions of the production predicate. -/
+def okPostS : List Instr :=
+  [ .binop 129 .gt (.reg 118) (.reg 128)
+  , .binop 120 .eq (.reg 118) (.reg 128)
+  , .binop 121 .ge (.reg 117) (.reg 119)
+  , .binop 120 .mul (.reg 120) (.reg 121)
+  , .binop 129 .add (.reg 129) (.reg 120)
+  , .binop 129 .mul (.reg 129) (.reg 115)
+  , .binop 129 .mul (.reg 129) (.reg 112)
+  , .binop 129 .add (.reg 129) (.reg 111)
+  , .binop 129 .mul (.reg 129) (.reg 107)
+  , .binop 122 .mul (.reg 106) (.reg 108)
+  , .binop 129 .add (.reg 129) (.reg 122)
+  , .binop 197 .mul (.reg 129) (.reg 105) ]
+
+/-- Assuming the classification flags have their proved Boolean meanings,
+the literal postlude implements the disjunction structure of `okFormula`.
+The `Neq ↔ ¬Eq` hypothesis is important: it excludes impossible flag sums
+before modular word normalization. -/
+theorem okPost_run (idx : Nat) (r : RegState)
+    (A Eq Neq B0 Big Se : Prop) [Decidable A] [Decidable Eq]
+    [Decidable Neq] [Decidable B0] [Decidable Big] [Decidable Se]
+    (lo1 hi1 lo2 hi2 : Nat)
+    [Decidable (wordGe lo1 hi1 lo2 hi2)]
+    (hNeqIff : Neq ↔ ¬Eq)
+    (h105 : r 105 = if A then 1 else 0)
+    (h106 : r 106 = if Eq then 1 else 0)
+    (h107 : r 107 = if Neq then 1 else 0)
+    (h108 : r 108 = if B0 then 1 else 0)
+    (h111 : r 111 = if Big then 1 else 0)
+    (h112 : r 112 = if ¬Big then 1 else 0)
+    (h115 : r 115 = if Se then 1 else 0)
+    (h117 : r 117 = lo1) (h118 : r 118 = hi1)
+    (h119 : r 119 = lo2) (h128 : r 128 = hi2) :
+    srun idx r okPostS 197 =
+      if A ∧ ((Eq ∧ B0) ∨ (Neq ∧ (Big ∨ (Se ∧ wordGe lo1 hi1 lo2 hi2))))
+      then 1 else 0 := by
+  have hNeqEq : Neq = ¬Eq := propext hNeqIff
+  subst Neq
+  simp only [okPostS, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, Option.getD_some, reduceIte, Nat.reduceEqDiff,
+    h105, h106, h107, h108, h111, h112, h115, h117, h118, h119, h128]
+  unfold wordGe
+  by_cases hA : A <;> by_cases hEq : Eq <;>
+    by_cases hB0 : B0 <;> by_cases hBig : Big <;> by_cases hSe : Se <;>
+    by_cases hHi : hi2 < hi1 <;> by_cases hHiEq : hi1 = hi2 <;>
+    by_cases hLo : lo2 ≤ lo1 <;> simp [hA, hEq, hB0, hBig, hSe,
+      hHi, hHiEq, hLo]
+  all_goals decide
+
+/-- The final production gate dominates every preceding flag and comparison. -/
+theorem okPost_zero (idx : Nat) (r : RegState) (h105 : r 105 = 0) :
+    srun idx r okPostS 197 = 0 := by
+  simp [okPostS, srun, sdest, sval, denoteOperand, denoteOp,
+    RegState.set, h105]
+
+/-- The two literal half-limb multipliers in the production predicate, in
+their scalar form. -/
+def okMul1S : List Instr :=
+  Section413G1Denote.mulWideG 4294967295 4294967296
+    194 116 117 118 120 121 122 123 124 125 126 127
+
+def okMul2S : List Instr :=
+  Section413G1Denote.mulWideG 4294967295 4294967296
+    101 101 119 128 120 121 122 123 124 125 126 127
+
+theorem okMul1_frame (idx : Nat) (r : RegState) (j : Nat)
+    (hlo : j ≠ 117) (hhi : j ≠ 118)
+    (hj : Section413G1Denote.NotIn8 j 120 121 122 123 124 125 126 127) :
+    srun idx r okMul1S j = r j :=
+  Section413G1Denote.mulWideG_frame idx r 4294967295 4294967296
+    194 116 117 118 120 121 122 123 124 125 126 127 j hlo hhi hj
+
+theorem okMul2_frame (idx : Nat) (r : RegState) (j : Nat)
+    (hlo : j ≠ 119) (hhi : j ≠ 128)
+    (hj : Section413G1Denote.NotIn8 j 120 121 122 123 124 125 126 127) :
+    srun idx r okMul2S j = r j :=
+  Section413G1Denote.mulWideG_frame idx r 4294967295 4294967296
+    101 101 119 128 120 121 122 123 124 125 126 127 j hlo hhi hj
+
+theorem okMul1_limbs (idx : Nat) (r : RegState) (hword : ∀ j, r j < M) :
+    srun idx r okMul1S 117 = (MulWide.hl (r 194) (r 116)).1 ∧
+      srun idx r okMul1S 118 = (MulWide.hl (r 194) (r 116)).2 := by
+  exact Section413G1Denote.mulWideG_hl idx r 194 116 117 118
+    120 121 122 123 124 125 126 127
+    (by simp [Section413G1Denote.Distinct8])
+    (by simp [Section413G1Denote.NotIn8])
+    (by simp [Section413G1Denote.NotIn8])
+    (by simp [Section413G1Denote.NotIn8])
+    (by simp [Section413G1Denote.NotIn8]) (by decide) hword
+
+theorem okMul2_limbs (idx : Nat) (r : RegState) (hword : ∀ j, r j < M) :
+    srun idx r okMul2S 119 = (MulWide.hl (r 101) (r 101)).1 ∧
+      srun idx r okMul2S 128 = (MulWide.hl (r 101) (r 101)).2 := by
+  exact Section413G1Denote.mulWideG_hl idx r 101 101 119 128
+    120 121 122 123 124 125 126 127
+    (by simp [Section413G1Denote.Distinct8])
+    (by simp [Section413G1Denote.NotIn8])
+    (by simp [Section413G1Denote.NotIn8])
+    (by simp [Section413G1Denote.NotIn8])
+    (by simp [Section413G1Denote.NotIn8]) (by decide) hword
+
 /-- Tail after the quotient and classification stages in the one live use of
 `okBody` (`rs=194`, gate `142`, result `197`). -/
 def okAfterClassifyS (c : CDEMAbelScan.Cfg) : List Instr :=
   (okS c 194 142 197).drop 21
+
+theorem okAfterClassifyS_decomp (c : CDEMAbelScan.Cfg) :
+    okAfterClassifyS c =
+      okProductPrepS ++ okMul1S ++ okMul2S ++ okPostS := by
+  simp [okAfterClassifyS, okS, CDEMAbelScan.okBody,
+    CDEMAbelScan.mulWideBody, Section413G1Denote.scalarOf,
+    okProductPrepS, okMul1S, okMul2S, Section413G1Denote.mulWideG, okPostS]
+
+theorem okAfterClassify_zero (c : CDEMAbelScan.Cfg) (idx : Nat)
+    (r : RegState) (h105 : r 105 = 0) :
+    srun idx r (okAfterClassifyS c) 197 = 0 := by
+  let r1 := srun idx r okProductPrepS
+  let r2 := srun idx r1 okMul1S
+  let r3 := srun idx r2 okMul2S
+  have hr1 : r1 105 = 0 := by
+    have h := okProductPrep_frame idx r 105 (by decide) (by decide) (by decide)
+      (by decide)
+    simpa [r1, h105] using h
+  have hr2 : r2 105 = 0 := by
+    have h := okMul1_frame idx r1 105 (by decide) (by decide)
+      (by simp [Section413G1Denote.NotIn8])
+    simpa [r2, hr1] using h
+  have hr3 : r3 105 = 0 := by
+    have h := okMul2_frame idx r2 105 (by decide) (by decide)
+      (by simp [Section413G1Denote.NotIn8])
+    simpa [r3, hr2] using h
+  rw [okAfterClassifyS_decomp, srun_append, srun_append, srun_append]
+  exact okPost_zero idx r3 hr3
+
+/-- The complete production tail refines the residual predicate formula.
+The wrapping subtraction branch is handled separately: when it would wrap,
+register `115` gates the ensuing wide product out of the Boolean result. -/
+theorem okAfterClassify_run (c : CDEMAbelScan.Cfg) (idx : Nat)
+    (r : RegState) (s e a b : Nat)
+    (A Eq B0 Big : Prop) [Decidable A] [Decidable Eq]
+    [Decidable B0] [Decidable Big]
+    (hword : ∀ j, r j < M)
+    (hs : r 194 = s) (he : r 109 = e) (ha : r 100 = a) (hb : r 101 = b)
+    (h105 : r 105 = if A then 1 else 0)
+    (h106 : r 106 = if Eq then 1 else 0)
+    (h107 : r 107 = if ¬Eq then 1 else 0)
+    (h108 : r 108 = if B0 then 1 else 0)
+    (h111 : r 111 = if Big then 1 else 0)
+    (h112 : r 112 = if ¬Big then 1 else 0)
+    (hseM : s * e < M) (habM : a * b < M) (h2abM : 2 * a * b < M) :
+    srun idx r (okAfterClassifyS c) 197 =
+      if A ∧ ((Eq ∧ B0) ∨
+        (¬Eq ∧ (Big ∨
+          (2 * a * b ≤ s * e ∧ b * b ≤ s * (s * e - 2 * a * b)))))
+      then 1 else 0 := by
+  classical
+  let r1 := srun idx r okProductPrepS
+  let r2 := srun idx r1 okMul1S
+  let r3 := srun idx r2 okMul2S
+  have hr1word : ∀ j, r1 j < M := srun_lt_of_lt idx _ r hword
+  have hr2word : ∀ j, r2 j < M := srun_lt_of_lt idx _ r1 hr1word
+  have hr1frame (j : Nat) (hj : j ≤ 112 ∨ 116 < j) : r1 j = r j := by
+    apply okProductPrep_frame <;> omega
+  have hr2frame (j : Nat) (hj : j ≤ 116 ∨ 128 < j) : r2 j = r1 j := by
+    apply okMul1_frame <;> simp [Section413G1Denote.NotIn8] <;> omega
+  have hr3frame (j : Nat) (hj : j ≤ 118) : r3 j = r2 j := by
+    apply okMul2_frame <;> simp [Section413G1Denote.NotIn8] <;> omega
+  have hprep := okProductPrep_flags idx r s e a b hs he ha hb hseM habM h2abM
+  dsimp only at hprep
+  have h105' : r3 105 = if A then 1 else 0 := by
+    rw [hr3frame 105 (by omega), hr2frame 105 (by omega),
+      hr1frame 105 (by omega), h105]
+  have h106' : r3 106 = if Eq then 1 else 0 := by
+    rw [hr3frame 106 (by omega), hr2frame 106 (by omega),
+      hr1frame 106 (by omega), h106]
+  have h107' : r3 107 = if ¬Eq then 1 else 0 := by
+    rw [hr3frame 107 (by omega), hr2frame 107 (by omega),
+      hr1frame 107 (by omega), h107]
+  have h108' : r3 108 = if B0 then 1 else 0 := by
+    rw [hr3frame 108 (by omega), hr2frame 108 (by omega),
+      hr1frame 108 (by omega), h108]
+  have h111' : r3 111 = if Big then 1 else 0 := by
+    rw [hr3frame 111 (by omega), hr2frame 111 (by omega),
+      hr1frame 111 (by omega), h111]
+  have h112' : r3 112 = if ¬Big then 1 else 0 := by
+    rw [hr3frame 112 (by omega), hr2frame 112 (by omega),
+      hr1frame 112 (by omega), h112]
+  have h115' : r3 115 = if 2 * a * b ≤ s * e then 1 else 0 := by
+    rw [hr3frame 115 (by omega), hr2frame 115 (by omega)]
+    exact hprep.2.2
+  rw [okAfterClassifyS_decomp, srun_append, srun_append, srun_append]
+  change srun idx r3 okPostS 197 = _
+  have hpost := okPost_run idx r3 A Eq (¬Eq) B0 Big
+    (2 * a * b ≤ s * e) (r3 117) (r3 118) (r3 119) (r3 128)
+    (by simp) h105' h106' h107' h108' h111' h112' h115'
+    rfl rfl rfl rfl
+  by_cases hle : 2 * a * b ≤ s * e
+  · have hprepExact := okProductPrep_run idx r s e a b hs he ha hb
+      hseM habM h2abM hle
+    dsimp only at hprepExact
+    have hr1s : r1 194 = s := by rw [hr1frame 194 (by omega), hs]
+    have hr1b : r1 101 = b := by rw [hr1frame 101 (by omega), hb]
+    have hr1d : r1 116 = s * e - 2 * a * b := hprepExact.2.2.2
+    have hm1 := okMul1_limbs idx r1 hr1word
+    have hm1lo : r2 117 = (MulWide.hl (r1 194) (r1 116)).1 := by
+      simpa [r2] using hm1.1
+    have hm1hi : r2 118 = (MulWide.hl (r1 194) (r1 116)).2 := by
+      simpa [r2] using hm1.2
+    have hm1spec := MulWide.hl_spec (r1 194) (r1 116)
+      (hr1word 194) (hr1word 116)
+    have hr2b : r2 101 = b := by rw [hr2frame 101 (by omega), hr1b]
+    have hm2 := okMul2_limbs idx r2 hr2word
+    have hm2lo : r3 119 = (MulWide.hl (r2 101) (r2 101)).1 := by
+      simpa [r3] using hm2.1
+    have hm2hi : r3 128 = (MulWide.hl (r2 101) (r2 101)).2 := by
+      simpa [r3] using hm2.2
+    have hm2spec := MulWide.hl_spec (r2 101) (r2 101)
+      (hr2word 101) (hr2word 101)
+    have hprod1 : r3 117 + MulWide.B64 * r3 118 =
+        s * (s * e - 2 * a * b) := by
+      rw [hr3frame 117 (by omega), hr3frame 118 (by omega), hm1lo, hm1hi,
+        hm1spec.1, hr1s, hr1d]
+    have hprod2 : r3 119 + MulWide.B64 * r3 128 = b * b := by
+      rw [hm2lo, hm2hi, hm2spec.1, hr2b]
+    have hlo1 : r3 117 < MulWide.B64 := by
+      rw [hr3frame 117 (by omega), hm1lo]
+      exact hm1spec.2
+    have hlo2 : r3 119 < MulWide.B64 := by
+      rw [hm2lo]
+      exact hm2spec.2
+    have hwordCmp : wordGe (r3 117) (r3 118) (r3 119) (r3 128) ↔
+        b * b ≤ s * (s * e - 2 * a * b) := by
+      rw [wordGe_iff_wval _ _ _ _ hlo1 hlo2, hprod1, hprod2]
+    simp only [hwordCmp] at hpost
+    simpa [hle] using hpost
+  · simpa [hle] using hpost
 
 theorem productionOkS_decomp (c : CDEMAbelScan.Cfg) :
     okS c 194 142 197 =
@@ -491,6 +855,75 @@ theorem productionOkS_decomp (c : CDEMAbelScan.Cfg) :
   simp [okS, okQuotS, okGuardS, okDivS, okClassifyS, okAfterClassifyS,
     CDEMAbelScan.okBody, CDEMAbelScan.mulWideBody,
     Section413G1Denote.scalarOf]
+
+/-- The entire 63-instruction predicate used by the live bisection site
+returns the exact Boolean value of `okFormula`.  All word-fit obligations are
+spelled out so that the enclosing bisection invariant, rather than a hidden
+normalization assumption, supplies them. -/
+theorem productionOkS_run (c : CDEMAbelScan.Cfg) (idx : Nat)
+    (r : RegState) (s k : Nat)
+    (hword : ∀ j, r j < M)
+    (hs : r 194 = s) (hk : r CDEMAbelScan.rK = k)
+    (hspos : 0 < s) (hW : c.wScale < M) (hkM : k < M)
+    (haSqM : (c.wScale / s) * (c.wScale / s) < M)
+    (h2aM : 2 * (c.wScale / s) + 1 < M)
+    (hseM : s * (k - (c.wScale / s) * (c.wScale / s)) < M)
+    (habM : (c.wScale / s) * (c.wScale % s) < M)
+    (h2abM : 2 * (c.wScale / s) * (c.wScale % s) < M) :
+    srun idx r (okS c 194 142 197) 197 =
+      if okFormula s k (c.wScale / s) (c.wScale % s) then 1 else 0 := by
+  let a := c.wScale / s
+  let b := c.wScale % s
+  let e := k - a * a
+  let q := srun idx r (okQuotS c 194)
+  let cl := srun idx q okClassifyS
+  have hsM : s < M := by rw [← hs]; exact hword 194
+  have hquot := okQuot_run c idx r 194 (by decide) (by simpa [hs] using hspos)
+    (by simpa [hs] using hsM) hW
+  dsimp only at hquot
+  have hq100 : q 100 = s := by simpa [q, hs] using hquot.1
+  have hq101 : q 101 = a := by simpa [q, a, hs] using hquot.2.1
+  have hq102 : q 102 = b := by simpa [q, b, hs] using hquot.2.2
+  have hq194 : q 194 = s := by
+    have h := okQuot_frame c idx r 194 194 (by decide) (by decide) (by decide)
+    simpa [q, hs] using h
+  have hqk : q CDEMAbelScan.rK = k := by
+    have h := okQuot_frame c idx r 194 CDEMAbelScan.rK
+      (by simp [CDEMAbelScan.rK]) (by simp [CDEMAbelScan.rK])
+      (by simp [CDEMAbelScan.rK])
+    simpa [q, hk] using h
+  have hqword : ∀ j, q j < M := srun_lt_of_lt idx _ r hword
+  have hclword : ∀ j, cl j < M := srun_lt_of_lt idx _ q hqword
+  have hcl194 : cl 194 = s := by
+    have h := okClassify_frame idx q 194 (by omega)
+      (by simp [CDEMAbelScan.rViol]) (by simp [CDEMAbelScan.rVDiv])
+    simpa [cl, hq194] using h
+  rw [productionOkS_decomp, srun_append, srun_append]
+  change srun idx cl (okAfterClassifyS c) 197 = _
+  by_cases hka : a * a ≤ k
+  · have hclass := okClassify_run idx q a b k hq101 hq102 hqk
+      (by simpa [a] using haSqM) hka hkM (by simpa [a] using h2aM)
+    dsimp only at hclass
+    rcases hclass with
+      ⟨hc100, hc101, hc103, hc105, hc106, hc107, hc108, hc109,
+        hc110, hc111, hc112⟩
+    have htail := okAfterClassify_run c idx cl s e a b
+      (a * a ≤ k) (k = a * a) (b = 0) (2 * a + 1 ≤ e)
+      hclword hcl194 (by simpa [cl, e] using hc109)
+      (by simpa [cl] using hc100) (by simpa [cl] using hc101)
+      (by simpa [hka] using hc105)
+      (by simpa [cl] using hc106) (by simpa [cl] using hc107)
+      (by simpa [cl] using hc108) (by simpa [cl, e] using hc111)
+      (by simpa [cl, e] using hc112)
+      (by simpa [a, e] using hseM) (by simpa [a, b] using habM)
+      (by simpa [a, b] using h2abM)
+    simpa [okFormula, a, b, e, hka] using htail
+  · have hlt : k < a * a := by omega
+    have hfalse := okClassify_false105 idx q a k hq101 hqk
+      (by simpa [a] using haSqM) hlt
+    have hcl105 : cl 105 = 0 := by simpa [cl] using hfalse
+    rw [okAfterClassify_zero c idx cl hcl105]
+    simp [okFormula, a, hka]
 
 /-- The full literal predicate block cannot fail through division by zero.
 No semantic claim is hidden here: correctness of the Boolean result remains a

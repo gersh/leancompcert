@@ -107,13 +107,26 @@ literal array-machine blocks used in this scan:
 * `okClassify_run`: the next 17 production instructions compute `a^2`,
   `e = k-a^2`, and the equality and large-`e` branch flags exactly under the
   explicit word/no-underflow bounds;
+* `okProductPrep_flags`, `wordGe_iff_wval`, and `okPost_run`: the scalar
+  product guard, little-endian 128-bit comparison, and final Boolean postlude
+  implement the residual formula, including the branch where the subtraction
+  wraps but is gated off;
+* `okAfterClassify_run`: both literal 64-by-64 multipliers and the complete
+  product/comparison tail refine that residual formula;
+* `productionOkS_run`: all 63 instructions at the live allocation
+  (`rs=194`, gate `142`, result `197`) return exactly `okFormula`, including
+  the `k < a^2` rejection path;
 * `okBody_defined`: the exact reciprocal-square-root predicate's two
   register-valued divisions cannot divide by zero.
 
-All three theorems include the array frame, so these scalar stages cannot
-silently modify the sieve plane.  A fresh source check under
-`MemoryHigh=3G`, `MemoryMax=4G`, `MemorySwapMax=0`, and `LEAN_NUM_THREADS=1`
-took `0.21 s`, peaked at `561308 KiB` RSS, and used no swap.
+The array-level primitive theorems include the array frame, so these scalar
+stages cannot silently modify the sieve plane.  A fresh source check under
+`MemoryHigh=1536M`, `MemoryMax=2G`, `MemorySwapMax=0`, and
+`LEAN_NUM_THREADS=1` took `1.72 s`, peaked at `708348 KiB` RSS, and used no
+swap.  A module build under the same cap took `1.94 s` and peaked at
+`730348 KiB`; fresh `#print axioms` checks report only `propext`,
+`Classical.choice`, and `Quot.sound` (with `okPost_run` needing only
+`propext`).
 
 The predicate definedness proof is deliberately split after its two-instruction
 divisor guard and two-instruction division stage.  A diagnostic one-shot
@@ -123,12 +136,11 @@ in `0.33 s`, peaked at `572076 KiB`, and used no swap inside a stricter 2 GiB
 hard cap.  This is also the required build shape for later predicate-value
 and bisection proofs.
 
-Still not proved: transcription of the predicate's product/comparison tail
-from the proved classification state to `okFormula`, followed by composition
-with the μ-table build, window marking,
-exact reciprocal-square-root bisection, and the outer loop to show that the
-complete `denote` *is* the residue.  That remaining refinement gap is
-corroborated, but not discharged, by §5.
+Still not proved: composition of the now-complete exact predicate theorem with
+the reciprocal-square-root bisection invariant, followed by the μ-table
+build, window marking, accumulators, and outer loop to show that the complete
+`denote` *is* the residue.  That remaining refinement gap is corroborated,
+but not discharged, by §5.
 
 ## 5. Oracle agreement
 
