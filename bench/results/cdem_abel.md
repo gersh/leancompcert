@@ -289,9 +289,21 @@ resets the round, and preserves the array, both `U` values, and all failure
 counters. The enlarged source check took `8.17 s` at `628840 KiB`; the module
 build took `8.36 s` at `617296 KiB`, under the one-thread 2 GiB zero-swap cap.
 
+The first regime is now composed too. `accProd_exact_frame_run` packages both
+exact nonzero `U` additions with the register and array frames, while
+`accBody_first_run` connects the live-cell head, both products, and the
+gate-zero initial bisection. The square-root handoff is an explicit executable
+invariant: the checked head result must equal `Nat.sqrt (W+cell)` before the
+initial bracket is opened. The body contract proves the one-cell clear, both
+exact `U` increments, initial bracket, unchanged `V` and failure counters,
+round advance, and fixed cell cursor. The enlarged source check took `13.15 s`
+at `689356 KiB`; the module build took `13.35 s` at `693572 KiB`, with one
+worker, the 2 GiB hard cap, and no swap. Thus all first, 60 interior, and final
+`accBody` regimes now have LeanCompCert execution contracts.
+
 Still not proved: composition of the now-complete head/product/bisection
-contracts for the first per-integer regime and across the full
-schedule, then the μ-table build, window marking,
+contracts across the full 62-round schedule, then the μ-table build, window
+marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.

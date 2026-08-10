@@ -475,4 +475,199 @@ theorem accBody_final_run (c : Cfg) (idx : Nat) (st : AState)
   exact accBody_final_of_head c idx st s hh hlohi hhiM hfit haLe hstep
     hcFit haccFit hword harrword
 
+structure FirstBodySpec (c : Cfg) (k dp dn ceil floor : Nat)
+    (before after : AState) : Prop where
+  arr : after.arr = fun j =>
+    if j = before.regs rC + c.winBase then 0 else before.arr j
+  low : after.regs rSl = (initial c.wScale k).lo
+  high : after.regs rSh = (initial c.wScale k).hi
+  uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
+    AddWide.wval (before.regs rUpLo, before.regs rUpHi) + dp * ceil
+  uNeg : AddWide.wval (after.regs rUnLo, after.regs rUnHi) =
+    AddWide.wval (before.regs rUnLo, before.regs rUnHi) + dn * floor
+  viol : after.regs rViol = before.regs rViol
+  vDiv : after.regs rVDiv = before.regs rVDiv
+  vBisect : after.regs rVBisect = before.regs rVBisect
+  v : AddWide.wval (after.regs rVLo, after.regs rVHi) =
+    AddWide.wval (before.regs rVLo, before.regs rVHi)
+  round : after.regs rKr = before.regs rKr + before.regs 43
+  cell : after.regs rC = before.regs rC
+
+theorem accBody_first_of_head (c : Cfg) (idx : Nat) (st : AState)
+    (nextT nextT2 : Nat)
+    (hh : FirstHeadSpec c st (arun idx st c.accHead) nextT nextT2)
+    (hroot : nextT = Nat.sqrt (st.regs rW + st.regs rC))
+    (htpos : 0 < Nat.sqrt (st.regs rW + st.regs rC))
+    (hWpos : 0 < c.wScale)
+    (hWtM : c.wScale + Nat.sqrt (st.regs rW + st.regs rC) < M)
+    (hkrFit : st.regs rKr + st.regs 43 < M)
+    (hfitPos : AddWide.wval (st.regs rUpLo, st.regs rUpHi) +
+      (arun idx st c.accHead).regs 169 *
+        (arun idx st c.accHead).regs 167 < AddWide.B128)
+    (hfitNeg : AddWide.wval (st.regs rUnLo, st.regs rUnHi) +
+      (arun idx st c.accHead).regs 170 *
+        (arun idx st c.accHead).regs 168 < AddWide.B128)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
+    FirstBodySpec c (st.regs rW + st.regs rC)
+      ((arun idx st c.accHead).regs 169)
+      ((arun idx st c.accHead).regs 170)
+      ((arun idx st c.accHead).regs 167)
+      ((arun idx st c.accHead).regs 168) st (arun idx st c.accBody) := by
+  let h := arun idx st c.accHead
+  let p := arun idx h c.accProd
+  let out := arun idx p c.accBisect
+  have hh' : FirstHeadSpec c st h nextT nextT2 := by simpa [h] using hh
+  have hwordH : ∀ j, h.regs j < M :=
+    (arun_word idx c.accHead st hword harrword).1
+  have harrH : ∀ j, h.arr j < M :=
+    (arun_word idx c.accHead st hword harrword).2
+  have headKeep (j : Nat)
+      (hw : LeanCompCert.Verified.ArrayRegFrame.writes j c.accHead = false) :
+      h.regs j = st.regs j := by
+    simpa [h] using LeanCompCert.Verified.ArrayRegFrame.arun_frame
+      idx j c.accHead hw st
+  have hp0 := accProd_exact_frame_run c idx h hwordH
+    (by
+      rw [headKeep rUpLo (by rfl), headKeep rUpHi (by rfl)]
+      simpa [h] using hfitPos)
+    (by
+      rw [headKeep rUnLo (by rfl), headKeep rUnHi (by rfl)]
+      simpa [h] using hfitNeg)
+  have hp : ExactProdSpec h p := by simpa [p] using hp0
+  have hwordP : ∀ j, p.regs j < M :=
+    (arun_word idx c.accProd h hwordH harrH).1
+  have pk (j : Nat) (h171 : j ≠ 171) (h172 : j ≠ 172)
+      (h173 : j ≠ 173) (h174 : j ≠ 174)
+      (hjs : Section413G1Denote.NotIn8 j 180 181 182 183 184 185 186 187)
+      (hupl : j ≠ rUpLo) (huph : j ≠ rUpHi)
+      (hunl : j ≠ rUnLo) (hunh : j ≠ rUnHi) (h188 : j ≠ 188) :
+      p.regs j = h.regs j :=
+    hp.frame j h171 h172 h173 h174 hjs hupl huph hunl hunh h188
+  have keepH (j : Nat)
+      (hj : j ≠ 171 ∧ j ≠ 172 ∧ j ≠ 173 ∧ j ≠ 174 ∧
+        Section413G1Denote.NotIn8 j 180 181 182 183 184 185 186 187 ∧
+        j ≠ rUpLo ∧ j ≠ rUpHi ∧ j ≠ rUnLo ∧ j ≠ rUnHi ∧ j ≠ 188)
+      : p.regs j = h.regs j := by
+    rcases hj with ⟨h171, h172, h173, h174, hjs, hupl, huph,
+      hunl, hunh, h188⟩
+    exact pk j h171 h172 h173 h174 hjs hupl huph hunl hunh h188
+  have keep (j : Nat)
+      (hj : j ≠ 171 ∧ j ≠ 172 ∧ j ≠ 173 ∧ j ≠ 174 ∧
+        Section413G1Denote.NotIn8 j 180 181 182 183 184 185 186 187 ∧
+        j ≠ rUpLo ∧ j ≠ rUpHi ∧ j ≠ rUnLo ∧ j ≠ rUnHi ∧ j ≠ 188)
+      (hhj : h.regs j = st.regs j) : p.regs j = st.regs j :=
+    (keepH j hj).trans hhj
+  have hp140 : p.regs 140 = 1 := by
+    rw [keepH 140 (by simp [Section413G1Denote.NotIn8, rUpLo, rUpHi,
+      rUnLo, rUnHi]), hh'.round0]
+  have hp141 : p.regs 141 = 0 := by
+    rw [keepH 141 (by simp [Section413G1Denote.NotIn8, rUpLo, rUpHi,
+      rUnLo, rUnHi]), hh'.last]
+  have hp142 : p.regs 142 = 0 := by
+    rw [keepH 142 (by simp [Section413G1Denote.NotIn8, rUpLo, rUpHi,
+      rUnLo, rUnHi]), hh'.bisect]
+  have hpT : p.regs rT = Nat.sqrt (st.regs rW + st.regs rC) := by
+    rw [keepH rT (by simp [rT, Section413G1Denote.NotIn8, rUpLo, rUpHi,
+      rUnLo, rUnHi]), hh'.t, hroot]
+  have hpKr : p.regs rKr = st.regs rKr := keep rKr
+    (by simp [rKr, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+    hh'.round
+  have hp43 : p.regs 43 = st.regs 43 := keep 43
+    (by simp [Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+    (headKeep 43 (by rfl))
+  have hb := accBisect_gate0_run c idx p (st.regs rW + st.regs rC)
+    hpT hp140 hp142 hp141 htpos hWpos hWtM
+    (by rw [hpKr, hp43]; exact hkrFit) hwordP
+  have hb' : FirstBisectSpec c (st.regs rW + st.regs rC) p out := by
+    simpa [out] using hb
+  have hbU := accBisect_u_frame c idx p
+  have hpViol : p.regs rViol = st.regs rViol := by
+    rw [pk rViol (by simp [rViol]) (by simp [rViol]) (by simp [rViol])
+      (by simp [rViol]) (by simp [rViol, Section413G1Denote.NotIn8])
+      (by simp [rViol, rUpLo]) (by simp [rViol, rUpHi])
+      (by simp [rViol, rUnLo]) (by simp [rViol, rUnHi]) (by simp [rViol]),
+      hh'.viol]
+  have hpDiv : p.regs rVDiv = st.regs rVDiv := keep rVDiv
+    (by simp [rVDiv, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+    (headKeep rVDiv (by rfl))
+  have hpBis : p.regs rVBisect = st.regs rVBisect := keep rVBisect
+    (by simp [rVBisect, Section413G1Denote.NotIn8, rUpLo, rUpHi,
+      rUnLo, rUnHi])
+    (headKeep rVBisect (by rfl))
+  have hpVLo : p.regs rVLo = st.regs rVLo := keep rVLo
+    (by simp [rVLo, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+    (headKeep rVLo (by rfl))
+  have hpVHi : p.regs rVHi = st.regs rVHi := keep rVHi
+    (by simp [rVHi, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+    (headKeep rVHi (by rfl))
+  have hpC : p.regs rC = st.regs rC := keep rC
+    (by simp [rC, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+    hh'.cell
+  have hall : FirstBodySpec c (st.regs rW + st.regs rC)
+      (h.regs 169) (h.regs 170) (h.regs 167) (h.regs 168) st out :=
+    { arr := by rw [hb'.arr, hp.arr, hh'.arr]
+      low := hb'.low
+      high := hb'.high
+      uPos := by
+        rw [hbU.1, hbU.2.1, hp.uPos,
+          headKeep rUpLo (by rfl), headKeep rUpHi (by rfl)]
+      uNeg := by
+        rw [hbU.2.2.1, hbU.2.2.2, hp.uNeg,
+          headKeep rUnLo (by rfl), headKeep rUnHi (by rfl)]
+      viol := by rw [hb'.viol, hpViol]
+      vDiv := by rw [hb'.vDiv, hpDiv]
+      vBisect := by rw [hb'.vBisect, hpBis]
+      v := by rw [hb'.v, hpVLo, hpVHi]
+      round := by rw [hb'.round, hpKr, hp43]
+      cell := by rw [hb'.cell, hpC] }
+  simpa [Cfg.accBody, arun_append, h, p, out] using hall
+
+theorem accBody_first_run (c : Cfg) (idx : Nat) (st : AState)
+    (hkr : st.regs rKr = 0) (hbsPos : 0 < c.bsSteps)
+    (hbsM : c.bsSteps < M) (hgate : st.regs 43 = 1)
+    (hzero : st.regs rZero = 0) (haddr : st.regs rC + c.winBase < M)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M)
+    (hk : 0 < st.regs rW + st.regs rC)
+    (hkFit : st.regs rW + st.regs rC < M)
+    (hkclosed : st.regs rW + st.regs rC <
+      st.regs rT2 + (2 * (st.regs rT + 1) + 1))
+    (htFit : st.regs rT + 1 < M)
+    (hdoubleFit : 2 * (st.regs rT + 1) + 1 < M)
+    (ht2Fit : st.regs rT2 + (2 * (st.regs rT + 1) + 1) < M)
+    (hWM : c.wScale < M)
+    (hsum :
+      headDPos (headG ((st.regs rF +
+        st.arr (st.regs rC + c.winBase)) % M)) (st.regs rE) +
+      headDNeg (headG ((st.regs rF +
+        st.arr (st.regs rC + c.winBase)) % M)) (st.regs rE) < M)
+    (htvFit : st.regs rTv +
+      (headDPos (headG ((st.regs rF +
+        st.arr (st.regs rC + c.winBase)) % M)) (st.regs rE) +
+       headDNeg (headG ((st.regs rF +
+        st.arr (st.regs rC + c.winBase)) % M)) (st.regs rE)) < M)
+    (hceilFit : c.wScale - 1 + (st.regs rW + st.regs rC) < M)
+    (hroot : (if st.regs rW + st.regs rC < st.regs rT2 then
+        st.regs rT else st.regs rT + 1) =
+      Nat.sqrt (st.regs rW + st.regs rC))
+    (htpos : 0 < Nat.sqrt (st.regs rW + st.regs rC))
+    (hWpos : 0 < c.wScale)
+    (hWtM : c.wScale + Nat.sqrt (st.regs rW + st.regs rC) < M)
+    (hkrFit : st.regs rKr + st.regs 43 < M)
+    (hfitPos : AddWide.wval (st.regs rUpLo, st.regs rUpHi) +
+      (arun idx st c.accHead).regs 169 *
+        (arun idx st c.accHead).regs 167 < AddWide.B128)
+    (hfitNeg : AddWide.wval (st.regs rUnLo, st.regs rUnHi) +
+      (arun idx st c.accHead).regs 170 *
+        (arun idx st c.accHead).regs 168 < AddWide.B128) :
+    FirstBodySpec c (st.regs rW + st.regs rC)
+      ((arun idx st c.accHead).regs 169)
+      ((arun idx st c.accHead).regs 170)
+      ((arun idx st c.accHead).regs 167)
+      ((arun idx st c.accHead).regs 168) st (arun idx st c.accBody) := by
+  have hh := accHead_first_run c idx st hkr hbsPos hbsM hgate hzero haddr
+    hword harrword hk hkFit hkclosed htFit hdoubleFit ht2Fit hWM hsum
+    htvFit hceilFit
+  exact accBody_first_of_head c idx st _ _ hh hroot htpos hWpos hWtM
+    hkrFit hfitPos hfitNeg hword harrword
+
 end LeanCompCert.Ports.CDEMAbelBody
