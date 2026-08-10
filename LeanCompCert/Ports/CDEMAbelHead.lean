@@ -1384,6 +1384,7 @@ structure LastHeadSpec (before after : AState) : Prop where
   dNeg : after.regs rDn = before.regs rDn
   e : after.regs rE = before.regs rE
   tv : after.regs rTv = before.regs rTv
+  sum : after.regs 165 = before.regs rDp + before.regs rDn
   posGate : after.regs 169 = 0
   negGate : after.regs 170 = 0
   low : after.regs rSl = before.regs rSl
@@ -1464,7 +1465,7 @@ theorem accHead_last_run (c : Cfg) (idx : Nat) (st : AState)
     post 168 = c.wScale / loaded rK ∧ post 169 = 0 ∧
     post 170 = 0 ∧ post 140 = 0 at hpost
   rcases hpost with ⟨hPF, hPK, hPT, hPT2, hPV, hPVS, hPDp, hPDn,
-    hPE, hPTv, _, _, _, hPPos, hPNeg, hP140⟩
+    hPE, hPTv, hPSum, _, _, hPPos, hPNeg, hP140⟩
   have postKeep (j : Nat) (hw : RegFrame.writes j (headPostS c) = false) :
       post j = loaded j := RegFrame.srun_frame idx j (headPostS c) hw loaded
   rw [ha]
@@ -1483,6 +1484,7 @@ theorem accHead_last_run (c : Cfg) (idx : Nat) (st : AState)
       dNeg := ?_
       e := ?_
       tv := ?_
+      sum := ?_
       posGate := hPPos
       negGate := hPNeg
       low := ?_
@@ -1513,6 +1515,8 @@ theorem accHead_last_run (c : Cfg) (idx : Nat) (st : AState)
     rw [hPE, loadedToBefore rE (by simp [rE]) (by rfl)]
   · change post rTv = st.regs rTv
     rw [hPTv, loadedToBefore rTv (by simp [rTv]) (by rfl)]
+  · change post 165 = st.regs rDp + st.regs rDn
+    rw [hPSum, hloadedDp, hloadedDn]
   · change post rSl = st.regs rSl
     rw [postKeep rSl (by rfl),
       loadedToBefore rSl (by simp [rSl]) (by rfl)]

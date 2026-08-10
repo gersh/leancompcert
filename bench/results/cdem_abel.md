@@ -280,8 +280,17 @@ The live module build, including a rebuilt 13-second head dependency, took
 `18.79 s` at `689016 KiB`. Fresh axiom prints contain only Lean's ordinary
 foundations.
 
+The final regime is now composed in the same module. `LastHeadSpec` exposes
+the already-computed `dPos+dNeg` register; `accProd_zero_run` proves both
+final zero-gated `U` stages are exact no-ops; and `accBody_final_run` feeds
+that value to the verified consuming bisection. The literal body therefore
+adds exactly `d·s` to `V`, closes the singleton bracket, increments the cell,
+resets the round, and preserves the array, both `U` values, and all failure
+counters. The enlarged source check took `8.17 s` at `628840 KiB`; the module
+build took `8.36 s` at `617296 KiB`, under the one-thread 2 GiB zero-swap cap.
+
 Still not proved: composition of the now-complete head/product/bisection
-contracts for the first and final per-integer regimes and across the full
+contracts for the first per-integer regime and across the full
 schedule, then the μ-table build, window marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
