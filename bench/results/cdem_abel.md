@@ -1128,3 +1128,23 @@ These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
 All three capstones print only `[propext, Quot.sound]`. Remaining table work is
 the finite prime/candidate telescope and the arithmetic identification of each
 completed row with `Ref.muCode`.
+
+`CDEMAbelSieveTelescope.lean` packages the two row branches as one executable
+`SieveState.step`. `SieveStateRep` relates its exact array, candidate, prime,
+factor remainder, parity, and squarefree fields to the literal machine while
+retaining the word, gate, and zero-register invariants. The one-body theorem
+`sieveBody_state_step` refines the complete emitted body to that step, and
+`sieveIter_state_refines` telescopes any finite ready trace.
+
+These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh sieve telescope source | 0.37 s | 571,764 KiB | 120,307,712 B | 0 |
+| sieve telescope module build | 0.43 s | 591,860 KiB | 156,573,696 B | 0 |
+| fresh three-capstone axiom print | 0.18 s | 533,228 KiB | 93,884,416 B | 0 |
+| cached umbrella consumer build | 0.63 s | 1,729,736 KiB | 216,121,344 B | 0 |
+
+All three capstones print only `[propext, Quot.sound]`. Remaining table work is
+to prove readiness and the closed cursor trace for the production prime list,
+then identify the final pure row code with `Ref.muCode`.
