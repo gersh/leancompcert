@@ -409,6 +409,8 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | physical initializer to classification seam, direct source check | 35.12 s | 4,188,456 KiB | 0 | success |
 | zero-counter seam and opaque full-classification endpoint, direct source check | 53.72 s | 4,353,088 KiB | 0 | success |
 | zero-counter seam and opaque full-classification endpoint, module build | 53.92 s | 4,357,624 KiB | 0 | success |
+| production `ArithmeticPre` six-headroom constructor, direct source check | 16.57 s | 3,869,892 KiB | 0 | success |
+| production `ArithmeticPre` six-headroom constructor, module build | 16.04 s | 3,851,220 KiB | 0 | success |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -478,6 +480,13 @@ An eager projected wrapper hit the deterministic heartbeat limit after about
 one minute, while the opaque invariant endpoint compiles in roughly 54 seconds
 and still exposes the exact counters, cleared cells, and boundary cursor via
 proved fields.
+The arithmetic follow-on now constructs the full emitted `ArithmeticPre`
+from only six source-shaped cumulative headroom facts: the two carried log
+sums, two lambda quotient sums, and two quotient/remainder psi carries.  It
+derives word closure, phase and candidate ranges, the finite positional log
+layout, both lookup addresses, and the RS62 one-step bounds internally.  A
+new exact bound on `PsiQR.advance.q` removes both low-level output-register
+hypotheses from the future finite arithmetic induction.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert
