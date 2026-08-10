@@ -626,6 +626,20 @@ Lean worker, no swap, `MemoryHigh=1536M`, and a hard `MemoryMax=2G`:
 | fresh source compilation | 36.18 s | 678,552 KiB | 0 |
 | `lake build LeanCompCert.Ports.CDEMAbelOuter` | 36.87 s | 689,964 KiB | 0 |
 
-This closes the literal middle-round composition.  Literal first and final
-rounds and the finite outer iterator remain to be composed before the retained
-production trace has a complete denotation proof.
+The next checkpoint adds `body_final_live_run`, which composes the same literal
+prefix with the last accumulator round and tail.  It proves singleton bracket
+closure, the exact `d * s` addition to the wide `V` accumulator, round reset,
+cell advance, live-cell preservation, and scratch clearing.  Its fresh axiom
+print is again `[propext, Classical.choice, Quot.sound]`.
+
+Because the module now checks both complete literal-body theorems, its current
+fresh source/build measurements under the same cap are:
+
+| check | elapsed | peak RSS | swap |
+| --- | ---: | ---: | ---: |
+| fresh source compilation | 64.88 s | 688,292 KiB | 0 |
+| `lake build LeanCompCert.Ports.CDEMAbelOuter` | 65.24 s | 726,364 KiB | 0 |
+
+This closes the literal middle and final-round compositions.  The literal
+first round and finite outer iterator remain before the retained production
+trace has a complete denotation proof.

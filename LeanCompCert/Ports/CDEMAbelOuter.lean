@@ -462,6 +462,120 @@ theorem body_middle_live_run (c : Cfg) (idx : Nat) (st : AState)
   rw [body_acc_decomp, arun_append, arun_append]
   simpa [prefixed, accumulated, out] using hall
 
+structure OuterFinalSpec (c : Cfg) (s d : Nat)
+    (before after : AState) : Prop where
+  arr : SinkClearSpec c before after
+  low : after.regs rSl = s
+  high : after.regs rSh = s
+  uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
+    AddWide.wval (before.regs rUpLo, before.regs rUpHi)
+  uNeg : AddWide.wval (after.regs rUnLo, after.regs rUnHi) =
+    AddWide.wval (before.regs rUnLo, before.regs rUnHi)
+  viol : after.regs rViol = before.regs rViol
+  vDiv : after.regs rVDiv = before.regs rVDiv
+  vBisect : after.regs rVBisect = before.regs rVBisect
+  v : AddWide.wval (after.regs rVLo, after.regs rVHi) =
+    AddWide.wval (before.regs rVLo, before.regs rVHi) + d * s
+  round : after.regs rKr = 0
+  cell : after.regs rC = before.regs rC + 1
+
+set_option maxRecDepth 2048 in
+set_option maxHeartbeats 1000000 in
+theorem body_final_live_run (c : Cfg) (idx : Nat) (st : AState)
+    (s : Nat)
+    (hidxM : idx < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ idx) (hmarkPos : 0 < c.markSteps)
+    (hmarkM : c.markSteps < M) (hR : c.markSteps ≤ st.regs rR)
+    (hkrLast : st.regs rKr = c.bsSteps) (hbsPos : 0 < c.bsSteps)
+    (hzero : st.regs rZero = 0) (hbsM : c.bsSteps < M)
+    (hsinkM : c.sink < M) (hword : ∀ j, st.regs j < M)
+    (harrword : ∀ j, st.arr j < M) (hk : 0 < st.regs rK)
+    (hWM : c.wScale < M) (hsum : st.regs rDp + st.regs rDn < M)
+    (hceilFit : c.wScale - 1 + st.regs rK < M)
+    (hlohi : st.regs rSl ≤ st.regs rSh) (hhiM : st.regs rSh < M)
+    (hfit : RoundFit c (st.regs rK) ⟨st.regs rSl, st.regs rSh⟩)
+    (haLe : c.wScale / midpoint ⟨st.regs rSl, st.regs rSh⟩ ≤
+      2147483648)
+    (hstep : step c.wScale (st.regs rK)
+      ⟨st.regs rSl, st.regs rSh⟩ = ⟨s, s⟩)
+    (hcFit : st.regs rC + 1 < M)
+    (haccFit : AddWide.wval (st.regs rVLo, st.regs rVHi) +
+      (st.regs rDp + st.regs rDn) * s < AddWide.B128) :
+    OuterFinalSpec c s (st.regs rDp + st.regs rDn) st
+      (arun idx st c.body) := by
+  let prefixed := arun idx st (accPrefix c)
+  let accumulated := arun idx prefixed c.accBody
+  let out := arun idx accumulated c.tailBody
+  have hp := accPrefix_latches c idx st hidxM hsieveM hsieve hmarkM
+    hmarkPos hR hword harrword
+  have hwPref := arun_word idx (accPrefix c) st hword harrword
+  have hh := accHead_last_run c idx prefixed
+    (by rw [hp.round]; exact hkrLast) hbsPos hp.gate
+    (by rw [hp.zero]; exact hzero) hbsM hsinkM hwPref.1 hwPref.2
+    (by rw [hp.key]; exact hk) hWM
+    (by rw [hp.dPos, hp.dNeg]; exact hsum)
+    (by rw [hp.key]; exact hceilFit)
+  have hfitPref : RoundFit c (prefixed.regs rK)
+      ⟨prefixed.regs rSl, prefixed.regs rSh⟩ := by
+    rw [hp.key, hp.low, hp.high]
+    exact hfit
+  have hquotPref : c.wScale /
+      midpoint ⟨prefixed.regs rSl, prefixed.regs rSh⟩ ≤ 2147483648 := by
+    rw [hp.low, hp.high]
+    exact haLe
+  have hstepPref : step c.wScale (prefixed.regs rK)
+      ⟨prefixed.regs rSl, prefixed.regs rSh⟩ = ⟨s, s⟩ := by
+    rw [hp.key, hp.low, hp.high]
+    exact hstep
+  have haccPref : AddWide.wval (prefixed.regs rVLo, prefixed.regs rVHi) +
+      (prefixed.regs rDp + prefixed.regs rDn) * s < AddWide.B128 := by
+    rw [hp.dPos, hp.dNeg]
+    rw [show prefixed.regs rVLo = st.regs rVLo from
+      ArrayRegFrame.arun_frame idx rVLo (accPrefix c) (by rfl) st]
+    rw [show prefixed.regs rVHi = st.regs rVHi from
+      ArrayRegFrame.arun_frame idx rVHi (accPrefix c) (by rfl) st]
+    exact haccFit
+  have hf := accBody_final_live_of_head c idx prefixed s hh
+    (by rw [hp.low, hp.high]; exact hlohi)
+    (by rw [hp.high]; exact hhiM) hfitPref hquotPref hstepPref
+    (by rw [hp.cell]; exact hcFit) haccPref hwPref.1 hwPref.2
+  have hprefLive := accPrefix_live_frame c idx st hidxM hsieveM hsieve
+    hmarkM hR hzero hsinkM
+  have prefFrame (j : Nat)
+      (hw : ArrayRegFrame.writes j (accPrefix c) = false) :
+      prefixed.regs j = st.regs j := by
+    exact ArrayRegFrame.arun_frame idx j (accPrefix c) hw st
+  have tailFrame (j : Nat)
+      (hw : ArrayRegFrame.writes j c.tailBody = false) :
+      out.regs j = accumulated.regs j := by
+    exact ArrayRegFrame.arun_frame idx j c.tailBody hw accumulated
+  have tailArr : out.arr = accumulated.arr :=
+    arun_store_free_arr idx c.tailBody accumulated (by rfl)
+  have hall : OuterFinalSpec c s (st.regs rDp + st.regs rDn) st out :=
+    { arr :=
+        { sink_zero := by rw [tailArr]; exact hf.arr.sink_zero
+          live := by
+            intro j hj
+            rw [tailArr]
+            exact (hf.arr.live j hj).trans (hprefLive j hj) }
+      low := by rw [tailFrame rSl (by rfl), hf.low]
+      high := by rw [tailFrame rSh (by rfl), hf.high]
+      uPos := by rw [tailFrame rUpLo (by rfl), tailFrame rUpHi (by rfl),
+        hf.uPos, prefFrame rUpLo (by rfl), prefFrame rUpHi (by rfl)]
+      uNeg := by rw [tailFrame rUnLo (by rfl), tailFrame rUnHi (by rfl),
+        hf.uNeg, prefFrame rUnLo (by rfl), prefFrame rUnHi (by rfl)]
+      viol := by rw [tailFrame rViol (by rfl), hf.viol, hp.viol]
+      vDiv := by rw [tailFrame rVDiv (by rfl), hf.vDiv,
+        prefFrame rVDiv (by rfl)]
+      vBisect := by rw [tailFrame rVBisect (by rfl), hf.vBisect,
+        prefFrame rVBisect (by rfl)]
+      v := by rw [tailFrame rVLo (by rfl), tailFrame rVHi (by rfl), hf.v,
+        prefFrame rVLo (by rfl), prefFrame rVHi (by rfl), hp.dPos, hp.dNeg]
+      round := by rw [tailFrame rKr (by rfl), hf.round]
+      cell := by rw [tailFrame rC (by rfl), hf.cell, hp.cell] }
+  rw [body_acc_decomp, arun_append, arun_append]
+  simpa [prefixed, accumulated, out] using hall
+
 def tailS (c : Cfg) : List Instr :=
   [ .binop 210 .add (.reg rR) (.reg 41)
   , .binop 211 .eq (.reg 210) (.lit c.period)
