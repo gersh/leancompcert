@@ -174,6 +174,163 @@ theorem addWideBody_arun_exact (k : Nat) (st : AState)
   rw [addWideBody_arun_mod k st accLo accHi alo ahi carry hr hacc hadd,
     Nat.mod_eq_of_lt hfit]
 
+/-! ## Exact-predicate arithmetic -/
+
+/-- The branch structure implemented by CDEM's exact square predicate after
+`W = a*s+b` has been computed. -/
+def okFormula (s k a b : Nat) : Prop :=
+  a * a ≤ k ∧
+    ((k = a * a ∧ b = 0) ∨
+      (k ≠ a * a ∧
+        (2 * a + 1 ≤ k - a * a ∨
+          (2 * a * b ≤ s * (k - a * a) ∧
+            b * b ≤ s * (s * (k - a * a) - 2 * a * b)))))
+
+/-- `(u+t)^2`, spelled out because LeanCompCert deliberately has no `ring`
+dependency. -/
+theorem sq_add (u t : Nat) :
+    (u + t) * (u + t) = u * u + 2 * u * t + t * t := by
+  simp only [Nat.add_mul, Nat.mul_add, Nat.two_mul, Nat.mul_comm t u]
+  omega
+
+def residualFormula (s a b e : Nat) : Prop :=
+  (e = 0 ∧ b = 0) ∨
+    (e ≠ 0 ∧
+      (2 * a + 1 ≤ e ∨
+        (2 * a * b ≤ s * e ∧ b * b ≤ s * (s * e - 2 * a * b))))
+
+theorem residualFormula_iff (s a b e : Nat) (hs : 0 < s) (hb : b < s) :
+    residualFormula s a b e ↔
+      2 * a * s * b + b * b ≤ s * s * e := by
+  constructor
+  · rintro (⟨rfl, rfl⟩ | ⟨he, hbig | hfine⟩)
+    · simp
+    · have hb' : b ≤ s := by omega
+      have h1 : 2 * a * s * b ≤ 2 * a * s * s :=
+        Nat.mul_le_mul_left (2 * a * s) hb'
+      have h2 : b * b < s * s := Nat.mul_lt_mul_of_lt_of_lt hb hb
+      have hsum : 2 * a * s * b + b * b < 2 * a * s * s + s * s :=
+        Nat.add_lt_add_of_le_of_lt h1 h2
+      have hid : 2 * a * s * s + s * s = s * s * (2 * a + 1) := by
+        simp [Nat.mul_add, Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+      have hmul : s * s * (2 * a + 1) ≤ s * s * e :=
+        Nat.mul_le_mul_left (s * s) hbig
+      omega
+    · obtain ⟨hse, hlast⟩ := hfine
+      have hsub : s * e - 2 * a * b + 2 * a * b = s * e :=
+        Nat.sub_add_cancel hse
+      have hid : s * s * e =
+          2 * a * s * b + s * (s * e - 2 * a * b) := by
+        calc
+          s * s * e = s * (s * e) := by rw [Nat.mul_assoc]
+          _ = s * ((s * e - 2 * a * b) + 2 * a * b) := by rw [hsub]
+          _ = 2 * a * s * b + s * (s * e - 2 * a * b) := by
+            simp [Nat.mul_add, Nat.add_comm, Nat.mul_comm, Nat.mul_left_comm]
+      rw [hid]
+      exact Nat.add_le_add_left hlast _
+  · intro h
+    by_cases he0 : e = 0
+    · left
+      refine ⟨he0, ?_⟩
+      subst e
+      simp only [Nat.mul_zero] at h
+      cases b <;> simp at h ⊢
+    · right
+      refine ⟨he0, ?_⟩
+      by_cases hbig : 2 * a + 1 ≤ e
+      · exact Or.inl hbig
+      · right
+        have hse : 2 * a * b ≤ s * e := by
+          apply Nat.le_of_not_gt
+          intro hlt
+          have hmul : s * (s * e) < s * (2 * a * b) :=
+            Nat.mul_lt_mul_of_pos_left hlt hs
+          have hleft : s * (2 * a * b) = 2 * a * s * b := by
+            calc
+              s * (2 * a * b) = (s * (2 * a)) * b := by rw [← Nat.mul_assoc]
+              _ = ((2 * a) * s) * b := by rw [Nat.mul_comm s (2 * a)]
+              _ = 2 * a * s * b := rfl
+          have hright : s * (s * e) = s * s * e := by rw [Nat.mul_assoc]
+          omega
+        refine ⟨hse, ?_⟩
+        have hsub : s * e - 2 * a * b + 2 * a * b = s * e :=
+          Nat.sub_add_cancel hse
+        have hid : s * s * e =
+            2 * a * s * b + s * (s * e - 2 * a * b) := by
+          calc
+            s * s * e = s * (s * e) := by rw [Nat.mul_assoc]
+            _ = s * ((s * e - 2 * a * b) + 2 * a * b) := by rw [hsub]
+            _ = 2 * a * s * b + s * (s * e - 2 * a * b) := by
+              simp [Nat.mul_add, Nat.add_comm, Nat.mul_comm, Nat.mul_left_comm]
+        rw [hid] at h
+        omega
+
+/-- **The rearranged branch formula is exactly `s²*k ≥ W²`.**  This is the
+paper-facing arithmetic theorem behind `okBody`: the large-`e` shortcut and
+the fine 128-bit comparison are neither approximations nor one-way guards. -/
+theorem okFormula_iff (W s k a b : Nat) (hs : 0 < s) (hb : b < s)
+    (hW : W = a * s + b) :
+    okFormula s k a b ↔ W * W ≤ s * s * k := by
+  constructor
+  · rintro ⟨hk, hcases⟩
+    have hresFormula : residualFormula s a b (k - a * a) := by
+      rcases hcases with hEq | hGt
+      · rcases hEq with ⟨heq, hb0⟩
+        left
+        exact ⟨by omega, hb0⟩
+      · rcases hGt with ⟨hne, hrest⟩
+        right
+        exact ⟨by omega, hrest⟩
+    have hres := (residualFormula_iff s a b (k - a * a) hs hb).mp hresFormula
+    have hsplit : k = a * a + (k - a * a) := by omega
+    have hWsq : W * W =
+        a * a * (s * s) + (2 * a * s * b + b * b) := by
+      rw [hW]
+      have h := sq_add (a * s) b
+      simpa only [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm,
+        Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm] using h
+    have hksq : s * s * k =
+        a * a * (s * s) + s * s * (k - a * a) := by
+      calc
+        s * s * k = s * s * (a * a + (k - a * a)) := by rw [← hsplit]
+        _ = a * a * (s * s) + s * s * (k - a * a) := by
+          simp [Nat.mul_add, Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+    omega
+  · intro h
+    have hk : a * a ≤ k := by
+      apply Nat.le_of_not_gt
+      intro hlt
+      have hmul : s * s * k < s * s * (a * a) :=
+        Nat.mul_lt_mul_of_pos_left hlt (Nat.mul_pos hs hs)
+      have hWas : a * s ≤ W := by omega
+      have hsq : (a * s) * (a * s) ≤ W * W := Nat.mul_le_mul hWas hWas
+      have hid : (a * s) * (a * s) = s * s * (a * a) := by
+        simp only [Nat.mul_comm, Nat.mul_left_comm]
+      rw [hid] at hsq
+      omega
+    refine ⟨hk, ?_⟩
+    have hsplit : k = a * a + (k - a * a) := by omega
+    have hWsq : W * W =
+        a * a * (s * s) + (2 * a * s * b + b * b) := by
+      rw [hW]
+      have hsquare := sq_add (a * s) b
+      simpa only [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm,
+        Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm] using hsquare
+    have hksq : s * s * k =
+        a * a * (s * s) + s * s * (k - a * a) := by
+      calc
+        s * s * k = s * s * (a * a + (k - a * a)) := by rw [← hsplit]
+        _ = a * a * (s * s) + s * s * (k - a * a) := by
+          simp [Nat.mul_add, Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+    have hres : 2 * a * s * b + b * b ≤ s * s * (k - a * a) := by
+      omega
+    have hform := (residualFormula_iff s a b (k - a * a) hs hb).mpr hres
+    rcases hform with ⟨he0, hb0⟩ | ⟨hne0, hrest⟩
+    · left
+      exact ⟨by omega, hb0⟩
+    · right
+      exact ⟨by omega, hrest⟩
+
 /-! ## Exact-predicate definedness
 
 `okBody` contains the only register-valued divisions in the reciprocal-square-

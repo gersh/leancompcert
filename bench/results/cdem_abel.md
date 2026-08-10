@@ -99,6 +99,9 @@ literal array-machine blocks used in this scan:
 * `addWideBody_arun_mod` and `addWideBody_arun_exact`: the accumulator is
   addition modulo `2^128`, and ordinary exact addition under the explicit
   no-wrap invariant;
+* `okFormula_iff`: the predicate's large-`e` shortcut and fine 128-bit branch
+  are equivalent in both directions to `W^2 <= s^2*k` after
+  `W = a*s+b`, so the rearrangement loses no cases and adds none;
 * `okBody_defined`: the exact reciprocal-square-root predicate's two
   register-valued divisions cannot divide by zero.
 
@@ -115,10 +118,11 @@ in `0.33 s`, peaked at `572076 KiB`, and used no swap inside a stricter 2 GiB
 hard cap.  This is also the required build shape for later predicate-value
 and bisection proofs.
 
-Still not proved: composition of these primitives with the μ-table build,
-window marking, exact reciprocal-square-root bisection, and the outer loop to
-show that the complete `denote` *is* the residue.  That remaining refinement
-gap is corroborated, but not discharged, by §5.
+Still not proved: transcription of the predicate instructions to
+`okFormula`, followed by composition with the μ-table build, window marking,
+exact reciprocal-square-root bisection, and the outer loop to show that the
+complete `denote` *is* the residue.  That remaining refinement gap is
+corroborated, but not discharged, by §5.
 
 ## 5. Oracle agreement
 
