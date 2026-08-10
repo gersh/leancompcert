@@ -90,8 +90,25 @@ eighteen new lines, no `sorry`, no `native_decide`): `abelProgram_wf` and,
 through `AProgram.evalCC_compile`, `abelProgram_compiled` — the emitted C
 computes exactly `denote`.
 
-Not proved, exactly as in `ArraySegSieve`, `PsiSegSieve` and `R2SegSieve`:
-that `denote` *is* the residue.  That is corroborated by §5.
+`LeanCompCert/Ports/CDEMAbelPrimitives.lean` now also proves, against the
+literal array-machine blocks used in this scan:
+
+* `muxBody_arun`: the branchless selector returns the selected word;
+* `mulWideBody_arun_exact`: the two output limbs recombine to the exact
+  natural-number product;
+* `addWideBody_arun_mod` and `addWideBody_arun_exact`: the accumulator is
+  addition modulo `2^128`, and ordinary exact addition under the explicit
+  no-wrap invariant.
+
+All three theorems include the array frame, so these scalar stages cannot
+silently modify the sieve plane.  A fresh source check under
+`MemoryHigh=3G`, `MemoryMax=4G`, `MemorySwapMax=0`, and `LEAN_NUM_THREADS=1`
+took `0.21 s`, peaked at `561308 KiB` RSS, and used no swap.
+
+Still not proved: composition of these primitives with the μ-table build,
+window marking, exact reciprocal-square-root bisection, and the outer loop to
+show that the complete `denote` *is* the residue.  That remaining refinement
+gap is corroborated, but not discharged, by §5.
 
 ## 5. Oracle agreement
 
