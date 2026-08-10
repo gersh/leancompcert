@@ -87,3 +87,6 @@ again with the 1.5 GiB hard limit and zero swap.
 
 `Chunk494` was split by the same route; both halves and the wrapper built in
 11.06 seconds at cgroup peak 903,462,912 bytes, with zero swap.
+
+`Chunk527` was split by the same route; both halves and the wrapper built in
+11.47 seconds at cgroup peak 997,052,416 bytes, with zero swap.
