@@ -576,6 +576,97 @@ theorem body_final_live_run (c : Cfg) (idx : Nat) (st : AState)
   rw [body_acc_decomp, arun_append, arun_append]
   simpa [prefixed, accumulated, out] using hall
 
+structure WindowClearLiveSpec (c : Cfg) (before after : AState) : Prop where
+  live : ∀ j, j ≠ c.sink → after.arr j =
+    if j = before.regs rC + c.winBase then 0 else before.arr j
+
+structure OuterFirstSpec (c : Cfg) (k dp dn ceil floor : Nat)
+    (before after : AState) : Prop where
+  arr : WindowClearLiveSpec c before after
+  key : after.regs rK = k
+  dPos : after.regs rDp = dp
+  dNeg : after.regs rDn = dn
+  gate : after.regs 43 = 1
+  zero : after.regs rZero = before.regs rZero
+  low : after.regs rSl = (initial c.wScale k).lo
+  high : after.regs rSh = (initial c.wScale k).hi
+  uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
+    AddWide.wval (before.regs rUpLo, before.regs rUpHi) + dp * ceil
+  uNeg : AddWide.wval (after.regs rUnLo, after.regs rUnHi) =
+    AddWide.wval (before.regs rUnLo, before.regs rUnHi) + dn * floor
+  viol : after.regs rViol = before.regs rViol
+  vDiv : after.regs rVDiv = before.regs rVDiv
+  vBisect : after.regs rVBisect = before.regs rVBisect
+  v : AddWide.wval (after.regs rVLo, after.regs rVHi) =
+    AddWide.wval (before.regs rVLo, before.regs rVHi)
+  round : after.regs rKr = before.regs rKr + 1
+  cell : after.regs rC = before.regs rC
+
+set_option maxRecDepth 2048 in
+set_option maxHeartbeats 1000000 in
+theorem body_first_live_of_acc (c : Cfg) (idx : Nat) (st : AState)
+    (k dp dn ceil floor : Nat)
+    (hidxM : idx < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ idx) (hmarkPos : 0 < c.markSteps)
+    (hmarkM : c.markSteps < M) (hR : c.markSteps ≤ st.regs rR)
+    (hzero : st.regs rZero = 0) (hsinkM : c.sink < M)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M)
+    (hacc :
+      let prefixed := arun idx st (accPrefix c)
+      FirstBodySpec c k dp dn ceil floor prefixed
+        (arun idx prefixed c.accBody)) :
+    OuterFirstSpec c k dp dn ceil floor st (arun idx st c.body) := by
+  let prefixed := arun idx st (accPrefix c)
+  let accumulated := arun idx prefixed c.accBody
+  let out := arun idx accumulated c.tailBody
+  have hp := accPrefix_latches c idx st hidxM hsieveM hsieve hmarkM
+    hmarkPos hR hword harrword
+  have hprefLive := accPrefix_live_frame c idx st hidxM hsieveM hsieve
+    hmarkM hR hzero hsinkM
+  have hacc' : FirstBodySpec c k dp dn ceil floor prefixed accumulated := by
+    simpa [prefixed, accumulated] using hacc
+  have prefFrame (j : Nat)
+      (hw : ArrayRegFrame.writes j (accPrefix c) = false) :
+      prefixed.regs j = st.regs j := by
+    exact ArrayRegFrame.arun_frame idx j (accPrefix c) hw st
+  have tailFrame (j : Nat)
+      (hw : ArrayRegFrame.writes j c.tailBody = false) :
+      out.regs j = accumulated.regs j := by
+    exact ArrayRegFrame.arun_frame idx j c.tailBody hw accumulated
+  have tailArr : out.arr = accumulated.arr :=
+    arun_store_free_arr idx c.tailBody accumulated (by rfl)
+  have hall : OuterFirstSpec c k dp dn ceil floor st out :=
+    { arr :=
+        { live := by
+            intro j hj
+            rw [tailArr, hacc'.arr, hp.cell]
+            change (if j = st.regs rC + c.winBase then 0 else prefixed.arr j) = _
+            by_cases heq : j = st.regs rC + c.winBase
+            · simp [heq]
+            · simpa [heq, prefixed] using hprefLive j hj }
+      key := by rw [tailFrame rK (by rfl), hacc'.key]
+      dPos := by rw [tailFrame rDp (by rfl), hacc'.dPos]
+      dNeg := by rw [tailFrame rDn (by rfl), hacc'.dNeg]
+      gate := by rw [tailFrame 43 (by rfl), hacc'.gate, hp.gate]
+      zero := by rw [tailFrame rZero (by rfl), hacc'.zero, hp.zero]
+      low := by rw [tailFrame rSl (by rfl), hacc'.low]
+      high := by rw [tailFrame rSh (by rfl), hacc'.high]
+      uPos := by rw [tailFrame rUpLo (by rfl), tailFrame rUpHi (by rfl),
+        hacc'.uPos, prefFrame rUpLo (by rfl), prefFrame rUpHi (by rfl)]
+      uNeg := by rw [tailFrame rUnLo (by rfl), tailFrame rUnHi (by rfl),
+        hacc'.uNeg, prefFrame rUnLo (by rfl), prefFrame rUnHi (by rfl)]
+      viol := by rw [tailFrame rViol (by rfl), hacc'.viol, hp.viol]
+      vDiv := by rw [tailFrame rVDiv (by rfl), hacc'.vDiv,
+        prefFrame rVDiv (by rfl)]
+      vBisect := by rw [tailFrame rVBisect (by rfl), hacc'.vBisect,
+        prefFrame rVBisect (by rfl)]
+      v := by rw [tailFrame rVLo (by rfl), tailFrame rVHi (by rfl), hacc'.v,
+        prefFrame rVLo (by rfl), prefFrame rVHi (by rfl)]
+      round := by rw [tailFrame rKr (by rfl), hacc'.round, hp.round, hp.gate]
+      cell := by rw [tailFrame rC (by rfl), hacc'.cell, hp.cell] }
+  rw [body_acc_decomp, arun_append, arun_append]
+  simpa [prefixed, accumulated, out] using hall
+
 def tailS (c : Cfg) : List Instr :=
   [ .binop 210 .add (.reg rR) (.reg 41)
   , .binop 211 .eq (.reg 210) (.lit c.period)

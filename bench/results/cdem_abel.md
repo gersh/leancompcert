@@ -640,6 +640,22 @@ fresh source/build measurements under the same cap are:
 | fresh source compilation | 64.88 s | 688,292 KiB | 0 |
 | `lake build LeanCompCert.Ports.CDEMAbelOuter` | 65.24 s | 726,364 KiB | 0 |
 
-This closes the literal middle and final-round compositions.  The literal
-first round and finite outer iterator remain before the retained production
-trace has a complete denotation proof.
+`body_first_live_of_acc` now supplies the remaining literal composition seam:
+given the already verified `FirstBodySpec` for the accumulator sub-block, it
+composes the actual selector, inactive sieve, inactive mark, accumulator, and
+tail.  Its `WindowClearLiveSpec` records the real first-round behavior: the
+current live window cell is cleared and all other live cells are preserved,
+but scratch is not falsely claimed to be zero.  A fresh axiom print reports
+only `[propext, Quot.sound]` for this composition theorem.
+
+With all three emitted-body compositions present, the current capped checks
+are:
+
+| check | elapsed | peak RSS | swap |
+| --- | ---: | ---: | ---: |
+| fresh source compilation | 65.46 s | 746,564 KiB | 0 |
+| `lake build LeanCompCert.Ports.CDEMAbelOuter` | 65.22 s | 737,888 KiB | 0 |
+
+The finite outer iterator and the production invariant that supplies the first
+accumulator contract remain before the retained production trace has a
+complete denotation proof.
