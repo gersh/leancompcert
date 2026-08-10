@@ -968,3 +968,30 @@ The new capstone prints only `[propext, Quot.sound]`. Every active mark-body
 branch now has complete literal array and cursor semantics; remaining marking
 work is the finite `markSteps` telescope and source identification of the
 completed resident divisor-convolution window.
+
+`CDEMAbelMarkSchedule.lean` now lifts the first active resident mark through
+the literal selector, inactive sieve, inactive accumulator, and period tail.
+The proof records two scheduler details that syntactic register/array framing
+would miss: the inactive accumulator clears the designated sink cell, and its
+cell-cursor instruction writes `rC + 0` rather than leaving `rC` untouched.
+Dedicated LeanCompCert lemmas prove the correct non-sink array frame and the
+semantic zero-cursor preservation.  The scheduler proof is split at the
+before-accumulator and before-tail boundaries; this reduced a monolithic
+heartbeat timeout to a short bounded build.
+
+These checks used one requested Lean worker and the strict cgroup
+`MemoryHigh=1G`, `MemoryMax=1536M`, `MemorySwapMax=0`:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh first-mark scheduler source | 22.15 s | 650,752 KiB | 230,064,128 B | 0 |
+| first-mark scheduler module build | 22.60 s | 656,388 KiB | 251,432,960 B | 0 |
+| fresh six-theorem axiom print | 0.16 s | 544,076 KiB | 106,668,032 B | 0 |
+| cached umbrella consumer build | 0.64 s | 1,735,796 KiB | 222,011,392 B | 0 |
+
+The public scheduler capstones print only `[propext, Quot.sound]` (the
+cell-zero helper needs only `propext`).  The actual first scheduled marking
+iteration now has a code-derived live-array update, exact divisor/sign/
+multiple/cell state, period cursor `1`, and unchanged window base.  The next
+marking task is to lift the three non-start mark transitions through the same
+scheduler and telescope the finite `markSteps` interval.
