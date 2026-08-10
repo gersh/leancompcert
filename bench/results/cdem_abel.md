@@ -195,6 +195,22 @@ zero-swap cap. Fresh axiom prints contain only Lean's ordinary foundations.
 This compact lifted interface is the required composition shape for the
 378-instruction body.
 
+The final active schedule is now complete too. `closeAdvance_gate1_run`
+proves the literal final selector resets the round counter and advances the
+cell cursor; `close_final_frame` carries the closed bracket and division
+counter through the product/add/advance suffix; and
+`accBisect_final_run` combines that frame with `close_run_exact`.  Its
+array-level result proves the singleton bracket, exact 128-bit addition of
+`d·s`, unchanged violation counters, round reset, cell increment, and array
+frame for the actual `accBisect` program.  The four-instruction advance was
+split into two two-instruction blocks after a direct all-at-once `simp` ran
+for minutes; the retained staged proof keeps the same instruction list and
+compiles as part of the full source in `5.46 s` at `796552 KiB` RSS.  The live
+module build took `5.92 s` at `839912 KiB`, with one worker, the 2 GiB hard
+cap, and no swap.  Fresh axiom prints for all five new refinement theorems
+contain only `propext`, `Classical.choice`, and `Quot.sound` (the two close
+lemmas do not require `Classical.choice`).
+
 `LeanCompCert/Ports/CDEMAbelAccumulation.lean` closes the next interleaved
 stage.  `mulAdd_run_mod` proves the reusable literal 64-by-64 multiply followed
 by two-limb addition, and `accProd_run_mod` instantiates it twice against the
