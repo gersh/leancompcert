@@ -1238,6 +1238,31 @@ theorem accBisect_arun (c : Cfg) (idx : Nat) (st : AState) :
       ⟨srun idx st.regs (accBisectScalarS c), st.arr⟩ := by
   rw [accBisect_lift, arun_lift]
 
+theorem accBisect_u_frame (c : Cfg) (idx : Nat) (st : AState) :
+    let out := arun idx st c.accBisect
+    out.regs rUpLo = st.regs rUpLo ∧
+      out.regs rUpHi = st.regs rUpHi ∧
+      out.regs rUnLo = st.regs rUnLo ∧
+      out.regs rUnHi = st.regs rUnHi := by
+  have frame (j : Nat)
+      (hw : RegFrame.writes j (openS c ++ roundS c ++ closeS) = false) :
+      srun idx st.regs (openS c ++ roundS c ++ closeS) j = st.regs j :=
+    RegFrame.srun_frame idx j _ hw st.regs
+  have hall :
+      srun idx st.regs (openS c ++ roundS c ++ closeS) rUpLo =
+          st.regs rUpLo ∧
+        srun idx st.regs (openS c ++ roundS c ++ closeS) rUpHi =
+          st.regs rUpHi ∧
+        srun idx st.regs (openS c ++ roundS c ++ closeS) rUnLo =
+          st.regs rUnLo ∧
+        srun idx st.regs (openS c ++ roundS c ++ closeS) rUnHi =
+          st.regs rUnHi :=
+    ⟨frame rUpLo (by rfl), frame rUpHi (by rfl),
+      frame rUnLo (by rfl), frame rUnHi (by rfl)⟩
+  dsimp only
+  rw [accBisect_arun]
+  simpa only [accBisectScalarS] using hall
+
 
 /-! ## Initial-bracket machine prefix -/
 

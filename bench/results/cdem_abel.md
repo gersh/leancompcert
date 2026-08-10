@@ -266,8 +266,23 @@ production `accHead` regime is now verified.  The enlarged source check took
 `13.95 s` and peaked at `693688 KiB` under the same cap.
 Fresh axiom prints use only `propext` and `Quot.sound`.
 
+`LeanCompCert/Ports/CDEMAbelBody.lean` starts the per-integer composition at
+the 60 interior regimes. `accBody_middle_run` applies the verified head,
+proves the two zero-gated product blocks leave both `U` accumulators exact,
+then applies the verified active bisection schedule. Its contract covers the
+array frame, exact pure bracket step, both `U` and `V` values, all three
+failure counters, round advance, and unchanged cell cursor for the literal
+`accHead ++ accProd ++ accBisect` block. A dedicated four-register bisection
+frame prevents normalization of the lifted array list. The fresh source check
+took `4.43 s`, peaked at `601832 KiB` RSS, and used no swap under the
+one-thread 2 GiB cap.
+The live module build, including a rebuilt 13-second head dependency, took
+`18.79 s` at `689016 KiB`. Fresh axiom prints contain only Lean's ordinary
+foundations.
+
 Still not proved: composition of the now-complete head/product/bisection
-contracts across the per-integer schedule, then the μ-table build, window marking,
+contracts for the first and final per-integer regimes and across the full
+schedule, then the μ-table build, window marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.
