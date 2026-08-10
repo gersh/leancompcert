@@ -411,6 +411,8 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | zero-counter seam and opaque full-classification endpoint, module build | 53.92 s | 4,357,624 KiB | 0 | success |
 | production `ArithmeticPre` six-headroom constructor, direct source check | 16.57 s | 3,869,892 KiB | 0 | success |
 | production `ArithmeticPre` six-headroom constructor, module build | 16.04 s | 3,851,220 KiB | 0 | success |
+| arithmetic constructor plus generic initializer/body word closure, direct source check | 38.99 s | 4,320,416 KiB | 0 | success |
+| arithmetic constructor plus generic initializer/body word closure, module build | 37.92 s | 4,314,408 KiB | 0 | success |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -487,6 +489,11 @@ derives word closure, phase and candidate ranges, the finite positional log
 layout, both lookup addresses, and the RS62 one-step bounds internally.  A
 new exact bound on `PsiQR.advance.q` removes both low-level output-register
 hypotheses from the future finite arithmetic induction.
+Generic initializer and finite-body word-closure theorems now provide the
+`regs` and `arr` fields for every production prefix without evaluating a
+native computation.  Their literal instruction-list traversal is the current
+cost of the arithmetic module (about 38 seconds and 4.32 GiB), still with a
+22 GiB hard cap and zero swap.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert

@@ -16,6 +16,49 @@ open LeanCompCert.Ports.RamareCombined100M
 open LeanCompCert.Verified.Reflect (M)
 open LeanCompCert.Verified.ArrayState (AState)
 
+/-! ## Word closure -/
+
+/-- Every finite literal-body prefix preserves machine-word closure. -/
+theorem BodyRefinement.bodyRun_word
+    (c : LambdaPsiSweep.Cfg) (k fuel : Nat) (s : AState)
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M) :
+    let out := BodyRefinement.bodyRun k c fuel s
+    (∀ j, out.regs j < M) ∧ (∀ j, out.arr j < M) := by
+  induction fuel with
+  | zero => exact ⟨hregs, harr⟩
+  | succ fuel ih =>
+      have hprev := ih
+      exact LeanCompCert.Verified.ArrayFoldBridge.arun_word k
+        (LambdaPsiSweep.body c) (BodyRefinement.bodyRun k c fuel s)
+        hprev.1 hprev.2
+
+/-- An arbitrary literal lambda/psi initializer is word-closed because every
+emitted register and array write has word semantics. -/
+theorem LambdaPsiSweep.init_word
+    (c : LambdaPsiSweep.Cfg) (seed : LambdaPsiSweep.Seed) :
+    let s := LeanCompCert.Verified.ArrayFoldBridge.arun 0
+      LeanCompCert.Verified.ArrayState.initialAState
+      (LambdaPsiSweep.init c seed)
+    (∀ j, s.regs j < M) ∧ (∀ j, s.arr j < M) := by
+  apply LeanCompCert.Verified.ArrayFoldBridge.arun_word 0
+    (LambdaPsiSweep.init c seed) LeanCompCert.Verified.ArrayState.initialAState
+  · intro j
+    simp [LeanCompCert.Verified.ArrayState.initialAState,
+      LeanCompCert.Verified.Reflect.initialState, M]
+  · intro j
+    simp [LeanCompCert.Verified.ArrayState.initialAState, M]
+
+/-- The physical production initializer is word-closed for arbitrary finite
+log values and arithmetic seeds, by specialization of the generic initializer
+theorem without reducing the concrete production table. -/
+theorem productionPhysicalInitState_word
+    (logs : List LogCell) (seed : LambdaPsiSweep.Seed) :
+    let s := WholeSweepInvariant.productionPhysicalInitState logs seed
+    (∀ j, s.regs j < M) ∧ (∀ j, s.arr j < M) := by
+  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  simpa only [WholeSweepInvariant.productionPhysicalInitState, c] using
+    LambdaPsiSweep.init_word c seed
+
 set_option maxRecDepth 20000 in
 /-- The RS62 log candidate does not write the classified factor-base
 position used by the following positional lambda lookup. -/
