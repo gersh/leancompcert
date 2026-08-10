@@ -84,3 +84,6 @@ the original four-name aggregate interface.
 `Chunk440` was the next cgroup-identified outlier. Its generated halves and
 wrapper built together in 11.05 seconds at cgroup peak 986,062,848 bytes,
 again with the 1.5 GiB hard limit and zero swap.
+
+`Chunk494` was split by the same route; both halves and the wrapper built in
+11.06 seconds at cgroup peak 903,462,912 bytes, with zero swap.
