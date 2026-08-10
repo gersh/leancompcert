@@ -74,3 +74,9 @@ wrapper:
 
 The original ten-micro-proof shard was stopped by the cgroup before the host
 could exhaust memory; all preceding cache entries remained usable.
+
+A later independent outlier at `Chunk414` was split with the checked-in
+`scripts/split_section413_window_chunk.py` utility. Its two halves and wrapper
+built together in 11.08 seconds at cgroup peak 921,808,896 bytes (1.5 GiB
+hard limit, zero swap). The utility refuses already-split inputs and retains
+the original four-name aggregate interface.
