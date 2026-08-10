@@ -1086,3 +1086,25 @@ All three capstones print only `[propext, Quot.sound]`. The remaining table
 work is to refine the 29-instruction trial/code prefix to a pure finite row
 model, telescope the prime and candidate cursors, and prove that the resulting
 resident code equals `Ref.muCode`.
+
+`CDEMAbelSievePrefix.lean` now refines that entire 29-instruction prefix.
+Small reset/load, factor, and code blocks compose into the executable pure
+functions `sieveResetStep`, `sieveFactorStep`, `sieveRowStep`, and
+`sieveCodeOf`.  `sieveBody_prefix_code_model` proves the literal prefix emits
+the pure row code; `sieveBody_last_model_store` carries it through the already
+factored final-prime suffix and proves the complete active body stores that
+code at `muBase+n`.  This avoids normalizing the complete body in one proof
+term while retaining an exact equation for every arithmetic branch.
+
+These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh sieve-prefix source | 0.58 s | 600,372 KiB | 161,447,936 B | 0 |
+| sieve-prefix module build | 0.63 s | 601,056 KiB | 184,803,328 B | 0 |
+| fresh four-capstone axiom print | 0.17 s | 536,920 KiB | 100,130,816 B | 0 |
+| cached umbrella consumer build | 0.73 s | 1,733,416 KiB | 218,013,696 B | 0 |
+
+All four capstones print only `[propext, Quot.sound]`.  Remaining resident-table
+work is now the non-final-prime suffix, the finite prime/candidate telescope,
+and the arithmetic identification of the resulting code with `Ref.muCode`.
