@@ -203,12 +203,17 @@ stage too: the two's-complement absolute-value selector computes
 negative parts of `G-E`.  This stage is itself split into the three-instruction
 sign prefix, five-instruction selector, and six-instruction increment tail so
 the compiler never elaborates the full head as one simplifier term.  The
-enlarged source check took `7.83 s`, peaked at `648144 KiB`, and used no swap;
-the module build took `7.87 s` and peaked at `672892 KiB` under the same cap.
+first-round latch and reciprocal tail are now verified too, including the
+exact `tv`, ceiling/floor, and positive/negative product gates.  Finally,
+`headPost_first_noBump_run` and `headPost_first_bump_run` compose the complete
+literal scalar postlude for both checked square-root branches.  The enlarged
+source check took `8.21 s`, peaked at `682424 KiB`, and used no swap; the
+module build took `8.28 s` and peaked at `708000 KiB` under the same cap.
 Fresh axiom prints use only `propext` and `Quot.sound`.
 
-Still not proved: the first-round latch/reciprocal tail, the complete first
-`accHead` transition, and its composition
+Still not proved: lifting the first scalar postlude through the live
+load-and-clear operation to close the complete first `accHead` transition,
+and its composition
 with the bisection schedule, then the μ-table build, window marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement

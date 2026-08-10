@@ -186,6 +186,12 @@ theorem headPostS_decomp (c : Cfg) :
     headPostS c = headFrontS c ++ headLatchS ++ headRecipS c := by
   simp [headPostS, headFrontS, headLatchS, headRecipS, List.append_assoc]
 
+def headTailS (c : Cfg) : List Instr := headLatchS ++ headRecipS c
+
+theorem headPostS_tail_decomp (c : Cfg) :
+    headPostS c = headFrontS c ++ headTailS c := by
+  simp [headPostS_decomp, headTailS, List.append_assoc]
+
 def headFKS : List Instr :=
   [ .binop 149 .mul (.reg 148) (.reg 140)
   , .binop rF .add (.reg rF) (.reg 149)
@@ -390,6 +396,406 @@ theorem headDelta_run (idx : Nat) (r : RegState) (f e : Nat)
       RegFrame.srun_frame idx rF headIncS (by rfl) m, hmF]
   simpa [headDeltaS_decomp, srun_append, q, m, out] using
     ⟨hi.2.2.1, hi.1, hi.2.1, houtF, hi.2.2.2⟩
+
+theorem headLatch_first_run (idx : Nat) (r : RegState) (g dp dn : Nat)
+    (h140 : r 140 = 1) (hG : r 158 = g)
+    (hDp : r 161 = dp) (hDn : r 163 = dn)
+    (hword : ∀ j, r j < M) :
+    let out := srun idx r headLatchS
+    out rDp = dp ∧ out rDn = dn ∧ out rE = g ∧ out 140 = 1 := by
+  have h1M : (1 : Nat) % M = 1 := by decide
+  have hcoeff : 1 + (M - 1) = M := by decide
+  have hDpM : dp % M = dp := by
+    rw [← hDp]
+    exact Nat.mod_eq_of_lt (hword 161)
+  have hDnM : dn % M = dn := by
+    rw [← hDn]
+    exact Nat.mod_eq_of_lt (hword 163)
+  have hGM : g % M = g := by
+    rw [← hG]
+    exact Nat.mod_eq_of_lt (hword 158)
+  simp [headLatchS, Section413G1Denote.muxS, srun, sdest, sval,
+    denoteOperand, denoteOp, RegState.set, rDp, rDn, rE,
+    h140, hG, hDp, hDn, h1M, hcoeff, hDpM, hDnM, hGM]
+
+theorem headRecip_first_run (c : Cfg) (idx : Nat) (r : RegState)
+    (h140 : r 140 = 1) (hk : 0 < r rK) (hword : ∀ j, r j < M)
+    (hWM : c.wScale < M) (hsum : r rDp + r rDn < M)
+    (htvFit : r rTv + (r rDp + r rDn) < M)
+    (hceilFit : c.wScale - 1 + r rK < M) :
+    let out := srun idx r (headRecipS c)
+    out 165 = r rDp + r rDn ∧
+      out rTv = r rTv + (r rDp + r rDn) ∧
+      out 167 = (c.wScale - 1 + r rK) / r rK ∧
+      out 168 = c.wScale / r rK ∧
+      out 169 = r rDp ∧ out 170 = r rDn := by
+  have hk0 : r rK ≠ 0 := Nat.ne_of_gt hk
+  have hdivM : (c.wScale - 1 + r rK) / r rK < M :=
+    Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hceilFit
+  have hfloorM : c.wScale / r rK < M :=
+    Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hWM
+  have hk0' : r 30 ≠ 0 := by simpa [rK] using hk0
+  have hsum' : r 16 + r 17 < M := by simpa [rDp, rDn] using hsum
+  have htvFit' : r 29 + (r 16 + r 17) < M := by
+    simpa [rTv, rDp, rDn] using htvFit
+  have hceilFit' : c.wScale - 1 + r 30 < M := by
+    simpa [rK] using hceilFit
+  have hdivM' : (c.wScale - 1 + r 30) / r 30 < M := by
+    simpa [rK] using hdivM
+  have hfloorM' : c.wScale / r 30 < M := by simpa [rK] using hfloorM
+  simp [headRecipS, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+    rDp, rDn, rTv, rK, h140]
+  refine ⟨Nat.mod_eq_of_lt hsum', Nat.mod_eq_of_lt htvFit', ?_, ?_,
+    Nat.mod_eq_of_lt (hword 16), Nat.mod_eq_of_lt (hword 17)⟩
+  · simp [hk0', Nat.mod_eq_of_lt hceilFit', Nat.mod_eq_of_lt hdivM']
+  · simp [hk0', Nat.mod_eq_of_lt hWM, Nat.mod_eq_of_lt hfloorM']
+
+theorem headTail_first_run (c : Cfg) (idx : Nat) (r : RegState)
+    (f k t t2 g dp dn : Nat)
+    (hF : r rF = f) (hK : r rK = k) (hT : r rT = t)
+    (hT2 : r rT2 = t2) (hG : r 158 = g)
+    (hDp : r 161 = dp) (hDn : r 163 = dn) (h140 : r 140 = 1)
+    (hword : ∀ j, r j < M) (hk : 0 < k) (hWM : c.wScale < M)
+    (hsum : dp + dn < M) (htvFit : r rTv + (dp + dn) < M)
+    (hceilFit : c.wScale - 1 + k < M) :
+    let out := srun idx r (headTailS c)
+    out rF = f ∧ out rK = k ∧ out rT = t ∧ out rT2 = t2 ∧
+      out rViol = r rViol ∧ out rVSqrt = r rVSqrt ∧
+      out rDp = dp ∧ out rDn = dn ∧ out rE = g ∧
+      out rTv = r rTv + (dp + dn) ∧ out 165 = dp + dn ∧
+      out 167 = (c.wScale - 1 + k) / k ∧
+      out 168 = c.wScale / k ∧ out 169 = dp ∧ out 170 = dn ∧
+      out 140 = 1 := by
+  let l := srun idx r headLatchS
+  let out := srun idx l (headRecipS c)
+  have hl := headLatch_first_run idx r g dp dn h140 hG hDp hDn hword
+  dsimp only at hl
+  change l rDp = dp ∧ l rDn = dn ∧ l rE = g ∧ l 140 = 1 at hl
+  rcases hl with ⟨hlDp, hlDn, hlE, hl140⟩
+  have hlword : ∀ j, l j < M := srun_lt_of_lt idx _ r hword
+  have lKeep (j : Nat) (hw : RegFrame.writes j headLatchS = false) :
+      l j = r j := RegFrame.srun_frame idx j headLatchS hw r
+  have hlK : l rK = k := by rw [lKeep rK (by rfl), hK]
+  have hlTv : l rTv = r rTv := lKeep rTv (by rfl)
+  have hr := headRecip_first_run c idx l hl140
+    (by rw [hlK]; exact hk) hlword hWM
+    (by rw [hlDp, hlDn]; exact hsum)
+    (by rw [hlTv, hlDp, hlDn]; exact htvFit)
+    (by rw [hlK]; exact hceilFit)
+  dsimp only at hr
+  change out 165 = l rDp + l rDn ∧
+    out rTv = l rTv + (l rDp + l rDn) ∧
+    out 167 = (c.wScale - 1 + l rK) / l rK ∧
+    out 168 = c.wScale / l rK ∧ out 169 = l rDp ∧
+    out 170 = l rDn at hr
+  rcases hr with ⟨hrSum, hrTv, hrCeil, hrFloor, hrPos, hrNeg⟩
+  have outKeep (j : Nat) (hw : RegFrame.writes j (headRecipS c) = false) :
+      out j = l j := RegFrame.srun_frame idx j (headRecipS c) hw l
+  have hall : out rF = f ∧ out rK = k ∧ out rT = t ∧
+      out rT2 = t2 ∧ out rViol = r rViol ∧
+      out rVSqrt = r rVSqrt ∧ out rDp = dp ∧ out rDn = dn ∧
+      out rE = g ∧ out rTv = r rTv + (dp + dn) ∧
+      out 165 = dp + dn ∧ out 167 = (c.wScale - 1 + k) / k ∧
+      out 168 = c.wScale / k ∧ out 169 = dp ∧ out 170 = dn ∧
+      out 140 = 1 :=
+    ⟨by rw [outKeep rF (by rfl), lKeep rF (by rfl), hF],
+      by rw [outKeep rK (by rfl), hlK],
+      by rw [outKeep rT (by rfl), lKeep rT (by rfl), hT],
+      by rw [outKeep rT2 (by rfl), lKeep rT2 (by rfl), hT2],
+      by rw [outKeep rViol (by rfl), lKeep rViol (by rfl)],
+      by rw [outKeep rVSqrt (by rfl), lKeep rVSqrt (by rfl)],
+      by rw [outKeep rDp (by rfl), hlDp],
+      by rw [outKeep rDn (by rfl), hlDn],
+      by rw [outKeep rE (by rfl), hlE],
+      by rw [hrTv, hlTv, hlDp, hlDn],
+      by rw [hrSum, hlDp, hlDn],
+      by rw [hrCeil, hlK],
+      by rw [hrFloor, hlK],
+      by rw [hrPos, hlDp],
+      by rw [hrNeg, hlDn],
+      by rw [outKeep 140 (by rfl), hl140]⟩
+  simpa [headTailS, srun_append, l, out] using hall
+
+theorem headFront_first_noBump_run (c : Cfg) (idx : Nat) (r : RegState)
+    (t t2 e : Nat) (h140 : r 140 = 1)
+    (hT : r rT = t) (hT2 : r rT2 = t2) (hE : r rE = e)
+    (hkFit : r rW + r rC < M) (hklt : r rW + r rC < t2)
+    (hword : ∀ j, r j < M) :
+    let f := (r rF + r 148) % M
+    let k := r rW + r rC
+    let out := srun idx r (headFrontS c)
+    out rF = f ∧ out rK = k ∧ out rT = t ∧ out rT2 = t2 ∧
+      out rViol = r rViol ∧ out rVSqrt = r rVSqrt ∧
+      out 158 = headG f ∧ out 161 = headDPos (headG f) e ∧
+      out 163 = headDNeg (headG f) e ∧ out rE = e ∧
+      out 140 = 1 := by
+  let f := (r rF + r 148) % M
+  let k := r rW + r rC
+  let fk := srun idx r headFKS
+  let sq := srun idx fk headSqrtS
+  let out := srun idx sq headDeltaS
+  have hfk := headFK_first_run idx r h140 hkFit
+  dsimp only at hfk
+  change fk rF = f ∧ fk rK = k ∧ fk 140 = 1 at hfk
+  rcases hfk with ⟨hfkF, hfkK, hfk140⟩
+  have hfkword : ∀ j, fk j < M := srun_lt_of_lt idx _ r hword
+  have fkKeep (j : Nat) (hw : RegFrame.writes j headFKS = false) :
+      fk j = r j := RegFrame.srun_frame idx j headFKS hw r
+  have hfkT : fk rT = t := by rw [fkKeep rT (by rfl), hT]
+  have hfkT2 : fk rT2 = t2 := by rw [fkKeep rT2 (by rfl), hT2]
+  have hs := headSqrt_noBump_run idx fk k t t2 hfk140 hfkK hfkT
+    hfkT2 (by simpa [k] using hklt) hfkword
+  dsimp only at hs
+  change sq rT = t ∧ sq rT2 = t2 ∧ sq rViol = fk rViol ∧
+    sq rVSqrt = fk rVSqrt ∧ sq 140 = 1 at hs
+  rcases hs with ⟨hsT, hsT2, hsViol, hsVSqrt, hs140⟩
+  have hsword : ∀ j, sq j < M := srun_lt_of_lt idx _ fk hfkword
+  have sqKeep (j : Nat) (hw : RegFrame.writes j headSqrtS = false) :
+      sq j = fk j := RegFrame.srun_frame idx j headSqrtS hw fk
+  have hsF : sq rF = f := by rw [sqKeep rF (by rfl), hfkF]
+  have hsK : sq rK = k := by rw [sqKeep rK (by rfl), hfkK]
+  have hsE : sq rE = e := by
+    rw [sqKeep rE (by rfl), fkKeep rE (by rfl), hE]
+  have hd := headDelta_run idx sq f e hsF hsE hsword
+  dsimp only at hd
+  change out 158 = headG f ∧ out 161 = headDPos (headG f) e ∧
+    out 163 = headDNeg (headG f) e ∧ out rF = f ∧ out rE = e at hd
+  rcases hd with ⟨hdG, hdDp, hdDn, hdF, hdE⟩
+  have outKeep (j : Nat) (hw : RegFrame.writes j headDeltaS = false) :
+      out j = sq j := RegFrame.srun_frame idx j headDeltaS hw sq
+  have hall : out rF = f ∧ out rK = k ∧ out rT = t ∧
+      out rT2 = t2 ∧ out rViol = r rViol ∧
+      out rVSqrt = r rVSqrt ∧ out 158 = headG f ∧
+      out 161 = headDPos (headG f) e ∧
+      out 163 = headDNeg (headG f) e ∧ out rE = e ∧ out 140 = 1 :=
+    ⟨hdF,
+      by rw [outKeep rK (by rfl), hsK],
+      by rw [outKeep rT (by rfl), hsT],
+      by rw [outKeep rT2 (by rfl), hsT2],
+      by rw [outKeep rViol (by rfl), hsViol, fkKeep rViol (by rfl)],
+      by rw [outKeep rVSqrt (by rfl), hsVSqrt, fkKeep rVSqrt (by rfl)],
+      hdG, hdDp, hdDn, hdE,
+      by rw [outKeep 140 (by rfl), hs140]⟩
+  simpa [headFrontS_decomp, srun_append, f, k, fk, sq, out] using hall
+
+theorem headFront_first_bump_run (c : Cfg) (idx : Nat) (r : RegState)
+    (t t2 e : Nat) (h140 : r 140 = 1)
+    (hT : r rT = t) (hT2 : r rT2 = t2) (hE : r rE = e)
+    (hkFit : r rW + r rC < M) (ht2k : t2 ≤ r rW + r rC)
+    (hkclosed : r rW + r rC < t2 + (2 * (t + 1) + 1))
+    (htFit : t + 1 < M) (hdoubleFit : 2 * (t + 1) + 1 < M)
+    (ht2Fit : t2 + (2 * (t + 1) + 1) < M)
+    (hword : ∀ j, r j < M) :
+    let f := (r rF + r 148) % M
+    let k := r rW + r rC
+    let nt := t + 1
+    let nt2 := t2 + (2 * (t + 1) + 1)
+    let out := srun idx r (headFrontS c)
+    out rF = f ∧ out rK = k ∧ out rT = nt ∧ out rT2 = nt2 ∧
+      out rViol = r rViol ∧ out rVSqrt = r rVSqrt ∧
+      out 158 = headG f ∧ out 161 = headDPos (headG f) e ∧
+      out 163 = headDNeg (headG f) e ∧ out rE = e ∧
+      out 140 = 1 := by
+  let f := (r rF + r 148) % M
+  let k := r rW + r rC
+  let nt := t + 1
+  let nt2 := t2 + (2 * (t + 1) + 1)
+  let fk := srun idx r headFKS
+  let sq := srun idx fk headSqrtS
+  let out := srun idx sq headDeltaS
+  have hfk := headFK_first_run idx r h140 hkFit
+  dsimp only at hfk
+  change fk rF = f ∧ fk rK = k ∧ fk 140 = 1 at hfk
+  rcases hfk with ⟨hfkF, hfkK, hfk140⟩
+  have hfkword : ∀ j, fk j < M := srun_lt_of_lt idx _ r hword
+  have fkKeep (j : Nat) (hw : RegFrame.writes j headFKS = false) :
+      fk j = r j := RegFrame.srun_frame idx j headFKS hw r
+  have hfkT : fk rT = t := by rw [fkKeep rT (by rfl), hT]
+  have hfkT2 : fk rT2 = t2 := by rw [fkKeep rT2 (by rfl), hT2]
+  have hs := headSqrt_bump_run idx fk k t t2 hfk140 hfkK hfkT hfkT2
+    (by simpa [k] using ht2k) (by simpa [k] using hkclosed)
+    htFit hdoubleFit ht2Fit hfkword
+  dsimp only at hs
+  change sq rT = nt ∧ sq rT2 = nt2 ∧ sq rViol = fk rViol ∧
+    sq rVSqrt = fk rVSqrt ∧ sq 140 = 1 at hs
+  rcases hs with ⟨hsT, hsT2, hsViol, hsVSqrt, hs140⟩
+  have hsword : ∀ j, sq j < M := srun_lt_of_lt idx _ fk hfkword
+  have sqKeep (j : Nat) (hw : RegFrame.writes j headSqrtS = false) :
+      sq j = fk j := RegFrame.srun_frame idx j headSqrtS hw fk
+  have hsF : sq rF = f := by rw [sqKeep rF (by rfl), hfkF]
+  have hsK : sq rK = k := by rw [sqKeep rK (by rfl), hfkK]
+  have hsE : sq rE = e := by
+    rw [sqKeep rE (by rfl), fkKeep rE (by rfl), hE]
+  have hd := headDelta_run idx sq f e hsF hsE hsword
+  dsimp only at hd
+  change out 158 = headG f ∧ out 161 = headDPos (headG f) e ∧
+    out 163 = headDNeg (headG f) e ∧ out rF = f ∧ out rE = e at hd
+  rcases hd with ⟨hdG, hdDp, hdDn, hdF, hdE⟩
+  have outKeep (j : Nat) (hw : RegFrame.writes j headDeltaS = false) :
+      out j = sq j := RegFrame.srun_frame idx j headDeltaS hw sq
+  have hall : out rF = f ∧ out rK = k ∧ out rT = nt ∧
+      out rT2 = nt2 ∧ out rViol = r rViol ∧
+      out rVSqrt = r rVSqrt ∧ out 158 = headG f ∧
+      out 161 = headDPos (headG f) e ∧
+      out 163 = headDNeg (headG f) e ∧ out rE = e ∧ out 140 = 1 :=
+    ⟨hdF,
+      by rw [outKeep rK (by rfl), hsK],
+      by rw [outKeep rT (by rfl), hsT],
+      by rw [outKeep rT2 (by rfl), hsT2],
+      by rw [outKeep rViol (by rfl), hsViol, fkKeep rViol (by rfl)],
+      by rw [outKeep rVSqrt (by rfl), hsVSqrt, fkKeep rVSqrt (by rfl)],
+      hdG, hdDp, hdDn, hdE,
+      by rw [outKeep 140 (by rfl), hs140]⟩
+  simpa [headFrontS_decomp, srun_append, f, k, nt, nt2, fk, sq, out] using hall
+
+theorem headPost_first_from_front (c : Cfg) (idx : Nat) (r : RegState)
+    (f k nt nt2 e : Nat)
+    (hfront :
+      let fr := srun idx r (headFrontS c)
+      fr rF = f ∧ fr rK = k ∧ fr rT = nt ∧ fr rT2 = nt2 ∧
+        fr rViol = r rViol ∧ fr rVSqrt = r rVSqrt ∧
+        fr 158 = headG f ∧ fr 161 = headDPos (headG f) e ∧
+        fr 163 = headDNeg (headG f) e ∧ fr rE = e ∧ fr 140 = 1)
+    (hword : ∀ j, r j < M) (hk : 0 < k) (hWM : c.wScale < M)
+    (hsum : headDPos (headG f) e + headDNeg (headG f) e < M)
+    (htvFit : r rTv +
+      (headDPos (headG f) e + headDNeg (headG f) e) < M)
+    (hceilFit : c.wScale - 1 + k < M) :
+    let out := srun idx r (headPostS c)
+    out rF = f ∧ out rK = k ∧ out rT = nt ∧ out rT2 = nt2 ∧
+      out rViol = r rViol ∧ out rVSqrt = r rVSqrt ∧
+      out rDp = headDPos (headG f) e ∧
+      out rDn = headDNeg (headG f) e ∧ out rE = headG f ∧
+      out rTv = r rTv +
+        (headDPos (headG f) e + headDNeg (headG f) e) ∧
+      out 165 = headDPos (headG f) e + headDNeg (headG f) e ∧
+      out 167 = (c.wScale - 1 + k) / k ∧
+      out 168 = c.wScale / k ∧
+      out 169 = headDPos (headG f) e ∧
+      out 170 = headDNeg (headG f) e ∧ out 140 = 1 := by
+  let fr := srun idx r (headFrontS c)
+  let out := srun idx fr (headTailS c)
+  dsimp only at hfront
+  change fr rF = f ∧ fr rK = k ∧ fr rT = nt ∧ fr rT2 = nt2 ∧
+    fr rViol = r rViol ∧ fr rVSqrt = r rVSqrt ∧
+    fr 158 = headG f ∧ fr 161 = headDPos (headG f) e ∧
+    fr 163 = headDNeg (headG f) e ∧ fr rE = e ∧ fr 140 = 1 at hfront
+  rcases hfront with ⟨hfF, hfK, hfT, hfT2, hfViol, hfVSqrt,
+    hfG, hfDp, hfDn, _hfE, hf140⟩
+  have hfrword : ∀ j, fr j < M := srun_lt_of_lt idx _ r hword
+  have hfrTv : fr rTv = r rTv :=
+    RegFrame.srun_frame idx rTv (headFrontS c) (by rfl) r
+  have ht := headTail_first_run c idx fr f k nt nt2 (headG f)
+    (headDPos (headG f) e) (headDNeg (headG f) e)
+    hfF hfK hfT hfT2 hfG hfDp hfDn hf140 hfrword hk hWM hsum
+    (by rw [hfrTv]; exact htvFit) hceilFit
+  dsimp only at ht
+  change out rF = f ∧ out rK = k ∧ out rT = nt ∧ out rT2 = nt2 ∧
+    out rViol = fr rViol ∧ out rVSqrt = fr rVSqrt ∧
+    out rDp = headDPos (headG f) e ∧
+    out rDn = headDNeg (headG f) e ∧ out rE = headG f ∧
+    out rTv = fr rTv +
+      (headDPos (headG f) e + headDNeg (headG f) e) ∧
+    out 165 = headDPos (headG f) e + headDNeg (headG f) e ∧
+    out 167 = (c.wScale - 1 + k) / k ∧ out 168 = c.wScale / k ∧
+    out 169 = headDPos (headG f) e ∧
+    out 170 = headDNeg (headG f) e ∧ out 140 = 1 at ht
+  rcases ht with ⟨htF, htK, htT, htT2, htViol, htVSqrt, htDp, htDn,
+    htE, htTv, htSum, htCeil, htFloor, htPos, htNeg, ht140⟩
+  have hall : out rF = f ∧ out rK = k ∧ out rT = nt ∧
+      out rT2 = nt2 ∧ out rViol = r rViol ∧
+      out rVSqrt = r rVSqrt ∧
+      out rDp = headDPos (headG f) e ∧
+      out rDn = headDNeg (headG f) e ∧ out rE = headG f ∧
+      out rTv = r rTv +
+        (headDPos (headG f) e + headDNeg (headG f) e) ∧
+      out 165 = headDPos (headG f) e + headDNeg (headG f) e ∧
+      out 167 = (c.wScale - 1 + k) / k ∧ out 168 = c.wScale / k ∧
+      out 169 = headDPos (headG f) e ∧
+      out 170 = headDNeg (headG f) e ∧ out 140 = 1 :=
+    ⟨htF, htK, htT, htT2,
+      by rw [htViol, hfViol],
+      by rw [htVSqrt, hfVSqrt],
+      htDp, htDn, htE,
+      by rw [htTv, hfrTv],
+      htSum, htCeil, htFloor, htPos, htNeg, ht140⟩
+  simpa [headPostS_tail_decomp, srun_append, fr, out] using hall
+
+theorem headPost_first_noBump_run (c : Cfg) (idx : Nat) (r : RegState)
+    (t t2 e : Nat) (h140 : r 140 = 1)
+    (hT : r rT = t) (hT2 : r rT2 = t2) (hE : r rE = e)
+    (hkFit : r rW + r rC < M) (hklt : r rW + r rC < t2)
+    (hword : ∀ j, r j < M) (hk : 0 < r rW + r rC)
+    (hWM : c.wScale < M)
+    (hsum : headDPos (headG ((r rF + r 148) % M)) e +
+      headDNeg (headG ((r rF + r 148) % M)) e < M)
+    (htvFit : r rTv +
+      (headDPos (headG ((r rF + r 148) % M)) e +
+        headDNeg (headG ((r rF + r 148) % M)) e) < M)
+    (hceilFit : c.wScale - 1 + (r rW + r rC) < M) :
+    let f := (r rF + r 148) % M
+    let k := r rW + r rC
+    let out := srun idx r (headPostS c)
+    out rF = f ∧ out rK = k ∧ out rT = t ∧ out rT2 = t2 ∧
+      out rViol = r rViol ∧ out rVSqrt = r rVSqrt ∧
+      out rDp = headDPos (headG f) e ∧ out rDn = headDNeg (headG f) e ∧
+      out rE = headG f ∧
+      out rTv = r rTv + (headDPos (headG f) e + headDNeg (headG f) e) ∧
+      out 165 = headDPos (headG f) e + headDNeg (headG f) e ∧
+      out 167 = (c.wScale - 1 + k) / k ∧ out 168 = c.wScale / k ∧
+      out 169 = headDPos (headG f) e ∧
+      out 170 = headDNeg (headG f) e ∧ out 140 = 1 := by
+  apply headPost_first_from_front c idx r
+    ((r rF + r 148) % M) (r rW + r rC) t t2 e
+  · exact headFront_first_noBump_run c idx r t t2 e h140 hT hT2 hE
+      hkFit hklt hword
+  · exact hword
+  · exact hk
+  · exact hWM
+  · exact hsum
+  · exact htvFit
+  · exact hceilFit
+
+theorem headPost_first_bump_run (c : Cfg) (idx : Nat) (r : RegState)
+    (t t2 e : Nat) (h140 : r 140 = 1)
+    (hT : r rT = t) (hT2 : r rT2 = t2) (hE : r rE = e)
+    (hkFit : r rW + r rC < M) (ht2k : t2 ≤ r rW + r rC)
+    (hkclosed : r rW + r rC < t2 + (2 * (t + 1) + 1))
+    (htFit : t + 1 < M) (hdoubleFit : 2 * (t + 1) + 1 < M)
+    (ht2Fit : t2 + (2 * (t + 1) + 1) < M)
+    (hword : ∀ j, r j < M) (hk : 0 < r rW + r rC)
+    (hWM : c.wScale < M)
+    (hsum : headDPos (headG ((r rF + r 148) % M)) e +
+      headDNeg (headG ((r rF + r 148) % M)) e < M)
+    (htvFit : r rTv +
+      (headDPos (headG ((r rF + r 148) % M)) e +
+        headDNeg (headG ((r rF + r 148) % M)) e) < M)
+    (hceilFit : c.wScale - 1 + (r rW + r rC) < M) :
+    let f := (r rF + r 148) % M
+    let k := r rW + r rC
+    let nt := t + 1
+    let nt2 := t2 + (2 * (t + 1) + 1)
+    let out := srun idx r (headPostS c)
+    out rF = f ∧ out rK = k ∧ out rT = nt ∧ out rT2 = nt2 ∧
+      out rViol = r rViol ∧ out rVSqrt = r rVSqrt ∧
+      out rDp = headDPos (headG f) e ∧ out rDn = headDNeg (headG f) e ∧
+      out rE = headG f ∧
+      out rTv = r rTv + (headDPos (headG f) e + headDNeg (headG f) e) ∧
+      out 165 = headDPos (headG f) e + headDNeg (headG f) e ∧
+      out 167 = (c.wScale - 1 + k) / k ∧ out 168 = c.wScale / k ∧
+      out 169 = headDPos (headG f) e ∧
+      out 170 = headDNeg (headG f) e ∧ out 140 = 1 := by
+  apply headPost_first_from_front c idx r
+    ((r rF + r 148) % M) (r rW + r rC)
+    (t + 1) (t2 + (2 * (t + 1) + 1)) e
+  · exact headFront_first_bump_run c idx r t t2 e h140 hT hT2 hE
+      hkFit ht2k hkclosed htFit hdoubleFit ht2Fit hword
+  · exact hword
+  · exact hk
+  · exact hWM
+  · exact hsum
+  · exact htvFit
+  · exact hceilFit
 
 theorem headFront_middle_run (c : Cfg) (idx : Nat) (r : RegState)
     (h140 : r 140 = 0) (hword : ∀ j, r j < M) :
