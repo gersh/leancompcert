@@ -385,6 +385,32 @@ theorem okDiv_defined (c : CDEMAbelScan.Cfg) (len k : Nat) (st : AState)
   simp [okDivS, lift, AllDefined, ADefined, hden, astep, sdest, sval,
     denoteOperand, denoteOp, AState.writeReg]
 
+/-- The four-instruction quotient prefix of the literal predicate. -/
+def okQuotS (c : CDEMAbelScan.Cfg) (rs : Nat) : List Instr :=
+  okGuardS rs ++ okDivS c
+
+/-- For a positive word candidate and a word-sized weight, the literal prefix
+computes the Euclidean quotient and remainder used by `okFormula`. -/
+theorem okQuot_arun (c : CDEMAbelScan.Cfg) (k : Nat) (st : AState)
+    (rs : Nat) (hrs100 : rs ≠ 100) (hs : 0 < st.regs rs)
+    (hsM : st.regs rs < M) (hW : c.wScale < M) :
+    let out := arun k st (lift (okQuotS c rs))
+    out.regs 100 = st.regs rs ∧
+      out.regs 101 = c.wScale / st.regs rs ∧
+      out.regs 102 = c.wScale % st.regs rs ∧
+      out.arr = st.arr := by
+  have hs0 : st.regs rs ≠ 0 := Nat.ne_of_gt hs
+  have hsmod : st.regs rs % M = st.regs rs := Nat.mod_eq_of_lt hsM
+  have hWmod : c.wScale % M = c.wScale := Nat.mod_eq_of_lt hW
+  have hdivM : c.wScale / st.regs rs < M :=
+    Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hW
+  have hremM : c.wScale % st.regs rs < M :=
+    Nat.lt_trans (Nat.mod_lt _ hs) hsM
+  rw [arun_lift]
+  simp [okQuotS, okGuardS, okDivS, srun, sdest, sval, denoteOperand,
+    denoteOp, RegState.set, hs0, hrs100, hsmod, hWmod,
+    Nat.mod_eq_of_lt hdivM, Nat.mod_eq_of_lt hremM]
+
 /-- The full literal predicate block cannot fail through division by zero.
 No semantic claim is hidden here: correctness of the Boolean result remains a
 separate refinement theorem, while this theorem closes partial definedness. -/
