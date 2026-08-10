@@ -174,4 +174,73 @@ theorem addWideBody_arun_exact (k : Nat) (st : AState)
   rw [addWideBody_arun_mod k st accLo accHi alo ahi carry hr hacc hadd,
     Nat.mod_eq_of_lt hfit]
 
+/-! ## Exact-predicate definedness
+
+`okBody` contains the only register-valued divisions in the reciprocal-square-
+root predicate.  Expanding all 63 instructions in one `simp` produces a
+quadratic state term.  The proof therefore uses the intended scalar-block
+boundary: two instructions manufacture a nonzero divisor, two perform the
+division and remainder, and the entire tail is division-free.
+-/
+
+/-- Scalar view of the literal CDEM predicate block. -/
+def okS (c : CDEMAbelScan.Cfg) (rs gate ok : Nat) : List Instr :=
+  (CDEMAbelScan.okBody c rs gate ok).map Section413G1Denote.scalarOf
+
+theorem okBody_lift (c : CDEMAbelScan.Cfg) (rs gate ok : Nat) :
+    CDEMAbelScan.okBody c rs gate ok = lift (okS c rs gate ok) := by
+  simp [okS, CDEMAbelScan.okBody, CDEMAbelScan.mulWideBody,
+    Section413G1Denote.scalarOf, lift]
+
+def okGuardS (rs : Nat) : List Instr :=
+  [ .binop 100 .eq (.reg rs) (.lit 0)
+  , .binop 100 .add (.reg 100) (.reg rs) ]
+
+def okDivS (c : CDEMAbelScan.Cfg) : List Instr :=
+  [ .binop 101 .udiv (.lit c.wScale) (.reg 100)
+  , .binop 102 .urem (.lit c.wScale) (.reg 100) ]
+
+def okRestS (c : CDEMAbelScan.Cfg) (rs gate ok : Nat) : List Instr :=
+  (okS c rs gate ok).drop 4
+
+theorem okS_decomp (c : CDEMAbelScan.Cfg) (rs gate ok : Nat) :
+    okS c rs gate ok = okGuardS rs ++ okDivS c ++ okRestS c rs gate ok := by
+  simp [okS, okGuardS, okDivS, okRestS, CDEMAbelScan.okBody,
+    CDEMAbelScan.mulWideBody, Section413G1Denote.scalarOf]
+
+/-- The guarded divisor is `1` at `s = 0` and `s` otherwise.  The register
+separation hypothesis is exactly the instruction-order condition needed to
+read the input after scratch register `100` is written. -/
+theorem okGuard_denominator (k : Nat) (s : RegState) (rs : Nat)
+    (hrs100 : rs ≠ 100) (hrs : s rs < M) :
+    srun k s (okGuardS rs) 100 ≠ 0 := by
+  have hM1 : M ≠ 1 := by decide
+  by_cases hz : s rs = 0
+  · simp [okGuardS, srun, sdest, sval, denoteOperand, denoteOp,
+      RegState.set, hz, hrs100, hM1]
+  · have hmod : s rs % M = s rs := Nat.mod_eq_of_lt hrs
+    simp [okGuardS, srun, sdest, sval, denoteOperand, denoteOp,
+      RegState.set, hz, hrs100, hmod]
+
+theorem okDiv_defined (c : CDEMAbelScan.Cfg) (len k : Nat) (st : AState)
+    (hden : st.regs 100 ≠ 0) :
+    AllDefined len k st (lift (okDivS c)) := by
+  simp [okDivS, lift, AllDefined, ADefined, hden, astep, sdest, sval,
+    denoteOperand, denoteOp, AState.writeReg]
+
+/-- The full literal predicate block cannot fail through division by zero.
+No semantic claim is hidden here: correctness of the Boolean result remains a
+separate refinement theorem, while this theorem closes partial definedness. -/
+theorem okBody_defined (c : CDEMAbelScan.Cfg) (len k : Nat) (st : AState)
+    (rs gate ok : Nat) (hrs100 : rs ≠ 100) (hrs : st.regs rs < M) :
+    AllDefined len k st (CDEMAbelScan.okBody c rs gate ok) := by
+  rw [okBody_lift, okS_decomp, lift_append, lift_append,
+    AllDefined_append, AllDefined_append]
+  refine ⟨⟨allDefined_lift_of_noDiv len k _ st (by rfl), ?_⟩, ?_⟩
+  · apply okDiv_defined
+    rw [arun_lift]
+    exact okGuard_denominator k st.regs rs hrs100 hrs
+  · apply allDefined_lift_of_noDiv
+    rfl
+
 end LeanCompCert.Ports.CDEMAbelPrimitives

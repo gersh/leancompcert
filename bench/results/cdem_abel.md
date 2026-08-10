@@ -98,12 +98,22 @@ literal array-machine blocks used in this scan:
   natural-number product;
 * `addWideBody_arun_mod` and `addWideBody_arun_exact`: the accumulator is
   addition modulo `2^128`, and ordinary exact addition under the explicit
-  no-wrap invariant.
+  no-wrap invariant;
+* `okBody_defined`: the exact reciprocal-square-root predicate's two
+  register-valued divisions cannot divide by zero.
 
 All three theorems include the array frame, so these scalar stages cannot
 silently modify the sieve plane.  A fresh source check under
 `MemoryHigh=3G`, `MemoryMax=4G`, `MemorySwapMax=0`, and `LEAN_NUM_THREADS=1`
 took `0.21 s`, peaked at `561308 KiB` RSS, and used no swap.
+
+The predicate definedness proof is deliberately split after its two-instruction
+divisor guard and two-instruction division stage.  A diagnostic one-shot
+`simp` over all 63 instructions reached `3.77 GiB` RSS after 73 seconds and
+was interrupted inside a 4 GiB hard cap.  The block-split source proof checked
+in `0.33 s`, peaked at `572076 KiB`, and used no swap inside a stricter 2 GiB
+hard cap.  This is also the required build shape for later predicate-value
+and bisection proofs.
 
 Still not proved: composition of these primitives with the μ-table build,
 window marking, exact reciprocal-square-root bisection, and the outer loop to
