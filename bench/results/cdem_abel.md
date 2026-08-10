@@ -1042,3 +1042,24 @@ source refinement is now purely finite arithmetic over `MarkState`: prove
 the production resident table makes every iterated cursor `MarkStepReady`,
 use the explicit `markBudget` bound to reach the terminal cursor, and identify
 the completed executable plane with `Ref.deltaF` on each window cell.
+
+`CDEMAbelMarkReady.lean` discharges the first of those finite obligations.
+`MarkInv` keeps the resident `muCode` table, divisor interval, and word bounds
+across all three executable cursor branches.  Consequently
+`first_iter_ready` proves every iteration from the emitted first-mark state is
+ready, and `bodyIter_markState_from_start_ready` removes the abstract
+per-iteration readiness premise from the literal scheduled-code telescope.
+
+These checks used the same serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh finite readiness source | 0.30 s | 593,696 KiB | 148,074,496 B | 0 |
+| finite readiness module build | 0.44 s | 605,288 KiB | 173,965,312 B | 0 |
+| fresh three-theorem axiom print | 0.16 s | 526,360 KiB | 87,552,000 B | 0 |
+| cached umbrella consumer build | 0.63 s | 1,732,456 KiB | 217,718,784 B | 0 |
+
+The readiness capstones print only `[propext, Quot.sound]` (the finite
+three-code range lemma needs only `propext`). Remaining marking work is the
+finite resident-table construction, the `markBudget` terminal bound, and the
+identification of the completed executable plane with `Ref.deltaF`.
