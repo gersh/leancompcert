@@ -1018,3 +1018,27 @@ marking branch now has both complete literal `markBody` semantics and an
 actual scheduled-body theorem. The remaining marking proof is the finite
 cursor trace/telescope and its identification with the source resident
 divisor convolution.
+
+`CDEMAbelMarkTelescope.lean` adds the executable finite cursor used for that
+trace. `MarkState.step` has exactly the resident-update, divisor-advance, and
+terminal-park branches; `body_markState_step` refines one literal scheduled
+body to that function. `bodyIter_markState_refines` telescopes any finite
+ready trace, while `body_first_markState_rep` and
+`bodyIter_markState_from_start` connect it to the actual first `mu(1)` body.
+The machine theorem therefore starts from emitted code rather than an
+assumed post-reset surrogate.
+
+Under the serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh finite mark telescope source | 20.48 s | 653,192 KiB | 210,993,152 B | 0 |
+| finite mark telescope module build | 18.62 s | 698,960 KiB | 276,439,040 B | 0 |
+| fresh four-theorem axiom print | 0.14 s | 526,188 KiB | 88,313,856 B | 0 |
+| cached umbrella consumer build | 0.73 s | 1,732,180 KiB | 215,953,408 B | 0 |
+
+All telescope capstones print only `[propext, Quot.sound]`. The remaining
+source refinement is now purely finite arithmetic over `MarkState`: prove
+the production resident table makes every iterated cursor `MarkStepReady`,
+use the explicit `markBudget` bound to reach the terminal cursor, and identify
+the completed executable plane with `Ref.deltaF` on each window cell.
