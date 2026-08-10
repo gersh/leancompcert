@@ -857,3 +857,26 @@ Under the same serialized one-worker 2 GiB zero-swap cgroup:
 | cached umbrella consumer build | 0.73 s | 1,729,924 KiB | 217,202,688 B | 0 |
 
 Both new capstones print only `[propext, Classical.choice, Quot.sound]`.
+
+`LeanCompCert/Ports/CDEMAbelMark.lean` begins the active window-marking
+denotation. `markBody_first_active` is a theorem about the complete literal
+emitted `markBody`: at `rR = 0` it proves the resident update
+`window[0] := window[0] + μ(1)` modulo the machine word, with `μ(1) = +1`,
+and the exact following cursor `(d, sign, multiple, cell) = (1, +1, 1, 0)`.
+The proof factors the instruction list into reset, store, divisor head,
+store-free table lookup, cursor commit, and budget suffix. This replaces an
+initial monolithic normalization that remained memory-safe but repeated the
+same tail work for minutes.
+
+Under the serialized one-worker 2 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh active-first-mark source | 1.87 s | 611,256 KiB | 171,847,680 B | 0 |
+| active-first-mark module build | 1.94 s | 627,536 KiB | 201,203,712 B | 0 |
+| fresh capstone axiom print | 0.15 s | 525,572 KiB | 88,100,864 B | 0 |
+| cached umbrella consumer build | 0.63 s | 1,729,988 KiB | 217,079,808 B | 0 |
+
+The capstone prints only `[propext, Quot.sound]`. The next marking step is to
+give the active non-start mark/cursor transition a source state and telescope
+it over the finite `markSteps` budget.
