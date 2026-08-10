@@ -193,6 +193,15 @@ module build took `7.94 s` and peaked at `656320 KiB`.  Fresh axiom prints use
 only `propext` and `Quot.sound` (the structural and scalar-stage theorems use
 only `propext`).
 
+The first-round proof is now staged as well: `headPre_first_run` proves the
+literal selector and live window address, `headFK_first_run` proves the loaded
+cell is added to wrapped `F` and latches the exact integer `k`, and
+`headSqrt_noBump_run`/`headSqrt_bump_run` prove both branches of the checked
+single-step square-root update.  The remaining first-round substage is the
+signed `G` decoder, split increment, and latching tail.  The enlarged source
+check took `7.46 s`, peaked at `616704 KiB`, and used no swap under the same
+cap; fresh axiom prints use only `propext` and `Quot.sound`.
+
 Still not proved: the first `accHead` transition and its composition
 with the bisection schedule, then the μ-table build, window marking,
 full accumulators, and outer loop to

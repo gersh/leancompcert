@@ -121,6 +121,25 @@ theorem headPre_last_run (c : Cfg) (idx : Nat) (r : RegState)
     hkrLast', hbs0, hgate, hzero', h0M, h1M,
     Nat.mod_eq_of_lt hbsM, Nat.mod_eq_of_lt hsink]
 
+theorem headPre_first_run (c : Cfg) (idx : Nat) (r : RegState)
+    (hkr : r rKr = 0) (hbsPos : 0 < c.bsSteps)
+    (hbsM : c.bsSteps < M) (hgate : r 43 = 1)
+    (haddr : r rC + c.winBase < M) :
+    let out := srun idx r (headPreS c)
+    out 140 = 1 ∧ out 141 = 0 ∧ out 142 = 0 ∧
+      out 144 = r rC + c.winBase := by
+  have h0M : (0 : Nat) % M = 0 := by decide
+  have h1M : (1 : Nat) % M = 1 := by decide
+  have hkr' : r 14 = 0 := by simpa [rKr] using hkr
+  have hbs0 : c.bsSteps ≠ 0 := Nat.ne_of_gt hbsPos
+  have h0bs : 0 ≠ c.bsSteps := Ne.symm hbs0
+  have hcoeff : 1 + (M - 1) = M := by decide
+  have haddr' : r 15 + c.winBase < M := by simpa [rC] using haddr
+  simp [headPreS, Section413G1Denote.muxS, srun, sdest, sval,
+    denoteOperand, denoteOp, RegState.set, rKr, rC, rZero,
+    hkr', hgate, h0M, h1M, hcoeff, Nat.mod_eq_of_lt hbsM]
+  exact ⟨by simp [h0bs, h0M], Nat.mod_eq_of_lt haddr'⟩
+
 def headFrontS (_c : Cfg) : List Instr :=
   [ .binop 149 .mul (.reg 148) (.reg 140)
   , .binop rF .add (.reg rF) (.reg 149)
@@ -166,6 +185,110 @@ def headRecipS (c : Cfg) : List Instr :=
 theorem headPostS_decomp (c : Cfg) :
     headPostS c = headFrontS c ++ headLatchS ++ headRecipS c := by
   simp [headPostS, headFrontS, headLatchS, headRecipS, List.append_assoc]
+
+def headFKS : List Instr :=
+  [ .binop 149 .mul (.reg 148) (.reg 140)
+  , .binop rF .add (.reg rF) (.reg 149)
+  , .binop 150 .add (.reg rW) (.reg rC) ] ++
+  Section413G1Denote.muxS rK 140 150 rK 151
+
+def headSqrtS : List Instr :=
+  [ .binop 152 .ge (.reg rK) (.reg rT2)
+  , .binop 152 .mul (.reg 152) (.reg 140)
+  , .binop rT .add (.reg rT) (.reg 152)
+  , .binop 153 .mul (.reg rT) (.lit 2)
+  , .binop 153 .add (.reg 153) (.lit 1)
+  , .binop 153 .mul (.reg 153) (.reg 152)
+  , .binop rT2 .add (.reg rT2) (.reg 153)
+  , .binop 154 .ge (.reg rK) (.reg rT2)
+  , .binop 154 .mul (.reg 154) (.reg 140)
+  , .binop rViol .add (.reg rViol) (.reg 154)
+  , .binop rVSqrt .add (.reg rVSqrt) (.reg 154) ]
+
+def headDeltaS : List Instr :=
+  [ .binop 155 .sub (.lit 1) (.reg rF)
+  , .binop 156 .ge (.reg 155) (.lit 9223372036854775808)
+  , .binop 157 .sub (.lit 0) (.reg 155) ] ++
+  Section413G1Denote.muxS 158 156 157 155 159 ++
+  [ .binop 160 .gt (.reg 158) (.reg rE)
+  , .binop 161 .sub (.reg 158) (.reg rE)
+  , .binop 161 .mul (.reg 161) (.reg 160)
+  , .binop 162 .gt (.reg rE) (.reg 158)
+  , .binop 163 .sub (.reg rE) (.reg 158)
+  , .binop 163 .mul (.reg 163) (.reg 162) ]
+
+theorem headFrontS_decomp (c : Cfg) :
+    headFrontS c = headFKS ++ headSqrtS ++ headDeltaS := by
+  simp [headFrontS, headFKS, headSqrtS, headDeltaS, List.append_assoc]
+
+theorem headFK_first_run (idx : Nat) (r : RegState)
+    (h140 : r 140 = 1) (hkFit : r rW + r rC < M) :
+    let out := srun idx r headFKS
+    out rF = (r rF + r 148) % M ∧ out rK = r rW + r rC ∧
+      out 140 = 1 := by
+  have h0M : (0 : Nat) % M = 0 := by decide
+  have h1M : (1 : Nat) % M = 1 := by decide
+  have hcoeff : 1 + (M - 1) = M := by decide
+  have hkFit' : r 3 + r 15 < M := by simpa [rW, rC] using hkFit
+  simp [headFKS, Section413G1Denote.muxS, srun, sdest, sval,
+    denoteOperand, denoteOp, RegState.set, rF, rK, rW, rC,
+    h140, h0M, h1M, hcoeff]
+  exact Nat.mod_eq_of_lt hkFit'
+
+theorem headSqrt_noBump_run (idx : Nat) (r : RegState) (k t t2 : Nat)
+    (h140 : r 140 = 1) (hK : r rK = k) (hT : r rT = t)
+    (hT2 : r rT2 = t2) (hklt : k < t2) (hword : ∀ j, r j < M) :
+    let out := srun idx r headSqrtS
+    out rT = t ∧ out rT2 = t2 ∧ out rViol = r rViol ∧
+      out rVSqrt = r rVSqrt ∧ out 140 = 1 := by
+  have h0M : (0 : Nat) % M = 0 := by decide
+  have hK' : r 30 = k := by simpa [rK] using hK
+  have hT' : r 20 = t := by simpa [rT] using hT
+  have hT2' : r 21 = t2 := by simpa [rT2] using hT2
+  have ht2M : t2 % M = t2 :=
+    Nat.mod_eq_of_lt (by simpa [hT2'] using hword 21)
+  have htM : t % M = t :=
+    Nat.mod_eq_of_lt (by simpa [hT'] using hword 20)
+  simp [headSqrtS, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+    rK, rT, rT2, rViol, rVSqrt, h140, hK', hT', hT2',
+    Nat.not_le_of_gt hklt, h0M, htM, ht2M,
+    Nat.mod_eq_of_lt (hword 22), Nat.mod_eq_of_lt (hword 247)]
+
+theorem headSqrt_bump_run (idx : Nat) (r : RegState) (k t t2 : Nat)
+    (h140 : r 140 = 1) (hK : r rK = k) (hT : r rT = t)
+    (hT2 : r rT2 = t2) (ht2k : t2 ≤ k)
+    (hkclosed : k < t2 + (2 * (t + 1) + 1))
+    (htFit : t + 1 < M) (hdoubleFit : 2 * (t + 1) + 1 < M)
+    (ht2Fit : t2 + (2 * (t + 1) + 1) < M)
+    (hword : ∀ j, r j < M) :
+    let out := srun idx r headSqrtS
+    out rT = t + 1 ∧ out rT2 = t2 + (2 * (t + 1) + 1) ∧
+      out rViol = r rViol ∧ out rVSqrt = r rVSqrt ∧ out 140 = 1 := by
+  have h0M : (0 : Nat) % M = 0 := by decide
+  have h1M : (1 : Nat) % M = 1 := by decide
+  have hK' : r 30 = k := by simpa [rK] using hK
+  have hT' : r 20 = t := by simpa [rT] using hT
+  have hT2' : r 21 = t2 := by simpa [rT2] using hT2
+  have hform : t2 + ((t + 1) * 2 + 1) = t2 + (2 * (t + 1) + 1) := by
+    omega
+  have hdoubleFit' : (t + 1) * 2 + 1 < M := by omega
+  have hnewM : (t2 + (2 * (t + 1) + 1)) % M =
+      t2 + (2 * (t + 1) + 1) := Nat.mod_eq_of_lt ht2Fit
+  have hnle : ¬ t2 + (2 * (t + 1) + 1) ≤ k := Nat.not_le_of_gt hkclosed
+  simp [headSqrtS, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+    rK, rT, rT2, rViol, rVSqrt, h140, hK', hT', hT2', ht2k,
+    h0M, h1M, Nat.mod_eq_of_lt htFit,
+    Nat.mod_eq_of_lt hdoubleFit', hform,
+    hnewM, hnle, Nat.mod_eq_of_lt (hword 22), Nat.mod_eq_of_lt (hword 247)]
+
+def headX (f : Nat) : Nat := (1 + (M - f)) % M
+
+def headG (f : Nat) : Nat :=
+  if 9223372036854775808 ≤ headX f then (M - headX f) % M else headX f
+
+def headDPos (g e : Nat) : Nat := if e < g then g - e else 0
+
+def headDNeg (g e : Nat) : Nat := if g < e then e - g else 0
 
 theorem headFront_middle_run (c : Cfg) (idx : Nat) (r : RegState)
     (h140 : r 140 = 0) (hword : ∀ j, r j < M) :
