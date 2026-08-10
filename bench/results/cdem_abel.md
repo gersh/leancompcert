@@ -1148,3 +1148,26 @@ These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
 All three capstones print only `[propext, Quot.sound]`. Remaining table work is
 to prove readiness and the closed cursor trace for the production prime list,
 then identify the final pure row code with `Ref.muCode`.
+
+`CDEMAbelSieveReady.lean` removes that abstract readiness premise. The rank
+`n·pn+pj` increases by exactly one on either row branch; positivity of the
+prime-table prefix is invariant because neither the resident-table nor sink
+store overlaps it. Consequently every iteration strictly before `sieveLen`
+is ready, `sieveIter_state_refines_from_zero` telescopes the whole finite
+machine trace without a per-step oracle, and `sieve_iter_full_cursors` proves
+the exact terminal cursor `(n,pj)=(K+1,0)`.
+
+These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh closed-cursor source | 0.25 s | 568,292 KiB | 120,823,808 B | 0 |
+| closed-cursor module build | 0.33 s | 576,080 KiB | 145,092,608 B | 0 |
+| fresh four-capstone axiom print | 0.15 s | 531,316 KiB | 94,609,408 B | 0 |
+| cached umbrella consumer build | 0.74 s | 1,736,304 KiB | 222,920,704 B | 0 |
+
+The capstones use only Lean's ordinary foundations: the rank and closed-cursor
+lemmas print `[propext, Quot.sound]`; readiness additionally prints
+`Classical.choice`. Remaining resident-table work is the pure arithmetic
+identification of each completed row with `Ref.muCode`, followed by the
+emitted initialization/scheduler connection.
