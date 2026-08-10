@@ -926,3 +926,27 @@ The prefix, middle, and complete transition each print only
 `[propext, Quot.sound]`. Remaining marking work is the terminal cursor case,
 the finite `markSteps` telescope, and identification of the finished resident
 window with the source divisor convolution.
+
+The terminal branch is now complete too. `markBody_active_cursor_terminal`
+proves that an active non-start cursor at `d = kBound` with an out-of-window
+multiple leaves the divisor at `kBound`, parks `(sign,multiple)` at
+`(0,segLen)`, and frames every non-sink array cell. The first direct terminal
+normalization was stopped when its term expansion approached the memory cap.
+The successful proof instead frames the arbitrary eight-instruction offset
+calculation and normalizes only the final five-instruction exhausted-parking
+block.
+
+These checks used an even stricter serialized one-worker cgroup:
+`MemoryHigh=1G`, `MemoryMax=1536M`, `MemorySwapMax=0`.
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh terminal cursor source | 15.57 s | 793,204 KiB | 378,474,496 B | 0 |
+| terminal cursor module build | 15.86 s | 830,464 KiB | 445,353,984 B | 0 |
+| fresh three-theorem axiom print | 0.15 s | 524,356 KiB | 88,109,056 B | 0 |
+| cached umbrella consumer build | 0.63 s | 1,730,524 KiB | 219,435,008 B | 0 |
+
+All three terminal theorems print only `[propext, Quot.sound]`. Every active
+mark-body branch now has literal semantics; remaining marking work is the
+finite `markSteps` telescope and the source identification of the completed
+resident divisor-convolution window.
