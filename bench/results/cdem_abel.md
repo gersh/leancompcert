@@ -348,6 +348,17 @@ Fresh axiom prints contain only `propext`, `Classical.choice`, and
 `600212/594072 KiB`. All four ran with one worker, a 2 GiB hard cap, and no
 swap.
 
+`LeanCompCert/Ports/CDEMAbelOuter.lean` starts the literal outer-loop layer.
+`selectors_acc_run` proves the five selector instructions set the sieve and
+mark gates to zero and the accumulation gate to one in the live accumulation
+range. `tail_continue_run` proves the six-instruction tail increments the
+period cursor without moving the window base, while `tail_wrap_run` proves the
+terminal cursor resets to zero and advances the window base by exactly
+`segLen`; all three preserve the array. The source check took `0.25 s` at
+`588812 KiB`, and the module build took `0.33 s` at `596492 KiB`, with one
+worker, the 2 GiB hard cap, and no swap. Fresh axiom prints use only `propext`
+and `Quot.sound`.
+
 Still not proved: composition of this now-complete 62-iteration accumulator
 schedule with the μ-table build and window marking, the global accumulator
 no-wrap invariant, and the outer loop to
