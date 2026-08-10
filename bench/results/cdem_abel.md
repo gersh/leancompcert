@@ -659,3 +659,25 @@ are:
 The finite outer iterator and the production invariant that supplies the first
 accumulator contract remain before the retained production trace has a
 complete denotation proof.
+
+`LeanCompCert/Ports/CDEMAbelOuterSchedule.lean` now supplies that finite
+iterator layer without re-elaborating the expensive body proofs.
+`bodyIter_middle_contracts` telescopes any finite family of literal middle-body
+contracts, including live-array preservation and scratch clearing after every
+nonempty trace. `bodySchedule_of_contracts` then composes literal first,
+middle, and final contracts into `OuterFullAccSpec`, with the exact two wide
+`U` additions, exact wide `V` addition, cleared window cell, cleared sink,
+round reset, and cell advance.
+
+Fresh axiom prints are `[propext, Quot.sound]` for the iterator and `[propext]`
+for the final contract composition. Under the one-worker 2 GiB zero-swap cap:
+
+| check | elapsed | peak RSS | swap |
+| --- | ---: | ---: | ---: |
+| fresh scheduler source | 0.28 s | 579,444 KiB | 0 |
+| scheduler module build | 0.34 s | 565,872 KiB | 0 |
+
+The remaining local scheduling obligation is now readiness: derive each
+literal body contract from a production invariant that also tracks the period
+cursor and window base. The denotation proof must then connect the resident
+Möbius table and streamed floor convolution to that invariant.
