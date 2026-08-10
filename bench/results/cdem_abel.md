@@ -329,11 +329,28 @@ source check took `62.13 s` at `651648 KiB`, and its module build took
 `76.72 s` at `708784 KiB` including rebuilt dependencies.  Every run used one
 worker, a 2 GiB hard cap, and no swap; no native evaluator is used.
 
-Still not proved: composition of the now-complete head/product/bisection
-endpoint readiness for the full 62-round schedule (the production-fit,
-quotient, bracket, and latch components are now discharged), then the
-μ-table build and window marking,
-full accumulators, and outer loop to
+The finite production schedule is now closed. `FirstBodySpec` exposes the
+latched key, signed increments, gate, and zero in addition to its accumulator
+contract. `ProductionMiddleCore` carries those values together with the exact
+round/cell counters, zero sink, and all register/array word bounds.
+`accIter_production_ready` inductively constructs every interior
+`MiddleStepReady` state from the actual first body; no family of 60 readiness
+hypotheses remains. `accBody_final_of_production_core` derives the final
+literal body from that endpoint and `final_step_exact`.
+`accSchedule_production` composes the actual first body, all
+`bsSteps - 1` interior bodies, and the final body into one `FullAccSpec` whose
+bracket is the singleton `exactRoot`, whose `U` and `V` changes are exact, and
+whose round/cell, failure-counter, and array effects match the program. Its
+only terminal arithmetic premise is the explicit 128-bit `V` no-wrap bound.
+Fresh axiom prints contain only `propext`, `Classical.choice`, and
+`Quot.sound`. The enlarged body source/build checks took `110.90/111.68 s` at
+`712556/734196 KiB`; the schedule source/build checks took `0.48/0.63 s` at
+`600212/594072 KiB`. All four ran with one worker, a 2 GiB hard cap, and no
+swap.
+
+Still not proved: composition of this now-complete 62-iteration accumulator
+schedule with the μ-table build and window marking, the global accumulator
+no-wrap invariant, and the outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.
 

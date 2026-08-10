@@ -10,6 +10,7 @@ open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Ports
 open LeanCompCert.Ports.CDEMAbelScan
 open LeanCompCert.Ports.CDEMAbelPrimitives
+open LeanCompCert.Ports.CDEMAbelAccumulation
 open LeanCompCert.Ports.CDEMAbelBisection
 open LeanCompCert.Ports.CDEMAbelBody
 
@@ -207,6 +208,90 @@ theorem accBody_middle_of_ready (c : Cfg) (idx : Nat) (st : AState)
     h.round_counter_word
   simpa [h.key, h.low, h.high] using hr
 
+structure ProductionMiddleCore (c : Cfg) (k dp dn n cell : Nat)
+    (st : AState) : Prop where
+  key : st.regs rK = k
+  dPos : st.regs rDp = dp
+  dNeg : st.regs rDn = dn
+  gate : st.regs 43 = 1
+  zero : st.regs rZero = 0
+  round : st.regs rKr = n + 1
+  cell : st.regs rC = cell
+  sink_zero : st.arr c.sink = 0
+  regs_word : ∀ j, st.regs j < M
+  arr_word : ∀ j, st.arr j < M
+
+theorem productionMiddleCore_step (c : Cfg) (idx : Nat) (st : AState)
+    (k dp dn n cell : Nat) (p : Bracket)
+    (hcore : ProductionMiddleCore c k dp dn n cell st)
+    (hready : MiddleStepReady c k p st) :
+    ProductionMiddleCore c k dp dn (n + 1) cell
+      (arun idx st c.accBody) := by
+  have hh := accHead_middle_run c idx st hready.round_ne_zero
+    hready.round_ne_last hready.gate hready.zero hready.steps_word
+    hready.sink_word hready.sink_zero hready.regs_word hready.arr_word
+    hready.key_pos hready.scale_word hready.delta_sum_word hready.ceil_word
+  have hl :
+      (arun idx st c.accBody).regs rK = st.regs rK ∧
+        (arun idx st c.accBody).regs rDp = st.regs rDp ∧
+        (arun idx st c.accBody).regs rDn = st.regs rDn ∧
+        (arun idx st c.accBody).regs 43 = st.regs 43 ∧
+        (arun idx st c.accBody).regs rZero = st.regs rZero := by
+    rw [arun_accBody_eq_parts]
+    exact accBody_middle_latch_of_head c idx st hh hready.regs_word
+      hready.arr_word
+  have hs := accBody_middle_of_ready c idx st k p hready
+  have hw := arun_word idx c.accBody st hready.regs_word hready.arr_word
+  exact
+    { key := by rw [hl.1, hcore.key]
+      dPos := by rw [hl.2.1, hcore.dPos]
+      dNeg := by rw [hl.2.2.1, hcore.dNeg]
+      gate := by rw [hl.2.2.2.1, hcore.gate]
+      zero := by rw [hl.2.2.2.2, hcore.zero]
+      round := by rw [hs.round, hcore.round, hcore.gate]
+      cell := by rw [hs.cell, hcore.cell]
+      sink_zero := by rw [hs.arr, hcore.sink_zero]
+      regs_word := hw.1
+      arr_word := hw.2 }
+
+theorem production_middle_ready_of_core (c : Cfg)
+    (hc : c.wScale = productionW) (k dp dn n cell : Nat)
+    (first current : AState)
+    (hcore : ProductionMiddleCore c k dp dn n cell current)
+    (htrace : MiddleTraceSpec c k (initial c.wScale k) 1 n first current)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax)
+    (hround : n + 1 < c.bsSteps) (hbsM : c.bsSteps < M)
+    (hsinkM : c.sink < M) (hsum : dp + dn < M)
+    (hceil : c.wScale - 1 + k < M) :
+    MiddleStepReady c k
+      (forwardIter c.wScale k n (initial c.wScale k)) current := by
+  have hb := production_forward_bracket c hc k n hk
+  dsimp only at hb
+  exact
+    { key := hcore.key
+      low := htrace.low
+      high := htrace.high
+      round_ne_zero := by rw [hcore.round]; omega
+      round_ne_last := by rw [hcore.round]; omega
+      gate := hcore.gate
+      zero := hcore.zero
+      steps_word := hbsM
+      sink_word := hsinkM
+      sink_zero := hcore.sink_zero
+      regs_word := hcore.regs_word
+      arr_word := hcore.arr_word
+      key_pos := by rw [hcore.key]; exact hk
+      scale_word := by rw [hc]; decide
+      delta_sum_word := by rw [hcore.dPos, hcore.dNeg]; exact hsum
+      ceil_word := by rw [hcore.key]; exact hceil
+      bracket_order := hb.1
+      high_word := hb.2
+      round_fit := production_forward_roundFit c hc k n hk hkmax
+      quotient_guard := production_forward_quotient_guard c hc k n hk hkmax
+      round_counter_word := by
+        rw [hcore.round, hcore.gate]
+        omega }
+
 theorem accIter_middle_ready (c : Cfg) (idx n : Nat) (st : AState)
     (k : Nat) (p : Bracket) (hlo : st.regs rSl = p.lo)
     (hhi : st.regs rSh = p.hi)
@@ -220,6 +305,112 @@ theorem accIter_middle_ready (c : Cfg) (idx n : Nat) (st : AState)
       (accIter c idx i st) k (forwardIter c.wScale k i p) (hready i hi)
   · intro i hi
     exact (hready i hi).gate
+
+theorem accIter_production_ready (c : Cfg) (idx count : Nat)
+    (first : AState) (k dp dn cell : Nat)
+    (hc : c.wScale = productionW) (hk : 0 < k)
+    (hkmax : k ≤ productionKMax) (hbsM : c.bsSteps < M)
+    (hsinkM : c.sink < M) (hsum : dp + dn < M)
+    (hceil : c.wScale - 1 + k < M)
+    (hlo : first.regs rSl = (initial c.wScale k).lo)
+    (hhi : first.regs rSh = (initial c.wScale k).hi)
+    (hcore0 : ProductionMiddleCore c k dp dn 0 cell first)
+    (hcount : count ≤ c.bsSteps - 1) :
+    (∀ i, i < count →
+      MiddleStepReady c k
+        (forwardIter c.wScale k i (initial c.wScale k))
+        (accIter c idx i first)) ∧
+      ProductionMiddleCore c k dp dn count cell
+        (accIter c idx count first) := by
+  induction count with
+  | zero =>
+      exact ⟨fun _ hi => by omega, hcore0⟩
+  | succ n ih =>
+      have hncount : n ≤ c.bsSteps - 1 := by omega
+      have hprev := ih hncount
+      have htrace := accIter_middle_ready c idx n first k
+        (initial c.wScale k) hlo hhi hprev.1
+      have hnround : n + 1 < c.bsSteps := by omega
+      have hnready := production_middle_ready_of_core c hc k dp dn n cell
+        first (accIter c idx n first) hprev.2 htrace hk hkmax hnround
+        hbsM hsinkM hsum hceil
+      have hnext := productionMiddleCore_step c idx
+        (accIter c idx n first) k dp dn n cell
+        (forwardIter c.wScale k n (initial c.wScale k)) hprev.2 hnready
+      constructor
+      · intro i hi
+        by_cases hin : i < n
+        · exact hprev.1 i hin
+        · have hieq : i = n := by omega
+          simpa [hieq] using hnready
+      · simpa [accIter] using hnext
+
+theorem production_core_of_first (c : Cfg) (idx : Nat) (st : AState)
+    (k dp dn ceil floor : Nat)
+    (hf : FirstBodySpec c k dp dn ceil floor st (arun idx st c.accBody))
+    (hround : st.regs rKr = 0) (hgate : st.regs 43 = 1)
+    (hzero : st.regs rZero = 0) (hcell : st.regs rC < c.segLen)
+    (hsink0 : st.arr c.sink = 0) (hword : ∀ j, st.regs j < M)
+    (harrword : ∀ j, st.arr j < M) :
+    ProductionMiddleCore c k dp dn 0 (st.regs rC)
+      (arun idx st c.accBody) := by
+  have hw := arun_word idx c.accBody st hword harrword
+  have hne : c.sink ≠ st.regs rC + c.winBase := by
+    unfold Cfg.sink
+    omega
+  exact
+    { key := hf.key
+      dPos := hf.dPos
+      dNeg := hf.dNeg
+      gate := by rw [hf.gate, hgate]
+      zero := by rw [hf.zero, hzero]
+      round := by rw [hf.round, hround, hgate]
+      cell := hf.cell
+      sink_zero := by rw [hf.arr]; simp [hne, hsink0]
+      regs_word := hw.1
+      arr_word := hw.2 }
+
+theorem accBody_final_of_production_core (c : Cfg) (idx : Nat)
+    (current first : AState) (k dp dn cell : Nat)
+    (hc : c.wScale = productionW)
+    (hsteps : c.bsSteps = CDEMAbelScan.bsBudget c.wScale)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax)
+    (hbsM : c.bsSteps < M) (hsinkM : c.sink < M)
+    (hsum : dp + dn < M) (hceil : c.wScale - 1 + k < M)
+    (hcore : ProductionMiddleCore c k dp dn (c.bsSteps - 1) cell current)
+    (htrace : MiddleTraceSpec c k (initial c.wScale k) 1
+      (c.bsSteps - 1) first current)
+    (hcellFit : cell + 1 < M)
+    (haccFit : AddWide.wval (current.regs rVLo, current.regs rVHi) +
+      (dp + dn) * exactRoot c.wScale k < AddWide.B128) :
+    FinalBodySpec (exactRoot c.wScale k) (dp + dn) current
+      (arun idx current c.accBody) := by
+  have hbsPos : 0 < c.bsSteps := by
+    rw [hsteps]
+    simp [CDEMAbelScan.bsBudget]
+  have hround : current.regs rKr = c.bsSteps := by
+    rw [hcore.round, Nat.sub_add_cancel hbsPos]
+  have hb := production_forward_bracket c hc k (c.bsSteps - 1) hk
+  dsimp only at hb
+  have hfit := production_forward_roundFit c hc k (c.bsSteps - 1) hk hkmax
+  have hquot := production_forward_quotient_guard c hc k
+    (c.bsSteps - 1) hk hkmax
+  have hlast := final_step_exact c k hsteps (by rw [hc]; decide) hk
+  have hr := accBody_final_run c idx current (exactRoot c.wScale k)
+    hround hbsPos hcore.gate hcore.zero hbsM hsinkM hcore.sink_zero
+    hcore.regs_word hcore.arr_word
+    (by rw [hcore.key]; exact hk)
+    (by rw [hc]; decide)
+    (by rw [hcore.dPos, hcore.dNeg]; exact hsum)
+    (by rw [hcore.key]; exact hceil)
+    (by simpa [htrace.low, htrace.high] using hb.1)
+    (by simpa [htrace.high] using hb.2)
+    (by simpa [hcore.key, htrace.low, htrace.high] using hfit)
+    (by simpa [htrace.low, htrace.high] using hquot)
+    (by simpa [hcore.key, htrace.low, htrace.high] using hlast)
+    (by rw [hcore.cell]; exact hcellFit)
+    (by simpa [hcore.dPos, hcore.dNeg] using haccFit)
+  simpa [hcore.dPos, hcore.dNeg] using hr
 
 def accSchedule (c : Cfg) (idx middleCount : Nat) (st : AState) : AState :=
   let first := arun idx st c.accBody
@@ -284,5 +475,46 @@ theorem accSchedule_from_ready_middle (c : Cfg) (idx middleCount : Nat)
     k (initial c.wScale k) hf.low hf.high hready
   exact accSchedule_of_contracts c idx middleCount st k dp dn ceil floor
     root d hf hm hl
+
+theorem accSchedule_production (c : Cfg) (idx : Nat) (st : AState)
+    (k dp dn ceil floor : Nat)
+    (hc : c.wScale = productionW)
+    (hsteps : c.bsSteps = CDEMAbelScan.bsBudget c.wScale)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax)
+    (hbsM : c.bsSteps < M) (hsinkM : c.sink < M)
+    (hsum : dp + dn < M) (hceil : c.wScale - 1 + k < M)
+    (hf : FirstBodySpec c k dp dn ceil floor st (arun idx st c.accBody))
+    (hround : st.regs rKr = 0) (hgate : st.regs 43 = 1)
+    (hzero : st.regs rZero = 0) (hcell : st.regs rC < c.segLen)
+    (hsink0 : st.arr c.sink = 0) (hword : ∀ j, st.regs j < M)
+    (harrword : ∀ j, st.arr j < M) (hcellFit : st.regs rC + 1 < M)
+    (haccFit :
+      let current := accIter c idx (c.bsSteps - 1) (arun idx st c.accBody)
+      AddWide.wval (current.regs rVLo, current.regs rVHi) +
+        (dp + dn) * exactRoot c.wScale k < AddWide.B128) :
+    FullAccSpec c k dp dn ceil floor (exactRoot c.wScale k) (dp + dn) st
+      (accSchedule c idx (c.bsSteps - 1) st) := by
+  let first := arun idx st c.accBody
+  let current := accIter c idx (c.bsSteps - 1) first
+  have hcore0 : ProductionMiddleCore c k dp dn 0 (st.regs rC) first := by
+    simpa [first] using production_core_of_first c idx st k dp dn ceil floor
+      hf hround hgate hzero hcell hsink0 hword harrword
+  have hprod := accIter_production_ready c idx (c.bsSteps - 1) first
+    k dp dn (st.regs rC) hc hk hkmax hbsM hsinkM hsum hceil
+    (by simpa [first] using hf.low) (by simpa [first] using hf.high)
+    hcore0 (Nat.le_refl _)
+  have htrace := accIter_middle_ready c idx (c.bsSteps - 1) first k
+    (initial c.wScale k) (by simpa [first] using hf.low)
+    (by simpa [first] using hf.high) hprod.1
+  have hl0 := accBody_final_of_production_core c idx current first k dp dn
+    (st.regs rC) hc hsteps hk hkmax hbsM hsinkM hsum hceil
+    (by simpa [current] using hprod.2)
+    (by simpa [current] using htrace) hcellFit
+    (by simpa [current] using haccFit)
+  have hl : FinalBodySpec (exactRoot c.wScale k) (dp + dn) current
+      (accSchedule c idx (c.bsSteps - 1) st) := by
+    simpa [accSchedule, first, current] using hl0
+  exact accSchedule_of_contracts c idx (c.bsSteps - 1) st k dp dn ceil
+    floor (exactRoot c.wScale k) (dp + dn) hf htrace hl
 
 end LeanCompCert.Ports.CDEMAbelSchedule

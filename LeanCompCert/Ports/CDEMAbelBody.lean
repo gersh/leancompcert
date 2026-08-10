@@ -551,6 +551,11 @@ structure FirstBodySpec (c : Cfg) (k dp dn ceil floor : Nat)
     (before after : AState) : Prop where
   arr : after.arr = fun j =>
     if j = before.regs rC + c.winBase then 0 else before.arr j
+  key : after.regs rK = k
+  dPos : after.regs rDp = dp
+  dNeg : after.regs rDn = dn
+  gate : after.regs 43 = before.regs 43
+  zero : after.regs rZero = before.regs rZero
   low : after.regs rSl = (initial c.wScale k).lo
   high : after.regs rSh = (initial c.wScale k).hi
   uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
@@ -565,6 +570,7 @@ structure FirstBodySpec (c : Cfg) (k dp dn ceil floor : Nat)
   round : after.regs rKr = before.regs rKr + before.regs 43
   cell : after.regs rC = before.regs rC
 
+set_option maxHeartbeats 2000000 in
 theorem accBody_first_of_head (c : Cfg) (idx : Nat) (st : AState)
     (nextT nextT2 : Nat)
     (hh : FirstHeadSpec c st (arun idx st c.accHead) nextT nextT2)
@@ -652,6 +658,11 @@ theorem accBody_first_of_head (c : Cfg) (idx : Nat) (st : AState)
     (by rw [hpKr, hp43]; exact hkrFit) hwordP
   have hb' : FirstBisectSpec c (st.regs rW + st.regs rC) p out := by
     simpa [out] using hb
+  have hbl := accBisect_latch_frame c idx p
+  dsimp only at hbl
+  change out.regs rK = p.regs rK ∧ out.regs rDp = p.regs rDp ∧
+    out.regs rDn = p.regs rDn ∧ out.regs 43 = p.regs 43 ∧
+    out.regs rZero = p.regs rZero at hbl
   have hbU := accBisect_u_frame c idx p
   have hpViol : p.regs rViol = st.regs rViol := by
     rw [pk rViol (by simp [rViol]) (by simp [rViol]) (by simp [rViol])
@@ -675,9 +686,23 @@ theorem accBody_first_of_head (c : Cfg) (idx : Nat) (st : AState)
   have hpC : p.regs rC = st.regs rC := keep rC
     (by simp [rC, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
     hh'.cell
+  have hpK : p.regs rK = h.regs rK := keepH rK
+    (by simp [rK, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+  have hpDp : p.regs rDp = h.regs rDp := keepH rDp
+    (by simp [rDp, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+  have hpDn : p.regs rDn = h.regs rDn := keepH rDn
+    (by simp [rDn, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+  have hpZero : p.regs rZero = st.regs rZero := keep rZero
+    (by simp [rZero, Section413G1Denote.NotIn8, rUpLo, rUpHi, rUnLo, rUnHi])
+    (headKeep rZero (by rfl))
   have hall : FirstBodySpec c (st.regs rW + st.regs rC)
       (h.regs 169) (h.regs 170) (h.regs 167) (h.regs 168) st out :=
     { arr := by rw [hb'.arr, hp.arr, hh'.arr]
+      key := by rw [hbl.1, hpK, hh'.k]
+      dPos := by rw [hbl.2.1, hpDp, hh'.dPos, hh'.posGate]
+      dNeg := by rw [hbl.2.2.1, hpDn, hh'.dNeg, hh'.negGate]
+      gate := by rw [hbl.2.2.2.1, hp43]
+      zero := by rw [hbl.2.2.2.2, hpZero]
       low := hb'.low
       high := hb'.high
       uPos := by
