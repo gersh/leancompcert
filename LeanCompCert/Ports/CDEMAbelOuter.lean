@@ -382,6 +382,11 @@ structure OuterMiddleSpec (c : Cfg) (k : Nat) (p : Bracket)
   dNeg : after.regs rDn = before.regs rDn
   gate : after.regs 43 = 1
   zero : after.regs rZero = before.regs rZero
+  f : after.regs rF = before.regs rF
+  t : after.regs rT = before.regs rT
+  t2 : after.regs rT2 = before.regs rT2
+  e : after.regs rE = before.regs rE
+  tv : after.regs rTv = before.regs rTv
   low : after.regs rSl = (step c.wScale k p).lo
   high : after.regs rSh = (step c.wScale k p).hi
   uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
@@ -397,7 +402,7 @@ structure OuterMiddleSpec (c : Cfg) (k : Nat) (p : Bracket)
   cell : after.regs rC = before.regs rC
 
 set_option maxRecDepth 2048 in
-set_option maxHeartbeats 1000000 in
+set_option maxHeartbeats 3000000 in
 theorem body_middle_live_run (c : Cfg) (idx : Nat) (st : AState)
     (k : Nat) (p : Bracket)
     (hidxM : idx < M) (hsieveM : c.sieveLen < M)
@@ -442,6 +447,14 @@ theorem body_middle_live_run (c : Cfg) (idx : Nat) (st : AState)
     (by rw [hp.high, hhigh]; exact hhiM)
     hfitPref hquotPref
     (by rw [hp.round, hp.gate]; exact hkrFit) hwPref.1 hwPref.2
+  have hstream := accBody_stream_frame_of_head c idx prefixed
+    hh.f hh.t hh.t2 hh.e hh.tv
+  dsimp only at hstream
+  change accumulated.regs rF = prefixed.regs rF ∧
+    accumulated.regs rT = prefixed.regs rT ∧
+    accumulated.regs rT2 = prefixed.regs rT2 ∧
+    accumulated.regs rE = prefixed.regs rE ∧
+    accumulated.regs rTv = prefixed.regs rTv at hstream
   have hl :
       accumulated.regs rK = prefixed.regs rK ∧
         accumulated.regs rDp = prefixed.regs rDp ∧
@@ -475,6 +488,15 @@ theorem body_middle_live_run (c : Cfg) (idx : Nat) (st : AState)
       dNeg := by rw [tailFrame rDn (by rfl), hl.2.2.1, hp.dNeg]
       gate := by rw [tailFrame 43 (by rfl), hl.2.2.2.1, hp.gate]
       zero := by rw [tailFrame rZero (by rfl), hl.2.2.2.2, hp.zero]
+      f := by rw [tailFrame rF (by rfl), hstream.1, prefFrame rF (by rfl)]
+      t := by rw [tailFrame rT (by rfl), hstream.2.1,
+        prefFrame rT (by rfl)]
+      t2 := by rw [tailFrame rT2 (by rfl), hstream.2.2.1,
+        prefFrame rT2 (by rfl)]
+      e := by rw [tailFrame rE (by rfl), hstream.2.2.2.1,
+        prefFrame rE (by rfl)]
+      tv := by rw [tailFrame rTv (by rfl), hstream.2.2.2.2,
+        prefFrame rTv (by rfl)]
       low := by rw [tailFrame rSl (by rfl), hm.low, hp.key, hp.low, hp.high,
         hkey, hlow, hhigh]
       high := by rw [tailFrame rSh (by rfl), hm.high, hp.key, hp.low, hp.high,
@@ -498,6 +520,11 @@ theorem body_middle_live_run (c : Cfg) (idx : Nat) (st : AState)
 structure OuterFinalSpec (c : Cfg) (s d : Nat)
     (before after : AState) : Prop where
   arr : SinkClearSpec c before after
+  f : after.regs rF = before.regs rF
+  t : after.regs rT = before.regs rT
+  t2 : after.regs rT2 = before.regs rT2
+  e : after.regs rE = before.regs rE
+  tv : after.regs rTv = before.regs rTv
   low : after.regs rSl = s
   high : after.regs rSh = s
   uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
@@ -513,7 +540,7 @@ structure OuterFinalSpec (c : Cfg) (s d : Nat)
   cell : after.regs rC = before.regs rC + 1
 
 set_option maxRecDepth 2048 in
-set_option maxHeartbeats 1000000 in
+set_option maxHeartbeats 3000000 in
 theorem body_final_live_run (c : Cfg) (idx : Nat) (st : AState)
     (s : Nat)
     (hidxM : idx < M) (hsieveM : c.sieveLen < M)
@@ -572,6 +599,14 @@ theorem body_final_live_run (c : Cfg) (idx : Nat) (st : AState)
     (by rw [hp.low, hp.high]; exact hlohi)
     (by rw [hp.high]; exact hhiM) hfitPref hquotPref hstepPref
     (by rw [hp.cell]; exact hcFit) haccPref hwPref.1 hwPref.2
+  have hstream := accBody_stream_frame_of_head c idx prefixed
+    hh.f hh.t hh.t2 hh.e hh.tv
+  dsimp only at hstream
+  change accumulated.regs rF = prefixed.regs rF ∧
+    accumulated.regs rT = prefixed.regs rT ∧
+    accumulated.regs rT2 = prefixed.regs rT2 ∧
+    accumulated.regs rE = prefixed.regs rE ∧
+    accumulated.regs rTv = prefixed.regs rTv at hstream
   have hprefLive := accPrefix_live_frame c idx st hidxM hsieveM hsieve
     hmarkM hR hzero hsinkM
   have prefFrame (j : Nat)
@@ -591,6 +626,15 @@ theorem body_final_live_run (c : Cfg) (idx : Nat) (st : AState)
             intro j hj
             rw [tailArr]
             exact (hf.arr.live j hj).trans (hprefLive j hj) }
+      f := by rw [tailFrame rF (by rfl), hstream.1, prefFrame rF (by rfl)]
+      t := by rw [tailFrame rT (by rfl), hstream.2.1,
+        prefFrame rT (by rfl)]
+      t2 := by rw [tailFrame rT2 (by rfl), hstream.2.2.1,
+        prefFrame rT2 (by rfl)]
+      e := by rw [tailFrame rE (by rfl), hstream.2.2.2.1,
+        prefFrame rE (by rfl)]
+      tv := by rw [tailFrame rTv (by rfl), hstream.2.2.2.2,
+        prefFrame rTv (by rfl)]
       low := by rw [tailFrame rSl (by rfl), hf.low]
       high := by rw [tailFrame rSh (by rfl), hf.high]
       uPos := by rw [tailFrame rUpLo (by rfl), tailFrame rUpHi (by rfl),
@@ -621,6 +665,18 @@ structure OuterFirstSpec (c : Cfg) (k dp dn ceil floor : Nat)
   dNeg : after.regs rDn = dn
   gate : after.regs 43 = 1
   zero : after.regs rZero = before.regs rZero
+  f : after.regs rF =
+    (before.regs rF + before.arr (before.regs rC + c.winBase)) % M
+  t : after.regs rT =
+    if before.regs rW + before.regs rC < before.regs rT2 then
+      before.regs rT else before.regs rT + 1
+  t2 : after.regs rT2 =
+    if before.regs rW + before.regs rC < before.regs rT2 then
+      before.regs rT2
+    else before.regs rT2 + (2 * (before.regs rT + 1) + 1)
+  e : after.regs rE = headG
+    ((before.regs rF + before.arr (before.regs rC + c.winBase)) % M)
+  tv : after.regs rTv = before.regs rTv + dp + dn
   low : after.regs rSl = (initial c.wScale k).lo
   high : after.regs rSh = (initial c.wScale k).hi
   uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
@@ -636,12 +692,13 @@ structure OuterFirstSpec (c : Cfg) (k dp dn ceil floor : Nat)
   cell : after.regs rC = before.regs rC
 
 set_option maxRecDepth 2048 in
-set_option maxHeartbeats 1000000 in
+set_option maxHeartbeats 3000000 in
 theorem body_first_live_of_acc (c : Cfg) (idx : Nat) (st : AState)
     (k dp dn ceil floor : Nat)
     (hidxM : idx < M) (hsieveM : c.sieveLen < M)
     (hsieve : c.sieveLen ≤ idx) (hmarkPos : 0 < c.markSteps)
     (hmarkM : c.markSteps < M) (hR : c.markSteps ≤ st.regs rR)
+    (hcellRange : st.regs rC < c.segLen)
     (hzero : st.regs rZero = 0) (hsinkM : c.sink < M)
     (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M)
     (hacc :
@@ -656,6 +713,12 @@ theorem body_first_live_of_acc (c : Cfg) (idx : Nat) (st : AState)
     hmarkPos hR hword harrword
   have hprefLive := accPrefix_live_frame c idx st hidxM hsieveM hsieve
     hmarkM hR hzero hsinkM
+  have haddrNe : st.regs rC + c.winBase ≠ c.sink := by
+    unfold Cfg.sink
+    omega
+  have hprefCell : prefixed.arr (st.regs rC + c.winBase) =
+      st.arr (st.regs rC + c.winBase) :=
+    hprefLive (st.regs rC + c.winBase) haddrNe
   have hacc' : FirstBodySpec c k dp dn ceil floor prefixed accumulated := by
     simpa [prefixed, accumulated] using hacc
   have prefFrame (j : Nat)
@@ -682,6 +745,16 @@ theorem body_first_live_of_acc (c : Cfg) (idx : Nat) (st : AState)
       dNeg := by rw [tailFrame rDn (by rfl), hacc'.dNeg]
       gate := by rw [tailFrame 43 (by rfl), hacc'.gate, hp.gate]
       zero := by rw [tailFrame rZero (by rfl), hacc'.zero, hp.zero]
+      f := by rw [tailFrame rF (by rfl), hacc'.f, prefFrame rF (by rfl),
+        hp.cell, hprefCell]
+      t := by rw [tailFrame rT (by rfl), hacc'.t, hp.window, hp.cell,
+        prefFrame rT2 (by rfl), prefFrame rT (by rfl)]
+      t2 := by rw [tailFrame rT2 (by rfl), hacc'.t2, hp.window, hp.cell,
+        prefFrame rT2 (by rfl), prefFrame rT (by rfl)]
+      e := by rw [tailFrame rE (by rfl), hacc'.e, prefFrame rF (by rfl),
+        hp.cell, hprefCell]
+      tv := by rw [tailFrame rTv (by rfl), hacc'.tv,
+        prefFrame rTv (by rfl)]
       low := by rw [tailFrame rSl (by rfl), hacc'.low]
       high := by rw [tailFrame rSh (by rfl), hacc'.high]
       uPos := by rw [tailFrame rUpLo (by rfl), tailFrame rUpHi (by rfl),

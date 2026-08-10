@@ -11,6 +11,7 @@ open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Ports
 open LeanCompCert.Ports.CDEMAbelScan
+open LeanCompCert.Ports.CDEMAbelAccumulation
 open LeanCompCert.Ports.CDEMAbelBisection
 open LeanCompCert.Ports.CDEMAbelSchedule
 open LeanCompCert.Ports.CDEMAbelOuter
@@ -128,6 +129,11 @@ structure OuterMiddleTraceSpec (c : Cfg) (k : Nat) (p : Bracket)
     (n : Nat) (before after : AState) : Prop where
   live : ∀ j, j ≠ c.sink → after.arr j = before.arr j
   sink_zero : n ≠ 0 → after.arr c.sink = 0
+  f : after.regs rF = before.regs rF
+  t : after.regs rT = before.regs rT
+  t2 : after.regs rT2 = before.regs rT2
+  e : after.regs rE = before.regs rE
+  tv : after.regs rTv = before.regs rTv
   low : after.regs rSl = (forwardIter c.wScale k n p).lo
   high : after.regs rSh = (forwardIter c.wScale k n p).hi
   uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
@@ -154,6 +160,11 @@ theorem bodyIter_middle_contracts (c : Cfg) (idx n : Nat) (st : AState)
       exact
         { live := by intro j _; rfl
           sink_zero := by simp
+          f := rfl
+          t := rfl
+          t2 := rfl
+          e := rfl
+          tv := rfl
           low := hlo
           high := hhi
           uPos := rfl
@@ -176,6 +187,11 @@ theorem bodyIter_middle_contracts (c : Cfg) (idx n : Nat) (st : AState)
             intro j hj
             exact (hs.arr.live j hj).trans (hi.live j hj)
           sink_zero := by intro _; exact hs.arr.sink_zero
+          f := hs.f.trans hi.f
+          t := hs.t.trans hi.t
+          t2 := hs.t2.trans hi.t2
+          e := hs.e.trans hi.e
+          tv := hs.tv.trans hi.tv
           low := hs.low
           high := hs.high
           uPos := hs.uPos.trans hi.uPos
@@ -195,6 +211,18 @@ structure OuterFullAccSpec (c : Cfg) (k dp dn ceil floor root d : Nat)
   sink_zero : after.arr c.sink = 0
   live : ∀ j, j ≠ c.sink → after.arr j =
     if j = before.regs rC + c.winBase then 0 else before.arr j
+  f : after.regs rF =
+    (before.regs rF + before.arr (before.regs rC + c.winBase)) % M
+  t : after.regs rT =
+    if before.regs rW + before.regs rC < before.regs rT2 then
+      before.regs rT else before.regs rT + 1
+  t2 : after.regs rT2 =
+    if before.regs rW + before.regs rC < before.regs rT2 then
+      before.regs rT2
+    else before.regs rT2 + (2 * (before.regs rT + 1) + 1)
+  e : after.regs rE = headG
+    ((before.regs rF + before.arr (before.regs rC + c.winBase)) % M)
+  tv : after.regs rTv = before.regs rTv + dp + dn
   low : after.regs rSl = root
   high : after.regs rSh = root
   uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
@@ -225,6 +253,11 @@ theorem bodySchedule_of_contracts (c : Cfg) (idx middleCount : Nat)
       live := by
         intro j hj
         exact (hl.arr.live j hj).trans ((hm.live j hj).trans (hf.arr.live j hj))
+      f := hl.f.trans (hm.f.trans hf.f)
+      t := hl.t.trans (hm.t.trans hf.t)
+      t2 := hl.t2.trans (hm.t2.trans hf.t2)
+      e := hl.e.trans (hm.e.trans hf.e)
+      tv := hl.tv.trans (hm.tv.trans hf.tv)
       low := hl.low
       high := hl.high
       uPos := hl.uPos.trans (hm.uPos.trans hf.uPos)

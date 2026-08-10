@@ -796,3 +796,36 @@ The remaining denotation work is now the finite window invariant itself:
 prove that the resident Möbius marking phase installs the `nextF` cell, carry
 `FirstEntryInv` and the exact wide accumulator values between cells/windows,
 and telescope the source-facing cell theorem across the 5,000 windows.
+
+The cell capstone now carries that finite invariant's persistent stream state,
+not only the Abel sums. `FirstBodySpec` proves the literal first round updates
+`rF`, the square-root cursor `rT`/`rT2`, the sign latch `rE`, and total
+variation `rTv`. `accBody_stream_frame_of_head` proves directly from the
+emitted product and bisection blocks that the middle and final rounds preserve
+those registers. The outer first/middle/final contracts and their finite
+middle telescope expose the same equations, so `OuterFullAccSpec` and
+`bodySchedule_production_of_entry` now report the complete post-cell stream
+state. The first outer proof requires the source-true guard `rC < segLen` to
+show that `rC + winBase` is a live address rather than the sink.
+
+All runs below used one requested Lean worker, `MemoryHigh=1536M`,
+`MemoryMax=2G`, `MemorySwapMax=0`, and no concurrent compiler. Kernel cgroup
+peaks are authoritative:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh accumulator-body source | 2 min 9.55 s | 739,420 KiB | 353,476,608 B | 0 |
+| accumulator-body module build | 2 min 9.27 s | 757,928 KiB | 402,632,704 B | 0 |
+| fresh strengthened outer source | 3 min 44.77 s | 750,392 KiB | 365,830,144 B | 0 |
+| fresh middle telescope source | 1 min 13.85 s | 637,972 KiB | 204,304,384 B | 0 |
+| readiness source | 1 min 0.65 s | 647,332 KiB | 216,190,976 B | 0 |
+| source-facing capstone source | 9.51 s | 621,340 KiB | 179,593,216 B | 0 |
+| cached-chain capstone build | 2 min 22.93 s | 659,272 KiB | 251,199,488 B | 0 |
+| fresh source capstone axiom print | 0.15 s | 524,852 KiB | 86,536,192 B | 0 |
+| cached LeanCompCert umbrella build | 0.74 s | 1,727,444 KiB | 215,973,888 B | 0 |
+
+The source capstone still prints exactly
+`[propext, Classical.choice, Quot.sound]`. The strengthened outer source is a
+known expensive elaboration unit, but its 349 MiB kernel peak is safely below
+the hard cap; it is therefore built serially and benchmarked rather than
+replaced by an opaque or native decision shortcut.

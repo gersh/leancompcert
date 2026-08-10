@@ -80,6 +80,7 @@ theorem body_first_ready_run (c : Cfg) (idx : Nat) (st : AState)
     (hidxM : idx < M) (hsieveM : c.sieveLen < M)
     (hsieve : c.sieveLen ≤ idx) (hmarkPos : 0 < c.markSteps)
     (hmarkM : c.markSteps < M) (hR : c.markSteps ≤ st.regs rR)
+    (hcellRange : st.regs rC < c.segLen)
     (hzero : st.regs rZero = 0) (hsinkM : c.sink < M)
     (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M)
     (hready : FirstStepReady c idx (arun idx st (accPrefix c))) :
@@ -96,7 +97,8 @@ theorem body_first_ready_run (c : Cfg) (idx : Nat) (st : AState)
     ((arun idx (arun idx st (accPrefix c)) c.accHead).regs 170)
     ((arun idx (arun idx st (accPrefix c)) c.accHead).regs 167)
     ((arun idx (arun idx st (accPrefix c)) c.accHead).regs 168)
-    hidxM hsieveM hsieve hmarkPos hmarkM hR hzero hsinkM hword harrword
+    hidxM hsieveM hsieve hmarkPos hmarkM hR hcellRange hzero hsinkM
+    hword harrword
   exact accBody_first_of_ready c idx (arun idx st (accPrefix c)) hready
 
 structure ProductionOuterMiddleCore (c : Cfg)
@@ -442,7 +444,8 @@ theorem bodySchedule_production_ready (c : Cfg) (idx : Nat) (st : AState)
     rw [hsteps]
     simp [CDEMAbelScan.bsBudget]
   have hfirst0 := body_first_ready_run c idx st hidxM hsieveM hsieve
-    hmarkPos hmarkM (by rw [hstartR]; omega) hzero hsinkM hword
+    hmarkPos hmarkM (by rw [hstartR]; omega)
+    (by rw [hcell]; exact hcellRange) hzero hsinkM hword
     harrword hready
   have hfirst : OuterFirstSpec c k dp dn ceil floor st
       (arun idx st c.body) := by

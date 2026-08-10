@@ -325,6 +325,48 @@ theorem arun_accBody_eq_parts (c : Cfg) (idx : Nat) (st : AState) :
       arun idx (arun idx (arun idx st c.accHead) c.accProd) c.accBisect := by
   rw [Cfg.accBody, arun_append, arun_append]
 
+set_option maxHeartbeats 2000000 in
+/- Registers carrying the floor-convolution stream are untouched by the
+product and bisection suffixes.  Thus any head phase which preserves them
+also preserves them through the complete accumulator body. -/
+theorem accBody_stream_frame_of_head (c : Cfg) (idx : Nat) (st : AState)
+    (hf : (arun idx st c.accHead).regs rF = st.regs rF)
+    (ht : (arun idx st c.accHead).regs rT = st.regs rT)
+    (ht2 : (arun idx st c.accHead).regs rT2 = st.regs rT2)
+    (he : (arun idx st c.accHead).regs rE = st.regs rE)
+    (htv : (arun idx st c.accHead).regs rTv = st.regs rTv) :
+    let out := arun idx st c.accBody
+    out.regs rF = st.regs rF ∧ out.regs rT = st.regs rT ∧
+      out.regs rT2 = st.regs rT2 ∧ out.regs rE = st.regs rE ∧
+      out.regs rTv = st.regs rTv := by
+  let h := arun idx st c.accHead
+  let p := arun idx h c.accProd
+  let out := arun idx p c.accBisect
+  have prodFrame (j : Nat)
+      (hw : ArrayRegFrame.writes j c.accProd = false) :
+      p.regs j = h.regs j :=
+    ArrayRegFrame.arun_frame idx j c.accProd hw h
+  have bisectFrame (j : Nat)
+      (hw : ArrayRegFrame.writes j c.accBisect = false) :
+      out.regs j = p.regs j :=
+    ArrayRegFrame.arun_frame idx j c.accBisect hw p
+  have hall : out.regs rF = st.regs rF ∧ out.regs rT = st.regs rT ∧
+      out.regs rT2 = st.regs rT2 ∧ out.regs rE = st.regs rE ∧
+      out.regs rTv = st.regs rTv := by
+    refine ⟨?_, ?_, ?_, ?_, ?_⟩
+    · rw [bisectFrame rF (by rfl), prodFrame rF (by rfl)]
+      simpa [h] using hf
+    · rw [bisectFrame rT (by rfl), prodFrame rT (by rfl)]
+      simpa [h] using ht
+    · rw [bisectFrame rT2 (by rfl), prodFrame rT2 (by rfl)]
+      simpa [h] using ht2
+    · rw [bisectFrame rE (by rfl), prodFrame rE (by rfl)]
+      simpa [h] using he
+    · rw [bisectFrame rTv (by rfl), prodFrame rTv (by rfl)]
+      simpa [h] using htv
+  rw [arun_accBody_eq_parts]
+  simpa [h, p, out] using hall
+
 theorem accBody_sink_clear_of_head (c : Cfg) (idx : Nat) (st : AState)
     (hh : SinkClearSpec c st (arun idx st c.accHead))
     (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
@@ -682,6 +724,18 @@ structure FirstBodySpec (c : Cfg) (k dp dn ceil floor : Nat)
   dNeg : after.regs rDn = dn
   gate : after.regs 43 = before.regs 43
   zero : after.regs rZero = before.regs rZero
+  f : after.regs rF =
+    (before.regs rF + before.arr (before.regs rC + c.winBase)) % M
+  t : after.regs rT =
+    if before.regs rW + before.regs rC < before.regs rT2 then
+      before.regs rT else before.regs rT + 1
+  t2 : after.regs rT2 =
+    if before.regs rW + before.regs rC < before.regs rT2 then
+      before.regs rT2
+    else before.regs rT2 + (2 * (before.regs rT + 1) + 1)
+  e : after.regs rE = headG
+    ((before.regs rF + before.arr (before.regs rC + c.winBase)) % M)
+  tv : after.regs rTv = before.regs rTv + dp + dn
   low : after.regs rSl = (initial c.wScale k).lo
   high : after.regs rSh = (initial c.wScale k).hi
   uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) =
@@ -700,6 +754,13 @@ set_option maxHeartbeats 2000000 in
 theorem accBody_first_of_head (c : Cfg) (idx : Nat) (st : AState)
     (nextT nextT2 : Nat)
     (hh : FirstHeadSpec c st (arun idx st c.accHead) nextT nextT2)
+    (hnextT : nextT =
+      if st.regs rW + st.regs rC < st.regs rT2 then
+        st.regs rT else st.regs rT + 1)
+    (hnextT2 : nextT2 =
+      if st.regs rW + st.regs rC < st.regs rT2 then
+        st.regs rT2
+      else st.regs rT2 + (2 * (st.regs rT + 1) + 1))
     (hroot : nextT = Nat.sqrt (st.regs rW + st.regs rC))
     (htpos : 0 < Nat.sqrt (st.regs rW + st.regs rC))
     (hWpos : 0 < c.wScale)
@@ -790,6 +851,10 @@ theorem accBody_first_of_head (c : Cfg) (idx : Nat) (st : AState)
     out.regs rDn = p.regs rDn ∧ out.regs 43 = p.regs 43 ∧
     out.regs rZero = p.regs rZero at hbl
   have hbU := accBisect_u_frame c idx p
+  have bisKeep (j : Nat)
+      (hw : LeanCompCert.Verified.ArrayRegFrame.writes j c.accBisect = false) :
+      out.regs j = p.regs j :=
+    LeanCompCert.Verified.ArrayRegFrame.arun_frame idx j c.accBisect hw p
   have hpViol : p.regs rViol = st.regs rViol := by
     rw [pk rViol (by simp [rViol]) (by simp [rViol]) (by simp [rViol])
       (by simp [rViol]) (by simp [rViol, Section413G1Denote.NotIn8])
@@ -829,6 +894,23 @@ theorem accBody_first_of_head (c : Cfg) (idx : Nat) (st : AState)
       dNeg := by rw [hbl.2.2.1, hpDn, hh'.dNeg, hh'.negGate]
       gate := by rw [hbl.2.2.2.1, hp43]
       zero := by rw [hbl.2.2.2.2, hpZero]
+      f := by rw [bisKeep rF (by rfl), keepH rF
+        (by simp [rF, Section413G1Denote.NotIn8, rUpLo, rUpHi,
+          rUnLo, rUnHi]), hh'.f]
+      t := by rw [bisKeep rT (by rfl), keepH rT
+        (by simp [rT, Section413G1Denote.NotIn8, rUpLo, rUpHi,
+          rUnLo, rUnHi]), hh'.t, hnextT]
+      t2 := by rw [bisKeep rT2 (by rfl), keepH rT2
+        (by simp [rT2, Section413G1Denote.NotIn8, rUpLo, rUpHi,
+          rUnLo, rUnHi]), hh'.t2, hnextT2]
+      e := by rw [bisKeep rE (by rfl), keepH rE
+        (by simp [rE, Section413G1Denote.NotIn8, rUpLo, rUpHi,
+          rUnLo, rUnHi]), hh'.e]
+      tv := by
+        rw [bisKeep rTv (by rfl), keepH rTv
+          (by simp [rTv, Section413G1Denote.NotIn8, rUpLo, rUpHi,
+            rUnLo, rUnHi]), hh'.tv, hh'.posGate, hh'.negGate]
+        simp only [Nat.add_assoc]
       low := hb'.low
       high := hb'.high
       uPos := by
@@ -890,7 +972,7 @@ theorem accBody_first_run (c : Cfg) (idx : Nat) (st : AState)
   have hh := accHead_first_run c idx st hkr hbsPos hbsM hgate hzero haddr
     hword harrword hk hkFit hkclosed htFit hdoubleFit ht2Fit hWM hsum
     htvFit hceilFit
-  exact accBody_first_of_head c idx st _ _ hh hroot htpos hWpos hWtM
+  exact accBody_first_of_head c idx st _ _ hh rfl rfl hroot htpos hWpos hWtM
     hkrFit hfitPos hfitNeg hword harrword
 
 end LeanCompCert.Ports.CDEMAbelBody
