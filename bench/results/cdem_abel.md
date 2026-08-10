@@ -1108,3 +1108,23 @@ These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
 All four capstones print only `[propext, Quot.sound]`.  Remaining resident-table
 work is now the non-final-prime suffix, the finite prime/candidate telescope,
 and the arithmetic identification of the resulting code with `Ref.muCode`.
+
+`CDEMAbelSieveStep.lean` closes the complementary non-final-prime branch.
+`sieve_nonlast_suffix` proves the literal suffix writes its provisional code
+only to the scratch sink, advances the prime cursor, and preserves the
+candidate cursor and every live array cell. `sieveBody_nonlast_model` composes
+that contract with the pure prefix model, so both control-flow outcomes of a
+complete active sieve body now have code-derived semantics.
+
+These checks used the serialized one-worker 1.5 GiB zero-swap cgroup:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh non-final row source | 0.65 s | 580,516 KiB | 140,091,392 B | 0 |
+| non-final row module build | 0.74 s | 576,924 KiB | 151,126,016 B | 0 |
+| fresh three-capstone axiom print | 0.17 s | 532,972 KiB | 93,310,976 B | 0 |
+| cached umbrella consumer build | 0.73 s | 1,727,456 KiB | 209,985,536 B | 0 |
+
+All three capstones print only `[propext, Quot.sound]`. Remaining table work is
+the finite prime/candidate telescope and the arithmetic identification of each
+completed row with `Ref.muCode`.
