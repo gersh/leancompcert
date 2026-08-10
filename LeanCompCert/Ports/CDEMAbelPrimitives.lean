@@ -338,7 +338,7 @@ theorem okFormula_iff (W s k a b : Nat) (hs : 0 < s) (hb : b < s)
 /-! ## Exact-predicate definedness
 
 `okBody` contains the only register-valued divisions in the reciprocal-square-
-root predicate.  Expanding all 63 instructions in one `simp` produces a
+root predicate.  Expanding all 74 instructions in one `simp` produces a
 quadratic state term.  The proof therefore uses the intended scalar-block
 boundary: two instructions manufacture a nonzero divisor, two perform the
 division and remainder, and the entire tail is division-free.
@@ -856,7 +856,7 @@ theorem productionOkS_decomp (c : CDEMAbelScan.Cfg) :
     CDEMAbelScan.okBody, CDEMAbelScan.mulWideBody,
     Section413G1Denote.scalarOf]
 
-/-- The entire 63-instruction predicate used by the live bisection site
+/-- The entire 74-instruction predicate used by the live bisection site
 returns the exact Boolean value of `okFormula`.  All word-fit obligations are
 spelled out so that the enclosing bisection invariant, rather than a hidden
 normalization assumption, supplies them. -/
@@ -924,6 +924,30 @@ theorem productionOkS_run (c : CDEMAbelScan.Cfg) (idx : Nat)
     have hcl105 : cl 105 = 0 := by simpa [cl] using hfalse
     rw [okAfterClassify_zero c idx cl hcl105]
     simp [okFormula, a, hka]
+
+/-- Paper-facing form of `productionOkS_run`: the literal block decides the
+monotone square predicate used by bisection. -/
+theorem productionOkS_run_sq (c : CDEMAbelScan.Cfg) (idx : Nat)
+    (r : RegState) (s k : Nat)
+    (hword : ∀ j, r j < M)
+    (hs : r 194 = s) (hk : r CDEMAbelScan.rK = k)
+    (hspos : 0 < s) (hW : c.wScale < M) (hkM : k < M)
+    (haSqM : (c.wScale / s) * (c.wScale / s) < M)
+    (h2aM : 2 * (c.wScale / s) + 1 < M)
+    (hseM : s * (k - (c.wScale / s) * (c.wScale / s)) < M)
+    (habM : (c.wScale / s) * (c.wScale % s) < M)
+    (h2abM : 2 * (c.wScale / s) * (c.wScale % s) < M) :
+    srun idx r (okS c 194 142 197) 197 =
+      if c.wScale * c.wScale ≤ s * s * k then 1 else 0 := by
+  rw [productionOkS_run c idx r s k hword hs hk hspos hW hkM
+    haSqM h2aM hseM habM h2abM]
+  have hWdecomp : c.wScale =
+      (c.wScale / s) * s + c.wScale % s := by
+    rw [Nat.mul_comm]
+    exact (Nat.div_add_mod c.wScale s).symm
+  have hiff := okFormula_iff c.wScale s k (c.wScale / s)
+    (c.wScale % s) hspos (Nat.mod_lt _ hspos) hWdecomp
+  simp only [hiff]
 
 /-- The full literal predicate block cannot fail through division by zero.
 No semantic claim is hidden here: correctness of the Boolean result remains a

@@ -113,7 +113,7 @@ literal array-machine blocks used in this scan:
   wraps but is gated off;
 * `okAfterClassify_run`: both literal 64-by-64 multipliers and the complete
   product/comparison tail refine that residual formula;
-* `productionOkS_run`: all 63 instructions at the live allocation
+* `productionOkS_run`: all 74 instructions at the live allocation
   (`rs=194`, gate `142`, result `197`) return exactly `okFormula`, including
   the `k < a^2` rejection path;
 * `okBody_defined`: the exact reciprocal-square-root predicate's two
@@ -130,17 +130,28 @@ swap.  A module build under the same cap took `1.94 s` and peaked at
 
 The predicate definedness proof is deliberately split after its two-instruction
 divisor guard and two-instruction division stage.  A diagnostic one-shot
-`simp` over all 63 instructions reached `3.77 GiB` RSS after 73 seconds and
+`simp` over all 74 instructions reached `3.77 GiB` RSS after 73 seconds and
 was interrupted inside a 4 GiB hard cap.  The block-split source proof checked
 in `0.33 s`, peaked at `572076 KiB`, and used no swap inside a stricter 2 GiB
 hard cap.  This is also the required build shape for later predicate-value
 and bisection proofs.
 
-Still not proved: composition of the now-complete exact predicate theorem with
-the reciprocal-square-root bisection invariant, followed by the μ-table
-build, window marking, accumulators, and outer loop to show that the complete
-`denote` *is* the residue.  That remaining refinement gap is corroborated,
-but not discharged, by §5.
+`LeanCompCert/Ports/CDEMAbelBisection.lean` now supplies the next refinement
+layer.  The finite executable `exactRoot` is characterized as the least `s`
+with `W² ≤ s²k`; the source-shaped initial bracket is proved to contain it;
+the actual logarithmic `bsBudget` is proved sufficient; and `round_run`
+composes the literal seven-instruction probe, complete 74-instruction
+predicate, and four branchless updates.  `rounds_run` then proves any finite
+sequence of those machine rounds refines the pure iterator, with the 64-bit
+fit conditions kept explicit at each midpoint.  The integrated source check
+under the same 2 GiB, one-thread, zero-swap cap took `3.72 s` and peaked at
+`647676 KiB` RSS.
+
+Still not proved: discharge of those midpoint fit conditions from the
+production bracket bounds, composition through the surrounding accumulation
+body, then the μ-table build, window marking, accumulators, and outer loop to
+show that the complete `denote` *is* the residue.  That remaining refinement
+gap is corroborated, but not discharged, by §5.
 
 ## 5. Oracle agreement
 
