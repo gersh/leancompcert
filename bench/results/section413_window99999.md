@@ -80,3 +80,7 @@ A later independent outlier at `Chunk414` was split with the checked-in
 built together in 11.08 seconds at cgroup peak 921,808,896 bytes (1.5 GiB
 hard limit, zero swap). The utility refuses already-split inputs and retains
 the original four-name aggregate interface.
+
+`Chunk440` was the next cgroup-identified outlier. Its generated halves and
+wrapper built together in 11.05 seconds at cgroup peak 986,062,848 bytes,
+again with the 1.5 GiB hard limit and zero swap.
