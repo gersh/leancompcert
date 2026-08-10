@@ -207,14 +207,18 @@ first-round latch and reciprocal tail are now verified too, including the
 exact `tv`, ceiling/floor, and positive/negative product gates.  Finally,
 `headPost_first_noBump_run` and `headPost_first_bump_run` compose the complete
 literal scalar postlude for both checked square-root branches.  The enlarged
-source check took `8.21 s`, peaked at `682424 KiB`, and used no swap; the
-module build took `8.28 s` and peaked at `708000 KiB` under the same cap.
+`accHead_first_run` now lifts that result through the actual selector, live
+window-cell load, and zeroing store.  It proves exactly that one source cell
+is cleared, exposes the new `F`, `k`, square-root, `G`, increments,
+reciprocals, `tv`, and both live `U` product gates, and frames the bisection
+and loop state.  Together with the interior and final contracts, every
+production `accHead` regime is now verified.  The enlarged source check took
+`13.93 s`, peaked at `671660 KiB`, and used no swap; the module build took
+`13.95 s` and peaked at `693688 KiB` under the same cap.
 Fresh axiom prints use only `propext` and `Quot.sound`.
 
-Still not proved: lifting the first scalar postlude through the live
-load-and-clear operation to close the complete first `accHead` transition,
-and its composition
-with the bisection schedule, then the μ-table build, window marking,
+Still not proved: composition of the now-complete head/product/bisection
+contracts across the per-integer schedule, then the μ-table build, window marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.

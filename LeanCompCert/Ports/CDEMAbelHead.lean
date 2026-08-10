@@ -948,6 +948,252 @@ theorem headPost_middle_run (c : Cfg) (idx : Nat) (r : RegState)
       hr.2.2.2.2.1, hr.2.2.2.2.2, hout140⟩
   simpa [headPostS_decomp, srun_append, f, l, out] using hall
 
+structure FirstHeadSpec (c : Cfg) (before after : AState)
+    (nextT nextT2 : Nat) : Prop where
+  arr : after.arr = fun j =>
+    if j = before.regs rC + c.winBase then 0 else before.arr j
+  round0 : after.regs 140 = 1
+  last : after.regs 141 = 0
+  bisect : after.regs 142 = 0
+  f : after.regs rF =
+    (before.regs rF + before.arr (before.regs rC + c.winBase)) % M
+  k : after.regs rK = before.regs rW + before.regs rC
+  t : after.regs rT = nextT
+  t2 : after.regs rT2 = nextT2
+  viol : after.regs rViol = before.regs rViol
+  vSqrt : after.regs rVSqrt = before.regs rVSqrt
+  dPos : after.regs rDp = headDPos
+    (headG ((before.regs rF +
+      before.arr (before.regs rC + c.winBase)) % M)) (before.regs rE)
+  dNeg : after.regs rDn = headDNeg
+    (headG ((before.regs rF +
+      before.arr (before.regs rC + c.winBase)) % M)) (before.regs rE)
+  e : after.regs rE = headG
+    ((before.regs rF + before.arr (before.regs rC + c.winBase)) % M)
+  tv : after.regs rTv = before.regs rTv +
+    (headDPos (headG ((before.regs rF +
+      before.arr (before.regs rC + c.winBase)) % M)) (before.regs rE) +
+     headDNeg (headG ((before.regs rF +
+      before.arr (before.regs rC + c.winBase)) % M)) (before.regs rE))
+  sum : after.regs 165 =
+    headDPos (headG ((before.regs rF +
+      before.arr (before.regs rC + c.winBase)) % M)) (before.regs rE) +
+    headDNeg (headG ((before.regs rF +
+      before.arr (before.regs rC + c.winBase)) % M)) (before.regs rE)
+  ceil : after.regs 167 =
+    (c.wScale - 1 + (before.regs rW + before.regs rC)) /
+      (before.regs rW + before.regs rC)
+  floor : after.regs 168 = c.wScale /
+    (before.regs rW + before.regs rC)
+  posGate : after.regs 169 = headDPos
+    (headG ((before.regs rF +
+      before.arr (before.regs rC + c.winBase)) % M)) (before.regs rE)
+  negGate : after.regs 170 = headDNeg
+    (headG ((before.regs rF +
+      before.arr (before.regs rC + c.winBase)) % M)) (before.regs rE)
+  low : after.regs rSl = before.regs rSl
+  high : after.regs rSh = before.regs rSh
+  cell : after.regs rC = before.regs rC
+  round : after.regs rKr = before.regs rKr
+
+set_option maxRecDepth 2048 in
+theorem accHead_first_run (c : Cfg) (idx : Nat) (st : AState)
+    (hkr : st.regs rKr = 0) (hbsPos : 0 < c.bsSteps)
+    (hbsM : c.bsSteps < M) (hgate : st.regs 43 = 1)
+    (hzero : st.regs rZero = 0)
+    (haddr : st.regs rC + c.winBase < M)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M)
+    (hk : 0 < st.regs rW + st.regs rC)
+    (hkFit : st.regs rW + st.regs rC < M)
+    (hkclosed : st.regs rW + st.regs rC <
+      st.regs rT2 + (2 * (st.regs rT + 1) + 1))
+    (htFit : st.regs rT + 1 < M)
+    (hdoubleFit : 2 * (st.regs rT + 1) + 1 < M)
+    (ht2Fit : st.regs rT2 + (2 * (st.regs rT + 1) + 1) < M)
+    (hWM : c.wScale < M)
+    (hsum :
+      headDPos (headG ((st.regs rF +
+        st.arr (st.regs rC + c.winBase)) % M)) (st.regs rE) +
+      headDNeg (headG ((st.regs rF +
+        st.arr (st.regs rC + c.winBase)) % M)) (st.regs rE) < M)
+    (htvFit : st.regs rTv +
+      (headDPos (headG ((st.regs rF +
+        st.arr (st.regs rC + c.winBase)) % M)) (st.regs rE) +
+       headDNeg (headG ((st.regs rF +
+        st.arr (st.regs rC + c.winBase)) % M)) (st.regs rE)) < M)
+    (hceilFit : c.wScale - 1 +
+      (st.regs rW + st.regs rC) < M) :
+    FirstHeadSpec c st (arun idx st c.accHead)
+      (if st.regs rW + st.regs rC < st.regs rT2 then
+        st.regs rT else st.regs rT + 1)
+      (if st.regs rW + st.regs rC < st.regs rT2 then
+        st.regs rT2
+       else st.regs rT2 + (2 * (st.regs rT + 1) + 1)) := by
+  let pre := srun idx st.regs (headPreS c)
+  let loaded := RegState.set pre 148 (st.arr (pre 144))
+  let cleared := fun j => if j = loaded 144 then loaded rZero else st.arr j
+  let post := srun idx loaded (headPostS c)
+  let out : AState := ⟨post, cleared⟩
+  let addr := st.regs rC + c.winBase
+  let f := (st.regs rF + st.arr addr) % M
+  let k := st.regs rW + st.regs rC
+  let t := st.regs rT
+  let t2 := st.regs rT2
+  let e := st.regs rE
+  let dp := headDPos (headG f) e
+  let dn := headDNeg (headG f) e
+  let nt := if k < t2 then t else t + 1
+  let nt2 := if k < t2 then t2 else t2 + (2 * (t + 1) + 1)
+  have ha := accHead_arun c idx st
+  dsimp only at ha
+  change arun idx st c.accHead = out at ha
+  have hp := headPre_first_run c idx st.regs hkr hbsPos hbsM hgate haddr
+  dsimp only at hp
+  change pre 140 = 1 ∧ pre 141 = 0 ∧ pre 142 = 0 ∧ pre 144 = addr at hp
+  rcases hp with ⟨hp140, hp141, hp142, hp144⟩
+  have preKeep (j : Nat) (hw : RegFrame.writes j (headPreS c) = false) :
+      pre j = st.regs j := RegFrame.srun_frame idx j (headPreS c) hw st.regs
+  have hpreword : ∀ j, pre j < M := srun_lt_of_lt idx _ st.regs hword
+  have loadedKeep (j : Nat) (hj : j ≠ 148) : loaded j = pre j := by
+    simp [loaded, RegState.set, hj]
+  have loadedToBefore (j : Nat) (hj148 : j ≠ 148)
+      (hw : RegFrame.writes j (headPreS c) = false) :
+      loaded j = st.regs j := by rw [loadedKeep j hj148, preKeep j hw]
+  have hloaded148 : loaded 148 = st.arr addr := by
+    simp [loaded, RegState.set, hp144]
+  have hloaded144 : loaded 144 = addr := by
+    rw [loadedKeep 144 (by decide), hp144]
+  have hloadedZero : loaded rZero = 0 := by
+    rw [loadedToBefore rZero (by simp [rZero]) (by rfl), hzero]
+  have hloadedword : ∀ j, loaded j < M := by
+    intro j
+    by_cases hj : j = 148
+    · subst j
+      rw [hloaded148]
+      exact harrword addr
+    · rw [loadedKeep j hj]
+      exact hpreword j
+  have hcleared : cleared = fun j => if j = addr then 0 else st.arr j := by
+    funext j
+    simp only [cleared, hloaded144, hloadedZero]
+  have hloaded140 : loaded 140 = 1 := by
+    rw [loadedKeep 140 (by decide), hp140]
+  have hloadedF : loaded rF = st.regs rF :=
+    loadedToBefore rF (by simp [rF]) (by rfl)
+  have hloadedW : loaded rW = st.regs rW :=
+    loadedToBefore rW (by simp [rW]) (by rfl)
+  have hloadedC : loaded rC = st.regs rC :=
+    loadedToBefore rC (by simp [rC]) (by rfl)
+  have hloadedT : loaded rT = t := by
+    rw [loadedToBefore rT (by simp [rT]) (by rfl)]
+  have hloadedT2 : loaded rT2 = t2 := by
+    rw [loadedToBefore rT2 (by simp [rT2]) (by rfl)]
+  have hloadedE : loaded rE = e := by
+    rw [loadedToBefore rE (by simp [rE]) (by rfl)]
+  have hloadedTv : loaded rTv = st.regs rTv :=
+    loadedToBefore rTv (by simp [rTv]) (by rfl)
+  have hloadedViol : loaded rViol = st.regs rViol :=
+    loadedToBefore rViol (by simp [rViol]) (by rfl)
+  have hloadedVSqrt : loaded rVSqrt = st.regs rVSqrt :=
+    loadedToBefore rVSqrt (by simp [rVSqrt]) (by rfl)
+  have hpost :
+      post rF = f ∧ post rK = k ∧ post rT = nt ∧ post rT2 = nt2 ∧
+      post rViol = loaded rViol ∧ post rVSqrt = loaded rVSqrt ∧
+      post rDp = dp ∧ post rDn = dn ∧ post rE = headG f ∧
+      post rTv = loaded rTv + (dp + dn) ∧ post 165 = dp + dn ∧
+      post 167 = (c.wScale - 1 + k) / k ∧
+      post 168 = c.wScale / k ∧ post 169 = dp ∧ post 170 = dn ∧
+      post 140 = 1 := by
+    by_cases hlt : k < t2
+    · have h := headPost_first_noBump_run c idx loaded t t2 e hloaded140
+        hloadedT hloadedT2 hloadedE
+        (by simpa [k, hloadedW, hloadedC] using hkFit)
+        (by rw [hloadedW, hloadedC]; simpa [k] using hlt) hloadedword
+        (by rw [hloadedW, hloadedC]; simpa [k] using hk) hWM
+        (by simpa [f, e, dp, dn, hloadedF, hloaded148] using hsum)
+        (by simpa [f, e, dp, dn, hloadedTv, hloadedF, hloaded148] using htvFit)
+        (by simpa [k, hloadedW, hloadedC] using hceilFit)
+      dsimp only at h
+      simpa [f, k, dp, dn, nt, nt2, hlt, hloadedF, hloaded148,
+        hloadedW, hloadedC] using h
+    · have ht2k : t2 ≤ k := Nat.le_of_not_gt hlt
+      have h := headPost_first_bump_run c idx loaded t t2 e hloaded140
+        hloadedT hloadedT2 hloadedE
+        (by simpa [k, hloadedW, hloadedC] using hkFit)
+        (by rw [hloadedW, hloadedC]; simpa [k] using ht2k)
+        (by rw [hloadedW, hloadedC]; simpa [k, t, t2] using hkclosed)
+        (by simpa [t] using htFit) (by simpa [t] using hdoubleFit)
+        (by simpa [t, t2] using ht2Fit) hloadedword
+        (by rw [hloadedW, hloadedC]; simpa [k] using hk) hWM
+        (by simpa [f, e, dp, dn, hloadedF, hloaded148] using hsum)
+        (by simpa [f, e, dp, dn, hloadedTv, hloadedF, hloaded148] using htvFit)
+        (by simpa [k, hloadedW, hloadedC] using hceilFit)
+      dsimp only at h
+      simpa [f, k, dp, dn, nt, nt2, hlt, hloadedF, hloaded148,
+        hloadedW, hloadedC] using h
+  rcases hpost with ⟨hPF, hPK, hPT, hPT2, hPV, hPVS, hPDp, hPDn,
+    hPE, hPTv, hPSum, hPCeil, hPFloor, hPPos, hPNeg, hP140⟩
+  have postKeep (j : Nat) (hw : RegFrame.writes j (headPostS c) = false) :
+      post j = loaded j := RegFrame.srun_frame idx j (headPostS c) hw loaded
+  rw [ha]
+  refine
+    { arr := hcleared
+      round0 := hP140
+      last := ?_
+      bisect := ?_
+      f := ?_
+      k := ?_
+      t := ?_
+      t2 := ?_
+      viol := ?_
+      vSqrt := ?_
+      dPos := ?_
+      dNeg := ?_
+      e := ?_
+      tv := ?_
+      sum := ?_
+      ceil := ?_
+      floor := ?_
+      posGate := ?_
+      negGate := ?_
+      low := ?_
+      high := ?_
+      cell := ?_
+      round := ?_ }
+  · change post 141 = 0
+    rw [postKeep 141 (by rfl), loadedKeep 141 (by decide), hp141]
+  · change post 142 = 0
+    rw [postKeep 142 (by rfl), loadedKeep 142 (by decide), hp142]
+  · exact hPF
+  · exact hPK
+  · simpa [nt, k, t, t2] using hPT
+  · simpa [nt2, k, t, t2] using hPT2
+  · change post rViol = st.regs rViol
+    rw [hPV, hloadedViol]
+  · change post rVSqrt = st.regs rVSqrt
+    rw [hPVS, hloadedVSqrt]
+  · exact hPDp
+  · exact hPDn
+  · exact hPE
+  · change post rTv = st.regs rTv + (dp + dn)
+    rw [hPTv, hloadedTv]
+  · exact hPSum
+  · exact hPCeil
+  · exact hPFloor
+  · exact hPPos
+  · exact hPNeg
+  · change post rSl = st.regs rSl
+    rw [postKeep rSl (by rfl),
+      loadedToBefore rSl (by simp [rSl]) (by rfl)]
+  · change post rSh = st.regs rSh
+    rw [postKeep rSh (by rfl),
+      loadedToBefore rSh (by simp [rSh]) (by rfl)]
+  · change post rC = st.regs rC
+    rw [postKeep rC (by rfl), hloadedC]
+  · change post rKr = st.regs rKr
+    rw [postKeep rKr (by rfl),
+      loadedToBefore rKr (by simp [rKr]) (by rfl)]
+
 structure MiddleHeadSpec (c : Cfg) (before after : AState) : Prop where
   arr : after.arr = before.arr
   round0 : after.regs 140 = 0
