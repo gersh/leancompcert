@@ -413,6 +413,7 @@ with `LEAN_NUM_THREADS=1`, `MemoryHigh=20G`, `MemoryMax=22G`, and
 | production `ArithmeticPre` six-headroom constructor, module build | 16.04 s | 3,851,220 KiB | 0 | success |
 | arithmetic constructor plus generic initializer/body word closure, direct source check | 38.99 s | 4,320,416 KiB | 0 | success |
 | arithmetic constructor plus generic initializer/body word closure, module build | 37.92 s | 4,314,408 KiB | 0 | success |
+| opaque word-state endpoint carrier, direct source check | 38.13 s | 4,332,888 KiB | 0 | success |
 
 The new `productionWindowStart_markInv` removes the initializer from the
 window induction boundary.  `ProductionMarkStateInv.arithmetic_frame` then
@@ -494,6 +495,10 @@ Generic initializer and finite-body word-closure theorems now provide the
 native computation.  Their literal instruction-list traversal is the current
 cost of the arithmetic module (about 38 seconds and 4.32 GiB), still with a
 22 GiB hard cap and zero swap.
+As with the classification endpoint, concrete finite-run word closure is now
+exported through `WordStateInv state`.  This lets downstream code specialize
+the full mark and classification fuels without forcing projections of the
+recursive state.
 
 The new quotient block compiles from source in under one second inside a
 6 GiB hard cgroup (`MemoryHigh=5 GiB`, no swap).  The sibling LeanCompCert

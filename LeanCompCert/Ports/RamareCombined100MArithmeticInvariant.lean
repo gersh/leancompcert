@@ -18,6 +18,13 @@ open LeanCompCert.Verified.ArrayState (AState)
 
 /-! ## Word closure -/
 
+/-- Opaque carrier for register and array word closure.  Keeping the state as
+a structure parameter prevents downstream specializations from reducing a
+large concrete `bodyRun` merely to expose its projections. -/
+structure WordStateInv (s : AState) : Prop where
+  regs : ∀ j, s.regs j < M
+  arr : ∀ j, s.arr j < M
+
 /-- Every finite literal-body prefix preserves machine-word closure. -/
 theorem BodyRefinement.bodyRun_word
     (c : LambdaPsiSweep.Cfg) (k fuel : Nat) (s : AState)
@@ -31,6 +38,15 @@ theorem BodyRefinement.bodyRun_word
       exact LeanCompCert.Verified.ArrayFoldBridge.arun_word k
         (LambdaPsiSweep.body c) (BodyRefinement.bodyRun k c fuel s)
         hprev.1 hprev.2
+
+/-- Structure-valued form of finite body word closure, suitable for opaque
+production endpoint specialization. -/
+theorem BodyRefinement.bodyRun_wordInv
+    (c : LambdaPsiSweep.Cfg) (k fuel : Nat) (s : AState)
+    (h : WordStateInv s) :
+    WordStateInv (BodyRefinement.bodyRun k c fuel s) := by
+  have hw := BodyRefinement.bodyRun_word c k fuel s h.regs h.arr
+  exact ⟨hw.1, hw.2⟩
 
 /-- An arbitrary literal lambda/psi initializer is word-closed because every
 emitted register and array write has word semantics. -/
@@ -58,6 +74,14 @@ theorem productionPhysicalInitState_word
   let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
   simpa only [WholeSweepInvariant.productionPhysicalInitState, c] using
     LambdaPsiSweep.init_word c seed
+
+/-- Opaque structure-valued initializer word closure. -/
+theorem productionPhysicalInitState_wordInv
+    (logs : List LogCell) (seed : LambdaPsiSweep.Seed) :
+    WordStateInv
+      (WholeSweepInvariant.productionPhysicalInitState logs seed) := by
+  have hw := productionPhysicalInitState_word logs seed
+  exact ⟨hw.1, hw.2⟩
 
 set_option maxRecDepth 20000 in
 /-- The RS62 log candidate does not write the classified factor-base
