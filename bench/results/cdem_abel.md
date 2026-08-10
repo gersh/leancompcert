@@ -765,3 +765,34 @@ The remaining production proof is below this scheduler boundary: establish
 `FirstStepReady` and the named first-round values from the resident Möbius
 table and streamed floor-convolution invariant, then telescope the proven
 cell theorem across all windows.
+
+`LeanCompCert/Ports/CDEMAbelSourceReady.lean` now discharges the first half of
+that boundary in source-shaped terms. `SqrtStreamInv` records that the current
+root square is at most the next integer, the stored `rT2` is the next square,
+and the square after one bump is strictly above the integer. From those three
+facts, `sqrtStream_step` proves that the literal branch is exactly `Nat.sqrt`
+and `sqrtStream_key_closed` proves its one-bump guard.
+
+`FirstEntryInv` names the next streamed floor-convolution cell through
+`nextF`, and states the signed deltas, reciprocals, and wide no-wrap bounds in
+those source values. `firstStepReady_of_entry` transports this invariant
+through the actual selector/inactive sieve/inactive mark prefix and derives
+`FirstStepReady`. `firstValues_of_entry` proves that the five machine outputs
+are precisely `nextKey`, `nextDPos`, `nextDNeg`, `nextCeil`, and `nextFloor`.
+The source-facing capstone `bodySchedule_production_of_entry` then invokes the
+complete literal scheduler, with no preassembled first-body contract or opaque
+post-head values. Its fresh axiom print is `[propext, Classical.choice,
+Quot.sound]`.
+
+Under one worker, the 2 GiB hard cgroup, and zero swap:
+
+| check | elapsed | GNU time peak RSS | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: | ---: |
+| fresh source-readiness source | 9.45 s | 636,176 KiB | 200,507,392 B | 0 |
+| source-readiness module build | 9.67 s | 622,068 KiB | 197,959,680 B | 0 |
+| fresh source capstone axiom print | 0.15 s | 524,804 KiB | 85,995,520 B | 0 |
+
+The remaining denotation work is now the finite window invariant itself:
+prove that the resident Möbius marking phase installs the `nextF` cell, carry
+`FirstEntryInv` and the exact wide accumulator values between cells/windows,
+and telescope the source-facing cell theorem across the 5,000 windows.

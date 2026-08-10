@@ -149,6 +149,7 @@ import LeanCompCert.Ports.CDEMAbelSchedule
 import LeanCompCert.Ports.CDEMAbelOuter
 import LeanCompCert.Ports.CDEMAbelOuterSchedule
 import LeanCompCert.Ports.CDEMAbelOuterReady
+import LeanCompCert.Ports.CDEMAbelSourceReady
 import LeanCompCert.Ports.RamareMStar140MCore
 import LeanCompCert.Ports.RamareMStar140MPre
 import LeanCompCert.Ports.RamareMStar140MPost1
