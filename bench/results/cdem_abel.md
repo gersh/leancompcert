@@ -174,8 +174,24 @@ build took `0.53 s` and peaked at `606240 KiB`.  Fresh axiom prints for all
 four public refinement theorems report only `propext`, `Classical.choice`, and
 `Quot.sound`.
 
-Still not proved: preservation/composition through the `accHead` block
-interleaved between bisection rounds, then the μ-table build, window marking,
+`LeanCompCert/Ports/CDEMAbelHead.lean` then decomposes the actual mixed
+array/scalar `accHead` block without expanding it as one proof term.  For every
+non-first, non-final bisection iteration, `accHead_middle_run` proves that the
+literal selector/load/clear/scalar sequence reads and re-clears only the zero
+sink cell, leaves the array and carried `F`, `k`, square-root, increment,
+violation, bracket, cell, and round state unchanged, computes the exact
+ceiling/floor reciprocals of `k`, and sets both `U` product gates to zero.
+This is the complete head contract for the 60 interior production rounds;
+the first-round window-cell transition and final-round selector remain to be
+composed separately.  The proof is split into pre-load, scalar front, latch,
+and reciprocal stages.  Its fresh source check under the one-thread 2 GiB
+zero-swap cap took `7.25 s` and peaked at `625604 KiB`; its module build took
+`7.16 s` and peaked at `636888 KiB`.  Fresh axiom prints use only `propext`
+and `Quot.sound` (the structural and scalar-stage theorems use only
+`propext`).
+
+Still not proved: the first/final `accHead` transitions and their composition
+with the bisection schedule, then the μ-table build, window marking,
 full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.
