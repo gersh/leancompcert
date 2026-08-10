@@ -155,8 +155,16 @@ source check under the same 2 GiB, one-thread, zero-swap cap took `4.29 s` and
 peaked at `669988 KiB` RSS; the module build took `4.54 s` and peaked at
 `726076 KiB`.
 
-Still not proved: composition through the bisection consumer and accumulation
-body, then the μ-table build, window marking, accumulators, and outer loop to
+The final consumer is now proved too. On a closed bracket, `close_run_mod`
+shows the literal violation check, half-limb product, two-limb add, and advance
+stage leave both violation counters unchanged and add exactly
+`(dPos+dNeg)·exactRoot` modulo `2^128`; `close_run_exact` removes the modulus
+under the explicit accumulator no-wrap invariant. With this addition the
+integrated source check took `4.46 s` and peaked at `696108 KiB`.
+
+Still not proved: preservation/composition through the `accHead` and
+`accProd` blocks interleaved between bisection rounds, then the μ-table build,
+window marking, full accumulators, and outer loop to
 show that the complete `denote` *is* the residue.  That remaining refinement
 gap is corroborated, but not discharged, by §5.
 

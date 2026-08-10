@@ -1094,4 +1094,190 @@ theorem open_run_initial (c : Cfg) (idx : Nat) (r : RegState) (k : Nat)
   simpa only [initial] using
     open_run c idx r (Nat.sqrt k) hrt h140 htpos hWpos hWtM hword
 
+/-! ## Final-round consumer -/
+
+def closeHeadS : List Instr :=
+  [ .binop 202 .ne (.reg rSl) (.reg rSh)
+  , .binop 202 .mul (.reg 202) (.reg 141)
+  , .binop rViol .add (.reg rViol) (.reg 202)
+  , .binop rVBisect .add (.reg rVBisect) (.reg 202)
+  , .binop 203 .mul (.reg 165) (.reg 141) ]
+
+def closeAdvanceS : List Instr :=
+  [ .binop 206 .add (.reg rKr) (.reg 43)
+  , .binop 207 .sub (.lit 1) (.reg 141)
+  , .binop rKr .mul (.reg 206) (.reg 207)
+  , .binop rC .add (.reg rC) (.reg 141) ]
+
+theorem closeS_decomp : closeS = closeHeadS ++
+    Section413G1Denote.mulWideG 4294967295 4294967296
+      203 rSh 204 205 180 181 182 183 184 185 186 187 ++
+    addWideS rVLo rVHi 204 205 188 ++ closeAdvanceS := rfl
+
+theorem closeHead_run (idx : Nat) (r : RegState) (s d : Nat)
+    (hlo : r rSl = s) (hhi : r rSh = s) (h141 : r 141 = 1)
+    (hd : r 165 = d) (hword : ∀ j, r j < M) :
+    let out := srun idx r closeHeadS
+    out 202 = 0 ∧ out rViol = r rViol ∧ out rVBisect = r rVBisect ∧
+      out 203 = d ∧
+      ∀ j, j ≠ 202 → j ≠ rViol → j ≠ rVBisect → j ≠ 203 → out j = r j := by
+  have hlo18 : r 18 = s := by simpa [rSl] using hlo
+  have hhi19 : r 19 = s := by simpa [rSh] using hhi
+  have hviolM : r 22 % M = r 22 := Nat.mod_eq_of_lt (hword 22)
+  have hvisM : r 248 % M = r 248 := Nat.mod_eq_of_lt (hword 248)
+  have hdM : d % M = d := by rw [← hd]; exact Nat.mod_eq_of_lt (hword 165)
+  simp [closeHeadS, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+    rSl, rSh, rViol, rVBisect, hlo18, hhi19, h141, hd,
+    hviolM, hvisM, hdM]
+  intro j h202 h22 h248 h203
+  simp [h202, h22, h248, h203]
+
+theorem closeAdvance_frame (idx : Nat) (r : RegState) (j : Nat)
+    (hj : j ≠ 206 ∧ j ≠ 207 ∧ j ≠ rKr ∧ j ≠ rC) :
+    srun idx r closeAdvanceS j = r j := by
+  apply srun_untouched
+  intro i hi
+  simp only [closeAdvanceS, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hj with ⟨h206, h207, hkr, hc⟩
+  rcases hi with rfl | rfl | rfl | rfl <;> simp only [sdest] <;> omega
+
+theorem close_run_mod (idx : Nat) (r : RegState) (s d : Nat)
+    (hlo : r rSl = s) (hhi : r rSh = s) (h141 : r 141 = 1)
+    (hd : r 165 = d) (hword : ∀ j, r j < M) :
+    let out := srun idx r closeS
+    out rViol = r rViol ∧ out rVBisect = r rVBisect ∧
+      AddWide.wval (out rVLo, out rVHi) =
+        (AddWide.wval (r rVLo, r rVHi) + d * s) % AddWide.B128 := by
+  let p := srun idx r closeHeadS
+  let q := srun idx p (Section413G1Denote.mulWideG 4294967295 4294967296
+    203 rSh 204 205 180 181 182 183 184 185 186 187)
+  let z := srun idx q (addWideS rVLo rVHi 204 205 188)
+  let out := srun idx z closeAdvanceS
+  have hp := closeHead_run idx r s d hlo hhi h141 hd hword
+  dsimp only at hp
+  have hpword : ∀ j, p j < M := srun_lt_of_lt idx _ r hword
+  have hpframe (j : Nat) (h202 : j ≠ 202) (hviol : j ≠ rViol)
+      (hbis : j ≠ rVBisect) (h203 : j ≠ 203) : p j = r j := by
+    simpa [p] using hp.2.2.2.2 j h202 hviol hbis h203
+  have hp203 : p 203 = d := by simpa [p] using hp.2.2.2.1
+  have hpSh : p rSh = s := by
+    rw [hpframe rSh (by simp [rSh]) (by simp [rSh, rViol])
+      (by simp [rSh, rVBisect]) (by simp [rSh]), hhi]
+  have hmul := Section413G1Denote.mulWideG_hl idx p 203 rSh 204 205
+    180 181 182 183 184 185 186 187
+    (by simp [Section413G1Denote.Distinct8])
+    (by simp [Section413G1Denote.NotIn8])
+    (by simp [Section413G1Denote.NotIn8, rSh])
+    (by simp [Section413G1Denote.NotIn8])
+    (by simp [Section413G1Denote.NotIn8])
+    (by decide) hpword
+  have hqword : ∀ j, q j < M := srun_lt_of_lt idx _ p hpword
+  have hqframe (j : Nat) (h204 : j ≠ 204) (h205 : j ≠ 205)
+      (hjs : Section413G1Denote.NotIn8 j 180 181 182 183 184 185 186 187) :
+      q j = p j := by
+    simpa [q] using Section413G1Denote.mulWideG_frame idx p
+      4294967295 4294967296 203 rSh 204 205
+      180 181 182 183 184 185 186 187 j h204 h205 hjs
+  have hqprod : AddWide.wval (q 204, q 205) = d * s := by
+    have hs := MulWide.hl_spec d s
+      (by
+        have hx := hpword 203
+        rw [AddWidePort.M_eq_B64] at hx
+        simpa [hp203] using hx)
+      (by
+        have hx := hpword rSh
+        rw [AddWidePort.M_eq_B64] at hx
+        simpa [hpSh] using hx)
+    rw [show q 204 = (MulWide.hl d s).1 by simpa [q, hp203, hpSh] using hmul.1,
+      show q 205 = (MulWide.hl d s).2 by simpa [q, hp203, hpSh] using hmul.2]
+    exact hs.1
+  have hqprodOk : AddWide.Ok (q 204, q 205) := by
+    constructor
+    · rw [← AddWidePort.M_eq_B64]
+      exact hqword 204
+    · rw [← AddWidePort.M_eq_B64]
+      exact hqword 205
+  have hqaccLo : q rVLo = r rVLo := by
+    rw [hqframe rVLo (by simp [rVLo]) (by simp [rVLo])
+      (by simp [Section413G1Denote.NotIn8, rVLo]),
+      hpframe rVLo (by simp [rVLo]) (by simp [rVLo, rViol])
+        (by simp [rVLo, rVBisect]) (by simp [rVLo])]
+  have hqaccHi : q rVHi = r rVHi := by
+    rw [hqframe rVHi (by simp [rVHi]) (by simp [rVHi])
+      (by simp [Section413G1Denote.NotIn8, rVHi]),
+      hpframe rVHi (by simp [rVHi]) (by simp [rVHi, rViol])
+        (by simp [rVHi, rVBisect]) (by simp [rVHi])]
+  have hqaccOk : AddWide.Ok (q rVLo, q rVHi) := by
+    constructor
+    · rw [hqaccLo, ← AddWidePort.M_eq_B64]
+      exact hword rVLo
+    · rw [hqaccHi, ← AddWidePort.M_eq_B64]
+      exact hword rVHi
+  have hregs : AddWidePort.WideRegs rVLo rVHi 188 204 205 :=
+    ⟨by simp [rVLo, rVHi], by simp [rVLo], by simp [rVHi],
+      by simp [rVLo], by simp [rVHi], by decide,
+      by simp [rVLo], by simp [rVHi], by decide⟩
+  have hadd := addWideS_run idx q rVLo rVHi 204 205 188 hregs
+  dsimp only at hadd
+  have hzword : ∀ j, z j < M := srun_lt_of_lt idx _ q hqword
+  have hzpair : (z rVLo, z rVHi) =
+      AddWide.addWide (q rVLo, q rVHi) (q 204, q 205) := by
+    simpa [z] using hadd.1
+  have hzval : AddWide.wval (z rVLo, z rVHi) =
+      (AddWide.wval (r rVLo, r rVHi) + d * s) % AddWide.B128 := by
+    rw [hzpair, AddWide.addWide_spec _ _ hqaccOk hqprodOk,
+      hqprod, hqaccLo, hqaccHi]
+  have hzframe (j : Nat) (hlo : j ≠ rVLo) (hhi : j ≠ rVHi)
+      (hc : j ≠ 188) : z j = q j := by
+    simpa [z] using hadd.2 j hlo hhi hc
+  have hqviol : q rViol = r rViol := by
+    rw [hqframe rViol (by simp [rViol]) (by simp [rViol])
+      (by simp [Section413G1Denote.NotIn8, rViol])]
+    simpa [p] using hp.2.1
+  have hqbis : q rVBisect = r rVBisect := by
+    rw [hqframe rVBisect (by simp [rVBisect]) (by simp [rVBisect])
+      (by simp [Section413G1Denote.NotIn8, rVBisect])]
+    simpa [p] using hp.2.2.1
+  have hzviol : z rViol = r rViol := by
+    rw [hzframe rViol (by simp [rVLo, rViol]) (by simp [rVHi, rViol])
+      (by simp [rViol]), hqviol]
+  have hzbis : z rVBisect = r rVBisect := by
+    rw [hzframe rVBisect (by simp [rVLo, rVBisect])
+      (by simp [rVHi, rVBisect]) (by simp [rVBisect]), hqbis]
+  have houtLo : out rVLo = z rVLo := by
+    simpa [out] using closeAdvance_frame idx z rVLo
+      (by simp [rVLo, rKr, rC])
+  have houtHi : out rVHi = z rVHi := by
+    simpa [out] using closeAdvance_frame idx z rVHi
+      (by simp [rVHi, rKr, rC])
+  have houtViol : out rViol = r rViol := by
+    have hframe : out rViol = z rViol := by
+      simpa [out] using closeAdvance_frame idx z rViol
+        (by simp [rViol, rKr, rC])
+    rw [hframe, hzviol]
+  have houtBis : out rVBisect = r rVBisect := by
+    have hframe : out rVBisect = z rVBisect := by
+      simpa [out] using closeAdvance_frame idx z rVBisect
+        (by simp [rVBisect, rKr, rC])
+    rw [hframe, hzbis]
+  rw [closeS_decomp, srun_append, srun_append, srun_append]
+  refine ⟨houtViol, houtBis, ?_⟩
+  change AddWide.wval (out rVLo, out rVHi) = _
+  rw [houtLo, houtHi]
+  exact hzval
+
+theorem close_run_exact (idx : Nat) (r : RegState) (s d : Nat)
+    (hlo : r rSl = s) (hhi : r rSh = s) (h141 : r 141 = 1)
+    (hd : r 165 = d) (hword : ∀ j, r j < M)
+    (hfit : AddWide.wval (r rVLo, r rVHi) + d * s < AddWide.B128) :
+    let out := srun idx r closeS
+    out rViol = r rViol ∧ out rVBisect = r rVBisect ∧
+      AddWide.wval (out rVLo, out rVHi) =
+        AddWide.wval (r rVLo, r rVHi) + d * s := by
+  have h := close_run_mod idx r s d hlo hhi h141 hd hword
+  dsimp only at h ⊢
+  rw [h.2.2, Nat.mod_eq_of_lt hfit]
+  exact ⟨h.1, h.2.1, rfl⟩
+
+
 end LeanCompCert.Ports.CDEMAbelBisection
