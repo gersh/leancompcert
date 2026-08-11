@@ -583,3 +583,12 @@ check took 0.29 seconds at 539,560 KiB under 1,536 MiB/no-swap, with closure
 
 The complete 675-target build passed in 4.96 seconds at 1,798,748 KiB under
 the 2,304 MiB/no-swap aggregate profile.
+
+`R2SegMarkingAdvanceTail.markAdvanceTailBody_run` joins the cursor theorem to
+the five-instruction budget guard, yielding one theorem for the complete
+32-instruction value/offset/budget suffix.  Its exact suffix equality has no
+axioms; its semantic closure is `[propext, Quot.sound]`.  The direct check
+took 0.32 seconds at 544,496 KiB under 1,536 MiB/no-swap.
+
+The complete 677-target build passed in 4.55 seconds at 1,805,404 KiB under
+the 2,304 MiB/no-swap aggregate profile.
