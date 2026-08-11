@@ -493,8 +493,31 @@ whereas the split source checks and the composite check stay below it.  The
 fresh composite source check takes about 0.2 seconds and peaks near 522 MiB;
 its closure is `[propext, Quot.sound]`, with no `sorry` or `native_decide`.
 
-This discharges the bit-field arithmetic and the local logical transition.
-The remaining marking proof is now the literal `markBody` instruction-slice
-refinement, followed by its cursor/power schedule and window telescope.  That
-will connect these per-hit facts to all live cells before the selector and
-fixed-point/error transport are composed.
+`R2SegMarkingInstr.lean` and its staged `Weight*`, `CellRaw`, and `Cell`
+consumers now discharge that literal instruction layer as well.
+`markCellBody_eq_slice` identifies the helper definitionally with the
+22-instruction production slice.  `markCellBody_rawMarkCount_run` proves the
+exact three array writes made by that slice, with pairwise-distinct plane
+addresses and all 64-bit headroom guards explicit.  The capstone
+`markCellBody_markPower_run` then combines the machine theorem with
+`rawMark_encode`: one actual load/scalar/store execution writes precisely the
+encoding of `MarkCell.markPower`.
+
+The packed-weight proof was split into flag, term, sum, add, commit, and
+composition modules after a one-shot branch expansion exceeded the 1,536 MiB
+hard limit.  With one Lean worker and swap disabled, representative fresh
+direct source checks were:
+
+| source check | elapsed | peak RSS | hard cap | result |
+|---|---:|---:|---:|---|
+| packed add composition | 0.20 s | 516,764 KiB | 1,536 MiB | success |
+| packed full scalar calculation | 0.21 s | 531,484 KiB | 1,536 MiB | success |
+| packed load/compute/store stage | 0.24 s | 539,684 KiB | 1,536 MiB | success |
+| complete raw three-plane slice | 0.28 s | 537,652 KiB | 1,536 MiB | success |
+| logical `markPower` capstone | 0.21 s | 539,608 KiB | 1,536 MiB | success |
+
+Every new capstone prints `[propext, Quot.sound]`, with no `sorry` or
+`native_decide`.  The remaining marking proof is now the cursor/power
+schedule and window telescope around this literal per-hit theorem.  That will
+connect the verified cell transition to all live cells before the selector
+and fixed-point/error transport are composed.
