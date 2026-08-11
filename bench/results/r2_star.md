@@ -667,3 +667,12 @@ check took 0.30 seconds at 540,292 KiB process RSS, with closure
 seconds at 1,816,776 KiB process RSS.  Both checks used live transient units
 with their 1,536/2,304 MiB high and hard limits, `MemoryAccounting=yes`, one
 Lean worker, and `MemorySwapMax=0`; both reported zero swap.
+
+`R2SegMarkingCursorPast.markResidentBody_past_cursor_run` closes the
+complementary cursor branch across the complete 78-instruction suffix.  It
+exposes the exact production bump-or-step selection, clamped table cursor,
+packed-row decode, selected next multiple, budget counters, and post-sink
+array.  Its direct source check took 0.33 seconds at 546,560 KiB process RSS,
+with closure `[propext, Quot.sound]`.  The complete 687-target build passed in
+4.85 seconds at 1,816,596 KiB process RSS.  Both ran in live transient units
+under the 1,536/2,304 MiB hard/no-swap profiles and reported zero swap.
