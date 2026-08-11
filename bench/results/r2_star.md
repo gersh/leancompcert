@@ -475,3 +475,26 @@ must still prove that its product, logarithmic-sum, and packed-weight planes
 satisfy the selector hypotheses at each live cell.  That invariant must then
 be telescoped through windows, followed by the fixed-point enclosure and
 real-bound transport.
+
+## 11. Formal marking-cell refinement
+
+`LeanCompCert/Ports/R2SegMarkingModel.lean` and the count-specific
+`R2SegMarkingRaw0`--`Raw3` modules now formalize one complete logical marking
+hit.  The model records the product plane, fixed-logarithm-sum plane, and the
+packed distinct-count/weight plane.  It proves exact decoding of the count and
+both 28-bit weights, the canonical empty-cell invariant, and preservation of
+that invariant by every base-prime or higher-power hit.
+
+The composite theorem `rawMark_encode` proves that the physical natural-word
+update commutes with the logical update for every reachable cell.  Its four
+packed-count cases live in separate modules: elaborating all transitions in
+one broad arithmetic simplification exceeded the 1,536 MiB development cap,
+whereas the split source checks and the composite check stay below it.  The
+fresh composite source check takes about 0.2 seconds and peaks near 522 MiB;
+its closure is `[propext, Quot.sound]`, with no `sorry` or `native_decide`.
+
+This discharges the bit-field arithmetic and the local logical transition.
+The remaining marking proof is now the literal `markBody` instruction-slice
+refinement, followed by its cursor/power schedule and window telescope.  That
+will connect these per-hit facts to all live cells before the selector and
+fixed-point/error transport are composed.
