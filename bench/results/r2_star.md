@@ -517,7 +517,18 @@ direct source checks were:
 | logical `markPower` capstone | 0.21 s | 539,608 KiB | 1,536 MiB | success |
 
 Every new capstone prints `[propext, Quot.sound]`, with no `sorry` or
-`native_decide`.  The remaining marking proof is now the cursor/power
-schedule and window telescope around this literal per-hit theorem.  That will
-connect the verified cell transition to all live cells before the selector
-and fixed-point/error transport are composed.
+`native_decide`.  The production prefix has since been extended backward in
+four further staged modules.  `R2SegMarkingAddress` proves that an active hit
+selects `j`, `j+L`, and `j+2L`; `R2SegMarkingHit` composes that stage with the
+cell theorem and is tied to the exact 30-instruction production slice.
+`R2SegMarkingPhase` proves that every iteration inside the mark budget enables
+that hit path, and `R2SegMarkingReset` proves both cursor-mux branches: window
+start installs `q0`, `w0`, the first-power flag, and the least nonnegative
+cell offset, while every non-start iteration preserves the complete
+prime-power cursor.  Fresh checks of these modules remain near 530--552 MiB
+under the same 1,536 MiB/no-swap cap.
+
+The remaining marking proof is now the post-hit cursor/power advance and the
+window telescope around these literal prefix theorems.  That will connect the
+verified cell transition to all live cells before the selector and
+fixed-point/error transport are composed.

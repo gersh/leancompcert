@@ -59,6 +59,37 @@ theorem markCellBody_markPower_run (k : Nat) (s : AState) (x : MarkCell)
   rw [hnext] at hraw
   exact hraw
 
+/-- Production-layout specialization: the three planes for cell `j` are at
+`j`, `j + L`, and `j + 2L`.  Positivity of `L` discharges all aliasing
+conditions required by the literal slice theorem. -/
+theorem markCellBody_markPower_addressed_run (k : Nat) (s : AState)
+    (x : MarkCell) (L j p wt : Nat) (first : Bool)
+    (hL : 0 < L)
+    (h30 : s.regs 30 = j)
+    (h31 : s.regs 31 = j + L)
+    (h32 : s.regs 32 = j + 2 * L)
+    (hloaded : loadedPlaneWords s = x.encode)
+    (hx : x.Inv)
+    (hp : s.regs rBp = p) (hwt : s.regs rWt = wt)
+    (hfirst : s.regs rFs = if first then 1 else 0)
+    (hp0 : 0 < p) (hpM : p < M)
+    (hwtBound : wt < 2 ^ wtBits)
+    (hprod : (s.arr (s.regs 30) +
+      markBit (s.arr (s.regs 30) = 0)) * p < M)
+    (hlsum : s.arr (s.regs 31) + wt < M)
+    (hweights : s.arr (s.regs 32) +
+      (if first then markWeightAdd x.count wt else 0) < M) :
+    let out := arun k s markCellBody
+    out.arr =
+      (writeLoadedPlaneWords s ((x.markPower p wt first).encode)).arr := by
+  have h30ne31 : s.regs 30 ≠ s.regs 31 := by rw [h30, h31]; omega
+  have h30ne32 : s.regs 30 ≠ s.regs 32 := by rw [h30, h32]; omega
+  have h31ne32 : s.regs 31 ≠ s.regs 32 := by rw [h31, h32]; omega
+  exact markCellBody_markPower_run k s x p wt first hloaded hx
+    h30ne31 h30ne32 h31ne32 hp hwt hfirst hp0 hpM hwtBound hprod hlsum
+    hweights
+
 #print axioms markCellBody_markPower_run
+#print axioms markCellBody_markPower_addressed_run
 
 end LeanCompCert.Ports.R2SegSieve
