@@ -715,3 +715,11 @@ instructions.  Its closure is `[propext, Quot.sound]`; the direct check took
 0.23 seconds at 541,472 KiB under the 1,536 MiB/no-swap cap.  The complete
 699-target build passed in 4.54 seconds at 1,818,604 KiB under the 2,304 MiB
 aggregate cap with one worker and zero swap.
+
+`R2SegMarkingScheduled` closes the exact one-body scheduling seam.  It proves
+that executing `body` is executing `markBody` followed by `markPostBody`, and
+provides a polymorphic postcondition transport so the large branch contracts
+need not be restated or re-elaborated during finite induction.  Both closures
+are `[propext]`.  The direct check took 0.15 seconds at 535,624 KiB; the live
+326-job umbrella consumer passed in 0.94 seconds at 1,754,176 KiB under the
+same one-worker, 1,536/2,304 MiB, no-swap profiles.
