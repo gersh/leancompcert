@@ -87,6 +87,70 @@ theorem markAddressCellBody_markPower_run (c : R2Cfg) (k : Nat)
   rw [h30, h31, h32, harr] at hcell
   exact hcell
 
+/-- On an active cursor already past the window, the same literal cell block
+updates only the three scratch sinks. -/
+theorem markAddressCellBody_past_run (c : R2Cfg) (k : Nat)
+    (s : AState) (x : MarkCell) (j p wt : Nat) (first : Bool)
+    (hL : 0 < c.segLen)
+    (hj : s.regs rJ = j) (hactive : s.regs 8 = 1)
+    (hjL : c.segLen ≤ j) (haddr : 5 * c.segLen < M)
+    (hloaded : planeWordsAt s c.segLen (3 * c.segLen) = x.encode)
+    (hx : x.Inv)
+    (hp : s.regs rBp = p) (hwt : s.regs rWt = wt)
+    (hfirst : s.regs rFs = if first then 1 else 0)
+    (hp0 : 0 < p) (hpM : p < M)
+    (hwtBound : wt < 2 ^ wtBits)
+    (hprod : (s.arr (3 * c.segLen) +
+      markBit (s.arr (3 * c.segLen) = 0)) * p < M)
+    (hlsum : s.arr (4 * c.segLen) + wt < M)
+    (hweights : s.arr (5 * c.segLen) +
+      (if first then markWeightAdd x.count wt else 0) < M) :
+    let out := arun k s (markAddressCellBody c)
+    out.arr =
+      (writePlaneWordsAt s c.segLen (3 * c.segLen)
+        ((x.markPower p wt first).encode)).arr := by
+  let addressed := arun k s (markAddressBody c)
+  have ha := markAddressBody_past_run c k s j hj hactive hjL haddr
+  dsimp only at ha
+  rcases ha with ⟨h30, h31, h32, harr⟩
+  change addressed.regs 30 = 3 * c.segLen at h30
+  change addressed.regs 31 = 4 * c.segLen at h31
+  change addressed.regs 32 = 5 * c.segLen at h32
+  change addressed.arr = s.arr at harr
+  have frameAddr (r : Nat) (h : writes r (markAddressBody c) = false) :
+      addressed.regs r = s.regs r :=
+    arun_frame k r (markAddressBody c) h s
+  have hp' : addressed.regs rBp = p :=
+    (frameAddr rBp (by rfl)).trans hp
+  have hwt' : addressed.regs rWt = wt :=
+    (frameAddr rWt (by rfl)).trans hwt
+  have hfirst' : addressed.regs rFs = if first then 1 else 0 :=
+    (frameAddr rFs (by rfl)).trans hfirst
+  have h31' : addressed.regs 31 = 3 * c.segLen + c.segLen := by
+    rw [h31]
+    omega
+  have h32' : addressed.regs 32 = 3 * c.segLen + 2 * c.segLen := by
+    rw [h32]
+    omega
+  have hloaded' : loadedPlaneWords addressed = x.encode := by
+    simpa [loadedPlaneWords, planeWordsAt, h30, h31', h32', harr] using
+      hloaded
+  have hcell := markCellBody_markPower_addressed_run k addressed x
+    c.segLen (3 * c.segLen) p wt first hL h30 h31' h32' hloaded' hx hp'
+    hwt' hfirst' hp0 hpM hwtBound
+    (by rw [h30, harr]; exact hprod)
+    (by rw [h31', harr]; simpa only [show 3 * c.segLen + c.segLen =
+      4 * c.segLen by omega] using hlsum)
+    (by rw [h32', harr]; simpa only [show 3 * c.segLen + 2 * c.segLen =
+      5 * c.segLen by omega] using hweights)
+  dsimp only at hcell
+  simp only [markAddressCellBody, arun_append]
+  simp only [writeLoadedPlaneWords, writePlaneWordsAt, AState.writeArr]
+    at hcell ⊢
+  rw [h30, h31', h32', harr] at hcell
+  exact hcell
+
 #print axioms markAddressCellBody_markPower_run
+#print axioms markAddressCellBody_past_run
 
 end LeanCompCert.Ports.R2SegSieve

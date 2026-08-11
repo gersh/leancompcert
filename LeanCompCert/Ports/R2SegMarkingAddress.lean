@@ -62,6 +62,31 @@ theorem markAddressBody_run (c : R2Cfg) (k : Nat) (s : AState) (j : Nat)
     Nat.mod_eq_of_lt h2LM, Nat.mod_eq_of_lt hjLM,
     Nat.mod_eq_of_lt haddr, Nat.mod_eq_of_lt h1M]
 
+/-- Once the current multiple lies past the window, the same active address
+stage selects only the three scratch sinks at `3L`, `4L`, and `5L`. -/
+theorem markAddressBody_past_run (c : R2Cfg) (k : Nat) (s : AState) (j : Nat)
+    (hj : s.regs rJ = j) (hactive : s.regs 8 = 1)
+    (hjL : c.segLen ≤ j) (haddr : 5 * c.segLen < M) :
+    let out := arun k s (markAddressBody c)
+    out.regs 30 = 3 * c.segLen ∧ out.regs 31 = 4 * c.segLen ∧
+      out.regs 32 = 5 * c.segLen ∧ out.arr = s.arr := by
+  have hLM : c.segLen < M := by omega
+  have h2LM : 2 * c.segLen < M := by omega
+  have h3LM : 3 * c.segLen < M := by omega
+  have h4LM : 4 * c.segLen < M := by omega
+  have h3add : 3 * c.segLen + c.segLen = 4 * c.segLen := by omega
+  have h3add2 : 3 * c.segLen + 2 * c.segLen = 5 * c.segLen := by omega
+  have h1M : (1 : Nat) < M := by decide
+  have hj4 : s.regs 4 = j := by simpa [rJ] using hj
+  simp only [markAddressBody, arun_lift]
+  simp [markAddressInstrs, srun, RegState.set, sdest, sval,
+    denoteOperand, denoteOp, hj4, hactive, rJ, show ¬j < c.segLen by omega,
+    R2Cfg.sink, h3add, h3add2, Nat.mod_eq_of_lt hLM,
+    Nat.mod_eq_of_lt h2LM,
+    Nat.mod_eq_of_lt h3LM, Nat.mod_eq_of_lt h4LM,
+    Nat.mod_eq_of_lt haddr, Nat.mod_eq_of_lt h1M]
+
 #print axioms markAddressBody_run
+#print axioms markAddressBody_past_run
 
 end LeanCompCert.Ports.R2SegSieve

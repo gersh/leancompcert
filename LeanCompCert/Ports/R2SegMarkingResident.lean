@@ -54,6 +54,69 @@ theorem markResidentBody_markPower_run (c : R2Cfg) (k : Nat)
   simp only [markResidentBody, arun_append]
   exact hframe.trans hhit
 
+/-- A cursor past the window updates only the three scratch sinks across the
+complete address/cell/cursor suffix. -/
+theorem markResidentBody_past_run (c : R2Cfg) (k : Nat)
+    (s : AState) (x : MarkCell) (j p wt : Nat) (first : Bool)
+    (hL : 0 < c.segLen)
+    (hj : s.regs rJ = j) (hactive : s.regs 8 = 1)
+    (hjL : c.segLen ≤ j) (haddr : 5 * c.segLen < M)
+    (hloaded : planeWordsAt s c.segLen (3 * c.segLen) = x.encode)
+    (hx : x.Inv)
+    (hp : s.regs rBp = p) (hwt : s.regs rWt = wt)
+    (hfirst : s.regs rFs = if first then 1 else 0)
+    (hp0 : 0 < p) (hpM : p < M)
+    (hwtBound : wt < 2 ^ wtBits)
+    (hprod : (s.arr (3 * c.segLen) +
+      markBit (s.arr (3 * c.segLen) = 0)) * p < M)
+    (hlsum : s.arr (4 * c.segLen) + wt < M)
+    (hweights : s.arr (5 * c.segLen) +
+      (if first then markWeightAdd x.count wt else 0) < M) :
+    let out := arun k s (markResidentBody c)
+    out.arr =
+      (writePlaneWordsAt s c.segLen (3 * c.segLen)
+        ((x.markPower p wt first).encode)).arr := by
+  let hit := arun k s (markAddressCellBody c)
+  have hhit := markAddressCellBody_past_run c k s x j p wt first hL hj
+    hactive hjL haddr hloaded hx hp hwt hfirst hp0 hpM hwtBound hprod
+    hlsum hweights
+  dsimp only at hhit
+  have hframe : (arun k hit (markAdvanceStepBody c)).arr = hit.arr := by
+    rw [markAdvanceStepBody_eq_advance]
+    exact markAdvanceBody_arr_frame c k hit
+  simp only [markResidentBody, arun_append]
+  exact hframe.trans hhit
+
+/-- Consequently every resident plane word (all addresses below `3L`) is
+framed by an out-of-window marking suffix. -/
+theorem markResidentBody_past_live_frame (c : R2Cfg) (k : Nat)
+    (s : AState) (x : MarkCell) (j p wt a : Nat) (first : Bool)
+    (hL : 0 < c.segLen)
+    (hj : s.regs rJ = j) (hactive : s.regs 8 = 1)
+    (hjL : c.segLen ≤ j) (haddr : 5 * c.segLen < M)
+    (hloaded : planeWordsAt s c.segLen (3 * c.segLen) = x.encode)
+    (hx : x.Inv)
+    (hp : s.regs rBp = p) (hwt : s.regs rWt = wt)
+    (hfirst : s.regs rFs = if first then 1 else 0)
+    (hp0 : 0 < p) (hpM : p < M)
+    (hwtBound : wt < 2 ^ wtBits)
+    (hprod : (s.arr (3 * c.segLen) +
+      markBit (s.arr (3 * c.segLen) = 0)) * p < M)
+    (hlsum : s.arr (4 * c.segLen) + wt < M)
+    (hweights : s.arr (5 * c.segLen) +
+      (if first then markWeightAdd x.count wt else 0) < M)
+    (ha : a < 3 * c.segLen) :
+    (arun k s (markResidentBody c)).arr a = s.arr a := by
+  have hrun := markResidentBody_past_run c k s x j p wt first hL hj
+    hactive hjL haddr hloaded hx hp hwt hfirst hp0 hpM hwtBound hprod
+    hlsum hweights
+  dsimp only at hrun
+  rw [hrun]
+  simp only [writePlaneWordsAt]
+  rw [AState.writeArr_arr_ne _ _ (by omega),
+    AState.writeArr_arr_ne _ _ (by omega),
+    AState.writeArr_arr_ne _ _ (by omega)]
+
 /-- At a window boundary, the complete literal `markBody` installs the first
 table entry and performs its resident logical hit. -/
 theorem markFullBody_start_resident_run (c : R2Cfg) (k : Nat) (s : AState)
@@ -154,6 +217,8 @@ theorem markFullBody_nonstart_resident_run (c : R2Cfg) (k : Nat)
 #print axioms markResidentBody_eq_suffix
 #print axioms markFullBody_eq_markBody
 #print axioms markResidentBody_markPower_run
+#print axioms markResidentBody_past_run
+#print axioms markResidentBody_past_live_frame
 #print axioms markFullBody_start_resident_run
 #print axioms markFullBody_nonstart_resident_run
 

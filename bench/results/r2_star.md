@@ -626,3 +626,14 @@ under 1,536 MiB/no-swap.
 
 The complete 683-target build passed in 4.65 seconds at 1,809,916 KiB under
 the 2,304 MiB/no-swap aggregate profile.
+
+The complementary past-window path is now explicit too.
+`markAddressBody_past_run` selects exactly the scratch cells at `3L`, `4L`,
+and `5L`; `markAddressCellBody_past_run` proves their logical update; and
+`markResidentBody_past_live_frame` proves every address below `3L` unchanged
+across the complete 78-instruction resident suffix.  Fresh direct checks
+peaked at 545,296, 535,144, and 562,008 KiB respectively under
+1,536 MiB/no-swap, with semantic closures `[propext, Quot.sound]`.
+
+The resulting 683-target rebuild passed in 8.15 seconds at 1,804,260 KiB
+under the 2,304 MiB/no-swap aggregate profile.
