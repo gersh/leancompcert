@@ -421,3 +421,31 @@ Lemma 6.2, it does not discharge it.**  The paper's citation still does not
 support the endpoint it prints, and the axiom's docstring on `claude_math`
 should keep saying so.  What has changed is that the endpoint is no longer
 merely asserted: it is computed.
+
+## 9. Formal source classification
+
+The paper repository now proves the real-valued mathematical seam in
+`MathExtras/NumberTheory/Reductions/R2CoeffClassification.lean`.  Starting
+from Mathlib's literal `vonMangoldt * vonMangoldt`, it proves:
+
+* `r2JumpReal_one`: the initial cell has no sparse jump;
+* `r2JumpReal_prime_pow`: every positive prime power contributes
+  `-(log p)^2` (modes 0 and 2);
+* `r2JumpReal_two_prime_pows_exact`: positive powers of two distinct primes
+  contribute `2 log p log q` (modes 1 and 3);
+* `r2JumpReal_eq_zero_of_three_le_card_primeFactors`: three or more distinct
+  factors contribute zero (mode 4); and
+* `r2Star_eq_linear_add_jumps`: the source summatory function is exactly the
+  `2 gamma N` linear step plus those sparse jumps.
+
+A direct source check completed in about 2.8 seconds under
+`MemoryMax=1536M`, `MemorySwapMax=0`; the four printed closures contain only
+`propext`, `Classical.choice`, and `Quot.sound`.  The aggregate `MathExtras`
+consumer also builds with one Lean worker under a 2,304 MiB/no-swap cap.
+
+This removes the Dirichlet-convolution/classification part of §7's gap.  The
+remaining theorem is program-specific: prove that the three planes recover
+the source factor count, bases, and exponents; telescope that invariant
+through `r2Program.denote`; and transport the fixed-point/error tests to the
+real source bound.  Until that theorem exists, the full run remains a
+completed benchmark and not a discharge of the literature atom.
