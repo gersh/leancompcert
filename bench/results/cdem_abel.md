@@ -1175,12 +1175,13 @@ emitted initialization/scheduler connection.
 The source computation has now been reformulated in the same finite shape as
 the compiled table builder. `Ref.muCodeWith` folds an explicit prime list by
 `Ref.primeTrialStep`, and `Ref.muCodeFor K` uses exactly
-`primesBelow (sqrt K + 1)`. Both `Ref.deltaF` and `markBudget` consume this
-configuration-shaped code. The earlier divisor-by-divisor `Ref.muCode` is
-retained as an independent audit implementation; it is no longer the live
-resident-table specification. `CDEMAbelMarkReady.muCode_cases` proves the new
-finite code is always `0`, `1`, or `2`, so the existing marking telescope now
-uses the runnable source computation directly.
+the certified `PrimeBase.ofTrialDivision (sqrt K)` list. Both `Ref.deltaF` and
+`markBudget` consume this configuration-shaped code. The earlier
+divisor-by-divisor `Ref.muCode` is retained as an independent audit
+implementation; it is no longer the live resident-table specification.
+`CDEMAbelMarkReady.muCode_cases` proves the new finite code is always `0`, `1`,
+or `2`, so the existing marking telescope now uses the runnable source
+computation directly.
 
 A complete production-domain executable audit compared all `199331` new
 codes with the retained reference and returned `true`; recomputing the
@@ -1287,3 +1288,42 @@ not memory.  Factoring it into an opaque combined frame reduced normalization
 and kept all measured cgroup peaks below 220 MB.
 The scheduled step prints `[propext, Quot.sound]`; the finite telescope and
 initialized table theorem additionally use `Classical.choice`.
+
+The downstream `claude_math` bridge now proves the missing mathematical
+identification in
+`MathExtras/NumberTheory/Reductions/CDEMAbelPrimeListMoebius.lean`.  It
+symbolically relates the prime-only state to the already verified all-divisor
+trial state, skips composite trial steps only while the squarefree flag is
+clear, and proves that `Ref.muCodeFor 199330 n` is the exact `0/+1/-1`
+encoding of Mathlib's Möbius function for every `1 ≤ n ≤ 199330`.
+The production list equality proves only the small square-root fact
+`sqrt 199330 = 446`; it does not kernel-evaluate the list and uses no
+`native_decide`.
+
+The bridge was then extended through the source divisor plane:
+`production_deltaF_zmod_eq_floorConv_sub` proves that the executable
+`Ref.deltaF` word is exactly the paper `floorConv k - floorConv (k-1)` in
+`ZMod 2^64`.  A first combined source file reached the hard cap and was
+terminated safely. Splitting the one-divisor encoding cases, finite list
+telescope, unwrapped floor-difference theorem, and final modular bridge keeps
+the same proof while bounding each elaboration process.
+
+These fresh source checks used one Lean worker, a 2.3 GiB hard cgroup, and no
+swap. The cgroup peak is authoritative; GNU `time` includes shared mapped
+dependencies and is therefore not used as the memory measurement here.
+
+| check | elapsed | cgroup `memory.peak` | swap |
+| --- | ---: | ---: | ---: |
+| prime-list Möbius bridge | 1.78 s | 378,437,632 B | 0 |
+| one-divisor encoded step | 1.43 s | 336,568,320 B | 0 |
+| finite encoded `deltaF` telescope | 9.05 s | 2,229,633,024 B | 0 |
+| unwrapped paper floor difference | 3.80 s | 815,697,920 B | 0 |
+| final `ZMod 2^64` plane bridge | 4.05 s | 837,677,056 B | 0 |
+| live CompCert consumer | 3.50 s | 817,115,136 B | 0 |
+
+The hard limit was 2,415,919,104 bytes, so the heaviest retained module has
+186,286,080 bytes (about 178 MiB) of enforced headroom. The live consumer
+prints only Lean's ordinary foundations plus
+`cdemAbelProduction_compcert_run`. The remaining source-refinement gap begins
+at the completed machine-plane telescope and accumulator schedule, not at the
+resident Möbius coefficients or the mathematical meaning of `Ref.deltaF`.

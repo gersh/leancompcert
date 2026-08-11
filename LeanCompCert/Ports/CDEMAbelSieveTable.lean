@@ -236,8 +236,7 @@ theorem sieve_machine_full_muCodeFor (c : Cfg) (idx : Nat)
     (hcursor : SieveCursorInv c model) (hn : model.n = 0)
     (hpj : model.pj = 0) (htable : SieveTableInv c model)
     (hpnM : c.pn < M) (hsinkM : c.sink < M)
-    (hprimes : c.primes =
-      LeanCompCert.Ports.ArraySegSieve.primesBelow (Nat.sqrt c.kBound + 1)) :
+    (hprimes : c.primes = Ref.muPrimes c.kBound) :
     let out := sieveIter c idx c.sieveLen machine
     ∀ d, d < c.k1 →
       out.arr (d + c.muBase) = Ref.muCodeFor c.kBound d := by

@@ -1,5 +1,6 @@
 import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Verified.MulWide
+import LeanCompCert.Verified.PackedSieve
 
 /-!
 # The CDEM Abel increment scan
@@ -197,11 +198,19 @@ def decodePrimeTrial (s : PrimeTrial) : Nat :=
 def muCodeWith (primes : List Nat) (n : Nat) : Nat :=
   decodePrimeTrial (primes.foldl primeTrialStep ⟨n, 0, 1⟩)
 
-/-- The source computation used for a `kBound` scan. It deliberately uses the
-same finite prime list as `Cfg.ofRange`; mathematical identification with
-Möbius is a separate coverage theorem. -/
+/-- The formally specified primes needed by a `kBound` scan.  Unlike the old
+emit-time array sieve, `PrimeBase.ofTrialDivision` carries a kernel proof that
+this list contains exactly the primes through `sqrt kBound`.  The bound is
+only 446 in production, so the simple verified construction is inexpensive. -/
+def muPrimes (kBound : Nat) : List Nat :=
+  (LeanCompCert.Verified.PackedSieve.PrimeBase.ofTrialDivision
+    (Nat.sqrt kBound)).list
+
+/-- The source computation used for a `kBound` scan.  Its prime list is now a
+pure, formally specified `PrimeBase`, so mathematical identification with
+Möbius no longer depends on an opaque emit-time array computation. -/
 def muCodeFor (kBound n : Nat) : Nat :=
-  muCodeWith (primesBelow (Nat.sqrt kBound + 1)) n
+  muCodeWith (muPrimes kBound) n
 
 /-- `Σ_{d ∣ k, d ≤ K} μ(d)`, as a wrapped `u64`. -/
 def deltaF (kBound k : Nat) : Nat :=
@@ -314,7 +323,7 @@ def Cfg.ofRange (wScale kBound segLen segCount : Nat) : Cfg :=
     segLen := segLen, segCount := segCount
     bsSteps := bsBudget wScale
     markSteps := markBudget kBound segLen
-    primes := primesBelow (Nat.sqrt kBound + 1) }
+    primes := Ref.muPrimes kBound }
 
 /-! ## §3 Register allocation
 

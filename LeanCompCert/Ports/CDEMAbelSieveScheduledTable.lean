@@ -189,8 +189,7 @@ theorem initialized_scheduled_sieve_full_muCodeFor (c : Cfg)
     (hsieveM : c.sieveLen < M) (hsinkM : c.sink < M)
     (hprimePos : ∀ p ∈ c.primes, 0 < p)
     (hprimeM : ∀ p ∈ c.primes, p < M)
-    (hprimes : c.primes =
-      LeanCompCert.Ports.ArraySegSieve.primesBelow (Nat.sqrt c.kBound + 1)) :
+    (hprimes : c.primes = Ref.muPrimes c.kBound) :
     let out := (List.range c.sieveLen).foldl
       (fun s idx => arun idx s c.body) (sieveEntry c)
     ∀ d, d < c.k1 → out.arr (d + c.muBase) =

@@ -44,8 +44,7 @@ theorem sieveFactorFold_code_source (primes : List Nat) (n : Nat) :
   rfl
 
 theorem sieveFactorFold_code_for (kBound n : Nat) :
-    let primes := LeanCompCert.Ports.ArraySegSieve.primesBelow
-      (Nat.sqrt kBound + 1)
+    let primes := Ref.muPrimes kBound
     let s := sieveFactorFold primes n
     sieveCodeOf s.m s.par s.sqf = Ref.muCodeFor kBound n := by
   exact sieveFactorFold_code_source _ _
