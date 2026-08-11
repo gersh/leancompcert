@@ -676,3 +676,21 @@ array.  Its direct source check took 0.33 seconds at 546,560 KiB process RSS,
 with closure `[propext, Quot.sound]`.  The complete 687-target build passed in
 4.85 seconds at 1,816,596 KiB process RSS.  Both ran in live transient units
 under the 1,536/2,304 MiB hard/no-swap profiles and reported zero swap.
+
+The remainder of a marking round is now staged rather than reduced as one
+large expression.  `R2SegMarkingClassFrame` covers the exact 62-instruction
+classifier, its three scratch-sink clears, and its disabled stream push; its
+direct source check took 2.03 seconds at 616,472 KiB process RSS.
+`R2SegMarkingLogFrame` covers all 158 log instructions, including the five
+zero failure commits, the zeroed log-round counter, and the framed read
+cursor; its final direct check took 6.35 seconds at 644,412 KiB.
+`R2SegMarkingTail` proves the exact non-boundary round increment and retained
+window/cursors in 0.36 seconds at 576,212 KiB.  Finally,
+`R2SegMarkingPost.markPostBody_run` composes class, log, and tail into the
+complete post-mark schedule in 1.83 seconds at 594,288 KiB.  Every semantic
+closure is `[propext, Quot.sound]`; the exact list equalities use no axioms.
+
+With the new modules imported by the umbrella, the complete 695-target build
+passed in 6.45 seconds at 1,809,576 KiB process RSS.  All source checks used
+the 1,536 MiB hard/high limit; the aggregate used 2,304 MiB.  Every run used
+one Lean worker, `MemorySwapMax=0`, and reported zero process swaps.
