@@ -723,3 +723,13 @@ need not be restated or re-elaborated during finite induction.  Both closures
 are `[propext]`.  The direct check took 0.15 seconds at 535,624 KiB; the live
 326-job umbrella consumer passed in 0.94 seconds at 1,754,176 KiB under the
 same one-worker, 1,536/2,304 MiB, no-swap profiles.
+
+`R2SegMarkingRoundPosition` supplies the first size-independent finite
+marking telescope over the literal production schedule.  A complete body
+strictly inside the marking budget advances `rR` exactly once and preserves
+`rW`; induction lifts this to an arbitrary index list and then to the exact
+`List.range`/`List.foldl` schedule consumed by the denotational bridge.  The
+semantic closures are `[propext, Quot.sound]`.  The direct source check took
+1.00 seconds at 598,048 KiB process RSS under the 1,536 MiB/no-swap cap.  The
+live 327-job umbrella consumer passed in 1.63 seconds at 1,752,632 KiB under
+the 2,304 MiB aggregate cap, with one worker and zero process swaps.
