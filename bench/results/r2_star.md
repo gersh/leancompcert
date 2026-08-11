@@ -615,3 +615,14 @@ are `[propext, Quot.sound]`.  The direct check took 0.34 seconds at
 
 The complete 681-target build passed in 4.75 seconds at 1,822,140 KiB under
 the 2,304 MiB/no-swap aggregate profile.
+
+`R2SegMarkingResident` identifies the prelude, address/cell block, and
+post-hit step definitionally with all 101 instructions of `markBody`.  Since
+the post-hit step is store-free, its start and non-start resident theorems
+prove the exact logical `MarkCell.markPower` update across the complete body.
+All exact-list equalities have no axioms and all semantic closures are
+`[propext, Quot.sound]`.  The direct check took 0.32 seconds at 561,808 KiB
+under 1,536 MiB/no-swap.
+
+The complete 683-target build passed in 4.65 seconds at 1,809,916 KiB under
+the 2,304 MiB/no-swap aggregate profile.
