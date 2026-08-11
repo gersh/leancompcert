@@ -563,3 +563,13 @@ telescope, followed by the directed fixed-point/error transport.
 The complete 671-target LeanCompCert build passed in 4.85 seconds at a
 1,817,416 KiB peak under the 2,304 MiB hard/no-swap aggregate profile, with
 one Lean worker and zero swaps.
+
+`R2SegMarkingAdvanceSelect.markAdvanceSelectBody_run` then composes the first
+16 suffix instructions into one table-selection seam: it carries the
+keep/bump/step decision through the clamped index, exact resident-row load,
+and packed prime/weight decode.  Its fresh direct source check took 0.45
+seconds at 548,400 KiB under the 1,536 MiB/no-swap profile, and its printed
+closure is `[propext, Quot.sound]`.
+
+With that capstone imported, the complete 673-target build passed in 4.84
+seconds at 1,821,648 KiB under the 2,304 MiB/no-swap aggregate profile.
