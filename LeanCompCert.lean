@@ -195,7 +195,7 @@ import LeanCompCert.Ports.CeDyadicBlock
 import LeanCompCert.Ports.CeDyadicClaim
 import LeanCompCert.Ports.CeDyadicSpec
 import LeanCompCert.Ports.CeHarmonicFold
-import LeanCompCert.Ports.R2SegMarkingAdvanceSelect
+import LeanCompCert.Ports.R2SegMarkingAdvanceCursor
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 

@@ -573,3 +573,13 @@ closure is `[propext, Quot.sound]`.
 
 With that capstone imported, the complete 673-target build passed in 4.84
 seconds at 1,821,648 KiB under the 2,304 MiB/no-swap aggregate profile.
+
+`R2SegMarkingAdvanceCursor.markAdvanceCursorBody_run` composes the 27
+value-and-offset instructions into the actual next `(power, base, weight,
+first-power flag, cell)` cursor.  It keeps the updated power nonzero as an
+explicit premise before either remainder is evaluated.  The direct source
+check took 0.29 seconds at 539,560 KiB under 1,536 MiB/no-swap, with closure
+`[propext, Quot.sound]`.
+
+The complete 675-target build passed in 4.96 seconds at 1,798,748 KiB under
+the 2,304 MiB/no-swap aggregate profile.
