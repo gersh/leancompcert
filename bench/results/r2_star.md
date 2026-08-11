@@ -705,3 +705,13 @@ counters and have closure `[propext, Quot.sound]`.  The direct source check
 took 2.28 seconds at 551,028 KiB process RSS under the 1,536 MiB/no-swap cap.
 The complete 697-target build passed in 6.84 seconds at 1,822,708 KiB under
 the 2,304 MiB aggregate cap, again with one worker and zero swap.
+
+`R2SegMarkingFullPastCursor.markFullBody_past_cursor_run` lifts the exact
+past-window bump-or-step transition through the complete literal prelude
+without duplicating its large word-readiness contract.  It names the
+post-prelude state explicitly, which the proved start/non-start prelude APIs
+supply, and identifies the resulting execution with all 101 `markBody`
+instructions.  Its closure is `[propext, Quot.sound]`; the direct check took
+0.23 seconds at 541,472 KiB under the 1,536 MiB/no-swap cap.  The complete
+699-target build passed in 4.54 seconds at 1,818,604 KiB under the 2,304 MiB
+aggregate cap with one worker and zero swap.
