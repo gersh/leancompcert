@@ -604,3 +604,14 @@ under 1,536 MiB/no-swap.
 
 The complete 679-target build passed in 5.35 seconds at 1,812,304 KiB under
 the 2,304 MiB/no-swap aggregate profile.
+
+`R2SegMarkingPrelude` begins the finite iteration layer by composing the
+four-instruction phase selector with the nineteen-instruction reset mux.
+Separate start and non-start theorems prove respectively the initial table
+cursor installation and preservation of the live prime-power cursor.  The
+exact 23-instruction prefix equality has no axioms; both semantic closures
+are `[propext, Quot.sound]`.  The direct check took 0.34 seconds at
+554,168 KiB under 1,536 MiB/no-swap.
+
+The complete 681-target build passed in 4.75 seconds at 1,822,140 KiB under
+the 2,304 MiB/no-swap aggregate profile.
