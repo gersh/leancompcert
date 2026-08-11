@@ -637,3 +637,15 @@ peaked at 545,296, 535,144, and 562,008 KiB respectively under
 
 The resulting 683-target rebuild passed in 8.15 seconds at 1,804,260 KiB
 under the 2,304 MiB/no-swap aggregate profile.
+
+`markFullBody_start_past_live_frame` and
+`markFullBody_nonstart_past_live_frame` lift that sink separation through the
+phase-selector/reset prelude.  Thus both window-start and later past-window
+regimes frame every live plane address across all 101 `markBody`
+instructions.  Their direct source check took 0.51 seconds at 579,612 KiB
+process RSS.  The complete 683-target build passed in 3.74 seconds at
+1,801,956 KiB process RSS.  Both ran in live transient units with
+`MemoryAccounting=yes`, hard/high limits of 1,536/2,304 MiB respectively,
+and `MemorySwapMax=0`; the units reported zero swap.  Process RSS is retained
+alongside cgroup accounting because already-shared mapped build pages are not
+newly charged to the transient unit.
