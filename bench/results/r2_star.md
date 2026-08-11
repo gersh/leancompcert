@@ -532,3 +532,34 @@ The remaining marking proof is now the post-hit cursor/power advance and the
 window telescope around these literal prefix theorems.  That will connect the
 verified cell transition to all live cells before the selector and
 fixed-point/error transport are composed.
+
+The next LeanCompCert checkpoint after `b680dfe` completes the literal post-hit
+suffix in seven memory-bounded stages.  `R2SegMarkingAdvanceFlags` proves the mutually
+exclusive keep/bump/step decision; `R2SegMarkingAdvanceLoad` proves the
+clamped table index and exact row load; `R2SegMarkingAdvanceDecode` proves the
+packed prime/weight decoder; `R2SegMarkingAdvanceValue` proves all three
+cursor-value mux branches; `R2SegMarkingAdvanceOffset` proves the retained,
+new-power, and sentinel offsets with an explicit positive divisor;
+`R2SegMarkingBudget` proves the final truncation guard; and
+`R2SegMarkingAdvance.markAdvanceBody_eq_suffix` identifies their concatenation
+with all 48 remaining production instructions.  Representative fresh direct
+source peaks under the 1,536 MiB/no-swap profile are:
+
+| staged source | peak RSS | result |
+|---|---:|---|
+| power decision | 562,920 KiB | success |
+| index and load | 564,852 KiB | success |
+| packed decoder | 556,152 KiB | success |
+| value mux | 556,912 KiB | success |
+| offset/remainder mux | 580,444 KiB | success |
+| budget guard | 546,296 KiB | success |
+| exact suffix capstone | 528,956 KiB | success |
+
+All printed closures are foundational only (`propext` and, where required,
+`Quot.sound`); the exact suffix equality itself has no axioms.  The remaining
+work is composition of these staged contracts into the finite marking-window
+telescope, followed by the directed fixed-point/error transport.
+
+The complete 671-target LeanCompCert build passed in 4.85 seconds at a
+1,817,416 KiB peak under the 2,304 MiB hard/no-swap aggregate profile, with
+one Lean worker and zero swaps.
