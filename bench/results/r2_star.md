@@ -733,3 +733,10 @@ semantic closures are `[propext, Quot.sound]`.  The direct source check took
 1.00 seconds at 598,048 KiB process RSS under the 1,536 MiB/no-swap cap.  The
 live 327-job umbrella consumer passed in 1.63 seconds at 1,752,632 KiB under
 the 2,304 MiB aggregate cap, with one worker and zero process swaps.
+
+`R2SegMarkingInit` now proves the exact finite seed-list execution and its
+marking cursor position, while `R2SegMarkingDenotePrefix` carries that result
+through the public program denotation.  Fresh direct source checks took 0.24
+seconds at 558,876 KiB and 0.21 seconds at 553,156 KiB respectively.  Both
+used the one-worker 1,536 MiB hard/high, no-swap profile and both have closure
+`[propext, Quot.sound]`; no decision-procedure axiom is introduced.

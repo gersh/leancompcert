@@ -703,7 +703,7 @@ decide a `writes` expression. -/
 theorem productionPhysicalInitState_zero
     (logs : List LogCell) (seed : LambdaPsiSweep.Seed) :
     (WholeSweepInvariant.productionPhysicalInitState logs seed).regs 0 = 0 := by
-  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  let c : LambdaPsiSweep.Cfg := { shape := certifiedProductionCursorCfg, logs }
   let logSeeded := arun 0 productionInitState
     (LeanCompCert.Ports.PsiSegSieve.seedRegs
       [(LambdaPsiSweep.lRLogL, seed.log.logL),
@@ -719,10 +719,7 @@ theorem productionPhysicalInitState_zero
        (LambdaPsiSweep.rPsiUQ, seed.psiU.q),
        (LambdaPsiSweep.rPsiUR, seed.psiU.r)])
   have hout : WholeSweepInvariant.productionPhysicalInitState logs seed = out := by
-    simp only [WholeSweepInvariant.productionPhysicalInitState,
-      LambdaPsiSweep.init,
-      LeanCompCert.Ports.RamareCombined100M.LogSweep.init,
-      productionInitState, c, out, stored, logSeeded, arun_append]
+    rfl
   have hout0 : out.regs 0 = stored.regs 0 :=
     LambdaPsiSweep.arun_reg_frame 0 0 _ stored (by rfl)
   have hstored0 : stored.regs 0 = logSeeded.regs 0 :=
@@ -740,7 +737,7 @@ theorem productionPhysicalInitState_classCounters_zero
     (logs : List LogCell) (seed : LambdaPsiSweep.Seed) :
     let s := WholeSweepInvariant.productionPhysicalInitState logs seed
     s.regs rVShape = 0 ∧ s.regs rSeen = 0 := by
-  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
+  let c : LambdaPsiSweep.Cfg := { shape := certifiedProductionCursorCfg, logs }
   let logSeeded := arun 0 productionInitState
     (LeanCompCert.Ports.PsiSegSieve.seedRegs
       [(LambdaPsiSweep.lRLogL, seed.log.logL),
@@ -756,10 +753,7 @@ theorem productionPhysicalInitState_classCounters_zero
        (LambdaPsiSweep.rPsiUQ, seed.psiU.q),
        (LambdaPsiSweep.rPsiUR, seed.psiU.r)])
   have hout : WholeSweepInvariant.productionPhysicalInitState logs seed = out := by
-    simp only [WholeSweepInvariant.productionPhysicalInitState,
-      LambdaPsiSweep.init,
-      LeanCompCert.Ports.RamareCombined100M.LogSweep.init,
-      productionInitState, c, out, stored, logSeeded, arun_append]
+    rfl
   have hz (r : Nat)
       (houtFrame : LambdaPsiSweep.ablockWritesReg r
         (LeanCompCert.Ports.PsiSegSieve.seedRegs

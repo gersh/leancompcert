@@ -521,3 +521,36 @@ umbrella build completed serialized under an 8 GiB hard cap; its peak was
 7,517,138,944 bytes and came from the pre-existing segmented-psi module, not
 this block.  The full Goldbach statement build completed serialized under a
 14 GiB hard cap, with a recorded cgroup peak of 12,929,568,768 bytes.
+
+## 2026-08-11 bounded-memory production build
+
+This checkpoint supersedes the earlier 4--22 GiB source-check figures above.
+The production prime table is now compiled as ten certified literal shards,
+the production phase descriptor as sixteen shards, and the large power-cell,
+shape, log, and lambda/psi proofs as small generic stages.  The physical
+initializer consumes the certified literal table; a separately compiled
+equivalence theorem proves that it is exactly the original generated,
+source-shaped descriptor.  Thus the memory reduction does not replace the
+paper-facing computation or assume its result.
+
+All direct checks below used one Lean worker in a transient cgroup with
+`MemoryHigh=MemoryMax=1536M` and `MemorySwapMax=0`.  `/usr/bin/time -v`
+reported:
+
+| source module | elapsed | maximum RSS |
+| --- | ---: | ---: |
+| `RamareCombined100MProductionInit.lean` | 2.44 s | 766,312 KiB |
+| `RamareCombined100MWholeSweepInitShapeGeneric.lean` | < 1 s | 603,000 KiB |
+| `RamareCombined100MWholeSweepInitEquivalence.lean` | 0.19 s | 573,324 KiB |
+| `RamareCombined100MWholeSweepInvariant.lean` | 0.61 s | 607,460 KiB |
+| `RamareCombined100MClassificationSweep.lean` | 20.08 s | 774,484 KiB |
+| `RamareCombined100MArithmeticInvariant.lean` | 5.14 s | 850,112 KiB |
+| `RamareCombined100MMaxHeadroom.lean` | 0.23 s | 579,132 KiB |
+
+The complete 393-job `LeanCompCert` umbrella then passed under a 2,304 MiB
+hard/high limit, with one worker and no swap.  The cached validation took
+0.84 seconds and reached 1,761,220 KiB process RSS.  Attempts to elaborate
+the original generated table inside the physical wrapper were reproducibly
+killed at 1,536, 2,048, and 2,304 MiB; routing that wrapper through the
+proved-equal certified literal descriptor is the change that removes that
+failure mode.

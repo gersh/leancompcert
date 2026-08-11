@@ -1,0 +1,12 @@
+import LeanCompCert.Ports.RamareCombined100MProductionPrimeTableBase
+
+namespace LeanCompCert.Ports.RamareCombined100M.ShapeSieve
+
+def productionPrimeTableChunk09 : List Nat :=
+  [9001, 9007, 9011, 9013, 9029, 9041, 9043, 9049, 9059, 9067, 9091, 9103, 9109, 9127, 9133, 9137, 9151, 9157, 9161, 9173, 9181, 9187, 9199, 9203, 9209, 9221, 9227, 9239, 9241, 9257, 9277, 9281, 9283, 9293, 9311, 9319, 9323, 9337, 9341, 9343, 9349, 9371, 9377, 9391, 9397, 9403, 9413, 9419, 9421, 9431, 9433, 9437, 9439, 9461, 9463, 9467, 9473, 9479, 9491, 9497, 9511, 9521, 9533, 9539, 9547, 9551, 9587, 9601, 9613, 9619, 9623, 9629, 9631, 9643, 9649, 9661, 9677, 9679, 9689, 9697, 9719, 9721, 9733, 9739, 9743, 9749, 9767, 9769, 9781, 9787, 9791, 9803, 9811, 9817, 9829, 9833, 9839, 9851, 9857, 9859, 9871, 9883, 9887, 9901, 9907, 9923, 9929, 9931, 9941, 9949, 9967, 9973]
+
+theorem productionPrimeTableChunk09_eq :
+    trialPrimeRange 9000 1001 = productionPrimeTableChunk09 := by
+  decide +kernel
+
+end LeanCompCert.Ports.RamareCombined100M.ShapeSieve

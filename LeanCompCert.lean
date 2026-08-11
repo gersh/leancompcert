@@ -137,6 +137,7 @@ import LeanCompCert.Ports.RamareCombined100MSegModel
 import LeanCompCert.Ports.RamareCombined100MQuotient
 import LeanCompCert.Ports.RamareCombined100MLambdaPsiSweep
 import LeanCompCert.Ports.RamareCombined100MMaxHeadroom
+import LeanCompCert.Ports.RamareCombined100MWholeSweepInitEquivalence
 import LeanCompCert.Ports.RamarePsiQRBlock
 import LeanCompCert.Ports.SigmaPrincipalHead
 import LeanCompCert.Ports.MoebiusSawtooth
@@ -197,6 +198,8 @@ import LeanCompCert.Ports.CeDyadicSpec
 import LeanCompCert.Ports.CeHarmonicFold
 import LeanCompCert.Ports.R2SegMarkingScheduled
 import LeanCompCert.Ports.R2SegMarkingRoundPosition
+import LeanCompCert.Ports.R2SegMarkingInit
+import LeanCompCert.Ports.R2SegMarkingDenotePrefix
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 

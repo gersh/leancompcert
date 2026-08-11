@@ -71,9 +71,21 @@ theorem productionPhysicalInitState_word
     (logs : List LogCell) (seed : LambdaPsiSweep.Seed) :
     let s := WholeSweepInvariant.productionPhysicalInitState logs seed
     (∀ j, s.regs j < M) ∧ (∀ j, s.arr j < M) := by
-  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
-  simpa only [WholeSweepInvariant.productionPhysicalInitState, c] using
-    LambdaPsiSweep.init_word c seed
+  let c : LambdaPsiSweep.Cfg := { shape := certifiedProductionCursorCfg, logs }
+  have hbase : (∀ j, productionInitState.regs j < M) ∧
+      (∀ j, productionInitState.arr j < M) := by
+    unfold productionInitState
+    apply LeanCompCert.Verified.ArrayFoldBridge.arun_word 0
+      certifiedProductionCursorCfg.init
+      LeanCompCert.Verified.ArrayState.initialAState
+    · intro j
+      simp [LeanCompCert.Verified.ArrayState.initialAState,
+        LeanCompCert.Verified.Reflect.initialState, M]
+    · intro j
+      simp [LeanCompCert.Verified.ArrayState.initialAState, M]
+  unfold WholeSweepInvariant.productionPhysicalInitState
+  exact WholeSweepInvariant.seededInitState_word c seed productionInitState
+    hbase.1 hbase.2
 
 /-- Opaque structure-valued initializer word closure. -/
 theorem productionPhysicalInitState_wordInv
@@ -206,11 +218,15 @@ theorem productionArithmeticPre_of_headroom
           (LambdaPsiSweep.afterLogCandidate k s) < M) :
     LambdaPsiSweep.ArithmeticPre
       ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg) k s := by
-  let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
-  have harray : productionCursorCfg.arrayLen + 2 * 10001 + 2 < M := by
-    have htable := productionCursorCfg_tableLen_le_10001
+  rw [productionCursorCfg_eq_certified] at hsumL hsumU hpsiL hpsiU ⊢
+  let c : LambdaPsiSweep.Cfg := { shape := certifiedProductionCursorCfg, logs }
+  have harray : certifiedProductionCursorCfg.arrayLen +
+      2 * 10001 + 2 < M := by
+    have htable : certifiedProductionCursorCfg.tableLen ≤ 10001 := by
+      rw [← congrArg Cfg.tableLen productionCursorCfg_eq_certified]
+      exact productionCursorCfg_tableLen_le_10001
     have hM : M = 18446744073709551616 := rfl
-    change (14 * 999900 + productionCursorCfg.tableLen + 1 + 4) +
+    change (14 * 999900 + certifiedProductionCursorCfg.tableLen + 1 + 4) +
       2 * 10001 + 2 < M
     omega
   have hincL : RS62.incLWord (s.regs 132) < M := by
@@ -267,13 +283,13 @@ theorem productionArithmeticPre_of_headroom
         (PsiQR.advance_q_le_add (logged.regs 132) lamU zU) hpsiU' }
   · rw [hp]
     change s.regs LambdaPsiSweep.sRP +
-      (productionCursorCfg.arrayLen + 2) < M
+      (certifiedProductionCursorCfg.arrayLen + 2) < M
     omega
   · rw [hp]
     change s.regs LambdaPsiSweep.sRP +
-      (productionCursorCfg.arrayLen + 2 + logs.length) < M
+      (certifiedProductionCursorCfg.arrayLen + 2 + logs.length) < M
     omega
-  · change productionCursorCfg.arrayLen + 2 + logs.length +
+  · change certifiedProductionCursorCfg.arrayLen + 2 + logs.length +
       logs.length < M
     omega
 
