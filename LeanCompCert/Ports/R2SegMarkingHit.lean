@@ -150,7 +150,66 @@ theorem markAddressCellBody_past_run (c : R2Cfg) (k : Nat)
   rw [h30, h31', h32', harr] at hcell
   exact hcell
 
+/-- The resident gate pair survives all three cell stores. -/
+theorem markAddressCellBody_resident_gates (c : R2Cfg) (k : Nat)
+    (s : AState) (j : Nat) (hj : s.regs rJ = j)
+    (hactive : s.regs 8 = 1) (hjL : j < c.segLen)
+    (haddr : j + 2 * c.segLen < M) :
+    let out := arun k s (markAddressCellBody c)
+    out.regs 8 = 1 ∧ out.regs 27 = 0 := by
+  let addressed := arun k s (markAddressBody c)
+  have h27 := markAddressBody_resident_pastBit c k s j hj hactive hjL haddr
+  have h8a : addressed.regs 8 = 1 :=
+    (arun_frame k 8 (markAddressBody c) (by rfl) s).trans hactive
+  let out := arun k addressed markCellBody
+  have h8o : out.regs 8 = addressed.regs 8 :=
+    arun_frame k 8 markCellBody (by rfl) addressed
+  have h27o : out.regs 27 = addressed.regs 27 :=
+    arun_frame k 27 markCellBody (by rfl) addressed
+  simp only [markAddressCellBody, arun_append]
+  exact ⟨h8o.trans h8a, h27o.trans h27⟩
+
+/-- The past-window gate pair likewise survives all three sink stores. -/
+theorem markAddressCellBody_past_gates (c : R2Cfg) (k : Nat)
+    (s : AState) (j : Nat) (hj : s.regs rJ = j)
+    (hactive : s.regs 8 = 1) (hjL : c.segLen ≤ j)
+    (haddr : 5 * c.segLen < M) :
+    let out := arun k s (markAddressCellBody c)
+    out.regs 8 = 1 ∧ out.regs 27 = 1 := by
+  let addressed := arun k s (markAddressBody c)
+  have h27 := markAddressBody_past_pastBit c k s j hj hactive hjL haddr
+  have h8a : addressed.regs 8 = 1 :=
+    (arun_frame k 8 (markAddressBody c) (by rfl) s).trans hactive
+  let out := arun k addressed markCellBody
+  have h8o : out.regs 8 = addressed.regs 8 :=
+    arun_frame k 8 markCellBody (by rfl) addressed
+  have h27o : out.regs 27 = addressed.regs 27 :=
+    arun_frame k 27 markCellBody (by rfl) addressed
+  simp only [markAddressCellBody, arun_append]
+  exact ⟨h8o.trans h8a, h27o.trans h27⟩
+
+/-- The address/cell block changes no persistent cursor or budget register. -/
+theorem markAddressCellBody_cursor_frame (c : R2Cfg) (k : Nat) (s : AState) :
+    let out := arun k s (markAddressCellBody c)
+    out.regs rPi = s.regs rPi ∧ out.regs rQ = s.regs rQ ∧
+      out.regs rBp = s.regs rBp ∧ out.regs rWt = s.regs rWt ∧
+      out.regs rFs = s.regs rFs ∧ out.regs rJ = s.regs rJ ∧
+      out.regs rW = s.regs rW ∧ out.regs rR = s.regs rR ∧
+      out.regs rViol = s.regs rViol ∧
+      out.regs rVMark = s.regs rVMark := by
+  let out := arun k s (markAddressCellBody c)
+  have frame (r : Nat) (h : writes r (markAddressCellBody c) = false) :
+      out.regs r = s.regs r :=
+    arun_frame k r (markAddressCellBody c) h s
+  exact ⟨frame rPi (by rfl), frame rQ (by rfl),
+    frame rBp (by rfl), frame rWt (by rfl), frame rFs (by rfl),
+    frame rJ (by rfl), frame rW (by rfl), frame rR (by rfl),
+    frame rViol (by rfl), frame rVMark (by rfl)⟩
+
 #print axioms markAddressCellBody_markPower_run
 #print axioms markAddressCellBody_past_run
+#print axioms markAddressCellBody_resident_gates
+#print axioms markAddressCellBody_past_gates
+#print axioms markAddressCellBody_cursor_frame
 
 end LeanCompCert.Ports.R2SegSieve

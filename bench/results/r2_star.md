@@ -649,3 +649,21 @@ process RSS.  The complete 683-target build passed in 3.74 seconds at
 and `MemorySwapMax=0`; the units reported zero swap.  Process RSS is retained
 alongside cgroup accounting because already-shared mapped build pages are not
 newly charged to the transient unit.
+
+The cursor seam now carries the production gate facts as well as the array
+effect.  `markAddressBody_resident_pastBit` and
+`markAddressBody_past_pastBit` prove the exact resident/past selector, while
+`markAddressCellBody_cursor_frame` proves that the address/cell block frames
+all persistent cursor and budget registers.  Fresh source checks for the
+address and address/cell modules took 0.40 and 0.39 seconds at 572,628 and
+576,384 KiB process RSS respectively under the 1,536 MiB/no-swap profile.
+
+`markResidentBody_resident_cursor_run` composes those facts with the complete
+48-instruction advance theorem.  On a resident hit it proves that the prime
+power row is preserved, `j` advances by the current power, and the two budget
+counters receive exactly the production `budgetFailure`.  Its direct source
+check took 0.30 seconds at 540,292 KiB process RSS, with closure
+`[propext, Quot.sound]`.  The complete 685-target build passed in 10.27
+seconds at 1,816,776 KiB process RSS.  Both checks used live transient units
+with their 1,536/2,304 MiB high and hard limits, `MemoryAccounting=yes`, one
+Lean worker, and `MemorySwapMax=0`; both reported zero swap.
