@@ -592,3 +592,15 @@ took 0.32 seconds at 544,496 KiB under 1,536 MiB/no-swap.
 
 The complete 677-target build passed in 4.55 seconds at 1,805,404 KiB under
 the 2,304 MiB/no-swap aggregate profile.
+
+`R2SegMarkingAdvanceStep.markAdvanceStepBody_run` composes the proved
+16-instruction table-selection/decode prefix with the proved 32-instruction
+cursor/budget tail.  It therefore covers the complete 48-instruction
+production post-hit suffix, including derived exclusive keep/bump/step bits,
+the positive updated-power guard, and both budget-failure counters.  Its exact
+suffix equality has no axioms and its semantic closure is
+`[propext, Quot.sound]`.  The direct check took 0.81 seconds at 567,772 KiB
+under 1,536 MiB/no-swap.
+
+The complete 679-target build passed in 5.35 seconds at 1,812,304 KiB under
+the 2,304 MiB/no-swap aggregate profile.
