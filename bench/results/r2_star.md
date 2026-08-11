@@ -694,3 +694,14 @@ With the new modules imported by the umbrella, the complete 695-target build
 passed in 6.45 seconds at 1,809,576 KiB process RSS.  All source checks used
 the 1,536 MiB hard/high limit; the aggregate used 2,304 MiB.  Every run used
 one Lean worker, `MemorySwapMax=0`, and reported zero process swaps.
+
+`R2SegMarkingFullCursor` lifts the resident suffix cursor contract through
+the complete phase-selector/reset prelude.  Separate boundary-start and
+ordinary-round theorems now cover all 101 `markBody` instructions: the first
+installs the initial packed row before advancing its multiple, while the
+second preserves the incoming row before the same exact resident advance.
+Both transport the production budget failure into the aggregate and marking
+counters and have closure `[propext, Quot.sound]`.  The direct source check
+took 2.28 seconds at 551,028 KiB process RSS under the 1,536 MiB/no-swap cap.
+The complete 697-target build passed in 6.84 seconds at 1,822,708 KiB under
+the 2,304 MiB aggregate cap, again with one worker and zero swap.
