@@ -449,3 +449,29 @@ the source factor count, bases, and exponents; telescope that invariant
 through `r2Program.denote`; and transport the fixed-point/error tests to the
 real source bound.  Until that theorem exists, the full run remains a
 completed benchmark and not a discharge of the literature atom.
+
+## 10. Formal compiled-selector refinement
+
+`LeanCompCert/Ports/R2SegClassification.lean` now proves the next
+program-specific layer.  The theorem `classSelectorBody_run` identifies the
+literal 24-instruction production slice in `R2Cfg.classBody` with a pure
+four-way classifier.  It covers the qualification bit, modes 0--3, active
+round gating, packed stream payload, and the factors which `logBody` later
+uses:
+
+* mode 0 selects `(log n, log n)` with a negative sign;
+* mode 1 selects `(log p, log n - lsum)` with a positive sign;
+* mode 2 selects `(log p, log p)` with a negative sign; and
+* mode 3 selects `(log p, log q)` with a positive sign.
+
+The proof is deliberately split into flag, mode, and payload stages.  A
+one-shot simplification of the same instruction list exceeded the 1,536 MiB
+hard cap and was killed; the staged source check completes in under one
+second under that cap and its fresh closure contains only `propext`,
+`Classical.choice`, and `Quot.sound`.
+
+This narrows the remaining denotation gap again.  The physical marking loop
+must still prove that its product, logarithmic-sum, and packed-weight planes
+satisfy the selector hypotheses at each live cell.  That invariant must then
+be telescoped through windows, followed by the fixed-point enclosure and
+real-bound transport.
