@@ -12,6 +12,15 @@ fresh source check with one Lean worker, `MemoryHigh=2G`, `MemoryMax=3G`, and
 swap disabled took `1.64 s` and peaked at `615844 KiB` RSS.  The proof uses
 the emitted register moves rather than reducing the full production run.
 
+`CDEMAbelInactiveSource` supplies the next compact boundary: when the
+accumulation selector is off, the emitted head preserves the source stream,
+and the existing framed product/bisection theorem carries `F`, `t`, `t²`,
+`G`, and `tv` through the full inactive accumulator.  Its fresh source check
+under the same cap took `0.66 s` at `579608 KiB` RSS.  An attempted monolithic
+re-proof of the entire bisection suffix reached one million deterministic
+heartbeats; it was discarded in favor of this compositional boundary before
+any production-scale rebuild.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on

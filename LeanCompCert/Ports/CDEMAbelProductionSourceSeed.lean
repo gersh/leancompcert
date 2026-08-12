@@ -117,4 +117,16 @@ theorem production_source_seed :
         rM, rPar, rSqf, rF, rE, rKr, rC, rDp, rDn, rSl, rSh, rT,
         rT2, rViol, rUpLo, rUpHi, rUnLo, rUnHi, rVLo, rVHi, rTv, rK]
 
+/-- The two persistent controls needed to carry the source seed through the
+inactive sieve and marking phases. -/
+theorem production_source_seed_controls :
+    let st := sieveEntry productionCfg
+    st.regs rZero = 0 ∧ st.regs rK = 1 := by
+  refine ⟨(sieveEntry_seed productionCfg).1, ?_⟩
+  apply production_seed_reg rK 1 (by decide)
+  · simp [Cfg.seedList]
+  · simp [Cfg.seedList, rZero, rR, rW, rD, rSg, rJ, rN, rPj,
+      rM, rPar, rSqf, rF, rE, rKr, rC, rDp, rDn, rSl, rSh, rT,
+      rT2, rViol, rUpLo, rUpHi, rUnLo, rUnHi, rVLo, rVHi, rTv, rK]
+
 end LeanCompCert.Ports.CDEMAbelProductionSourceSeed
