@@ -1413,3 +1413,17 @@ Fresh checks on 2026-08-11 used one Lean worker in the 3 GiB/no-swap cgroup:
 Fresh axiom prints for the changing-index telescope and terminal slack theorem
 report `[propext, Quot.sound]`; the full machine-array theorem additionally
 uses `Classical.choice`.
+
+`CDEMAbelSieveMarkEntry.lean` now carries the next composition boundary. It
+proves, without normalizing a production trace, that every actual scheduled
+sieve iteration preserves `rR = 0` and `rW = 1`; telescopes that contract over
+the changing-index sieve prefix; and combines it with the existing sieve
+invariant to expose the zero register, word-valued array, and complete resident
+Möbius table in the state consumed by the first marking step. The accumulator
+frame is deliberately split into head, product, and bisection blocks: a single
+whole-body frame query exceeded the deterministic heartbeat budget.
+
+A fresh source check under the one-worker 3 GiB/no-swap cap took 52.34 s and
+peaked at 646,632 KiB RSS. Fresh axiom prints for the one-step and telescope
+contracts report `[propext, Quot.sound]`; the combined resident-table entry
+contract additionally uses `Classical.choice`.
