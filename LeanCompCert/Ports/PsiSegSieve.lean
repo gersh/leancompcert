@@ -1000,113 +1000,14 @@ def refPsiLimbs (S lo hi : Nat) : Nat × Nat :=
   let a := (refPsi S lo hi).1
   (a % 18446744073709551616, a / 18446744073709551616)
 
-/-! ## Kernel sanity checks
+/-! ## Reference audit
 
-The bridge does not depend on any of this: it says the artifact computes
-`denote`, whatever `denote` is.  These checks are the other half — evidence
-that `denote` is the residue it is meant to be.  They evaluate the whole
-four-phase sieve in the kernel at a tiny configuration and compare against a
-**trial-division** reference, which shares no code with it: `lambdaFix` finds
-the smallest factor of `n` by division and asks whether `n` is a power of it,
-where the artifact reads an unmarked sieve cell and a merged emit-time table.
-
-`S = 6` here, not `48`, only so that the log phase is 6 rounds per entry
-instead of 48; the arithmetic is the same at every scale, and the artifact
-repeats the comparison against `bench/ref_psi.c` at `S = 48` and
-`hi = 10⁶, 10⁷, 10⁸`, where it agrees bit for bit.
+The small independent emit-time checks live in `PsiSegSieveChecks`.  The old
+closed whole-program kernel reductions were not proof dependencies and were
+retired after a capped rebuild measured a multi-gigabyte peak.  The production
+route instead uses the proved compiler/denotation chain above and the compiled
+agreement controls against `bench/ref_psi.c` at `S = 48` and
+`hi = 10⁶, 10⁷, 10⁸`.
 -/
-
-namespace Check
-
-/-- The smallest prime factor of `n`, by trial division. -/
-def smallestFactorAux (n d fuel : Nat) : Nat :=
-  match fuel with
-  | 0 => n
-  | fuel + 1 => if d * d > n then n else if n % d = 0 then d else
-      smallestFactorAux n (d + 1) fuel
-
-def smallestFactor (n : Nat) : Nat := smallestFactorAux n 2 n
-
-/-- Is `m` a power of `p`? -/
-def isPowerOf (p m fuel : Nat) : Bool :=
-  match fuel with
-  | 0 => m == 1
-  | fuel + 1 =>
-      if m == 1 then true
-      else if p < 2 then false
-      else if m % p == 0 then isPowerOf p (m / p) fuel else false
-
-/-- `Λ(n)` at scale `2^S`: `lnFix S p` when `n = p^k`, else `0`. -/
-def lambdaFix (S n : Nat) : Nat :=
-  if n < 2 then 0
-  else
-    let p := smallestFactor n
-    if isPowerOf p n n then lnFix S p else 0
-
-/-- `(Σ_{lo ≤ n ≤ hi} Λ(n), #test points, last test point)`. -/
-def refWindow (S lo hi : Nat) : Nat × Nat × Nat :=
-  ((List.range (hi + 1)).drop lo).foldl (fun acc n =>
-    let w := lambdaFix S n
-    if w = 0 then acc else (acc.1 + w, acc.2.1 + 1, n)) (0, 0, lo - 1)
-
-/-- One main window of eight cells covering `[25, 32]`, behind one root window
-covering `[1, 8]`.  The counts are spelled out because the emit-time sieve is
-not a kernel-reducible definition; they are what `PsiCfg.ofScale 4 25 8 1`
-computes — `⌊√32⌋ = 5`, `⌊√8⌋ = 2` leaves `[2]` as the bootstrap table, and the
-root phase collects the two remaining primes `3`, `5` into a table of
-`π(5) = 3` entries.  The prime powers in range are `25`, `27` and `32`, each
-weighted by `lnFix 4 p` and **not** by `lnFix 4 (p^k)`. -/
-def cfg : PsiCfg :=
-  { base :=
-      { lo := 25, segLen := 8, segCount := 1, rootCount := 1
-        bootPrimes := [2], mainCount := 3, rootCap := 5, markSteps := 29 }
-    sc := 4
-    streamCap := 5
-    pp := [(25, 25), (27, 17), (32, 11)] }
-
-/-- The head `[1, 24]`, folded at emit time.  `biasOf 4 = 2²⁷`. -/
-def seed : PsiSeed :=
-  { dlo := 134217695, dhi := 0, prev := 24, terms := 13
-    sq := 4, sq2 := 25, ex := 4, th := 32 }
-
-/-- …and that is exactly what the trial-division reference says the head is. -/
-example : seed.dlo = biasOf 4 + (refWindow 4 2 24).1 - 2 ^ 4 * 24 := by decide
-
-example : seed.terms = (refWindow 4 2 24).2.1 := by decide
-
-/-- A program with the epilogue stripped and the output pointed at one
-accumulator, so a single residue register can be read off. -/
-def probe (out : Nat) : AProgram :=
-  { regCount := regCount, arrayLen := cfg.arrayLen
-    loopCount := cfg.period * (cfg.rootCount + cfg.segCount)
-    init := cfg.init seed, body := cfg.body, epilogue := [], output := out }
-
-/-- The three emit-time prime-power weights are `Λ(p^k) = log p`, not
-`log(p^k)`: `25 ↦ lnFix 5`, `27 ↦ lnFix 3`, `32 ↦ lnFix 2`. -/
-example : cfg.pp = [(25, lnFix 4 5), (27, lnFix 4 3), (32, lnFix 4 2)] := by decide
-
-set_option maxRecDepth 40000000 in
-set_option maxHeartbeats 20000000 in
-/-- **The two-limb accumulator.**  After the four-phase loop the low limb holds
-the head's carry-in plus `Σ_{25 ≤ n ≤ 32} Λ(n)` minus `2⁴·(32 − 24)` — the
-residual, exactly as the trial-division reference computes it. -/
-example : (probe rDlo).denote
-    = some (seed.dlo + (refWindow 4 25 32).1
-        - 2 ^ 4 * ((refWindow 4 25 32).2.2 - seed.prev)) := by decide
-
-set_option maxRecDepth 40000000 in
-set_option maxHeartbeats 20000000 in
-/-- The term count is the head's plus the window's; the window's five test
-points are `25 = 5², 27 = 3³, 29, 31, 32 = 2⁵`, so both the prime stream and
-the prime-power merge are exercised. -/
-example : (probe rTerms).denote
-    = some (seed.terms + (refWindow 4 25 32).2.1) := by decide
-
-set_option maxRecDepth 40000000 in
-set_option maxHeartbeats 20000000 in
-/-- The incrementally maintained `⌊√n⌋` reaches `⌊√32⌋ = 5`. -/
-example : (probe rSq).denote = some 5 := by decide
-
-end Check
 
 end LeanCompCert.Ports.PsiSegSieve

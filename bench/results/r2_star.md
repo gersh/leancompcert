@@ -752,3 +752,56 @@ The direct source check peaked at **112,914,432 charged bytes** and the focused
 no-swap profile; both had zero pressure, hard-limit, OOM, or swap events.
 Fresh axiom prints are `[propext, Quot.sound]` for the segment theorems and
 `[propext]` for the epilogue theorems.
+
+## 12. Fixed-point real telescope and dependency isolation
+
+`LeanCompCert.Verified.LogFixedBounds` is a deliberately downstream structural
+module.  It proves that the `S` emitted fractional bits are below `2^S` and
+therefore that `logFix S n < 63·2^S` for every `n < 2^63`.  Keeping this
+storage theorem out of `LogFixed` is important build engineering: changing the
+circuit module invalidates the monolithic `PsiSegSieve` emitter, whereas a
+change to `LogFixedBounds` does not.
+
+The focused four-job target completed in **1.6 seconds** at **193,441,792
+charged bytes** under one Lean worker, `MemoryHigh=2G`, `MemoryMax=3G`, and
+`MemorySwapMax=0`, with zero pressure, hard-limit, OOM, or swap events.
+
+The paper repository's downstream
+`MathExtras.NumberTheory.Reductions.R2FixedPointSoundness` supplies the real
+telescope at the actual `S = 24` production scale:
+
+```
+lnFix 24 n ≤ 2^24 log n ≤ lnFix 24 n + 4,
+gammaStep 24 ≤ 2^24 (2γ),
+a193 / 2^16 ≤ 1.93,
+⌊√n⌋ ≤ √n.
+```
+
+The two-sided natural-log result uses the exact 64-bit `L2` literal, an
+ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
+two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its source
+check completed in **7.1 seconds** at **619,339,776 charged bytes** under the
+same 2/3 GiB no-swap profile, with every memory event counter zero.  No native
+evaluator or new trust declaration is introduced.
+
+As a regression control, placing the structural theorem in `LogFixed` was
+tested and rejected: it triggered a rebuild of `PsiSegSieve`, crossed the 2
+GiB soft threshold, and reached 2.9 GiB before the contained compile was
+stopped.  The downstream-module layout is the retained route.
+
+The same investigation found the larger cause: three closed whole-program
+`by decide` examples were embedded at the bottom of each production emitter.
+They were not proof dependencies, but every source edit forced their complete
+kernel reduction.  Under the 2/3 GiB no-swap profile the isolated `ψ` check
+reached **2,894,848,000 charged bytes** after ten minutes and was stopped
+before the hard ceiling.  Those reductions are retired in favor of the proved
+`AProgram` compiler/denotation chain and the existing CompCert/gcc/reference
+accepting and rejecting controls recorded above.
+
+The cheap, independent emit-time checks remain in
+`PsiSegSieveChecks` and `R2SegSieveChecks`; fresh source checks peaked at
+**110,145,536** and **95,125,504 charged bytes** respectively with zero memory
+events.  With the reductions off the production path, `PsiSegSieve` compiled
+from source in **1.7 seconds / 178,335,744 bytes**, and the live
+`R2SegSieve` target in **3.5 seconds / 223,911,936 bytes**, both with every
+memory event counter zero.  This is the retained memory-safe build layout.
