@@ -99,6 +99,18 @@ hard-limit, OOM, and swap events.  The MathExtras paper bridge checked at a
 `MemoryHigh` at 2.39 GB and 2,014 reclaim events.  Splitting scalar values and
 using a generic stream-step lemma reduced charged memory by more than 92%.
 
+`CDEMAbelProductionEnvelope` now provides the reusable numerical invariant for
+the remaining production cells.  `ProductionAggregateEnvelope` bounds total
+variation and each directed 128-bit accumulator by the paper-scale expression
+`(k-1) * K * W`.  Assuming the next finite Möbius jump satisfies
+`dPos + dNeg <= K`, it derives every word and wide no-wrap premise required by
+`InteriorNextBounds`, and the exact full-accumulator contract preserves the
+envelope across one cell.  The theorem is seeded at the proved second entry,
+so no production prefix is reduced.  A fresh source check charged 142,299,136
+bytes and the 101-module target build charged 161,320,960 bytes; both reported
+zero pressure, hard-limit, OOM, and swap events.  This checkpoint deliberately
+leaves the uniform paper jump bound as the next mathematical obligation.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on
