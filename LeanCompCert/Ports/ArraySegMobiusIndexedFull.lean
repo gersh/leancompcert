@@ -189,6 +189,196 @@ structure ProductionCoreSchedule (c : Cfg)
   mainBaseM : mainBase c bootFuel laterFuel delta +
     mainFuel * c.segLen < M
 
+/-- Root-only schedule for the general production case where the last
+allocated segment is padded past `rootCap`.  `valid` is the exact number of
+live candidates in that final segment. -/
+structure PaddedProductionRootSchedule (c : Cfg)
+    (bootBound bootFuel laterFuel valid delta : Nat) : Prop where
+  bootPrime : PrimeTableInv c.bootPrimes bootBound
+  bootShape : ∃ tail, c.bootPrimes = c.firstPrime :: tail
+  bootLe : c.bootCount ≤ c.tableLen
+  tableLenM : c.tableLen < M
+  markPos : 0 < c.markSteps
+  markM : c.markSteps < M
+  periodM : c.period < M
+  spanM : c.rootSpan < M
+  firstPrimePos : 0 < c.firstPrime
+  firstPrimeLeLen : c.firstPrime ≤ c.segLen
+  firstPrimeLeBoot : c.firstPrime ≤ bootBound
+  bootBoundM : bootBound < M
+  bootBoundSqM : bootBound * bootBound < M
+  segBootM : c.segLen + bootBound < M
+  arrayM : c.arrayLen < M
+  markBudget :
+    (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps
+  segLenPos : 0 < c.segLen
+  bootTwo : 2 ≤ bootBound
+  rootCapM : c.rootCap < M
+  deltaEq : c.wDelta = delta
+  deltaM : delta < M
+
+  bootstrapRange : bootFuel * c.period ≤ c.rootSpan - 1
+  bootstrapBaseM : 1 + bootFuel * c.segLen < M
+  bootstrapLastTwo : ∀ n, n < bootFuel →
+    2 ≤ 1 + (n + 1) * c.segLen - 1
+  bootstrapStartWithin : ∀ n, n < bootFuel →
+    1 + n * c.segLen - 1 ≤ bootBound
+  bootstrapWithin : ∀ n, n < bootFuel →
+    1 + (n + 1) * c.segLen - 1 ≤ bootBound
+  bootstrapCap : ∀ n, n < bootFuel →
+    1 + (n + 1) * c.segLen - 1 ≤ c.rootCap
+  bootstrapCover : ∀ n, n < bootFuel →
+    1 + n * c.segLen + c.segLen < (bootBound + 1) * (bootBound + 1)
+  bootFit : c.bootPrimes.length < c.tableLen
+  bootstrapFit : ∀ n, n < bootFuel → ∀ k, k < c.segLen →
+    (rootScanMixed c.bootPrimes bootBound (1 + n * c.segLen) k).length <
+      c.tableLen
+
+  crossingRange : bootFuel * c.period + c.period ≤ c.rootSpan - 1
+  crossingBaseM : crossingBase c bootFuel + c.segLen < M
+  crossingStartWithin : crossingBase c bootFuel - 1 ≤ bootBound
+  crossingLast : bootBound < crossingBase c bootFuel + c.segLen - 1
+  crossingCap : crossingBase c bootFuel + c.segLen - 1 ≤ c.rootCap
+  crossingCover : crossingBase c bootFuel + c.segLen <
+    (bootBound + 1) * (bootBound + 1)
+  crossingFit : ∀ k, k < c.segLen →
+    (rootScanMixed c.bootPrimes bootBound (crossingBase c bootFuel) k).length <
+      c.tableLen
+
+  laterRange : (bootFuel + 1) * c.period + laterFuel * c.period ≤
+    c.rootSpan - 1
+  laterBaseM : laterBase c bootFuel + laterFuel * c.segLen < M
+  laterCap : ∀ n, n < laterFuel →
+    laterBase c bootFuel + (n + 1) * c.segLen - 1 ≤ c.rootCap
+  laterCover : ∀ n, n < laterFuel →
+    laterBase c bootFuel + n * c.segLen + c.segLen <
+      (bootBound + 1) * (bootBound + 1)
+  laterFit : ∀ n, n < laterFuel → ∀ k, k < c.segLen →
+    let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
+      (laterBase c bootFuel) n
+    (rootScanFrom ps (laterBase c bootFuel + n * c.segLen) k).length ≤
+        c.tableLen ∧
+      (unmarkedBool
+          (rootScanFrom ps (laterBase c bootFuel + n * c.segLen) k)
+          (laterBase c bootFuel + n * c.segLen + k) = true →
+        (rootScanFrom ps
+          (laterBase c bootFuel + n * c.segLen) k).length < c.tableLen)
+
+  finalIndex : (bootFuel + 1) * c.period + laterFuel * c.period +
+    c.period = c.rootSpan
+  finalBaseM : laterBase c bootFuel + laterFuel * c.segLen + c.segLen < M
+  finalValid : laterBase c bootFuel + laterFuel * c.segLen + valid - 1 =
+    c.rootCap
+  finalValidLt : valid < c.segLen
+  finalCover : laterBase c bootFuel + laterFuel * c.segLen + valid <
+    (bootBound + 1) * (bootBound + 1)
+  finalPrefixFit :
+    (rootLaterWindows c (crossingTable c bootBound bootFuel)
+      (laterBase c bootFuel) laterFuel).length ≤ c.tableLen
+  finalFit : ∀ k, k < valid →
+    let ps := rootLaterWindows c (crossingTable c bootBound bootFuel)
+      (laterBase c bootFuel) laterFuel
+    (rootScanFrom ps
+      (laterBase c bootFuel + laterFuel * c.segLen) k).length ≤ c.tableLen ∧
+      (unmarkedBool
+          (rootScanFrom ps
+            (laterBase c bootFuel + laterFuel * c.segLen) k)
+          (laterBase c bootFuel + laterFuel * c.segLen + k) = true →
+        (rootScanFrom ps
+          (laterBase c bootFuel + laterFuel * c.segLen) k).length <
+            c.tableLen)
+  finalCapFit :
+    (rootScanFrom
+      (rootLaterWindows c (crossingTable c bootBound bootFuel)
+        (laterBase c bootFuel) laterFuel)
+      (laterBase c bootFuel + laterFuel * c.segLen) valid).length ≤
+        c.tableLen
+  finalLen :
+    (rootScanFrom
+      (rootLaterWindows c (crossingTable c bootBound bootFuel)
+        (laterBase c bootFuel) laterFuel)
+      (laterBase c bootFuel + laterFuel * c.segLen) valid).length = c.tableLen
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 1000000 in
+/-- Complete root-only production execution for a padded final segment. -/
+theorem indexedProductionRoot_padded_complete
+    (c : Cfg) (bootBound bootFuel laterFuel valid delta : Nat)
+    (h : PaddedProductionRootSchedule c bootBound bootFuel laterFuel valid delta) :
+    let out := indexedWindowRun 0 c (bootFuel + 1 + (laterFuel + 1))
+      (coreEntry c)
+    let ps := rootScanFrom
+      (rootLaterWindows c (crossingTable c bootBound bootFuel)
+        (laterBase c bootFuel) laterFuel)
+      (laterBase c bootFuel + laterFuel * c.segLen) valid
+    (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      MachineTableRep c out ps ∧ out.regs rR = 0 ∧
+      out.regs rW = mainBase c bootFuel laterFuel delta ∧
+      out.regs rZero = 0 := by
+  let entry := coreEntry c
+  have hbootM : ∀ p, p ∈ c.bootPrimes → p < M := by
+    intro p hp
+    exact Nat.lt_of_le_of_lt (h.bootPrime.upper p hp) h.bootBoundM
+  have hentry := coreEntry_complete c bootBound h.bootPrime h.bootLe
+    hbootM h.arrayM
+  have hbootPos : 0 < c.bootCount := by
+    obtain ⟨tail, hshape⟩ := h.bootShape
+    simp [Cfg.bootCount, hshape]
+  have hboots := indexedWindowRun_bootstrap_complete c 0 entry
+    c.bootPrimes bootBound 1 bootFuel hentry.table hentry.view
+    hentry.position hentry.base hentry.zero hentry.cleared h.bootShape rfl
+    (by simpa using h.bootstrapRange) hbootPos h.bootLe h.tableLenM h.markPos
+    h.markM h.periodM h.spanM h.firstPrimePos h.firstPrimeLeLen
+    h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
+    h.bootstrapBaseM h.arrayM h.markBudget (by omega) h.bootTwo
+    h.bootstrapLastTwo h.bootstrapStartWithin h.bootstrapWithin
+    h.bootstrapCap h.bootstrapCover h.bootFit h.bootstrapFit h.rootCapM
+  let crossState := indexedWindowRun 0 c (bootFuel + 1) entry
+  let crossed := crossingTable c bootBound bootFuel
+  have hcross := indexedBootstrapWindows_mixed_complete c 0 entry
+    c.bootPrimes bootBound 1 bootFuel hboots h.bootShape rfl
+    (by simpa using h.crossingRange) hbootPos h.bootLe h.tableLenM h.markPos
+    h.markM h.periodM h.spanM h.firstPrimePos h.firstPrimeLeLen
+    h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
+    h.crossingBaseM h.arrayM h.markBudget (by omega) h.bootTwo
+    h.crossingStartWithin h.crossingLast h.crossingCap h.crossingCover
+    h.bootFit h.crossingFit h.rootCapM
+  let idxCross := (bootFuel + 1) * c.period
+  let laterW := laterBase c bootFuel
+  have hlater := indexedWindowRun_later_root_complete_room c idxCross crossState
+    c.bootPrimes crossed bootBound laterW laterFuel hcross.1 h.bootPrime
+    hcross.2.1 hcross.2.2.2.2.2.2 hcross.2.2.2.1
+    hcross.2.2.2.2.1 hcross.2.2.2.2.2.1 hcross.2.2.1 h.bootShape rfl
+    h.laterRange hbootPos h.bootLe h.tableLenM h.markPos h.markM h.periodM
+    h.spanM h.firstPrimePos h.firstPrimeLeLen h.firstPrimeLeBoot
+    h.bootBoundM h.bootBoundSqM h.segBootM h.laterBaseM h.arrayM
+    h.markBudget h.segLenPos h.bootTwo (by
+      have hlt := h.crossingLast
+      dsimp only [laterW, laterBase, crossingBase]
+      dsimp only [crossingBase] at hlt
+      omega) h.laterCap h.laterCover h.laterFit h.rootCapM
+  have hfinal := indexedLaterWindows_final_padded_transition c idxCross
+    crossState c.bootPrimes crossed bootBound laterW laterFuel valid delta
+    hlater h.bootPrime h.bootShape rfl h.finalIndex hbootPos h.bootLe
+    h.tableLenM h.markPos h.markM h.periodM h.spanM h.firstPrimePos
+    h.firstPrimeLeLen h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM
+    h.segBootM h.finalBaseM h.arrayM h.markBudget h.segLenPos h.bootTwo
+    (by
+      have hlt := h.crossingLast
+      dsimp only [laterW, laterBase, crossingBase]
+      dsimp only [crossingBase] at hlt
+      omega) h.finalValid h.finalValidLt h.finalCover h.finalPrefixFit
+    h.finalFit h.finalCapFit h.rootCapM h.deltaEq h.deltaM
+  have hcompose : indexedWindowRun 0 c (bootFuel + 1 + (laterFuel + 1))
+      entry = indexedWindowRun idxCross c (laterFuel + 1) crossState := by
+    rw [indexedWindowRun_add]
+    simpa only [idxCross, crossState, Nat.zero_add]
+  rw [hcompose]
+  refine ⟨hfinal.2.1, ?_, hfinal.2.2.1, ?_, hfinal.2.2.2.2⟩
+  · simpa only [laterW, crossed, crossingTable] using
+      hfinal.1.toMachineTableRep
+  · simpa only [mainBase, laterW] using hfinal.2.2.2.1
+
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 1000000 in
 /-- Complete execution of the production sieve core, from its compiled

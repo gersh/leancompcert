@@ -95,7 +95,7 @@ theorem indexedBodyRun_mixed_root_acc_prefix
     (hwPos : 0 < w)
     (hboot2 : 2 ≤ bootBound)
     (hwBoot : w - 1 ≤ bootBound)
-    (hfuelCap : w + fuel ≤ c.rootCap)
+    (hfuelCap : w + fuel - 1 ≤ c.rootCap)
     (hcover : w + fuel < (bootBound + 1) * (bootBound + 1))
     (hbootLen : boot.length < c.tableLen)
     (hfit : ∀ k, k < fuel →

@@ -439,6 +439,83 @@ theorem indexedLaterWindows_final_transition_room
   simpa [cur, wn, Nat.add_mul, Nat.add_assoc] using hstep
 
 set_option maxRecDepth 10000 in
+/-- The outer later-window induction followed by a partially filled final
+root segment.  The returned table is exact through `rootCap`, not through the
+machine padding at the end of the allocated segment. -/
+theorem indexedLaterWindows_final_padded_transition
+    (c : Cfg) (idx : Nat) (s : AState) (boot full : List Nat)
+    (bootBound w fuel valid delta : Nat)
+    (hLater : IndexedLaterWindowsInv c idx s boot full bootBound w fuel)
+    (hBoot : PrimeTableInv boot bootBound)
+    (hbootShape : ∃ tail, boot = c.firstPrime :: tail)
+    (hbootLen : boot.length = c.bootCount)
+    (hrootWindow : (idx + fuel * c.period) + c.period = c.rootSpan)
+    (hbootPos : 0 < c.bootCount) (hbootLe : c.bootCount ≤ c.tableLen)
+    (htableLenM : c.tableLen < M)
+    (hTPos : 0 < c.markSteps) (hTM : c.markSteps < M)
+    (hPM : c.period < M) (hspanM : c.rootSpan < M)
+    (hp1Pos : 0 < c.firstPrime) (hp1LeL : c.firstPrime ≤ c.segLen)
+    (hp1LeBound : c.firstPrime ≤ bootBound) (hboundM : bootBound < M)
+    (hboundSqM : bootBound * bootBound < M)
+    (hsegBoundM : c.segLen + bootBound < M)
+    (hwSegM : w + fuel * c.segLen + c.segLen < M)
+    (hA : c.arrayLen < M)
+    (hbudget : (boot.map fun p => c.segLen / p + 2).sum ≤ c.markSteps)
+    (hLPos : 0 < c.segLen) (hboot2 : 2 ≤ bootBound)
+    (hbootLt : bootBound < w)
+    (hvalid : w + fuel * c.segLen + valid - 1 = c.rootCap)
+    (hvalidLt : valid < c.segLen)
+    (hcover : w + fuel * c.segLen + valid <
+      (bootBound + 1) * (bootBound + 1))
+    (hfullFit : (rootLaterWindows c full w fuel).length ≤ c.tableLen)
+    (hfit : ∀ k, k < valid →
+      (rootScanFrom (rootLaterWindows c full w fuel)
+        (w + fuel * c.segLen) k).length ≤ c.tableLen ∧
+      (unmarkedBool
+          (rootScanFrom (rootLaterWindows c full w fuel)
+            (w + fuel * c.segLen) k)
+          (w + fuel * c.segLen + k) = true →
+        (rootScanFrom (rootLaterWindows c full w fuel)
+          (w + fuel * c.segLen) k).length < c.tableLen))
+    (hcapFit :
+      (rootScanFrom (rootLaterWindows c full w fuel)
+        (w + fuel * c.segLen) valid).length ≤ c.tableLen)
+    (hcapM : c.rootCap < M)
+    (hDelta : c.wDelta = delta) (hDeltaM : delta < M) :
+    let out := indexedWindowRun idx c (fuel + 1) s
+    let finalTable := rootScanFrom (rootLaterWindows c full w fuel)
+      (w + fuel * c.segLen) valid
+    RootTableInv c out finalTable c.rootCap ∧
+      (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      out.regs rR = 0 ∧
+      out.regs rW =
+        ((w + fuel * c.segLen) + ((c.segLen + delta) % M)) % M ∧
+      out.regs rZero = 0 := by
+  obtain ⟨tail, rfl⟩ := hbootShape
+  let mid := indexedWindowRun idx c fuel s
+  let cur := rootLaterWindows c full w fuel
+  let wn := w + fuel * c.segLen
+  have hnStart : wn + firstOffset wn c.firstPrime < M := by
+    have hoff : firstOffset wn c.firstPrime < c.firstPrime :=
+      Nat.mod_lt _ hp1Pos
+    dsimp only [wn] at hoff ⊢
+    omega
+  have hstep := indexedRootWindow_later_padded_transition c
+    (idx + fuel * c.period) mid tail cur bootBound wn valid delta
+    hLater.table hBoot hLater.view hLater.position hLater.base hLater.zero
+    hLater.cleared hbootLen hrootWindow hbootPos hbootLe htableLenM hTPos
+    hTM hPM hspanM hp1Pos hp1LeL hp1LeBound hboundM hboundSqM hsegBoundM
+    (by simpa [wn, Nat.add_assoc] using hwSegM) hnStart hA hbudget hLPos
+    hboot2 (by dsimp only [wn]; omega)
+    (by simpa [wn, Nat.add_mul, Nat.add_assoc] using hvalid) hvalidLt
+    (by simpa [wn, Nat.add_assoc] using hcover) hfullFit
+    (by simpa [cur, wn, Nat.add_assoc] using hfit)
+    (by simpa [cur, wn, Nat.add_assoc] using hcapFit)
+    hcapM hDelta hDeltaM
+  rw [indexedWindowRun_succ]
+  simpa [cur, wn, Nat.add_mul, Nat.add_assoc] using hstep
+
+set_option maxRecDepth 10000 in
 /-- The ordinary later-root phase, its exact final retargeting window, and any
 finite suffix of main windows compose into one changing-index execution. -/
 theorem indexedLaterWindows_then_main_complete_room

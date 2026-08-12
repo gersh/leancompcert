@@ -359,7 +359,7 @@ theorem bodyRun_later_root_acc_prefix_room
     (hfuel : fuel < c.segLen)
     (hboot2 : 2 ≤ bootBound)
     (hbootLt : bootBound < w)
-    (hfuelCap : w + fuel ≤ c.rootCap)
+    (hfuelCap : w + fuel - 1 ≤ c.rootCap)
     (hcover : w + fuel < (bootBound + 1) * (bootBound + 1))
     (hfit : ∀ k, k < fuel →
       (rootScanFrom ps w k).length ≤ c.tableLen ∧
@@ -459,7 +459,7 @@ theorem bodyRun_later_root_acc_prefix
     (hfuel : fuel < c.segLen)
     (hboot2 : 2 ≤ bootBound)
     (hbootLt : bootBound < w)
-    (hfuelCap : w + fuel ≤ c.rootCap)
+    (hfuelCap : w + fuel - 1 ≤ c.rootCap)
     (hcover : w + fuel < (bootBound + 1) * (bootBound + 1))
     (hfit : ∀ k, k < fuel →
       (rootScanFrom ps w k).length < c.tableLen)

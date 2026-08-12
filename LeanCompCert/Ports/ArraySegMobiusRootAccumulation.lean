@@ -48,6 +48,29 @@ theorem postRootGate_one (c : Cfg) (idx : Nat) (s : AState)
     denoteOperand, denoteOp, AState.writeReg,
     h65', h2mod, hsub, hcapSubMod, hlt]
 
+/-- A padded candidate strictly above the configured root cap is rejected by
+the production range comparison, independently of its sieve bit.  This is the
+machine fact needed for the partially filled final root segment. -/
+theorem postRootGate_above_cap (c : Cfg) (idx : Nat) (s : AState) (n : Nat)
+    (h65 : s.regs 65 = n) (hcapLt : c.rootCap < n)
+    (hn2 : 2 ≤ n) (hnM : n < M) (hcapM : c.rootCap < M) :
+    (arun idx s (postRootGate c)).regs 137 = 0 := by
+  have hsubRaw : (n + (M - 2)) % M = n - 2 := by
+    have heq : n + (M - 2) = M + (n - 2) := by omega
+    rw [heq, Nat.add_mod_left, Nat.mod_eq_of_lt]
+    omega
+  have hcapSubM : c.rootCap - 1 < M := by omega
+  have hcapSubMod : (c.rootCap - 1) % M = c.rootCap - 1 :=
+    Nat.mod_eq_of_lt hcapSubM
+  have hlt : ¬n - 2 < c.rootCap - 1 := by omega
+  have h65' : s.regs 65 = n := h65
+  have h2mod : (2 : Nat) % M = 2 := by decide
+  simp [postRootGate, postRootBeforeCollect, arun, astep,
+    LeanCompCert.Verified.InstrBlock.sdest,
+    LeanCompCert.Verified.InstrBlock.sval,
+    denoteOperand, denoteOp, AState.writeReg,
+    h65', h2mod, hsubRaw, hcapSubMod, hlt]
+
 /-- During root accumulation the compiled selector enables accumulation and
 root collection, while disabling the main-output gate. -/
 theorem selectorBlock_root_acc_controls (c : Cfg) (idx : Nat) (s : AState)
@@ -570,6 +593,60 @@ theorem rootCursorInput_one_controls (c : Cfg) (idx : Nat) (s : AState)
     exact hgate
   exact ⟨hgR, hgW, hgWrite, hg137⟩
 
+/-- A padded candidate above `rootCap` reaches the cursor boundary with
+collection disabled, while the production coordinates and table cursor are
+framed exactly. -/
+theorem rootCursorInput_above_cap_controls (c : Cfg) (idx : Nat)
+    (s : AState) (n r w write i : Nat)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i) (hn : n = w + i)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hn2 : 2 ≤ n) (hcapLt : c.rootCap < n)
+    (hcapM : c.rootCap < M) :
+    let t := rootCursorInput c idx s
+    t.regs rR = r ∧ t.regs rW = w ∧ t.regs rWrite = write ∧
+      t.regs 137 = 0 := by
+  let u := rootStoreInput c idx s
+  let g := arun idx u (postBeforeRootStore c)
+  let t := astep idx g (.store 141 65)
+  let q := signalInput c idx s
+  have hu := rootStoreInput_controls c idx s r w write i (q.arr i)
+    hR hW hWrite hT hiEq hroot hRM hTM hidxM hspanM hi hwM rfl
+  let gate := arun idx u (postRootGate c)
+  have hgate : gate.regs 137 = 0 :=
+    postRootGate_above_cap c idx u n
+      (by rw [hu.2.2.2.2.2.2.1, ← hn]) hcapLt hn2
+      (by rw [hn]; exact hwM) hcapM
+  have hgR : g.regs rR = r := by
+    change (arun idx u (postBeforeRootStore c)).regs rR = r
+    rw [postBeforeRootStore_eq_slices, arun_append]
+    rw [arun_reg_frame idx rR (postRootAddress c) gate (by rfl)]
+    rw [arun_reg_frame idx rR (postRootGate c) u (by rfl)]
+    exact hu.1
+  have hgW : g.regs rW = w := by
+    change (arun idx u (postBeforeRootStore c)).regs rW = w
+    rw [postBeforeRootStore_eq_slices, arun_append]
+    rw [arun_reg_frame idx rW (postRootAddress c) gate (by rfl)]
+    rw [arun_reg_frame idx rW (postRootGate c) u (by rfl)]
+    exact hu.2.1
+  have hgWrite : g.regs rWrite = write := by
+    change (arun idx u (postBeforeRootStore c)).regs rWrite = write
+    rw [postBeforeRootStore_eq_slices, arun_append]
+    rw [arun_reg_frame idx rWrite (postRootAddress c) gate (by rfl)]
+    rw [arun_reg_frame idx rWrite (postRootGate c) u (by rfl)]
+    exact hu.2.2.1
+  have hg137 : g.regs 137 = 0 := by
+    change (arun idx u (postBeforeRootStore c)).regs 137 = 0
+    rw [postBeforeRootStore_eq_slices, arun_append]
+    rw [arun_reg_frame idx 137 (postRootAddress c) gate (by rfl)]
+    exact hgate
+  exact ⟨hgR, hgW, hgWrite, hg137⟩
+
 /-- The candidate-one body advances one position without changing either
 the table cursor or the root-window base. -/
 theorem arun_coreBody_root_acc_one_nowrap
@@ -596,6 +673,61 @@ theorem arun_coreBody_root_acc_one_nowrap
   simpa using postAfterRootStore_nowrap c idx t r w write 0 ht.1 ht.2.1
     ht.2.2.1 ht.2.2.2 hnext hPM hidxM hspanM hidxNe (by simpa)
     (by omega)
+
+/-- An interior padded root candidate advances normally and retains the table
+cursor because the cap gate contributes a zero collection bit. -/
+theorem arun_coreBody_root_acc_above_cap_nowrap
+    (c : Cfg) (idx : Nat) (s : AState) (n r w write i : Nat)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i) (hn : n = w + i)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hn2 : 2 ≤ n) (hcapLt : c.rootCap < n)
+    (hcapM : c.rootCap < M) (hnext : r + 1 < c.period)
+    (hwriteM : write < M) :
+    let out := arun idx s c.coreBody
+    out.regs rWrite = write ∧ out.regs rR = r + 1 ∧
+      out.regs rW = w := by
+  let t := rootCursorInput c idx s
+  have ht := rootCursorInput_above_cap_controls c idx s n r w write i
+    hR hW hWrite hT hiEq hn hroot hRM hTM hidxM hspanM hi hwM hn2
+    hcapLt hcapM
+  rw [arun_coreBody_eq_rootCursorInput]
+  simpa using postAfterRootStore_nowrap c idx t r w write 0 ht.1 ht.2.1
+    ht.2.2.1 ht.2.2.2 hnext hPM hidxM hspanM hidxNe hwriteM
+    (by omega)
+
+/-- A padded candidate at an ordinary root-window endpoint performs the real
+window wrap while retaining the table cursor. -/
+theorem arun_coreBody_root_acc_above_cap_wrap
+    (c : Cfg) (idx : Nat) (s : AState) (n r w write i : Nat)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i) (hn : n = w + i)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hidxNe : idx ≠ c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hn2 : 2 ≤ n) (hcapLt : c.rootCap < n)
+    (hcapM : c.rootCap < M) (hwrap : r + 1 = c.period)
+    (hwriteM : write < M) (hwNextM : w + c.segLen < M) :
+    let out := arun idx s c.coreBody
+    out.regs rWrite = write ∧ out.regs rR = 0 ∧
+      out.regs rW = w + c.segLen := by
+  let t := rootCursorInput c idx s
+  have ht := rootCursorInput_above_cap_controls c idx s n r w write i
+    hR hW hWrite hT hiEq hn hroot hRM hTM hidxM hspanM hi hwM hn2
+    hcapLt hcapM
+  rw [arun_coreBody_eq_rootCursorInput]
+  simpa using postAfterRootStore_wrap c idx t r w write 0 ht.1 ht.2.1
+    ht.2.2.1 ht.2.2.2 hwrap hPM hidxM hspanM hidxNe hwriteM hwNextM
 
 /-- An interior root-accumulation body advances the schedule position without
 evaluating or specifying its candidate-table update. -/
@@ -750,6 +882,36 @@ theorem arun_coreBody_root_acc_transition (c : Cfg) (idx : Nat)
   rw [arun_coreBody_eq_rootCursorInput]
   exact postAfterRootStore_rootTransition c idx t r w write collect delta
     ht.1 ht.2.1 ht.2.2.1 ht.2.2.2 hDelta hDeltaM hnext hPM hspanPos
+    hspanM hidx hwriteM
+
+/-- The final padded root candidate performs the root-to-main retargeting but
+cannot change the table cursor because it lies above `rootCap`. -/
+theorem arun_coreBody_root_acc_above_cap_transition
+    (c : Cfg) (idx : Nat) (s : AState)
+    (n r w write i delta : Nat)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i) (hn : n = w + i)
+    (hRM : r < M) (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hspanPos : 0 < c.rootSpan)
+    (hspanM : c.rootSpan < M) (hidx : idx = c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hn2 : 2 ≤ n) (hcapLt : c.rootCap < n)
+    (hcapM : c.rootCap < M) (hwrap : r + 1 = c.period)
+    (hwriteM : write < M)
+    (hDelta : c.wDelta = delta) (hDeltaM : delta < M) :
+    let out := arun idx s c.coreBody
+    out.regs rWrite = write ∧ out.regs rR = 0 ∧
+      out.regs rW = (w + ((c.segLen + delta) % M)) % M := by
+  let t := rootCursorInput c idx s
+  have hroot : idx < c.rootSpan := by omega
+  have ht := rootCursorInput_above_cap_controls c idx s n r w write i
+    hR hW hWrite hT hiEq hn hroot hRM hTM hidxM hspanM hi hwM hn2
+    hcapLt hcapM
+  rw [arun_coreBody_eq_rootCursorInput]
+  simpa using postAfterRootStore_rootTransition c idx t r w write 0 delta
+    ht.1 ht.2.1 ht.2.2.1 ht.2.2.2 hDelta hDeltaM hwrap hPM hspanPos
     hspanM hidx hwriteM
 
 /-- Before the candidate store, the exact represented prime table and its
@@ -1172,6 +1334,86 @@ theorem arun_coreBody_root_acc_one_retain
     exact hprogress.2.1
   · rw [← arun_coreBody_eq_rootStoreInput]
     exact hprogress.2.2
+  · rw [← arun_coreBody_eq_rootStoreInput]
+    rw [arun_reg_frame idx rZero c.coreBody s (by rfl)]
+    exact hzero
+
+/-- A complete root body at a padded candidate above `rootCap` clears its
+decoder cell and retains the exact table and its mathematical prime bound.
+The result is independent of the candidate's unmarked bit: the compiled range
+gate alone disables the live store. -/
+theorem arun_coreBody_root_acc_above_cap_table_cells
+    (c : Cfg) (idx : Nat) (s : AState)
+    (ps : List Nat) (bound n r w write i : Nat)
+    (hInv : RootTableInv c s ps bound)
+    (hLen : ps.length ≤ c.tableLen)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i) (hn : n = w + i)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M)
+    (hidxM : idx < M) (hspanM : c.rootSpan < M)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hn2 : 2 ≤ n) (hcapLt : c.rootCap < n)
+    (hcapM : c.rootCap < M) (hA : c.arrayLen < M)
+    (hzero : s.regs rZero = 0) :
+    RootTableInv c (arun idx s c.coreBody) ps bound ∧
+      machineCell c (arun idx s c.coreBody) i = ⟨0, 0⟩ ∧
+      (∀ j, j < c.segLen → j ≠ i →
+        machineCell c (arun idx s c.coreBody) j = machineCell c s j) ∧
+      (arun idx s c.coreBody).regs rZero = 0 := by
+  let q := signalInput c idx s
+  have huInv := rootStoreInput_rootTableInv c idx s ps bound r w write i
+    hInv hLen hR hW hWrite hT hiEq hroot hRM hTM hidxM hspanM hi hwM hA
+  have hu := rootStoreInput_controls c idx s r w write i (q.arr i)
+    hR hW hWrite hT hiEq hroot hRM hTM hidxM hspanM hi hwM rfl
+  have hgate :
+      (arun idx (rootStoreInput c idx s) (postRootGate c)).regs 137 = 0 :=
+    postRootGate_above_cap c idx (rootStoreInput c idx s) n
+      (by rw [hu.2.2.2.2.2.2.1, ← hn]) hcapLt hn2
+      (by rw [hn]; exact hwM) hcapM
+  have hclear := rootStoreInput_clears c idx s r w write i hR hW hWrite
+    hT hiEq hroot hRM hTM hidxM hspanM hi hwM hzero hA
+  have hwriteEq : write = c.primeBase + ps.length := by
+    rw [← hInv.cursor, hWrite]
+  have hwriteM : write < M := by
+    have hend : c.primeBase + c.tableLen < c.arrayLen := by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+      omega
+    rw [hwriteEq]
+    omega
+  rw [arun_coreBody_eq_rootStoreInput]
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · constructor
+    · exact rootWriteSuffix_retain_of_gate_disabled c idx
+        (rootStoreInput c idx s) ps huInv.toMachineTableRep hLen hgate hA
+    · exact huInv.primeTable
+  · apply rootCellState_ext
+    · exact (rootWriteSuffix_disabled_preserves c idx
+        (rootStoreInput c idx s) write i hgate hu.2.2.1 hwriteM hA
+        (by simp only [Cfg.primeSink, Cfg.resultBase]; omega)).1.trans
+          hclear.1
+    · exact (rootWriteSuffix_disabled_preserves c idx
+        (rootStoreInput c idx s) write (i + c.segLen) hgate hu.2.2.1
+        hwriteM hA
+        (by simp only [Cfg.primeSink, Cfg.resultBase]; omega)).1.trans
+          hclear.2
+  · intro j hj hjNe
+    rw [← arun_coreBody_eq_rootStoreInput]
+    apply rootCellState_ext
+    · exact arun_coreBody_root_acc_frame_of_gate_disabled c idx s r w
+        write i j hR hW hWrite hT hiEq hroot hRM hTM hidxM hspanM hi
+        hwM hwriteM hA hgate hjNe (by omega)
+        (by simp only [Cfg.sinkProd]; omega)
+        (by simp only [Cfg.sinkProd]; omega)
+        (by simp only [Cfg.primeSink, Cfg.resultBase]; omega)
+    · exact arun_coreBody_root_acc_frame_of_gate_disabled c idx s r w
+        write i (j + c.segLen) hR hW hWrite hT hiEq hroot hRM hTM hidxM
+        hspanM hi hwM hwriteM hA hgate (by omega) (by omega)
+        (by simp only [Cfg.sinkProd]; omega)
+        (by simp only [Cfg.sinkProd]; omega)
+        (by simp only [Cfg.primeSink, Cfg.resultBase]; omega)
   · rw [← arun_coreBody_eq_rootStoreInput]
     rw [arun_reg_frame idx rZero c.coreBody s (by rfl)]
     exact hzero
