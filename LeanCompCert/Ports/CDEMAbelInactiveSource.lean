@@ -194,4 +194,44 @@ theorem accBody_inactive_carry_run (c : Cfg) (idx : Nat) (st : AState)
     by rw [hb.2.2.1, prodFrame rDn (by rfl), hh.dNeg],
     by rw [hb.2.2.2.2, prodFrame rZero (by rfl), hh.zero]⟩
 
+/-- Irreducible interface used by downstream scheduled proofs. -/
+def inactiveAccRun (c : Cfg) (idx : Nat) (st : AState) : AState :=
+  arun idx st c.accBody
+
+attribute [irreducible] inactiveAccRun
+
+theorem inactiveAccRun_stream (c : Cfg) (idx : Nat) (st : AState)
+    (hgate : st.regs 43 = 0) (hzero : st.regs rZero = 0)
+    (hsinkM : c.sink < M) (hword : ∀ j, st.regs j < M)
+    (harrword : ∀ j, st.arr j < M) (hk : 0 < st.regs rK)
+    (hWM : c.wScale < M) (hsum : st.regs rDp + st.regs rDn < M)
+    (hceilFit : c.wScale - 1 + st.regs rK < M) :
+    let out := inactiveAccRun c idx st
+    out.regs rF = st.regs rF ∧ out.regs rT = st.regs rT ∧
+      out.regs rT2 = st.regs rT2 ∧ out.regs rE = st.regs rE ∧
+      out.regs rTv = st.regs rTv := by
+  rw [inactiveAccRun]
+  exact accBody_inactive_stream_run c idx st hgate hzero hsinkM hword
+    harrword hk hWM hsum hceilFit
+
+theorem inactiveAccRun_carry (c : Cfg) (idx : Nat) (st : AState)
+    (hgate : st.regs 43 = 0) (hzero : st.regs rZero = 0)
+    (hsinkM : c.sink < M) (hword : ∀ j, st.regs j < M)
+    (harrword : ∀ j, st.arr j < M) (hk : 0 < st.regs rK)
+    (hWM : c.wScale < M) (hsum : st.regs rDp + st.regs rDn < M)
+    (hceilFit : c.wScale - 1 + st.regs rK < M) :
+    let out := inactiveAccRun c idx st
+    out.regs rK = st.regs rK ∧ out.regs rDp = st.regs rDp ∧
+      out.regs rDn = st.regs rDn ∧ out.regs rZero = st.regs rZero := by
+  rw [inactiveAccRun]
+  exact accBody_inactive_carry_run c idx st hgate hzero hsinkM hword
+    harrword hk hWM hsum hceilFit
+
+theorem inactiveAccRun_word (c : Cfg) (idx : Nat) (st : AState)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
+    (∀ j, (inactiveAccRun c idx st).regs j < M) ∧
+      ∀ j, (inactiveAccRun c idx st).arr j < M := by
+  rw [inactiveAccRun]
+  exact arun_word idx c.accBody st hword harrword
+
 end LeanCompCert.Ports.CDEMAbelInactiveSource

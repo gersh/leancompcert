@@ -28,6 +28,16 @@ join across selectors, sieve, mark, accumulator, and tail still exceeded one
 million elaboration heartbeats while staying below 574 MiB; that join is
 therefore being split at phase boundaries rather than retained.
 
+That phase split is now compiled.  `CDEMAbelInactivePrelude` frames the
+source stream and persistent latches through selectors, sieve, and marking;
+`CDEMAbelInactiveSuffix` composes an irreducible accumulator interface with
+the tail.  The compact accumulator source check took `31.21 s` at
+`621288 KiB` RSS, including the persistent-latch proof.  The suffix source
+check took `1.23 s` at `627936 KiB`, and the live prelude-plus-suffix build
+took `2.43 s` at `641296 KiB`.  All ran with one worker, `MemoryHigh=2G`,
+`MemoryMax=3G`, swap disabled, and no swapping occurred.  Fresh axiom prints
+for the prelude, stream, carry, and word interfaces report only `propext`.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on
