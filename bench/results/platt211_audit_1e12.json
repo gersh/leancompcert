@@ -1,0 +1,21 @@
+{
+  "artifact": "fail-safe LeanCompCert audit of the retained Platt (2.11) campaign",
+  "completed_at": "2026-08-12T10:17:52-07:00",
+  "manifest": "bench/results/manifests/platt211_1e12.json",
+  "manifest_sha256": "3ed737cb9ad2dd5a107d46c08d179e351850c199482ec487443c35d998f4cb3e",
+  "manifest_windows": 1092,
+  "audit_zero_windows": 1092,
+  "audit_nonzero_windows": 0,
+  "receipt_jsonl_sha256": "e8afbf9f99759e18da91dd936ee82d52359b57f9a6f196ff8a3bdaf0b4627311",
+  "receipt_jsonl_bytes": 168501,
+  "emission_wall_seconds": 23.748,
+  "compcert_compilation_wall_seconds": 33.952,
+  "run_wall_seconds": 11603.024,
+  "run_core_seconds": 127222.009,
+  "workers": 12,
+  "process_peak_rss_kib": 539400,
+  "swap_bytes": 0,
+  "memory_high_bytes": 2147483648,
+  "memory_max_bytes": 3221225472,
+  "verification": "A resumable verifier rerun matched all 1,092 receipt rows to the pinned, gap-free manifest and selected zero pending rows. The raw JSONL is a local run log and is intentionally not versioned."
+}

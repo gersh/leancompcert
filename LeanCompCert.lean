@@ -225,6 +225,7 @@ import LeanCompCert.Ports.R2SegLogExponent
 import LeanCompCert.Ports.R2SegLogLiveRound
 import LeanCompCert.Ports.R2SegLogLiveSuffix
 import LeanCompCert.Ports.R2SegLnFixConvert
+import LeanCompCert.Ports.R2SegLogFinalLn
 import LeanCompCert.Ports.R2SegLogPayload
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport

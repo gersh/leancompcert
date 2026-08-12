@@ -1,3 +1,4 @@
+import LeanCompCert.Ports.ArraySegMobiusSignal
 import LeanCompCert.Ports.R2SegLogExponent
 import LeanCompCert.Verified.ArrayRegFrame
 
@@ -96,6 +97,70 @@ theorem logLiveRoundBody_continue_run (c : R2Cfg) (k : Nat) (s : AState)
   rw [logLiveRoundBody, arun_append, arun_append, arun_append]
   exact ⟨hstep.1, hstep.2.1, hstep.2.2.1, hstep.2.2.2.1,
     hstep.2.2.2.2.trans (hecRun.2.2.2.2.trans
+      (hl.2.2.2.trans hg.2.2.2.2.2))⟩
+
+/-- Besides advancing the recurrence, a continuation prefix preserves the
+latched entry and its incremental exponent invariant.  This state form is the
+induction interface for consecutive production bodies. -/
+theorem logLiveRoundBody_continue_state_run (c : R2Cfg) (k : Nat) (s : AState)
+    (ec wc n payload e th viol vlog j : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = j) (hj0 : j ≠ 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hne : s.regs rNe = n) (hpl : s.regs rPl = payload)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hnM : n < M) (hpM : payload < M)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    let out := arun k s (logLiveRoundBody c)
+    out.regs rNe = n ∧ out.regs rPl = payload ∧
+      out.regs rEx = e ∧ out.regs rTh = th ∧
+      out.regs rViol = viol ∧ out.regs rVLog2 = vlog ∧
+      out.arr = s.arr := by
+  let gated := arun k s (logEntryGateBody c)
+  have hg := logEntryGateBody_live_run c k s ec wc j hec hwc hk hphase
+    hlive hbase haddr
+  dsimp only at hg
+  have hg208 : gated.regs 208 = 0 := by simpa [hj0] using hg.2.2.2.2.1
+  let latched := arun k gated logEntryLatchBody
+  have hl := logEntryLatchBody_continue_run k gated n payload hg208
+    ((arun_frame k rNe (logEntryGateBody c) (by rfl) s).trans hne)
+    ((arun_frame k rPl (logEntryGateBody c) (by rfl) s).trans hpl)
+    hnM hpM
+  dsimp only at hl
+  have frameG (r : Nat) (hw : writes r (logEntryGateBody c) = false) :
+      gated.regs r = s.regs r := arun_frame k r (logEntryGateBody c) hw s
+  have frameL (r : Nat) (hw : writes r logEntryLatchBody = false) :
+      latched.regs r = gated.regs r := arun_frame k r logEntryLatchBody hw gated
+  let exponented := arun k latched logExponentBody
+  have hecRun := logExponentBody_continue_run k latched n e th viol vlog
+    hl.2.1 ((frameL rEx (by rfl)).trans ((frameG rEx (by rfl)).trans he))
+    ((frameL rTh (by rfl)).trans ((frameG rTh (by rfl)).trans hth))
+    ((frameL rViol (by rfl)).trans ((frameG rViol (by rfl)).trans hv))
+    ((frameL rVLog2 (by rfl)).trans ((frameG rVLog2 (by rfl)).trans hvl))
+    ((frameL 208 (by rfl)).trans hg208) heM hthM hvM hvlM
+  dsimp only at hecRun
+  have frameE (r : Nat) (hw : writes r logExponentBody = false) :
+      exponented.regs r = latched.regs r :=
+    arun_frame k r logExponentBody hw latched
+  have frameStep (r : Nat) (hw : writes r (logRoundStepBody c.sc) = false) :
+      (arun k exponented (logRoundStepBody c.sc)).regs r =
+        exponented.regs r :=
+    arun_frame k r (logRoundStepBody c.sc) hw exponented
+  have harrStep : (arun k exponented (logRoundStepBody c.sc)).arr =
+      exponented.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k (logRoundStepBody c.sc) exponented (by rfl)
+  rw [logLiveRoundBody, arun_append, arun_append, arun_append]
+  exact ⟨(frameStep rNe (by rfl)).trans ((frameE rNe (by rfl)).trans hl.2.1),
+    (frameStep rPl (by rfl)).trans ((frameE rPl (by rfl)).trans hl.2.2.1),
+    (frameStep rEx (by rfl)).trans hecRun.1,
+    (frameStep rTh (by rfl)).trans hecRun.2.1,
+    (frameStep rViol (by rfl)).trans hecRun.2.2.1,
+    (frameStep rVLog2 (by rfl)).trans hecRun.2.2.2.1,
+    harrStep.trans (hecRun.2.2.2.2.trans
       (hl.2.2.2.trans hg.2.2.2.2.2))⟩
 
 /-- A new entry whose existing power-of-two threshold already exceeds the
@@ -240,6 +305,7 @@ theorem logLiveRoundBody_start_bump_run (c : R2Cfg) (k : Nat) (s : AState)
 
 #print axioms logLiveRoundBody_eq_slice
 #print axioms logLiveRoundBody_continue_run
+#print axioms logLiveRoundBody_continue_state_run
 #print axioms logLiveRoundBody_start_no_bump_run
 #print axioms logLiveRoundBody_start_bump_run
 

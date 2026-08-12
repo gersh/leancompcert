@@ -1926,11 +1926,16 @@ returned one. The smoke/control cgroups peaked at 133,455,872 and
 127,332,352 bytes respectively, with zero pressure, hard-limit, OOM, or swap
 events.
 
-The exact audit is running as `platt211-audit-1e12b.service` with 12 CompCert
-workers inside one `MemoryHigh=2G`, `MemoryMax=3G`, no-swap cgroup. This entry
-does not claim a completed receipt; final timings and hashes must be recorded
-only after all 1,092 rows return zero. Early progress through window 900
-peaked at 480,829,440 charged bytes.
+The exact `platt211-audit-1e12b.service` audit subsequently completed all
+1,092 windows successfully with 12 CompCert workers inside one
+`MemoryHigh=2G`, `MemoryMax=3G`, no-swap cgroup.  Every audit return was zero.
+Emission took 23.748 seconds, CompCert compilation 33.952 seconds, and the
+executions 11,603.024 wall seconds / 127,222.009 core seconds.  `/usr/bin/time`
+reported 539,400 KiB peak process RSS and zero swaps.  A fresh resumability
+check matched every row to the pinned gap-free manifest and selected zero
+pending rows.  The local 168,501-byte JSONL receipt has SHA-256
+`e8afbf9f99759e18da91dd936ee82d52359b57f9a6f196ff8a3bdaf0b4627311`;
+its compact versioned summary is `bench/results/platt211_audit_1e12.json`.
 
 The source-refinement side now has a leaf implementation rather than a scalar
 only claim. `ArraySegMobiusExtrema.lean` proves the literal nineteen array
@@ -1967,5 +1972,5 @@ exhausted the heartbeat budget while charged memory remained below 160 MB.
 The implementation was consequently split at the opaque signal-schedule
 boundary above instead of forcing the 1,092-window manifest through one
 elaboration.  The remaining proof layer is the concrete manifest schedule,
-its observation/carry composition, and run admission after the independent
-fail-safe audit completes.
+its observation/carry composition, and the run-admission declaration backed
+by the now-complete independent fail-safe receipt.

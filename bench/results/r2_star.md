@@ -958,6 +958,23 @@ slice decompositions are axiom-free; semantic theorems use only `propext`,
 whole production bodies while retaining the exact recurrence and cursor
 state, then attach final-round payload and accumulator semantics.
 
+The complete-body induction boundary is now explicit.  On a nonfinal
+continuation, the full suffix proves every guarded event/failure commit is a
+no-op and preserves the latched entry, exponent/threshold, violation state,
+recurrence, array, and cursor while advancing `rK` and `logIter` exactly once.
+On a final continuation, `R2SegLogFinalLn` connects the completed `logFrac`
+through literal instructions 250--262 to the existing verified half-limb
+conversion, yielding the source definition `lnFix`; the same theorem proves
+finish one, counter reset, and a single cursor advance.  Fresh source checks
+peaked at **636,212 KiB** for the nonfinal suffix and **568,132 KiB** for the
+finalization leaf.  The rebuilt 104-job finalization target took **5.74
+seconds / 669,980 KiB**, and cached aggregate import-only took **0.53 seconds
+/ 1,737,660 KiB**, all under the standard cap.  Trust prints remain limited
+to `propext`, `Classical.choice`, and `Quot.sound`; all literal decompositions
+are axiom-free.  The remaining telescope work is to expose the corresponding
+full state after each of the two possible first-entry exponent cases, then
+induct the 23 continuation bodies.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
