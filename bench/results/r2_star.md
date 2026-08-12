@@ -794,12 +794,19 @@ division and the full four-ulp width in every single or doubled jump mode.
 Thus the remaining induction can carry the program's existing `err` word
 directly rather than introducing an analytic error oracle.
 
+The source bridge now packages those inequalities into direct contracts for
+negative prime-power events and positive two-prime-power events, followed by
+generic signed accumulator-step lemmas.  The other running component is also
+two-sided: a 64-term Euler--Maclaurin enclosure proves that the downward
+`gammaStep 24` rounding loses strictly less than one accumulator ulp per
+integer, exactly the slack supplied by the checker's literal `+ n`.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
-latest source check completed in **7.4 seconds** at **784,674,816 charged
-bytes**, and its live consumer target completed in **9.3 seconds** at
-**879,677,440 charged bytes**, under the same 2/3 GiB no-swap profile.  Every
+latest source check completed in **8.0 seconds** at **792,793,088 charged
+bytes**, and its live consumer target completed in **10.9 seconds** at
+**906,772,480 charged bytes**, under the same 2/3 GiB no-swap profile.  Every
 memory event counter was zero.  No native evaluator or new trust declaration
 is introduced.
 
