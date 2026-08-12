@@ -1327,3 +1327,66 @@ prints only Lean's ordinary foundations plus
 `cdemAbelProduction_compcert_run`. The remaining source-refinement gap begins
 at the completed machine-plane telescope and accumulator schedule, not at the
 resident Möbius coefficients or the mathematical meaning of `Ref.deltaF`.
+
+## Compact marking-budget computation
+
+`LeanCompCert/Ports/CDEMAbelMarkTermination.lean` gives the literal marking
+cursor an exact decreasing work measure and bounds its production start by a
+compact sum with one row per divisor. The executable benchmark hoists the
+formally specified prime list once, then evaluates that compact sum:
+
+```
+systemd-run --user --scope \
+  -p MemoryHigh=2048M -p MemoryMax=3072M -p MemorySwapMax=0 \
+  env LEAN_NUM_THREADS=1 /usr/bin/time -v \
+  lake env lean --run bench/CDEMAbelMarkBudget.lean
+```
+
+On 2026-08-11 it returned `compact=8723967`, `markSteps=8845158`, and
+`margin=121191` in 12.71 s elapsed, with 551,612 KiB peak RSS and zero swap.
+The earlier non-hoisted evaluator was stopped after two minutes because it
+rebuilt the prime base inside every divisor row; it is not part of the route.
+The retained benchmark is the source oracle for the rolled scalar
+LeanCompCert checker, whose compiled run supplies the finite inequality used
+by the cursor-termination theorem.
+
+The retained rolled artifact is
+`LeanCompCert/Ports/CDEMAbelMarkBudgetCheck.lean`.  Its scalar loop executes
+`88,701,405` rounds and returns the exact compact budget `8,723,967`; the
+generated driver exits successfully exactly at that value.  The verified
+compiler theorem identifies the emitted C with the source denotation, a
+symbolic reblocking theorem identifies the flat loop with `199,329` divisor
+rows, and the downstream `CDEMAbelMarkBudgetCompCert.lean` bridge proves that
+each row is the paper-identified prime-list/Moebius allowance.  Thus the run
+proves the production inequality rather than merely agreeing with the source
+benchmark.
+
+The retained production rerun on 2026-08-11 used a one-worker 3 GiB hard
+cgroup with swap disabled:
+
+| phase | elapsed | peak RSS | result |
+| --- | ---: | ---: | --- |
+| emit rolled C | 0.71 s | 805,804 KiB | `88,701,405 8,723,967 ok` |
+| CompCert 3.17 `-O2` | 0.02 s | 15,700 KiB | exit 0 |
+| CompCert binary | 0.64 s | 872 KiB | exit 0 |
+| GCC 13.3 `-O2` | 0.03 s | 25,060 KiB | exit 0 |
+| GCC binary | 0.48 s | 888 KiB | exit 0 |
+
+Both binaries were ephemeral.  The retained C source is 3,954 bytes with
+SHA-256 `8e3824021c56abe756ac3cde6e14a53cb04c7fd99502e22caf42ba9510ff0d6f`;
+the main repository retains that source and its complete receipt under
+`audits/compcert/cdem_abel_mark_budget/`.
+
+## Marking-plane arithmetic bridge
+
+`LeanCompCert/Ports/CDEMAbelMarkPlane.lean` proves that the cursor's literal
+start cell `(d - w % d) % d` followed by increments of `d` visits exactly the
+cells for which `d ∣ w + j`.  It then telescopes the finite divisor fold and
+proves pointwise equality with the independent `Ref.deltaF kBound (w + j)`
+computation.  This closes the arithmetic-identification half of the machine
+plane gap; the remaining step is to attach the terminal `MarkState` array to
+that fold.
+
+A fresh source check on 2026-08-11, with one Lean worker in the 3 GiB/no-swap
+cgroup, took 0.32 s elapsed, used 596,996 KiB peak RSS, and performed no swap.
+The Lake target build also completed successfully (59 jobs).
