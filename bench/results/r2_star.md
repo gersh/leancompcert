@@ -813,6 +813,13 @@ signed carry transition.  The latest source check took **1.5 seconds /
 cold 87-module build took 24.7 seconds / 172,363,776 bytes).  All memory-event
 counters were zero.
 
+`R2SegLogFactors` closes the adjacent classifier-to-product seam: the literal
+13-instruction block 266--278 is proved to compute exactly
+`ClassResult.jumpFactors`, with an array-state lifting theorem.  Its capped
+source check took **1.1 seconds / 113,889,280 charged bytes**, with all memory
+events zero.  Its focused live target took **1.1 seconds / 140,111,872
+charged bytes**, also with zero events.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its

@@ -211,6 +211,7 @@ import LeanCompCert.Ports.R2SegMarkingInit
 import LeanCompCert.Ports.R2SegMarkingDenotePrefix
 import LeanCompCert.Ports.R2SegDenoteSegments
 import LeanCompCert.Ports.R2SegLogAccumulator
+import LeanCompCert.Ports.R2SegLogFactors
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 
