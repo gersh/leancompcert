@@ -2004,3 +2004,18 @@ violation count.  This focused target built in 0.33 seconds wall at 570,988
 KiB RSS under the same 1/2 GiB zero-swap profile.  Its axiom print contains
 only the two named physical-run contracts plus the three Lean foundations;
 there is no `sorryAx` or generated native-evaluation axiom.
+
+The first concrete schedule layer now records one shared literal table of all
+168 primes through 1,000 and lets each row select its exact bootstrap prefix
+by a generated count.  Only eleven distinct `(bootBound, bootCount)` pairs and
+thirteen distinct `(segLen, bootCount, bootBudget)` triples occur in the 1,092
+rows.  `ArraySegMobiusPlatt211Schedule.lean` replays those compact tables in
+the ordinary kernel, proves every selected prefix is an exact `PrimeTableInv`,
+and proves its marking allowance fits the row budget.  A first formulation
+that independently rescanned all 1,092 rows was stopped after memory reclaim
+made its repeated work clearly unsuitable; the compact transcript is the
+paper-faithful finite replacement.  Its final focused build completed in 3.64
+seconds wall at 1,338,012 KiB peak RSS under `MemoryHigh=1G`,
+`MemoryMax=2G`, one Lean worker, and zero swap.  All three table checks are
+axiom-free, while the two exported schedule facts use only `propext`,
+`Classical.choice`, and `Quot.sound`.

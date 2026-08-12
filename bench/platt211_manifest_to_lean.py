@@ -46,6 +46,10 @@ def main() -> None:
         "",
         "set_option maxRecDepth 200000",
         "",
+        "/-- All primes at most 1,000; each row stores a prefix length. -/",
+        "def bootstrapPrimes : List Nat := [%s]" %
+        ", ".join(map(str, [p for p in primes if p <= 1000])),
+        "",
         "/-- One retained CompCert window and the three extrema carry cells.",
         "The observations and window shape are copied verbatim from the pinned",
         "production manifest.  The compact `Cfg.ofRange` fields and the formal",
@@ -58,6 +62,8 @@ def main() -> None:
         "  segCount : Nat",
         "  rootCount : Nat",
         "  bootBound : Nat",
+        "  bootCount : Nat",
+        "  bootBudget : Nat",
         "  mainCount : Nat",
         "  rootCap : Nat",
         "  markSteps : Nat",
@@ -79,6 +85,8 @@ def main() -> None:
         root_count = max(1, (root_cap + row["seglen"] - 1) // row["seglen"])
         root_len = root_count * row["seglen"]
         boot_bound = max(math.isqrt(root_len), 2)
+        boot_primes = [p for p in primes if p <= boot_bound]
+        boot_budget = sum(row["seglen"] // p + 2 for p in boot_primes)
         active_primes = [p for p in primes if p <= max(boot_bound, root_cap)]
         main_count = len(active_primes)
         mark_steps = sum(row["seglen"] // p + 2 for p in active_primes) + 16
@@ -89,13 +97,16 @@ def main() -> None:
         comma = "," if index + 1 < len(rows) else ""
         out.append(
             "  { idx := %d, lo := %d, hi := %d, segLen := %d, "
-            "segCount := %d, rootCount := %d, bootBound := %d, "
+            "segCount := %d, rootCount := %d, bootBound := %d, bootCount := %d, "
+            "bootBudget := %d, "
             "mainCount := %d, rootCap := %d, markSteps := %d, "
             "threshold := %d, strictThreshold := %d, seed := %d, "
             "tOut := %d, tMax := %d, tMin := %d, violations := %d }%s"
             % (
                 row["idx"], row["lo"], row["hi"], row["seglen"],
-                row["segcount"], root_count, boot_bound, main_count, root_cap,
+                row["segcount"], root_count, boot_bound,
+                len(boot_primes), boot_budget,
+                main_count, root_cap,
                 mark_steps, row["thr"], strict_threshold, row["seed"],
                 slots[0], slots[1], slots[2], row["viol"], comma,
             )

@@ -28,7 +28,7 @@ def rowCfg (row : Row) : Cfg where
   segLen := row.segLen
   segCount := row.segCount
   rootCount := row.rootCount
-  bootPrimes := primesBelow (row.bootBound + 1)
+  bootPrimes := bootstrapPrimes.take row.bootCount
   mainCount := row.mainCount
   rootCap := row.rootCap
   markSteps := row.markSteps
