@@ -1948,8 +1948,24 @@ checks under the 2/3 GiB no-swap profile measured:
 | widened residue-frame focused build | 202,813,440 B | 0 |
 | extrema array/trace source | 136,581,120 B | 0 |
 | extrema array/trace focused target | 304,549,888 B | 0 |
+| scheduled extrema fold source | 105,074,688 B | 0 |
+| literal extrema production source | 100,589,568 B | 0 |
+| literal extrema production focused target | 128,528,384 B | 0 |
+| MathExtras true-Möbius recurrence bridge source | 340,930,560 B | 0 |
+| MathExtras paper-bridge live consumer | 1,142,493,184 B | 0 |
 
-Fresh axiom prints for the residue transition and its partial denotation
-contain only `propext`. The remaining proof layer is the production window
-schedule and manifest observation/carry composition into the already-proved
-paper fixed-point theorem.
+The extrema trace now has exact finite split lemmas, and its signal list is
+proved equal to the existing five-field production signal list through their
+common core projection.  Therefore any cached `ConsecutiveSignalSchedule`
+certificate transports to the extrema trace, whose literal final state is
+proved equal to `extRunFrom`; the MathExtras bridge in turn identifies that
+recurrence with the true-Möbius `muExtAt`.  Fresh axiom prints through this
+layer contain only `propext`, `Classical.choice`, and `Quot.sound`.
+
+A direct attempt to instantiate the whole production schedule in this leaf
+exhausted the heartbeat budget while charged memory remained below 160 MB.
+The implementation was consequently split at the opaque signal-schedule
+boundary above instead of forcing the 1,092-window manifest through one
+elaboration.  The remaining proof layer is the concrete manifest schedule,
+its observation/carry composition, and run admission after the independent
+fail-safe audit completes.

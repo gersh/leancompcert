@@ -101,6 +101,19 @@ def combinedIndexedRun (idx : Nat) (c : Cfg) : Nat → AState → AState
       arun (idx + fuel) (combinedIndexedRun idx c fuel s)
         (c.coreBody ++ mobiusOverNResidue) := rfl
 
+/-- Split the literal extrema trace at an arbitrary finite event boundary. -/
+theorem combinedIndexedRun_add (idx : Nat) (c : Cfg) (a b : Nat)
+    (s : AState) :
+    combinedIndexedRun idx c (a + b) s =
+      combinedIndexedRun (idx + a) c b
+        (combinedIndexedRun idx c a s) := by
+  induction b with
+  | zero => rfl
+  | succ b ih =>
+      rw [Nat.add_succ, combinedIndexedRun_succ, combinedIndexedRun_succ, ih]
+      have heq : idx + (a + b) = idx + a + b := by omega
+      rw [heq]
+
 /-- The complete extrema trace retains exactly the standalone indexed sieve
 trace in its core-facing projection. -/
 theorem combinedIndexedRun_core (idx : Nat) (c : Cfg) (fuel : Nat)
@@ -128,6 +141,29 @@ def combinedSignals (idx : Nat) (c : Cfg) (fuel : Nat) (s : AState) :
     List Sig :=
   (List.range fuel).map fun j =>
     readSig (arun (idx + j) (combinedIndexedRun idx c j s) c.coreBody)
+
+/- The exact extrema signal trace splits at the same finite event boundary. -/
+set_option maxRecDepth 10000 in
+theorem combinedSignals_add (idx : Nat) (c : Cfg) (a b : Nat)
+    (s : AState) :
+    combinedSignals idx c (a + b) s =
+      combinedSignals idx c a s ++
+        combinedSignals (idx + a) c b (combinedIndexedRun idx c a s) := by
+  unfold combinedSignals
+  rw [List.range_add, List.map_append, List.map_map]
+  let pre : List Sig := (List.range a).map fun j =>
+    readSig (arun (idx + j) (combinedIndexedRun idx c j s) c.coreBody)
+  refine congrArg (fun tail : List Sig => pre ++ tail) ?_
+  apply List.map_congr_left
+  intro j hj
+  simp only [Function.comp_apply]
+  have hidx : idx + (a + j) = idx + a + j := (Nat.add_assoc idx a j).symm
+  have hstate := combinedIndexedRun_add idx c a j s
+  have hi := congrArg (fun index =>
+    arun index (combinedIndexedRun idx c (a + j) s) c.coreBody) hidx
+  have hs := congrArg (fun state =>
+    arun (idx + a + j) state c.coreBody) hstate
+  exact congrArg readSig (hi.trans hs)
 
 /-- Transparent iteration of the nineteen-instruction extrema transition. -/
 def extFold : List Sig → MobiusExtremaScalar.Ext → MobiusExtremaScalar.Ext

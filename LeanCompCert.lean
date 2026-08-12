@@ -92,6 +92,8 @@ import LeanCompCert.Ports.MobiusResidueAcc
 import LeanCompCert.Ports.MobiusResidueTest
 import LeanCompCert.Ports.MobiusResidueWindow
 import LeanCompCert.Ports.ArraySegMobiusExtrema
+import LeanCompCert.Ports.ArraySegMobiusExtremaFold
+import LeanCompCert.Ports.ArraySegMobiusExtremaProduction
 import LeanCompCert.Ports.ArraySegMobiusCellRep
 import LeanCompCert.Ports.ArraySegMobiusAccumulation
 import LeanCompCert.Ports.ArraySegMobiusRootAccumulation

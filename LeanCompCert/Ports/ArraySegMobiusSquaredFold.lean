@@ -28,14 +28,14 @@ open LeanCompCert.Ports.MobiusResidueTrial
 private theorem squaredResidue_avoids_core (k j : Nat)
     (hj : CoreReg j = true) :
     (mobiusLiveSquaredResidue k).all (avoidsReg j) = true := by
-  have hw : ¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 191)) :=
+  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨ (150 ≤ j ∧ j ≤ 191)) :=
     of_decide_eq_true hj
-  have h100 : j < 100 ∨ 104 < j := by
+  have h100 : j < 100 ∨ 120 < j := by
     by_cases h : j < 100
     · exact Or.inl h
     · refine Or.inr (Nat.lt_of_not_ge ?_)
-      intro hj104
-      exact hw (Or.inl ⟨Nat.le_of_not_gt h, hj104⟩)
+      intro hj120
+      exact hw (Or.inl ⟨Nat.le_of_not_gt h, hj120⟩)
   have h150 : j < 150 ∨ 191 < j := by
     by_cases h : j < 150
     · exact Or.inl h
