@@ -51,6 +51,18 @@ Fresh axiom prints contain only `propext`, `Classical.choice`, and
 refinement at every prefix reached about `2.8 GiB` RSS; it was interrupted
 before the `3 GiB` cap and replaced by the retained selector/tail telescope.
 
+The same finite prefixes now carry the three wide accumulator values and the
+bisection round counter.  The retained proof splits at an opaque
+head-plus-zero-product boundary, proves the all-zero-selector bisection
+preserves `V` and `rKr`, and then telescopes the resulting complete-body
+contract.  The integrated inactive-wide source check took `11.51 s` at
+`591600 KiB`; the production sieve-plus-mark specialization took `0.29 s` at
+`593740 KiB`, and its targeted build took `0.44 s` at `590880 KiB`.  A first
+monolithic composition exceeded one million heartbeats after `37.30 s` while
+remaining at `579500 KiB`; it was discarded.  Fresh axiom prints for the
+retained wide interfaces report only `propext`, `Classical.choice`, and
+`Quot.sound`.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on
