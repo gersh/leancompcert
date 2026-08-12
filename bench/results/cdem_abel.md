@@ -1639,3 +1639,28 @@ bounds after the same full block.  Its generic changing-index state and word
 lemmas checked in 0.36 s at 610,740 KiB; the concrete production state checked
 in 0.25 s at 574,932 KiB and its target build in 0.37 s at 567,492 KiB, under
 the same 2/3 GiB one-worker, no-swap profile.
+
+## Changing-index fidelity and the second-entry aggregate seed
+
+`CDEMAbelIndexIndependence.lean` proves that every selector and accumulation
+suffix operand is independent of the physical loop index once the sieve
+prefix is complete. Consequently `bodySchedule_eq_bodyIterFrom` identifies
+each fixed-index proof schedule with exactly `bsSteps + 1` iterations of the
+literal changing-index emitted loop. `CDEMAbelProductionSecondEntry.lean`
+now gives the first completed cell a named state and proves that all four
+aggregate views (`rTv`, the two directed wide sums, and the wide square-root
+sum) are zero there.
+
+Fresh one-worker checks on 2026-08-12 used `MemoryHigh=2G`,
+`MemoryMax=3G`, and `MemorySwapMax=0`:
+
+| check | charged `memory.peak` | hard-limit/OOM/swap events |
+| --- | ---: | ---: |
+| changing-index fidelity source | 194,359,296 B | 0 |
+| changing-index fidelity target | 220,778,496 B | 0 |
+| second-entry aggregate source | 216,821,760 B | 0 |
+| second-entry aggregate target | 190,644,224 B | 0 |
+
+Fresh axiom prints report `[propext, Quot.sound]` for the exact schedule
+identity and `[propext, Classical.choice, Quot.sound]` for the concrete
+aggregate seed.

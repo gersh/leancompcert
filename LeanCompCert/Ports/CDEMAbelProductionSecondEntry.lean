@@ -258,6 +258,22 @@ theorem production_second_source_values
 structure SecondWideValues (after : AState) : Prop where
   uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) = 0
   uNeg : AddWide.wval (after.regs rUnLo, after.regs rUnHi) = 0
+  v : AddWide.wval (after.regs rVLo, after.regs rVHi) = 0
+
+/-- Named second accumulation entry.  Downstream bridges use this opaque
+boundary instead of asking the elaborator to unify through the production
+marking trace. -/
+def productionSecondState : AState :=
+  bodySchedule productionCfg productionFirstIdx
+    (productionCfg.bsSteps - 1)
+    (bodyIterFrom productionCfg productionCfg.sieveLen
+      productionCfg.markSteps productionAfterSieve)
+
+structure SecondAggregateZeros (after : AState) : Prop where
+  variation : after.regs rTv = 0
+  uPos : AddWide.wval (after.regs rUpLo, after.regs rUpHi) = 0
+  uNeg : AddWide.wval (after.regs rUnLo, after.regs rUnHi) = 0
+  v : AddWide.wval (after.regs rVLo, after.regs rVHi) = 0
 
 set_option maxRecDepth 4096 in
 set_option maxHeartbeats 1000000 in
@@ -279,16 +295,34 @@ theorem production_second_wide_values
   have hfull := hschedule0.1
   have hvalues0 := productionAfterMark_first_values hbudget
   dsimp only at hvalues0
-  rcases productionAfterMark_wide_seed with ⟨hup0, hun0, _hv0, _hround0⟩
+  rcases productionAfterMark_wide_seed with ⟨hup0, hun0, hv0, _hround0⟩
   have hup : AddWide.wval (st.regs rUpLo, st.regs rUpHi) = 0 := hup0
   have hun : AddWide.wval (st.regs rUnLo, st.regs rUnHi) = 0 := hun0
+  have hv : AddWide.wval (st.regs rVLo, st.regs rVHi) = 0 := hv0
   exact
     { uPos := by
         rw [hfull.uPos, hup, hvalues0.2.2.1]
         simp only [Nat.zero_mul, Nat.zero_add]
       uNeg := by
         rw [hfull.uNeg, hun, hvalues0.2.2.2]
-        simp only [Nat.zero_mul, Nat.zero_add] }
+        simp only [Nat.zero_mul, Nat.zero_add]
+      v := by
+        rw [hfull.v, hv, hvalues0.2.2.1, hvalues0.2.2.2]
+        simp only [Nat.zero_add, Nat.zero_mul] }
+
+theorem production_second_aggregate_zeros
+    (hbudget : 1 + compactMarkBudget productionCfg ≤
+      productionCfg.markSteps) :
+    SecondAggregateZeros productionSecondState := by
+  have htv0 := production_second_tv hbudget
+  dsimp only at htv0
+  have hwide0 := production_second_wide_values hbudget
+  dsimp only at hwide0
+  exact
+    { variation := htv0
+      uPos := hwide0.uPos
+      uNeg := hwide0.uNeg
+      v := hwide0.v }
 
 set_option maxRecDepth 4096 in
 /-- All numerical no-wrap conditions for the second active cell. -/
