@@ -1427,3 +1427,17 @@ A fresh source check under the one-worker 3 GiB/no-swap cap took 52.34 s and
 peaked at 646,632 KiB RSS. Fresh axiom prints for the one-step and telescope
 contracts report `[propext, Quot.sound]`; the combined resident-table entry
 contract additionally uses `Classical.choice`.
+
+The production prime configuration is now certified inside LeanCompCert as
+well. `CDEMAbelProductionSieveMark.lean` proves the finite bound
+`sqrt 199330 = 446`, identifies the literal 86-prime table compiled into the
+production artifact with `Ref.muPrimes productionCfg.kBound`, and derives its
+positivity and machine-word bounds from the verified `PrimeBase` contract.
+This removes the need for a main-repository theorem to expand the literal
+configuration at the sieve/mark boundary. The proof uses neither `sorry` nor
+`native_decide`.
+
+The fresh source check under the one-worker 3 GiB/no-swap cap took 15.77 s and
+peaked at 2,382,568 KiB RSS. This is deliberately isolated in its own module:
+attempting to elaborate it together with the scheduled-prefix instantiation
+hit the cgroup limit and was terminated safely.
