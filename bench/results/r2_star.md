@@ -844,6 +844,18 @@ seconds / 564,208 KiB**, and the cached aggregate import check took **0.92
 seconds / 1,751,564 KiB**.  The new trust prints contain only `propext`,
 `Classical.choice`, and `Quot.sound`.
 
+The shared `LogFixPort` circuit now has a general semantic theorem as well as
+its compiler theorem.  `LogFixRoundSemantics` splits the literal 20-operation
+half-limb round into six stages, proves every intermediate non-wrapping from
+the normalized mantissa invariant `2^62 ≤ x < 2^63`, and identifies the two
+output registers with `logMant x` and the next `logBit` accumulator.  The
+fresh source check took **1.07 seconds / 573,740 KiB**; the focused target took
+**1.18 seconds / 580,504 KiB**, and the aggregate import-only check took
+**0.95 seconds / 1,756,080 KiB**.  Its trust print contains only `propext`,
+`Classical.choice`, and `Quot.sound`.  The remaining R2-local task is to apply
+this circuit result to the register-renamed production slice and telescope its
+finite rounds.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its

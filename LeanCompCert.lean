@@ -37,6 +37,7 @@ import LeanCompCert.Verified.ArrayAudit
 import LeanCompCert.Verified.ArrayRolled
 import LeanCompCert.Ports.ArrayMobius
 import LeanCompCert.Ports.LogFixPort
+import LeanCompCert.Ports.LogFixRoundSemantics
 import LeanCompCert.Verified.AddWide
 import LeanCompCert.Verified.LogAccum
 import LeanCompCert.Ports.AddWidePort
