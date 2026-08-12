@@ -1361,6 +1361,12 @@ each row is the paper-identified prime-list/Moebius allowance.  Thus the run
 proves the production inequality rather than merely agreeing with the source
 benchmark.
 
+The registry invocation is
+`lake env lean --run bench/CDEMAbelMarkBudgetEmit.lean production OUT`.
+There is deliberately no reduced smoke configuration: the run axiom fixes the
+exact production program, whose compiled execution is already subsecond, so
+both registry sizing slots name this same production mode.
+
 The retained production rerun on 2026-08-11 used a one-worker 3 GiB hard
 cgroup with swap disabled:
 

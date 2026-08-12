@@ -6,10 +6,11 @@ Emit the rolled CompCert artifact for the production CDEM Abel marking-budget
 check.  This is the same `Reflect.Program` whose source denotation and verified
 compiler bridge are proved in `CDEMAbelMarkBudgetCheck{Fold,Compile}`.
 
-Usage:
+Usage (the explicit mode lets the campaign registry pin both smoke and scale
+invocations; this exact run contract has only a production configuration):
 
 ```
-lake env lean --run bench/CDEMAbelMarkBudgetEmit.lean OUT
+lake env lean --run bench/CDEMAbelMarkBudgetEmit.lean production OUT
 ```
 
 The generated `main` returns success exactly when the output is the production
@@ -33,7 +34,7 @@ end Bench.CDEMAbelMarkBudgetEmit
 open Bench.CDEMAbelMarkBudgetEmit in
 def main (args : List String) : IO UInt32 := do
   match args with
-  | [out] =>
+  | ["production", out] | [out] =>
       match emitRolled program symbolName with
       | .error errs =>
           for e in errs do IO.eprintln e
@@ -43,5 +44,5 @@ def main (args : List String) : IO UInt32 := do
           IO.println s!"{program.loopCount} {acceptingValue} ok"
           return 0
   | _ =>
-      IO.eprintln "usage: OUT"
+      IO.eprintln "usage: production OUT"
       return 1
