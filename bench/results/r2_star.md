@@ -820,6 +820,18 @@ source check took **1.1 seconds / 113,889,280 charged bytes**, with all memory
 events zero.  Its focused live target took **1.1 seconds / 140,111,872
 charged bytes**, also with zero events.
 
+`R2SegLnFixConvert` now closes the preceding 11-instruction fixed-point
+conversion seam.  It proves that the exact half-limb multiply/carry sequence
+at instructions 252--262 maps the verified `logFix` word to the production
+`lnFix` value and leaves the sieve array unchanged.  A first monolithic
+normalization was rejected after reaching roughly 2.7 GiB inside the hard
+cap.  Splitting the same literal instruction stream into extract, multiply,
+and carry stages reduced the successful fresh source check to **0.5 seconds /
+552,544 KiB maximum resident set**.  The cached focused target check took
+**0.17 seconds / 122,272 KiB**, and the aggregate import-only consumer check
+took **0.99 seconds / 1,751,148 KiB**.  Fresh axiom prints contain only
+`propext`, `Classical.choice`, and `Quot.sound`.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
