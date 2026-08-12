@@ -801,13 +801,17 @@ two-sided: a 64-term Euler--Maclaurin enclosure proves that the downward
 `gammaStep 24` rounding loses strictly less than one accumulator ulp per
 integer, exactly the slack supplied by the checker's literal `+ n`.
 
-`R2SegLogAccumulator` begins the machine-side composition.  It identifies
+`R2SegLogAccumulator` supplies the machine-side composition.  It identifies
 instructions 279--285 and 316--320 plus the term counter as literal slices of
 `R2Cfg.logBody`, proves their exact total scalar semantics, and lifts the
-commit result to `AState` with a full array frame.  The source check took
-**0.8 seconds / 125,493,248 charged bytes**; the focused live target took
-**24.7 seconds / 172,363,776 charged bytes** while rebuilding its 87-module
-dependency cone.  All memory-event counters were zero.
+results to `AState` with full array frames.  The 42 intervening instructions
+are proved to preserve the event payload, sign, finish gate, error, count, and
+array, and the complete 58-instruction interval is composed into one exact
+signed carry transition.  The latest source check took **1.5 seconds /
+139,628,544 charged bytes**; the focused live target took **1.6 seconds /
+168,714,240 charged bytes** with its dependency cone cached (the preceding
+cold 87-module build took 24.7 seconds / 172,363,776 bytes).  All memory-event
+counters were zero.
 
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
