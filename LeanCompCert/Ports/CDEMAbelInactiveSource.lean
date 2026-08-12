@@ -34,6 +34,7 @@ structure InactiveHeadSourceSpec (before after : AState) : Prop where
   negGate : after.regs 170 = 0
   round : after.regs rKr = before.regs rKr
   cell : after.regs rC = before.regs rC
+  zero : after.regs rZero = before.regs rZero
 
 set_option maxRecDepth 4096 in
 theorem accHead_inactive_source_run (c : Cfg) (idx : Nat) (st : AState)
@@ -133,7 +134,11 @@ theorem accHead_inactive_source_run (c : Cfg) (idx : Nat) (st : AState)
       cell := by
         change post rC = st.regs rC
         rw [postKeep rC (by rfl),
-          loadedToBefore rC (by simp [rC]) (by rfl)] }
+          loadedToBefore rC (by simp [rC]) (by rfl)]
+      zero := by
+        change post rZero = st.regs rZero
+        rw [postKeep rZero (by rfl),
+          loadedToBefore rZero (by simp [rZero]) (by rfl)] }
 
 /-- The inactive full accumulator preserves the persistent floor-convolution
 stream.  This compact composition uses the already framed product/bisection
@@ -151,5 +156,42 @@ theorem accBody_inactive_stream_run (c : Cfg) (idx : Nat) (st : AState)
   have hh := accHead_inactive_source_run c idx st hgate hzero hsinkM
     hword harrword hk hWM hsum hceilFit
   exact accBody_stream_frame_of_head c idx st hh.f hh.t hh.t2 hh.e hh.tv
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 1000000 in
+/-- The persistent latches needed to repeat another inactive scheduled
+iteration also pass through the full accumulator. -/
+theorem accBody_inactive_carry_run (c : Cfg) (idx : Nat) (st : AState)
+    (hgate : st.regs 43 = 0) (hzero : st.regs rZero = 0)
+    (hsinkM : c.sink < M) (hword : ∀ j, st.regs j < M)
+    (harrword : ∀ j, st.arr j < M) (hk : 0 < st.regs rK)
+    (hWM : c.wScale < M) (hsum : st.regs rDp + st.regs rDn < M)
+    (hceilFit : c.wScale - 1 + st.regs rK < M) :
+    let out := arun idx st c.accBody
+    out.regs rK = st.regs rK ∧ out.regs rDp = st.regs rDp ∧
+      out.regs rDn = st.regs rDn ∧ out.regs rZero = st.regs rZero := by
+  let h := arun idx st c.accHead
+  let p := arun idx h c.accProd
+  let out := arun idx p c.accBisect
+  have hh := accHead_inactive_source_run c idx st hgate hzero hsinkM
+    hword harrword hk hWM hsum hceilFit
+  change InactiveHeadSourceSpec st h at hh
+  have prodFrame (j : Nat)
+      (hw : ArrayRegFrame.writes j c.accProd = false) :
+      p.regs j = h.regs j :=
+    ArrayRegFrame.arun_frame idx j c.accProd hw h
+  have hb := accBisect_latch_frame c idx p
+  change (arun idx p c.accBisect).regs rK = p.regs rK ∧
+    (arun idx p c.accBisect).regs rDp = p.regs rDp ∧
+    (arun idx p c.accBisect).regs rDn = p.regs rDn ∧
+    (arun idx p c.accBisect).regs 43 = p.regs 43 ∧
+    (arun idx p c.accBisect).regs rZero = p.regs rZero at hb
+  rw [arun_accBody_eq_parts]
+  change out.regs rK = st.regs rK ∧ out.regs rDp = st.regs rDp ∧
+    out.regs rDn = st.regs rDn ∧ out.regs rZero = st.regs rZero
+  exact ⟨by rw [hb.1, prodFrame rK (by rfl), hh.k],
+    by rw [hb.2.1, prodFrame rDp (by rfl), hh.dPos],
+    by rw [hb.2.2.1, prodFrame rDn (by rfl), hh.dNeg],
+    by rw [hb.2.2.2.2, prodFrame rZero (by rfl), hh.zero]⟩
 
 end LeanCompCert.Ports.CDEMAbelInactiveSource

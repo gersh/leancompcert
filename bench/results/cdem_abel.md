@@ -21,6 +21,13 @@ re-proof of the entire bisection suffix reached one million deterministic
 heartbeats; it was discarded in favor of this compositional boundary before
 any production-scale rebuild.
 
+The companion persistent-latch theorem carries `k`, `dPos`, `dNeg`, and the
+zero register through that same full inactive accumulator.  Its source check
+took `31.07 s` at `606512 KiB` RSS under the 3 GiB cap.  A one-declaration
+join across selectors, sieve, mark, accumulator, and tail still exceeded one
+million elaboration heartbeats while staying below 574 MiB; that join is
+therefore being split at phase boundaries rather than retained.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on
