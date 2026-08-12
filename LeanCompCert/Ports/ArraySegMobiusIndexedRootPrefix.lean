@@ -479,6 +479,98 @@ structure IndexedPaddedRootPrefixInv (c : Cfg) (s : AState)
   zero : s.regs rZero = 0
 
 set_option maxHeartbeats 1000000
+/-- Generic extension through cap-disabled padding, starting from an already
+constructed exact table.  `start` is the decoder offset of the first padded
+candidate in the containing root segment. -/
+theorem indexedBodyRun_above_cap_prefix
+    (c : Cfg) (idx start fuel : Nat) (s : AState)
+    (ps : List Nat) (w : Nat)
+    (hInv : RootTableInv c s ps c.rootCap)
+    (hLen : ps.length ≤ c.tableLen)
+    (hR : s.regs rR = c.markSteps + start)
+    (hW : s.regs rW = w) (hzero : s.regs rZero = 0)
+    (hcleared : ∀ j, j < start → machineCell c s j = ⟨0, 0⟩)
+    (hstartCap : c.rootCap < w + start)
+    (hstartTwo : 2 ≤ w + start)
+    (hfuel : start + fuel < c.segLen)
+    (hidxRange : idx + fuel ≤ c.rootSpan - 1)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M) (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M) (hwSegM : w + c.segLen < M) :
+    IndexedPaddedRootPrefixInv c (indexedBodyRun idx c fuel s)
+      ps w start fuel := by
+  set_option maxRecDepth 10000 in
+   induction fuel with
+  | zero =>
+      exact {
+        table := by simpa using hInv
+        cleared := by simpa using hcleared
+        position := by simpa using hR
+        base := hW
+        zero := hzero }
+  | succ k ih =>
+      have hk := ih (by omega) (by omega)
+      let prev := indexedBodyRun idx c k s
+      let curIdx := idx + k
+      let i := start + k
+      let n := w + i
+      have hiSeg : i < c.segLen := by omega
+      have hcurRoot : curIdx < c.rootSpan := by
+        dsimp only [curIdx]
+        omega
+      have hcurM : curIdx < M := by omega
+      have hcurNe : curIdx ≠ c.rootSpan - 1 := by
+        dsimp only [curIdx]
+        omega
+      have hprevInv : RootTableInv c prev ps c.rootCap := by
+        simpa only [prev] using hk.table
+      have hprevR : prev.regs rR = c.markSteps + i := by
+        simpa only [prev, i, Nat.add_assoc] using hk.position
+      have hprevW : prev.regs rW = w := hk.base
+      have hprevWrite : prev.regs rWrite = c.primeBase + ps.length :=
+        hprevInv.cursor
+      have hRM : c.markSteps + i < M := by
+        have : c.markSteps + i < c.period := by
+          simp only [Cfg.period]
+          omega
+        omega
+      have hnM : n < M := by
+        dsimp only [n, i]
+        omega
+      have hn2 : 2 ≤ n := by
+        dsimp only [n, i]
+        omega
+      have hcapLt : c.rootCap < n := by
+        dsimp only [n, i]
+        omega
+      have hwriteM : c.primeBase + ps.length < M := by
+        have hend : c.primeBase + c.tableLen < c.arrayLen := by
+          simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+          omega
+        omega
+      have hcellsStep := arun_coreBody_root_acc_above_cap_table_cells c
+        curIdx prev ps c.rootCap n (c.markSteps + i) w
+        (c.primeBase + ps.length) i hprevInv hLen hprevR hprevW hprevWrite
+        (by omega) (by omega) rfl hcurRoot hRM hTM hcurM hspanM hiSeg
+        hnM hn2 hcapLt hcapM hA hk.zero
+      have hpos := arun_coreBody_root_acc_above_cap_nowrap c curIdx prev n
+        (c.markSteps + i) w (c.primeBase + ps.length) i hprevR hprevW
+        hprevWrite (by omega) (by omega) rfl hcurRoot hRM hTM hPM hcurM
+        hspanM hcurNe hiSeg hnM hn2 hcapLt hcapM
+        (by simp only [Cfg.period]; omega) hwriteM
+      rw [indexedBodyRun_succ]
+      exact {
+        table := hcellsStep.1
+        cleared := by
+          intro j hj
+          by_cases hji : j = i
+          · simpa [hji] using hcellsStep.2.1
+          · exact (hcellsStep.2.2.1 j (by omega) hji).trans
+              (hk.cleared j (by omega))
+        position := by simpa only [i, Nat.add_assoc] using hpos.2.1
+        base := hpos.2.2
+        zero := hcellsStep.2.2.2 }
+
 /-- After scanning exactly through `rootCap`, any strict prefix of the padded
 tail executes the real production body but retains the exact cap table. -/
 theorem indexedBodyRun_later_root_acc_padded_prefix

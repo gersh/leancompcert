@@ -24,6 +24,7 @@ open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusRootAccumulation
 open LeanCompCert.Ports.ArraySegMobiusRootPrefix
 open LeanCompCert.Ports.ArraySegMobiusIndexedRun
+open LeanCompCert.Ports.ArraySegMobiusIndexedRootPrefix
 open LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv
 
 /-- Runnable table fold for a window that crosses the bootstrap bound. -/
@@ -307,6 +308,109 @@ theorem indexedBodyRun_mixed_root_acc_prefix
         position := hstep.2.2.2.1
         base := hstep.2.2.2.2.1
         zero := hstep.2.2.2.2.2 }
+
+set_option maxHeartbeats 1000000
+/-- A mixed bootstrap/sequential window that reaches `rootCap` before the end
+of its allocated segment.  The remaining cells are rejected by the compiled
+cap gate and the last one performs the real root-to-main transition. -/
+theorem indexedBodyRun_mixed_root_acc_padded_transition
+    (c : Cfg) (idx valid : Nat) (s : AState)
+    (boot : List Nat) (bootBound w delta : Nat)
+    (hInv : RootTableInv c s boot bootBound)
+    (hView : BootstrapTableView c s boot)
+    (hR : s.regs rR = c.markSteps) (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen → machineCell c s j = rootCellFold boot (w + j))
+    (hvalid : w + valid - 1 = c.rootCap) (hvalidLt : valid < c.segLen)
+    (hidxWindow : idx + c.segLen = c.rootSpan)
+    (hwPos : 0 < w) (hboot2 : 2 ≤ bootBound) (hwBoot : w - 1 ≤ bootBound)
+    (hbootLtCap : bootBound ≤ c.rootCap)
+    (hcover : w + valid < (bootBound + 1) * (bootBound + 1))
+    (hbootLen : boot.length < c.tableLen)
+    (hfit : ∀ k, k < valid → (rootScanMixed boot bootBound w k).length < c.tableLen)
+    (hcapFit : (rootScanMixed boot bootBound w valid).length ≤ c.tableLen)
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M) (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M) (hwSegM : w + c.segLen < M)
+    (hDelta : c.wDelta = delta) (hDeltaM : delta < M) :
+    RootTableInv c (indexedBodyRun idx c c.segLen s)
+        (rootScanMixed boot bootBound w valid) c.rootCap ∧
+      (∀ j, j < c.segLen → machineCell c (indexedBodyRun idx c c.segLen s) j = ⟨0, 0⟩) ∧
+      (indexedBodyRun idx c c.segLen s).regs rR = 0 ∧
+      (indexedBodyRun idx c c.segLen s).regs rW =
+        (w + ((c.segLen + delta) % M)) % M ∧
+      (indexedBodyRun idx c c.segLen s).regs rZero = 0 := by
+  have hpref := indexedBodyRun_mixed_root_acc_prefix c idx valid s boot
+    bootBound w hInv hView hR hW hzero hcells hvalidLt (by omega) hwPos
+    hboot2 hwBoot (by omega) hcover hbootLen hfit hTM hPM hspanM hcapM hA
+  let mid := indexedBodyRun idx c valid s
+  let capTable := rootScanMixed boot bootBound w valid
+  have hmax : max bootBound (w + valid - 1) = c.rootCap := by
+    rw [hvalid]
+    exact Nat.max_eq_right hbootLtCap
+  have hmidInv : RootTableInv c mid capTable c.rootCap := by
+    simpa only [mid, capTable, hmax] using hpref.table
+  let k := c.segLen - 1
+  let pad := k - valid
+  have hkSeg : k < c.segLen := by omega
+  have hprefixFuel : valid + pad = k := by dsimp only [pad]; omega
+  have hpad := indexedBodyRun_above_cap_prefix c (idx + valid) valid pad
+    mid capTable w hmidInv hcapFit hpref.position hpref.base hpref.zero
+    hpref.cleared (by omega) (by omega) (by rw [hprefixFuel]; exact hkSeg)
+    (by omega) hTM hPM hspanM hcapM hA hwSegM
+  let prev := indexedBodyRun idx c k s
+  let curIdx := idx + k
+  let n := w + k
+  have hprevEq : indexedBodyRun (idx + valid) c pad mid = prev := by
+    rw [← indexedBodyRun_add]
+    simpa only [mid, prev, hprefixFuel, Nat.add_assoc]
+  have hcurEq : curIdx = c.rootSpan - 1 := by dsimp only [curIdx, k]; omega
+  have hcurM : curIdx < M := by omega
+  have hspanPos : 0 < c.rootSpan := by omega
+  have hprevInv : RootTableInv c prev capTable c.rootCap := by rw [← hprevEq]; exact hpad.table
+  have hprevR : prev.regs rR = c.markSteps + k := by
+    rw [← hprevEq]
+    calc
+      _ = c.markSteps + valid + pad := hpad.position
+      _ = c.markSteps + k := by omega
+  have hprevW : prev.regs rW = w := by rw [← hprevEq]; exact hpad.base
+  have hprevZero : prev.regs rZero = 0 := by rw [← hprevEq]; exact hpad.zero
+  have hprevWrite : prev.regs rWrite = c.primeBase + capTable.length := hprevInv.cursor
+  have hRM : c.markSteps + k < M := by
+    have : c.markSteps + k < c.period := by simp only [Cfg.period]; omega
+    omega
+  have hnM : n < M := by dsimp only [n, k]; omega
+  have hn2 : 2 ≤ n := by dsimp only [n, k]; omega
+  have hcapLt : c.rootCap < n := by dsimp only [n, k]; omega
+  have hwriteM : c.primeBase + capTable.length < M := by
+    have hend : c.primeBase + c.tableLen < c.arrayLen := by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+      omega
+    dsimp only [capTable]
+    omega
+  have hcellsStep := arun_coreBody_root_acc_above_cap_table_cells c
+    curIdx prev capTable c.rootCap n (c.markSteps + k) w
+    (c.primeBase + capTable.length) k hprevInv hcapFit hprevR hprevW
+    hprevWrite (by omega) (by omega) rfl (by omega) hRM hTM hcurM hspanM
+    hkSeg hnM hn2 hcapLt hcapM hA hprevZero
+  have hpos := arun_coreBody_root_acc_above_cap_transition c curIdx prev n
+    (c.markSteps + k) w (c.primeBase + capTable.length) k delta hprevR
+    hprevW hprevWrite (by omega) (by omega) rfl hRM hTM hPM hcurM
+    hspanPos hspanM hcurEq hkSeg hnM hn2 hcapLt hcapM
+    (by simp only [Cfg.period]; omega) hwriteM hDelta hDeltaM
+  have hkSucc : k + 1 = c.segLen := by omega
+  have hrun : indexedBodyRun idx c c.segLen s = arun curIdx prev c.coreBody := by
+    rw [← hkSucc, indexedBodyRun_succ]
+  rw [hrun]
+  refine ⟨hcellsStep.1, ?_, hpos.2.1, hpos.2.2, hcellsStep.2.2.2⟩
+  intro j hj
+  by_cases hjk : j = k
+  · simpa [hjk] using hcellsStep.2.1
+  · exact (hcellsStep.2.2.1 j hj hjk).trans (by
+      rw [← hprevEq]
+      exact hpad.cleared j (by omega))
+
+set_option maxHeartbeats 200000
 
 /-- A nonfinal mixed window closes at the actual wrap index.  The last
 candidate is explicitly beyond the bootstrap bound, as in the production
