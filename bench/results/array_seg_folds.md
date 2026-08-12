@@ -1910,3 +1910,46 @@ no closed prime list is reduced merely to recover its head.  The direct
 `ArraySegMobiusIndexedFull.lean` source check took 0.39 seconds at 573,696 KiB
 under the 1/2 GiB profile; its 72-job target passed.  The expanded strict
 axiom audit took 0.68 seconds at 1,636,904 KiB under the 2/3 GiB profile.
+
+## Fail-safe `(2.11)` audit and extrema source trace (2026-08-12)
+
+The completed 1,092-window CompCert campaign predates the fail-safe source
+audit transform. `ArraySegBatch.lean` now has a `platt211audit` mode which
+emits `auditProgram (mobiusProgram ...)` for the exact configuration,
+threshold, and reconciled carry seed of each retained manifest row.
+`platt211_audit.py` pins the production manifest SHA-256
+`3ed737cb9ad2dd5a107d46c08d179e351850c199482ec487443c35d998f4cb3e`,
+checks the gap-free chain and every carry before emission, and writes a
+strictly resumable per-window JSONL receipt. Two exact production windows
+returned zero in the smoke run; an intentionally unsafe `lo=0` control
+returned one. The smoke/control cgroups peaked at 133,455,872 and
+127,332,352 bytes respectively, with zero pressure, hard-limit, OOM, or swap
+events.
+
+The exact audit is running as `platt211-audit-1e12b.service` with 12 CompCert
+workers inside one `MemoryHigh=2G`, `MemoryMax=3G`, no-swap cgroup. This entry
+does not claim a completed receipt; final timings and hashes must be recorded
+only after all 1,092 rows return zero. Early progress through window 900
+peaked at 480,829,440 charged bytes.
+
+The source-refinement side now has a leaf implementation rather than a scalar
+only claim. `ArraySegMobiusExtrema.lean` proves the literal nineteen array
+instructions are the transparent extrema step, proves their partial
+denotation from the explicit nonzero-candidate guard, frames the array and
+the segmented core, relates the changing-index combined trace to the already
+verified standalone sieve, and folds the actual emitted signal list. The
+core relation's private range now includes the extrema residue's historical
+registers `105..120`; the executable program is unchanged. Fresh one-worker
+checks under the 2/3 GiB no-swap profile measured:
+
+| check | charged `memory.peak` | hard-limit/OOM/swap events |
+| --- | ---: | ---: |
+| audit batch emitter source | 125,001,728 B | 0 |
+| widened residue-frame focused build | 202,813,440 B | 0 |
+| extrema array/trace source | 136,581,120 B | 0 |
+| extrema array/trace focused target | 304,549,888 B | 0 |
+
+Fresh axiom prints for the residue transition and its partial denotation
+contain only `propext`. The remaining proof layer is the production window
+schedule and manifest observation/carry composition into the already-proved
+paper fixed-point theorem.

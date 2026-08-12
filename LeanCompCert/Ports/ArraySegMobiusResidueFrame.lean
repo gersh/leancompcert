@@ -26,9 +26,11 @@ open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.MobiusResidueRealisation
 
-/-- Registers outside the residue's private register ranges. -/
+/-- Registers outside all production Möbius residues' private ranges.
+The two-limb live residue uses `100..104`; the older extrema residue used by
+the `(2.11)` campaign additionally uses `105..120`. -/
 def CoreReg (j : Nat) : Bool :=
-  decide (¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 191)))
+  decide (¬((100 ≤ j ∧ j ≤ 120) ∨ (150 ≤ j ∧ j ≤ 191)))
 
 /-- Two states agree on the complete sieve-facing projection. -/
 def CoreAgree (s t : AState) : Prop :=
@@ -222,14 +224,14 @@ theorem arun_coreBody_congr (c : Cfg) (idx : Nat) {s t : AState}
 
 private theorem residue_avoids_core (k j : Nat) (hj : CoreReg j = true) :
     (mobiusLiveResidue k).all (avoidsReg j) = true := by
-  have hw : ¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 191)) :=
+  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨ (150 ≤ j ∧ j ≤ 191)) :=
     of_decide_eq_true hj
-  have h100 : j < 100 ∨ 104 < j := by
+  have h100 : j < 100 ∨ 120 < j := by
     by_cases h : j < 100
     · exact Or.inl h
     · refine Or.inr (Nat.lt_of_not_ge ?_)
-      intro hj104
-      exact hw (Or.inl ⟨Nat.le_of_not_gt h, hj104⟩)
+      intro hj120
+      exact hw (Or.inl ⟨Nat.le_of_not_gt h, hj120⟩)
   have h150 : j < 150 ∨ 191 < j := by
     by_cases h : j < 150
     · exact Or.inl h
@@ -282,14 +284,14 @@ theorem foldl_combined_core (c : Cfg) (k fuel : Nat) {s t : AState}
 private theorem liveInit_avoids_core (seed : MobLiveSeed) (j : Nat)
     (hj : CoreReg j = true) :
     (mobiusLiveInit seed).all (avoidsReg j) = true := by
-  have hw : ¬((100 ≤ j ∧ j ≤ 104) ∨ (150 ≤ j ∧ j ≤ 191)) :=
+  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨ (150 ≤ j ∧ j ≤ 191)) :=
     of_decide_eq_true hj
-  have h100 : j < 100 ∨ 104 < j := by
+  have h100 : j < 100 ∨ 120 < j := by
     by_cases h : j < 100
     · exact Or.inl h
     · refine Or.inr (Nat.lt_of_not_ge ?_)
-      intro hj104
-      exact hw (Or.inl ⟨Nat.le_of_not_gt h, hj104⟩)
+      intro hj120
+      exact hw (Or.inl ⟨Nat.le_of_not_gt h, hj120⟩)
   simp [mobiusLiveInit, ArraySegSieve.seed, avoidsReg,
     rTLo, rTHi, rCeil, rCeilSq,
     rMViol]

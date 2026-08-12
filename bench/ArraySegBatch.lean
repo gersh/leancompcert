@@ -1,4 +1,5 @@
 import LeanCompCert.Ports.ArraySegSieve
+import LeanCompCert.Verified.ArrayAudit
 
 /-!
 Batch emitter for `Ports.ArraySegSieve`: the same artifacts
@@ -30,11 +31,15 @@ pressure and the `.olean` page cache has been evicted, is minutes rather than
 the half-second the emission itself costs.  Everything else here is
 `ArraySegEmit`'s code, unchanged; only the driver loop is new.
 
-Emission only; no proof obligation is discharged here.
+Modes `platt211audit` and `plattstrongaudit` emit the mechanically transformed
+fail-safe program.  Their driver exits zero exactly when every source
+division and array access was defined.  Emission only; no proof obligation is
+discharged here.
 -/
 
 open LeanCompCert
 open LeanCompCert.Verified.ArrayState
+open LeanCompCert.Verified.ArrayAudit
 open LeanCompCert.Ports.ArraySegSieve
 
 namespace Bench.ArraySegBatch
@@ -102,6 +107,14 @@ def verdictDriver (name : String) (cells base slots classBase : Nat)
 `bench/ArraySegEmit.lean`'s, because this file emits the same artifacts. -/
 def classes : List Class := [ ("mobius_upper", 0, 2), ("mobius_lower", 1, 3) ]
 
+/-- Minimal self-checking driver for a fail-safe audit program. -/
+def auditDriver (name : String) (cells : Nat) : String :=
+  "\nstatic uint64_t cells[" ++ toString cells ++ "];\n" ++
+  "int main(void)\n{\n" ++
+  "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    return r == UINT64_C(0) ? 0 : 1;\n" ++
+  "}\n"
+
 def emitOne (idx mode loS lenS cntS : String) (out : String)
     (seed : Option Nat) : IO Bool := do
   let some lo := loS.toNat? | do IO.eprintln s!"job {idx}: bad LO"; return false
@@ -109,16 +122,21 @@ def emitOne (idx mode loS lenS cntS : String) (out : String)
   let some cnt := cntS.toNat? | do IO.eprintln s!"job {idx}: bad SEGCOUNT"; return false
   let c := Cfg.ofRange lo len cnt
   let name := s!"Seg{mode}L{lo}S{len}N{cnt}"
-  let p ←
+  let source ←
     match mode with
     | "platt211" => pure (mobiusProgram c (seed.getD tBias) (platt211Threshold c.hi))
+    | "platt211audit" => pure (mobiusProgram c (seed.getD tBias) (platt211Threshold c.hi))
     | "plattstrong" => pure (mobiusProgram c (seed.getD tBias) (plattStrongerThreshold c.hi))
+    | "plattstrongaudit" => pure (mobiusProgram c (seed.getD tBias) (plattStrongerThreshold c.hi))
     | _ => do IO.eprintln s!"job {idx}: bad MODE {mode}"; return false
+  let audited := mode == "platt211audit" || mode == "plattstrongaudit"
+  let p := if audited then auditProgram source else source
   match p.emitRolled name with
   | .error errs => (for e in errs do IO.eprintln e); return false
   | .ok src =>
-      IO.FS.writeFile out
-        (src ++ verdictDriver name p.arrayLen (p.arrayLen - 16) 3 8 classes []
+      IO.FS.writeFile out (src ++
+        if audited then auditDriver name p.arrayLen
+        else verdictDriver name p.arrayLen (p.arrayLen - 16) 3 8 classes []
           true)
       IO.println s!"job {idx} lo={lo} hi={c.hi} thr211={platt211Threshold c.hi} thrstrong={plattStrongerThreshold c.hi} arrayLen={p.arrayLen} loopCount={p.loopCount} bodyLen={p.body.length}"
       return true
