@@ -17,7 +17,7 @@ open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Verified.LogFixed
 
-private theorem logIter_fst_range (x0 : Nat)
+theorem logIter_fst_range (x0 : Nat)
     (hxlo : B62 ≤ x0) (hxhi : x0 < B63) : ∀ n : Nat,
     B62 ≤ (logIter x0 n).1 ∧ (logIter x0 n).1 < B63 := by
   intro n
@@ -101,6 +101,7 @@ theorem foldl_logRoundBody_24 (indices : List Nat) (s : AState) (x0 : Nat)
     (by omega)
 
 #print axioms foldl_logRoundBody_from_iter
+#print axioms logIter_fst_range
 #print axioms foldl_logRoundBody
 #print axioms foldl_logRoundBody_24
 

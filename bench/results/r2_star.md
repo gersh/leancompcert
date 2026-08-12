@@ -898,6 +898,18 @@ took **0.44 seconds / 551,736 KiB**, and the aggregate import-only check took
 Trust prints contain no axioms beyond `propext`, `Classical.choice`, and
 `Quot.sound`, while both literal slice equalities are axiom-free.
 
+`R2SegLogRoundStep` composes those islands with the relocated circuit.  Its
+literal 36-instruction slice theorem and separate first/continuation
+contracts advance `logIter`, emit register 247's exact final-round bit, and
+either increment or reset `rK`, with the array framed throughout.  The fresh
+source check took **0.42 seconds / 532,860 KiB**.  Rebuilding the focused
+target (including invalidated small dependencies) took **1.14 seconds /
+557,756 KiB**; the cached aggregate import-only check took **0.62 seconds /
+1,754,940 KiB** under the one-worker 2/3 GiB no-swap cap.  Trust remains
+`propext`, `Classical.choice`, and `Quot.sound`; the slice equality is
+axiom-free.  The next bridge is from the earlier live-entry gate/load prefix
+to these step hypotheses, followed by a fold over 24 complete body states.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
