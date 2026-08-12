@@ -20,6 +20,7 @@ fact is isolated from the literal prime certificate so later marking proofs do
 not need to elaborate both large arguments in one process. -/
 theorem productionAfterSieve_state :
     productionAfterSieve.regs rZero = 0 ∧
+      (∀ j, productionAfterSieve.regs j < M) ∧
       ∀ j, productionAfterSieve.arr j < M := by
   rcases bodySieveIter_invariant productionCfg productionCfg.sieveLen
     (sieveEntry productionCfg) (initialSieveModel productionCfg)
@@ -35,6 +36,6 @@ theorem productionAfterSieve_state :
     (by change 1199417 < M; decide) with
     ⟨finalModel, hfinalRep, _, _, _⟩
   rw [productionAfterSieve, ← bodySieveIter_eq_fold]
-  exact ⟨hfinalRep.zero, hfinalRep.arrWord⟩
+  exact ⟨hfinalRep.zero, hfinalRep.regsWord, hfinalRep.arrWord⟩
 
 end LeanCompCert.Ports.CDEMAbelProductionSieveState

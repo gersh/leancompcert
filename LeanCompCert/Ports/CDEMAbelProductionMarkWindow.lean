@@ -34,7 +34,8 @@ theorem production_full_mark_window_eq_deltaF
   apply bodyIterFrom_full_mark_window_eq_deltaF_of_compact_budget productionCfg
     productionCfg.sieveLen productionAfterSieve 1
     productionFirstMark_rep productionAfterSieve_table_live
-    (fun j _ => productionAfterSieve_state.2 (j + productionCfg.winBase))
+    (fun j _ => productionAfterSieve_state.2.2
+      (j + productionCfg.winBase))
   · change 25987624 < M
     decide
   · change 17142466 < M

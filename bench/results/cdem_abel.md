@@ -1461,3 +1461,10 @@ holding about 1.4 GiB: its dependent premise forced unification through
 non-dependent `compactMarkBudget` premise and itself checks in 0.24 s at
 554,292 KiB.  This converts an expensive elaboration path into five small,
 independently cached certificates without changing the compiled computation.
+
+The state-facing companion subsequently exposes the exact period cursor,
+window origin, zero register, cell cursor, and global register/array word
+bounds after the same full block.  Its generic changing-index state and word
+lemmas checked in 0.36 s at 610,740 KiB; the concrete production state checked
+in 0.25 s at 574,932 KiB and its target build in 0.37 s at 567,492 KiB, under
+the same 2/3 GiB one-worker, no-swap profile.
