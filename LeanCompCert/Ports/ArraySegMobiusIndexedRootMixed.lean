@@ -45,6 +45,19 @@ theorem rootScanMixed_succ (boot : List Nat) (bootBound w fuel : Nat) :
       else rootTableStep (rootScanMixed boot bootBound w fuel) (w + fuel) :=
   rfl
 
+/-- A mixed scan appends at most one table entry per candidate. -/
+theorem rootScanMixed_length_le (boot : List Nat) (bootBound w fuel : Nat) :
+    (rootScanMixed boot bootBound w fuel).length ≤ boot.length + fuel := by
+  induction fuel with
+  | zero => simp
+  | succ k ih =>
+      rw [rootScanMixed_succ]
+      split
+      · omega
+      · unfold rootTableStep
+        split <;> simp only [List.length_append, List.length_singleton,
+          Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] <;> omega
+
 /-- Before the mixed scan crosses the bootstrap bound, its table is unchanged. -/
 theorem rootScanMixed_eq_boot_of_le (boot : List Nat)
     (bootBound w fuel : Nat) (hle : w + fuel - 1 ≤ bootBound) :

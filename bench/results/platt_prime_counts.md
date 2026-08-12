@@ -66,20 +66,25 @@ ccomp -O2 -o /tmp/platt-tail-budget /tmp/platt-tail-budget.c
 
 The pinned `10^12` manifest also has a direct certificate using the actual
 production segmented root loop.  `Platt211RootBatch.lean` sets the following
-main-window count to zero and returns the persistent table cursor; the paired
+main-window count to zero, gives the root table the structurally roomy capacity
+`rootCap + bootCount`, and returns the persistent table cursor; the paired
 audit program checks every source guard.  This avoids replaying the completed
-main sweep merely to inspect the root table.
+main sweep merely to inspect the root table, while ensuring that the table-fit
+proof does not assume the recorded prime count it is intended to verify.
+When a one-window root interval ends exactly on its segment boundary, the
+certificate adds one inert cell beyond `rootCap`; the cap gate prevents that
+cell from changing the table and makes the proved final transition uniform.
 
 All 1,092 rows completed, with one ordinary and one audit receipt per row:
 
 | rows | receipts | emit wall | CompCert wall | run wall | campaign peak RSS | swaps |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1,092 | 2,184 | 51.914 s | 44.185 s | 8.486 s | 579,172 KiB | 0 |
+| 1,092 | 2,184 | 51.194 s | 44.157 s | 8.487 s | 609,424 KiB | 0 |
 
 The compact summary is `platt211_root_1e12.json`.  It pins manifest SHA-256
 `3ed737cb9ad2dd5a107d46c08d179e351850c199482ec487443c35d998f4cb3e`
 and aggregate receipt SHA-256
-`0a4a0b7d47dde604e50c94cbaeb190e8775a3519503ae6c269d14009c11d23bf`.
+`970c545d4fd929a456b7d6617c3285300dceb43caf6d5f3b0f1848ca36dfb787`.
 The run used CompCert 3.17, twelve runtime workers and four compiler workers
 inside a no-swap cgroup with `MemoryHigh=1536M` and `MemoryMax=2560M`.
 

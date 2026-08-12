@@ -28,6 +28,7 @@ open LeanCompCert.Verified.ArrayComputation
 open LeanCompCert.Verified.ArrayAudit
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusSignal
+open LeanCompCert.Ports.ArraySegMobiusMark
 open LeanCompCert.Ports.ArraySegMobiusResidueFrame
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusPrimeTable
@@ -39,15 +40,29 @@ open LeanCompCert.Ports.ArraySegMobiusIndexedMain
 open LeanCompCert.Ports.ArraySegMobiusIndexedProgram
 open LeanCompCert.Ports.ArraySegMobiusPlatt211ManifestData
 open LeanCompCert.Ports.ArraySegMobiusPlatt211Manifest
+open LeanCompCert.Ports.ArraySegMobiusPlatt211Schedule
 open LeanCompCert.Ports.ArraySegMobiusPlatt211Certificate
 open LeanCompCert.Ports.ArraySegMobiusExtrema
 open LeanCompCert.Ports.ArraySegMobiusIndexedFull
 
-/-- The production root schedule with no following main window.  `lo` is set
-to one so the root-to-main jump is also a small literal, although no main
-iteration is executed. -/
+/-- Add one gated padding cell to the four one-window rows whose production
+root interval ended exactly at a segment boundary.  The live interval still
+ends at `rootCap`; this only makes the final-transition proof uniform. -/
+def rootCertificateSegLen (row : Row) : Nat :=
+  if row.rootCount = 1 ∧ row.rootCap = row.segLen then row.segLen + 1
+  else row.segLen
+
+/-- The production root schedule with no following main window.  Its table is
+deliberately roomy (`rootCap + bootCount` cells), so the refinement proof gets
+a structural capacity bound independent of the recorded prime count.  Exact
+one-window boundaries receive one inert padding cell.  The compiled cursor
+still returns the recorded count. -/
 def rootOnlyCfg (row : Row) : Cfg :=
-  { rowCfg row with lo := 1, segCount := 0 }
+  { rowCfg row with
+      lo := 1
+      segLen := rootCertificateSegLen row
+      segCount := 0
+      mainCount := row.rootCap + row.bootCount }
 
 /-- Root-only source program returning the prime-table write cursor. -/
 def rootOnlyProgram (row : Row) : AProgram :=
@@ -60,24 +75,197 @@ theorem rootOnlyProgram_wf (row : Row) : (rootOnlyProgram row).WF := by
   · exact (mobiusProgram_wf (rootOnlyCfg row) tBias 0).2
 
 theorem rootOnlyProgram_arrayLen (row : Row) :
-    (rootOnlyProgram row).arrayLen = 3 * row.segLen + row.mainCount + 18 := rfl
+    (rootOnlyProgram row).arrayLen =
+      3 * rootCertificateSegLen row +
+        (row.rootCap + row.bootCount) + 18 := rfl
+
+def roomyRootShapeOK (row : Row) : Bool :=
+  decide (8 * (3 * rootCertificateSegLen row +
+    (row.rootCap + row.bootCount) + 18) ≤ M)
+
+def paddedBoundaryBudgetOK (row : Row) : Bool :=
+  decide (row.rootCount = 1 ∧ row.rootCap = row.segLen →
+    ((rootOnlyCfg row).bootPrimes.map fun p =>
+      (rootOnlyCfg row).segLen / p + 2).sum ≤ (rootOnlyCfg row).markSteps)
+
+def roomyRootShapesOK : Bool := rows.all roomyRootShapeOK
+def paddedBoundaryBudgetsOK : Bool := rows.all paddedBoundaryBudgetOK
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+theorem roomyRootShapes_ok : roomyRootShapesOK = true := by decide
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 4000000 in
+theorem paddedBoundaryBudgets_ok : paddedBoundaryBudgetsOK = true := by
+  decide
+
+theorem row_roomyRootShape (row : Row) (hrow : row ∈ rows) :
+    8 * (3 * rootCertificateSegLen row +
+      (row.rootCap + row.bootCount) + 18) ≤ M := by
+  have hbool := (List.all_eq_true.mp roomyRootShapes_ok) row hrow
+  exact of_decide_eq_true hbool
+
+theorem row_rootCertificateBudget (row : Row) (hrow : row ∈ rows) :
+    let c := rootOnlyCfg row
+    (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps := by
+  by_cases hboundary : row.rootCount = 1 ∧ row.rootCap = row.segLen
+  · have hbool :=
+      (List.all_eq_true.mp paddedBoundaryBudgets_ok) row hrow
+    exact (of_decide_eq_true hbool) hboundary
+  · have hold := row_bootBudget row hrow
+    simpa [rootOnlyCfg, rootCertificateSegLen, hboundary, rowCfg] using hold
+
+/-- Cheap arithmetic side conditions for the dominant one-root-window rows.
+The prime-table contents and marking budget remain separate proved facts. -/
+def singleRootArithmetic (row : Row) : Prop :=
+  let c := rootOnlyCfg row
+  c.bootCount = row.bootCount ∧ 0 < c.bootCount ∧
+  c.tableLen = c.bootCount + c.rootCap ∧ c.tableLen < M ∧
+  0 < c.markSteps ∧ c.markSteps < M ∧ c.period < M ∧
+  c.rootSpan < M ∧ 0 < c.firstPrime ∧
+  c.firstPrime ≤ c.segLen ∧ c.firstPrime ≤ row.bootBound ∧
+  row.bootBound < M ∧ row.bootBound * row.bootBound < M ∧
+  c.segLen + row.bootBound < M ∧ 1 + c.segLen < M ∧
+  1 + firstOffset 1 c.firstPrime < M ∧ c.arrayLen < M ∧
+  2 ≤ row.bootBound ∧ c.period = c.rootSpan ∧
+  1 - 1 ≤ row.bootBound ∧ row.bootBound ≤ c.rootCap ∧
+  1 + row.rootCap - 1 = c.rootCap ∧ row.rootCap < c.segLen ∧
+  1 + row.rootCap < (row.bootBound + 1) * (row.bootBound + 1) ∧
+  c.rootCap < M ∧ c.wDelta < M
+
+instance (row : Row) : Decidable (singleRootArithmetic row) := by
+  unfold singleRootArithmetic
+  infer_instance
+
+def singleRootArithmeticOK (row : Row) : Bool :=
+  decide (row.rootCount = 1 ∧ row.bootBound ≤ row.rootCap ∧
+    row.rootCap < (rootOnlyCfg row).segLen →
+    singleRootArithmetic row)
+
+def singleRootArithmeticAllOK : Bool := rows.all singleRootArithmeticOK
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 4000000 in
+theorem singleRootArithmeticAll_ok : singleRootArithmeticAllOK = true := by
+  decide
+
+theorem row_singleRootArithmetic (row : Row) (hrow : row ∈ rows)
+    (hcount : row.rootCount = 1) (hbootCap : row.bootBound ≤ row.rootCap)
+    (hpadded : row.rootCap < (rootOnlyCfg row).segLen) :
+    singleRootArithmetic row := by
+  have hbool := (List.all_eq_true.mp singleRootArithmeticAll_ok) row hrow
+  exact (of_decide_eq_true hbool) ⟨hcount, hbootCap, hpadded⟩
+
+/-- Every one-root-window row has a complete padded production schedule.  Its
+fit proof uses the roomy table and the structural one-append-per-candidate
+bound, never the recorded prime count. -/
+theorem row_singleRootSchedule (row : Row) (hrow : row ∈ rows)
+    (hcount : row.rootCount = 1) (hbootCap : row.bootBound ≤ row.rootCap)
+    (hpadded : row.rootCap < (rootOnlyCfg row).segLen) :
+    SingleMixedPaddedRootSchedule (rootOnlyCfg row) row.bootBound
+      row.rootCap (rootOnlyCfg row).wDelta := by
+  let c := rootOnlyCfg row
+  have hn := row_singleRootArithmetic row hrow hcount hbootCap hpadded
+  change
+    c.bootCount = row.bootCount ∧ 0 < c.bootCount ∧
+    c.tableLen = c.bootCount + c.rootCap ∧ c.tableLen < M ∧
+    0 < c.markSteps ∧ c.markSteps < M ∧ c.period < M ∧
+    c.rootSpan < M ∧ 0 < c.firstPrime ∧
+    c.firstPrime ≤ c.segLen ∧ c.firstPrime ≤ row.bootBound ∧
+    row.bootBound < M ∧ row.bootBound * row.bootBound < M ∧
+    c.segLen + row.bootBound < M ∧ 1 + c.segLen < M ∧
+    1 + firstOffset 1 c.firstPrime < M ∧ c.arrayLen < M ∧
+    2 ≤ row.bootBound ∧ c.period = c.rootSpan ∧
+    1 - 1 ≤ row.bootBound ∧ row.bootBound ≤ c.rootCap ∧
+    1 + row.rootCap - 1 = c.rootCap ∧ row.rootCap < c.segLen ∧
+    1 + row.rootCap < (row.bootBound + 1) * (row.bootBound + 1) ∧
+    c.rootCap < M ∧ c.wDelta < M at hn
+  rcases hn with ⟨hbootCount, hbootPos, htable, htableM, hmarkPos,
+    hmarkM, hperiodM, hspanM, hpPos, hpLen, hpBoot, hbootM, hbootSqM,
+    hsegBootM, hwindowM, hoffsetM, harrayM, hbootTwo, hrootIndex,
+    hbootStart, hbootCap, hvalid, hvalidLt, hcover, hcapM, hdeltaM⟩
+  have hprime : PrimeTableInv c.bootPrimes row.bootBound := by
+    simpa [c, rootOnlyCfg, rowCfg] using row_bootPrime row hrow
+  have hshape : ∃ tail, c.bootPrimes = c.firstPrime :: tail := by
+    cases hlist : c.bootPrimes with
+    | nil => simp [Cfg.bootCount, hlist] at hbootPos
+    | cons p tail =>
+        refine ⟨tail, ?_⟩
+        simp [Cfg.firstPrime, hlist]
+  have hbudget :
+      (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps := by
+    simpa [c] using row_rootCertificateBudget row hrow
+  refine
+    { bootPrime := hprime
+      bootShape := hshape
+      bootLe := by
+        change c.bootCount ≤ c.tableLen
+        rw [htable]
+        omega
+      tableLenM := htableM
+      markPos := hmarkPos
+      markM := hmarkM
+      periodM := hperiodM
+      spanM := hspanM
+      firstPrimePos := hpPos
+      firstPrimeLeLen := hpLen
+      firstPrimeLeBoot := hpBoot
+      bootBoundM := hbootM
+      bootBoundSqM := hbootSqM
+      segBootM := hsegBootM
+      windowBaseM := hwindowM
+      firstOffsetM := hoffsetM
+      arrayM := harrayM
+      markBudget := hbudget
+      bootTwo := hbootTwo
+      rootIndex := hrootIndex
+      bootStart := hbootStart
+      bootLeCap := hbootCap
+      finalValid := hvalid
+      finalValidLt := hvalidLt
+      finalCover := hcover
+      bootFit := by
+        change c.bootPrimes.length < c.tableLen
+        rw [htable]
+        simp only [Cfg.bootCount]
+        omega
+      finalFit := by
+        intro k hk
+        change (rootScanMixed c.bootPrimes row.bootBound 1 k).length <
+          c.tableLen
+        have hlen := rootScanMixed_length_le c.bootPrimes row.bootBound 1 k
+        calc
+          _ ≤ c.bootPrimes.length + k := hlen
+          _ = c.bootCount + k := rfl
+          _ < c.bootCount + c.rootCap := by
+            have : k < c.rootCap := by
+              simpa [c, rootOnlyCfg, rowCfg] using hk
+            omega
+          _ = c.tableLen := htable.symm
+      finalCapFit := by
+        change (rootScanMixed c.bootPrimes row.bootBound 1 c.rootCap).length ≤
+          c.tableLen
+        have hlen := rootScanMixed_length_le c.bootPrimes row.bootBound 1
+          c.rootCap
+        calc
+          _ ≤ c.bootPrimes.length + c.rootCap := hlen
+          _ = c.bootCount + c.rootCap := rfl
+          _ = c.tableLen := htable.symm
+      rootCapM := hcapM
+      deltaEq := rfl
+      deltaM := hdeltaM }
 
 theorem rootOnlyProgram_arrayLen_lt (row : Row) (hrow : row ∈ rows) :
     (rootOnlyProgram row).arrayLen < M := by
-  have hbool := (List.all_eq_true.mp cfgShapes_ok) row hrow
-  unfold cfgShapeOK at hbool
-  have hshape := of_decide_eq_true hbool
-  rcases hshape with ⟨_, _, _, _, _, _, hbytes⟩
+  have hbytes := row_roomyRootShape row hrow
   rw [rootOnlyProgram_arrayLen]
   have hM : 0 < M := M_pos
   omega
 
 theorem rootOnlyProgram_baseOk (row : Row) (hrow : row ∈ rows) :
     BaseOk (rootOnlyProgram row).arrayLen 0 := by
-  have hbool := (List.all_eq_true.mp cfgShapes_ok) row hrow
-  unfold cfgShapeOK at hbool
-  have hshape := of_decide_eq_true hbool
-  rcases hshape with ⟨_, _, _, _, _, _, hbytes⟩
+  have hbytes := row_roomyRootShape row hrow
   have hbytes' : 8 * (rootOnlyProgram row).arrayLen ≤ M := by
     rw [rootOnlyProgram_arrayLen]
     exact hbytes
@@ -211,7 +399,20 @@ theorem row_singleRoot_primeTable (row : Row) (hrow : row ∈ rows)
   dsimp only [core] at hcoreCursor hsemantic
   omega
 
+/-- Closed computation-backed prime-table certificate for every padded
+one-root-window row in the production manifest. -/
+theorem row_singleRoot_primeTable_closed (row : Row) (hrow : row ∈ rows)
+    (hcount : row.rootCount = 1) (hbootCap : row.bootBound ≤ row.rootCap)
+    (hpadded : row.rootCap < (rootOnlyCfg row).segLen) :
+    let c := rootOnlyCfg row
+    let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+    PrimeTableInv ps c.rootCap ∧ ps.length = row.mainCount := by
+  exact row_singleRoot_primeTable row hrow hcount row.rootCap
+    (rootOnlyCfg row).wDelta
+    (row_singleRootSchedule row hrow hcount hbootCap hpadded)
+
 #print axioms row_rootOnly_writeCursor
 #print axioms row_singleRoot_primeTable
+#print axioms row_singleRoot_primeTable_closed
 
 end LeanCompCert.Ports.ArraySegMobiusPlatt211RootCertificate

@@ -66,11 +66,20 @@ def load_rows(limit: int | None) -> list[dict]:
         root_count = max(1, (root_cap + row["seglen"] - 1) // row["seglen"])
         boot_bound = max(math.isqrt(root_count * row["seglen"]), 2)
         main_count = bisect.bisect_right(primes, max(boot_bound, root_cap))
-        expected = 3 * row["seglen"] + 1 + main_count
+        # The formal certificate adds one inert, root-cap-gated cell when a
+        # one-window root interval ends exactly on the segment boundary.
+        # Its table cursor is consequently based after that padded segment.
+        certificate_seglen = (
+            row["seglen"] + 1
+            if root_count == 1 and root_cap == row["seglen"]
+            else row["seglen"]
+        )
+        expected = 3 * certificate_seglen + 1 + main_count
         jobs.append({
             "idx": idx,
             "root_cap": root_cap,
             "seglen": row["seglen"],
+            "certificate_seglen": certificate_seglen,
             "expected": expected,
         })
     return jobs if limit is None else jobs[:limit]
@@ -145,7 +154,9 @@ def run_one(item: tuple[dict, str], outdir: Path) -> dict:
         )
     return {
         "idx": job["idx"], "mode": mode, "root_cap": job["root_cap"],
-        "seglen": job["seglen"], "expected": expected,
+        "seglen": job["seglen"],
+        "certificate_seglen": job["certificate_seglen"],
+        "expected": expected,
         "seconds": round(elapsed, 6),
     }
 
