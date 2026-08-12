@@ -777,10 +777,20 @@ a193 / 2^16 ≤ 1.93,
 ⌊√n⌋ ≤ √n.
 ```
 
+It also transports the literal jump products through the program's final
+right shift.  The single product used by modes 0/2 and the doubled product
+used by modes 1/3 are each bracketed between the stored natural quotient and
+the source-scaled real product, with the explicit four-ulp product width and
+one final-division ulp.  Prime-power and two-distinct-prime-power corollaries
+are stated directly in terms of the live `r2JumpReal`, so the remaining
+whole-state induction need not reopen von Mangoldt convolution or real
+multiplication.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its source
-check completed in **7.1 seconds** at **619,339,776 charged bytes** under the
+latest source check completed in **6.7 seconds** at **700,874,752 charged
+bytes** under the
 same 2/3 GiB no-swap profile, with every memory event counter zero.  No native
 evaluator or new trust declaration is introduced.
 
