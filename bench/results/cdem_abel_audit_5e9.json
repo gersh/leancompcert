@@ -1,0 +1,44 @@
+{
+  "atom": "LeanCompCert.Ports.CDEMAbelProductionAuditCertificate.cdemAbelProductionAudit_compcert_run",
+  "artifact": "LeanCompCert/Ports/CDEMAbelScan.lean :: auditComputation productionComputation",
+  "claim": "the fail-safe audit of the exact CDEM Abel production computation Returns 0",
+  "configuration": {
+    "weight_scale": 1000000000000000000,
+    "k_bound": 199330,
+    "segment_length": 1000000,
+    "segment_count": 5000,
+    "high_endpoint": 5000000000,
+    "loop_count": 354242932466,
+    "array_length": 1199434,
+    "body_instructions": 443
+  },
+  "artifacts": {
+    "emitted_c_bytes": 54774,
+    "emitted_c_sha256": "e8209fbc9e1b21f360513e6826c7f6c652861ebb4f18627ff8a0fbea1ceb5ab3",
+    "compcert_executable_bytes": 70552,
+    "compcert_executable_sha256": "de9f7d0c5528c489dbdaa592bcb14469001efd85d536e19dae4cdf10f3282f13"
+  },
+  "toolchain": {
+    "compcert": "The CompCert C verified compiler, version 3.17",
+    "lean": "Lean 4.32.1 aarch64"
+  },
+  "run": {
+    "started": "2026-08-12T05:47:35-07:00",
+    "finished": "2026-08-12T10:57:36-07:00",
+    "user_seconds": 18599.51,
+    "system_seconds": 0.00,
+    "wall_seconds": 18601,
+    "cpu_seconds_cgroup": 18599.527,
+    "maximum_rss_kib": 10316,
+    "exit_status": 0,
+    "audit_result": 0,
+    "swap_operations": 0
+  },
+  "limits": {
+    "memory_high_bytes": 134217728,
+    "memory_max_bytes": 268435456,
+    "memory_swap_max_bytes": 0,
+    "tasks_max": 16
+  },
+  "verification": "The exact CompCert executable exited zero. The audit transform latches every zero-divisor or out-of-bounds event into its result, so this run supplies the source-definedness premise for the separately retained twelve-cell production observation. Raw systemd journal output is intentionally not versioned."
+}

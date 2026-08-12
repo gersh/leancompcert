@@ -1689,11 +1689,17 @@ A production-shaped smoke configuration (`W=10^18`, `K=100`, `segLen=1000`,
 `segCount=2`) returned zero, while the deliberately unsafe control
 (`W=1`, `K=1`, `segLen=10`, `segCount=1`) returned one.
 
-The exact executable was started on 2026-08-12 as the memory-capped transient
-unit `cdem-abel-audit-5e9.service`, with `MemoryHigh=128M`, `MemoryMax=256M`,
-swap disabled, and one process. This entry deliberately records no completed
-receipt yet; completion, wall/user time, observation, and the run-admission
-declaration must be added only after a successful exit.
+The exact executable completed successfully on 2026-08-12 as the memory-capped
+transient unit `cdem-abel-audit-5e9.service`, with `MemoryHigh=128M`,
+`MemoryMax=256M`, swap disabled, and one process.  It returned zero after
+`5:10:01` wall time (`18,599.51` user seconds and `18,599.527` cgroup CPU
+seconds), at `10,316` KiB maximum RSS and zero swaps.  The compact retained
+receipt is `bench/results/cdem_abel_audit_5e9.json`; it pins the emitted C and
+executable hashes and the exact production configuration.  The corresponding
+run admission is
+`CDEMAbelProductionAuditCertificate.cdemAbelProductionAudit_compcert_run`,
+whose proposition is exactly `(auditComputation productionComputation).Returns
+0`.
 
 Fresh one-worker checks used `MemoryHigh=2G`, `MemoryMax=3G`, and disabled
 swap:

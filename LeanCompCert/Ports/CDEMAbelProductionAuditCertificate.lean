@@ -11,11 +11,11 @@ defined.  `auditComputation productionComputation` is the mechanically
 transformed program which latches any zero divisor or out-of-bounds access in
 a fresh result register while preserving the original computation.
 
-The theorem below consumes that separate physical computation as an explicit
-premise.  Once the production receipt has actually completed, the premise can
-be named as a run admission and the literal five-billion-cell source program
-will denote zero.  This does not yet identify the result cells with the paper
-sums; that is the next, state-observation bridge.
+The theorem below consumes that separate physical computation.  Its exact
+five-billion-cell execution completed with exit status zero on 2026-08-12;
+the narrow run admission records that physical fact.  This does not by itself
+identify the result cells with the paper sums; that is the next,
+state-observation bridge.
 -/
 
 namespace LeanCompCert.Ports.CDEMAbelProductionAuditCertificate
@@ -24,6 +24,13 @@ open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayComputation
 open LeanCompCert.Verified.ArrayAudit
 open LeanCompCert.Ports.CDEMAbelProductionCertificate
+
+/-- CompCert 3.17 execution of the exact fail-safe production audit returned
+zero dynamic division/address guard failures.  The retained benchmark receipt
+pins the emitted C and executable hashes, configuration, resource limits, and
+successful process exit. -/
+axiom cdemAbelProductionAudit_compcert_run :
+    (auditComputation productionComputation).Returns ((0 : Nat) : Int)
 
 /-- The retained twelve-cell observation includes the original output local,
 so it also supplies the ordinary `Returns 0` receipt required by the honest
@@ -65,6 +72,13 @@ theorem cdemAbelProduction_denote_of_audit
   · exact hAudit
   · exact cdemAbelProduction_returns_zero
 
+/-- The literal production source denotes zero, using the completed fail-safe
+audit receipt rather than a caller-supplied definedness premise. -/
+theorem cdemAbelProduction_denote :
+    productionComputation.program.denote = some 0 :=
+  cdemAbelProduction_denote_of_audit cdemAbelProductionAudit_compcert_run
+
 #print axioms cdemAbelProduction_denote_of_audit
+#print axioms cdemAbelProduction_denote
 
 end LeanCompCert.Ports.CDEMAbelProductionAuditCertificate
