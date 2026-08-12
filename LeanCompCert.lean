@@ -215,6 +215,7 @@ import LeanCompCert.Ports.R2SegDenoteSegments
 import LeanCompCert.Ports.R2SegLogAccumulator
 import LeanCompCert.Ports.R2SegLogFactors
 import LeanCompCert.Ports.R2SegLogRound
+import LeanCompCert.Ports.R2SegLogRoundFold
 import LeanCompCert.Ports.R2SegLnFixConvert
 import LeanCompCert.Ports.R2SegLogPayload
 import LeanCompCert.Attest

@@ -871,6 +871,19 @@ with one Lean worker under the 2/3 GiB no-swap cap.  Trust prints contain only
 uses no axioms.  The remaining round work is the finite multi-round telescope
 and its connection to the log-phase schedule.
 
+`R2SegLogRoundFold` now supplies the finite telescope.  Its invariant starts
+at any already-completed round `j` and folds an arbitrary list of further
+literal R2 round blocks, identifying both registers with `logIter` at
+`j + length`.  A specialized theorem starts from the normalized mantissa and
+zero accumulator and returns `logFrac`; the production corollary fixes the
+list length to 24.  Every theorem preserves the production array.  The source
+check took **0.42 seconds / 528,540 KiB**, the focused target **0.55 seconds /
+538,132 KiB**, and the cached aggregate import-only check **0.94 seconds /
+1,750,180 KiB**, all under the one-worker 2/3 GiB no-swap cap.  Trust prints
+again contain only `propext`, `Classical.choice`, and `Quot.sound`.  What
+remains is to show that the surrounding live-entry schedule supplies exactly
+these 24 round states before finalization.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
