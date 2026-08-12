@@ -1,4 +1,6 @@
 import LeanCompCert.Ports.ArraySegMobiusPlatt211Schedule
+import LeanCompCert.Ports.ArraySegMobiusExtrema
+import LeanCompCert.Ports.ArraySegMobiusIndexedFull
 import LeanCompCert.Verified.ArrayAudit
 
 /-!
@@ -25,9 +27,21 @@ open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Verified.ArrayComputation
 open LeanCompCert.Verified.ArrayAudit
 open LeanCompCert.Ports.ArraySegSieve
+open LeanCompCert.Ports.ArraySegMobiusSignal
+open LeanCompCert.Ports.ArraySegMobiusResidueFrame
+open LeanCompCert.Ports.ArraySegMobiusRootSchedule
+open LeanCompCert.Ports.ArraySegMobiusPrimeTable
+open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
+open LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv
+open LeanCompCert.Ports.ArraySegMobiusIndexedRun
+open LeanCompCert.Ports.ArraySegMobiusIndexedRootMixed
+open LeanCompCert.Ports.ArraySegMobiusIndexedMain
+open LeanCompCert.Ports.ArraySegMobiusIndexedProgram
 open LeanCompCert.Ports.ArraySegMobiusPlatt211ManifestData
 open LeanCompCert.Ports.ArraySegMobiusPlatt211Manifest
 open LeanCompCert.Ports.ArraySegMobiusPlatt211Certificate
+open LeanCompCert.Ports.ArraySegMobiusExtrema
+open LeanCompCert.Ports.ArraySegMobiusIndexedFull
 
 /-- The production root schedule with no following main window.  `lo` is set
 to one so the root-to-main jump is also a small literal, although no main
@@ -114,6 +128,90 @@ theorem row_rootOnly_writeCursor (row : Row) (hrow : row ∈ rows) :
     (platt211RootAudit_compcert_run row hrow)
     (platt211Root_compcert_run row hrow)
 
+/-- The epilogue stores result cells but cannot change the persistent prime
+table cursor, so the physical receipt already identifies the loop-exit
+cursor. -/
+theorem row_rootOnly_loop_writeCursor (row : Row) (hrow : row ∈ rows) :
+    let a := rootOnlyComputation row hrow
+    let sEntry := arun 0 initialAState a.program.init
+    let sLoop := (List.range a.program.loopCount).foldl
+      (fun s idx => arun idx s a.program.body) sEntry
+    sLoop.regs rWrite = (rootOnlyCfg row).primeBase + row.mainCount := by
+  let a := rootOnlyComputation row hrow
+  let sEntry := arun 0 initialAState a.program.init
+  let sLoop := (List.range a.program.loopCount).foldl
+    (fun s idx => arun idx s a.program.body) sEntry
+  have hfinal := row_rootOnly_writeCursor row hrow
+  change (arun 0 sLoop a.program.epilogue).regs rWrite =
+      (rootOnlyCfg row).primeBase + row.mainCount at hfinal
+  have hframe : (arun 0 sLoop a.program.epilogue).regs rWrite =
+      sLoop.regs rWrite := by
+    apply arun_reg_frame
+    simp [a, rootOnlyComputation, rootOnlyProgram, mobiusProgram, Cfg.program,
+      mobiusEpilogue, gtTest, ltTest, storeResult, storeResults, mobiusViolRegs,
+      avoidsReg, rWrite, rVTHi, rVTLo]
+  exact hframe.symm.trans hfinal
+
+/-- The root-only program's historical extrema suffix preserves the verified
+standalone sieve projection through all production root windows. -/
+theorem row_rootOnly_core_projection (row : Row) (hrow : row ∈ rows) :
+    let a := rootOnlyComputation row hrow
+    let sEntry := arun 0 initialAState a.program.init
+    let sLoop := (List.range a.program.loopCount).foldl
+      (fun s idx => arun idx s a.program.body) sEntry
+    CoreAgree sLoop
+      (indexedWindowRun 0 (rootOnlyCfg row) row.rootCount
+        (coreEntry (rootOnlyCfg row))) := by
+  have hcore := historicalCombinedFold_core (rootOnlyCfg row) tBias
+    ((rootOnlyProgram row).loopCount)
+  change CoreAgree
+    ((List.range (rootOnlyProgram row).loopCount).foldl
+      (fun q idx => arun idx q (rootOnlyProgram row).body)
+      (arun 0 initialAState (rootOnlyProgram row).init))
+    (indexedWindowRun 0 (rootOnlyCfg row) row.rootCount
+      (coreEntry (rootOnlyCfg row)))
+  change CoreAgree _
+    (indexedBodyRun 0 (rootOnlyCfg row)
+      (row.rootCount * (rootOnlyCfg row).period)
+      (coreEntry (rootOnlyCfg row)))
+  simpa only [rootOnlyProgram, mobiusProgram, Cfg.program, rootOnlyCfg, rowCfg,
+    Nat.add_zero, Nat.mul_comm, coreEntry] using hcore
+
+/-- For a one-window manifest row, the physical cursor receipt and the
+verified padded-window refinement identify the exact final prime-table length.
+This is the finite bridge needed before the arithmetic campaign may consume
+the recorded `mainCount`. -/
+theorem row_singleRoot_primeTable (row : Row) (hrow : row ∈ rows)
+    (hcount : row.rootCount = 1) (valid delta : Nat)
+    (hschedule : SingleMixedPaddedRootSchedule (rootOnlyCfg row)
+      row.bootBound valid delta) :
+    let ps := rootScanMixed (rootOnlyCfg row).bootPrimes row.bootBound 1 valid
+    PrimeTableInv ps (rootOnlyCfg row).rootCap ∧ ps.length = row.mainCount := by
+  let c := rootOnlyCfg row
+  let core := indexedWindowRun 0 c 1 (coreEntry c)
+  let ps := rootScanMixed c.bootPrimes row.bootBound 1 valid
+  have hsem := indexedProductionRoot_single_mixed_padded_complete c
+    row.bootBound valid delta hschedule
+  change RootTableInv c core ps c.rootCap ∧ _ at hsem
+  have hagree := row_rootOnly_core_projection row hrow
+  change CoreAgree _ (indexedWindowRun 0 c row.rootCount (coreEntry c)) at hagree
+  rw [hcount] at hagree
+  have hphysical := row_rootOnly_loop_writeCursor row hrow
+  let a := rootOnlyComputation row hrow
+  let sEntry := arun 0 initialAState a.program.init
+  let sLoop := (List.range a.program.loopCount).foldl
+    (fun s idx => arun idx s a.program.body) sEntry
+  change sLoop.regs rWrite = c.primeBase + row.mainCount at hphysical
+  have hcoreCursor : core.regs rWrite = c.primeBase + row.mainCount := by
+    rw [← hagree.2 rWrite (by rfl)]
+    exact hphysical
+  change PrimeTableInv ps c.rootCap ∧ ps.length = row.mainCount
+  refine ⟨hsem.1.primeTable, ?_⟩
+  have hsemantic := hsem.1.cursor
+  dsimp only [core] at hcoreCursor hsemantic
+  omega
+
 #print axioms row_rootOnly_writeCursor
+#print axioms row_singleRoot_primeTable
 
 end LeanCompCert.Ports.ArraySegMobiusPlatt211RootCertificate

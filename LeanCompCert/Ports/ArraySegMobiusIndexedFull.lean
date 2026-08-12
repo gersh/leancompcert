@@ -16,6 +16,7 @@ open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusRootPrefix
 open LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv
 open LeanCompCert.Ports.ArraySegMobiusIndexedRootMixed
+open LeanCompCert.Ports.ArraySegMobiusIndexedRootWindows
 open LeanCompCert.Ports.ArraySegMobiusIndexedMain
 open LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter
 open LeanCompCert.Ports.ArraySegMobiusIndexedProgram
@@ -78,6 +79,82 @@ theorem finalRootTable_shape (c : Cfg) (bootBound bootFuel laterFuel : Nat)
 def mainBase (c : Cfg) (bootFuel laterFuel delta : Nat) : Nat :=
   ((laterBase c bootFuel + laterFuel * c.segLen) +
     ((c.segLen + delta) % M)) % M
+
+/-- Finite side conditions for the common production shape in which the
+entire root sieve occupies one mixed window and the unused suffix is rejected
+by the compiled `rootCap` gate. -/
+structure SingleMixedPaddedRootSchedule (c : Cfg)
+    (bootBound valid delta : Nat) : Prop where
+  bootPrime : PrimeTableInv c.bootPrimes bootBound
+  bootShape : ∃ tail, c.bootPrimes = c.firstPrime :: tail
+  bootLe : c.bootCount ≤ c.tableLen
+  tableLenM : c.tableLen < M
+  markPos : 0 < c.markSteps
+  markM : c.markSteps < M
+  periodM : c.period < M
+  spanM : c.rootSpan < M
+  firstPrimePos : 0 < c.firstPrime
+  firstPrimeLeLen : c.firstPrime ≤ c.segLen
+  firstPrimeLeBoot : c.firstPrime ≤ bootBound
+  bootBoundM : bootBound < M
+  bootBoundSqM : bootBound * bootBound < M
+  segBootM : c.segLen + bootBound < M
+  windowBaseM : 1 + c.segLen < M
+  firstOffsetM : 1 + firstOffset 1 c.firstPrime < M
+  arrayM : c.arrayLen < M
+  markBudget :
+    (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps
+  bootTwo : 2 ≤ bootBound
+  rootIndex : c.period = c.rootSpan
+  bootStart : 1 - 1 ≤ bootBound
+  bootLeCap : bootBound ≤ c.rootCap
+  finalValid : 1 + valid - 1 = c.rootCap
+  finalValidLt : valid < c.segLen
+  finalCover : 1 + valid < (bootBound + 1) * (bootBound + 1)
+  bootFit : c.bootPrimes.length < c.tableLen
+  finalFit : ∀ k, k < valid →
+    (rootScanMixed c.bootPrimes bootBound 1 k).length < c.tableLen
+  finalCapFit :
+    (rootScanMixed c.bootPrimes bootBound 1 valid).length ≤ c.tableLen
+  rootCapM : c.rootCap < M
+  deltaEq : c.wDelta = delta
+  deltaM : delta < M
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 1000000 in
+/-- Complete root-only production execution for one padded mixed window. -/
+theorem indexedProductionRoot_single_mixed_padded_complete
+    (c : Cfg) (bootBound valid delta : Nat)
+    (h : SingleMixedPaddedRootSchedule c bootBound valid delta) :
+    let out := indexedWindowRun 0 c 1 (coreEntry c)
+    let ps := rootScanMixed c.bootPrimes bootBound 1 valid
+    RootTableInv c out ps c.rootCap ∧
+      (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      out.regs rR = 0 ∧
+      out.regs rW = (1 + ((c.segLen + delta) % M)) % M ∧
+      out.regs rZero = 0 := by
+  let entry := coreEntry c
+  have hbootM : ∀ p, p ∈ c.bootPrimes → p < M := by
+    intro p hp
+    exact Nat.lt_of_le_of_lt (h.bootPrime.upper p hp) h.bootBoundM
+  have hentry := coreEntry_complete c bootBound h.bootPrime h.bootLe
+    hbootM h.arrayM
+  obtain ⟨tail, hshape⟩ := h.bootShape
+  have hbootPos : 0 < c.bootCount := by
+    simp [Cfg.bootCount, hshape]
+  have hwindow := indexedRootWindow_mixed_padded_transition c 0 entry tail
+    bootBound 1 valid delta (by simpa [hshape] using hentry.table)
+    (by simpa [hshape] using hentry.view) hentry.position hentry.base
+    hentry.zero hentry.cleared (by simp [Cfg.bootCount, hshape])
+    (by simpa using h.rootIndex) hbootPos h.bootLe h.tableLenM h.markPos h.markM h.periodM
+    h.spanM h.firstPrimePos h.firstPrimeLeLen h.firstPrimeLeBoot
+    h.bootBoundM h.bootBoundSqM h.segBootM h.windowBaseM h.firstOffsetM
+    h.arrayM (by simpa [hshape] using h.markBudget) (by omega) h.bootTwo
+    h.bootStart h.bootLeCap h.finalValid h.finalValidLt h.finalCover
+    (by simpa [hshape] using h.bootFit)
+    (by simpa [hshape] using h.finalFit)
+    (by simpa [hshape] using h.finalCapFit) h.rootCapM h.deltaEq h.deltaM
+  simpa only [indexedWindowRun, Nat.one_mul, hshape] using hwindow
 
 /-- Finite schedule facts needed to instantiate the symbolic outer proof.
 Every list-length and range field is decidable and can be discharged by a

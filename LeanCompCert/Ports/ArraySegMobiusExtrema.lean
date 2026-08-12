@@ -76,6 +76,29 @@ theorem arun_core_frame (idx : Nat) (s : AState) :
     exact arun_reg_frame idx j mobiusOverNResidue s
       (residue_avoids_core j hj)
 
+private theorem mobiusInit_avoids_core (t j : Nat)
+    (hj : CoreReg j = true) :
+    (mobiusInit t).all (avoidsReg j) = true := by
+  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨ (150 ≤ j ∧ j ≤ 191)) :=
+    of_decide_eq_true hj
+  have h150 : j < 150 ∨ 191 < j := by
+    by_cases h : j < 150
+    · exact Or.inl h
+    · refine Or.inr (Nat.lt_of_not_ge ?_)
+      intro hj191
+      exact hw (Or.inr ⟨Nat.le_of_not_gt h, hj191⟩)
+  simp [mobiusInit, seed, avoidsReg, rT, rTmax, rTmin]
+  rcases h150 with h150 | h150 <;> omega
+
+/-- The historical extrema initializer changes only private scalar fields. -/
+theorem arun_mobiusInit_core_frame (t idx : Nat) (s : AState) :
+    CoreAgree (arun idx s (mobiusInit t)) s := by
+  constructor
+  · exact arun_arr_frame idx (mobiusInit t) s (by rfl)
+  · intro j hj
+    exact arun_reg_frame idx j (mobiusInit t) s
+      (mobiusInit_avoids_core t j hj)
+
 /-- One core-plus-extrema event projects to the ordinary standalone core. -/
 theorem arun_combined_core (c : Cfg) (idx : Nat) {s t : AState}
     (h : CoreAgree s t) :
@@ -125,6 +148,39 @@ theorem combinedIndexedRun_core (idx : Nat) (c : Cfg) (fuel : Nat)
   | succ n ih =>
       rw [combinedIndexedRun_succ, indexedBodyRun_succ]
       exact arun_combined_core c (idx + n) ih
+
+/-- The recursive combined runner is the literal fold used by `AProgram`. -/
+theorem foldl_range_combined_eq_combinedIndexedRun (idx : Nat) (c : Cfg)
+    (fuel : Nat) (s : AState) :
+    (List.range fuel).foldl
+        (fun q k => arun (idx + k) q (c.coreBody ++ mobiusOverNResidue)) s =
+      combinedIndexedRun idx c fuel s := by
+  induction fuel with
+  | zero => rfl
+  | succ n ih =>
+      rw [List.range_succ, List.foldl_append, ih]
+      rfl
+
+/-- The complete historical core-plus-extrema trace has the standalone
+verified sieve trace as its exact core-facing projection. -/
+theorem historicalCombinedFold_core (c : Cfg) (t fuel : Nat) :
+    let entry := arun 0 initialAState (c.coreInit ++ mobiusInit t)
+    let full := (List.range fuel).foldl
+      (fun q idx => arun idx q (c.coreBody ++ mobiusOverNResidue)) entry
+    CoreAgree full
+      (indexedBodyRun 0 c fuel (arun 0 initialAState c.coreInit)) := by
+  dsimp only
+  have hentry : CoreAgree
+      (arun 0 initialAState (c.coreInit ++ mobiusInit t))
+      (arun 0 initialAState c.coreInit) := by
+    rw [arun_append]
+    exact arun_mobiusInit_core_frame t 0
+      (arun 0 initialAState c.coreInit)
+  have hfold := foldl_range_combined_eq_combinedIndexedRun 0 c fuel
+    (arun 0 initialAState (c.coreInit ++ mobiusInit t))
+  simp only [Nat.zero_add] at hfold
+  rw [hfold]
+  exact combinedIndexedRun_core 0 c fuel hentry
 
 /-- At every event the extrema trace presents exactly the signal of the
 already-verified standalone segmented sieve trace. -/
