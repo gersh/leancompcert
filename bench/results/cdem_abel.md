@@ -1441,3 +1441,12 @@ The fresh source check under the one-worker 3 GiB/no-swap cap took 15.77 s and
 peaked at 2,382,568 KiB RSS. This is deliberately isolated in its own module:
 attempting to elaborate it together with the scheduled-prefix instantiation
 hit the cgroup limit and was terminated safely.
+
+The follow-on `CDEMAbelProductionSieveCursor.lean` consumes that isolated
+certificate without re-elaborating it. It instantiates the exact production
+changing-index prefix twice in compact source-shaped forms: the cursor theorem
+proves `rR = 0` and `rW = 1`, while the table theorem exposes every resident
+cell below `K+1`. Keeping the table theorem's `let out := fold ...` shape
+identical to its generic producer avoids unfolding the literal configuration
+during typeclass unification. A fresh source check took 0.25 s at 585,388 KiB
+RSS under the same one-worker 3 GiB/no-swap cap.
