@@ -944,6 +944,20 @@ focused target **0.44 seconds / 559,240 KiB**, and aggregate import-only
 identity is axiom-free.  The matching new-entry composition and full-body
 suffix frame are next, after which the 24-state schedule can telescope.
 
+The live prefix now also covers both new-entry cases: an already-high
+power-of-two threshold and the single permitted threshold crossing.  The new
+`R2SegLogLiveSuffix` theorem family frames every recurrence register across
+the remaining 97 scalar instructions, lifts all three live-prefix cases to
+the complete 158-instruction production body, and proves that the final
+instruction advances the stream cursor by exactly the finish bit.  Its fresh
+source check took **0.79 seconds / 576,520 KiB**, the focused target **0.93
+seconds / 580,724 KiB**, and the cached aggregate import-only check **0.52
+seconds / 1,737,592 KiB** under the one-worker 2/3 GiB no-swap cap.  Literal
+slice decompositions are axiom-free; semantic theorems use only `propext`,
+`Classical.choice`, and `Quot.sound`.  The next proof can therefore iterate
+whole production bodies while retaining the exact recurrence and cursor
+state, then attach final-round payload and accumulator semantics.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
