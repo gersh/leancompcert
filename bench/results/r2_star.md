@@ -740,3 +740,15 @@ through the public program denotation.  Fresh direct source checks took 0.24
 seconds at 558,876 KiB and 0.21 seconds at 553,156 KiB respectively.  Both
 used the one-worker 1,536 MiB hard/high, no-swap profile and both have closure
 `[propext, Quot.sound]`; no decision-procedure axiom is introduced.
+
+`R2SegDenoteSegments` now extracts every arbitrary finite loop slice from one
+successful program denotation and specializes that theorem to each complete
+production window.  It separately exposes the literal epilogue, its total
+`arun` state, and the exact observed output.  Thus the forthcoming
+array/cursor invariant can telescope one opaque window at a time without
+reducing the `2.1·10^10` source trace or assuming partial definedness again.
+The direct source check peaked at **112,914,432 charged bytes** and the focused
+85-job target at **130,691,072 charged bytes** under the one-worker 2/3 GiB
+no-swap profile; both had zero pressure, hard-limit, OOM, or swap events.
+Fresh axiom prints are `[propext, Quot.sound]` for the segment theorems and
+`[propext]` for the epilogue theorems.
