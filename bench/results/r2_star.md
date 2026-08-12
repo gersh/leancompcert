@@ -990,6 +990,24 @@ is therefore closed; the next composition target is the final payload-factor,
 signed-jump, and carried-accumulator state already verified in separate
 literal slices.
 
+That final-event composition is now verified.  The factor selector exposes
+the exact natural `0/1` sign word; `R2SegLogFinalPrefix` carries the packed
+payload, mode/no-log words, finish bit, and exact source `lnFix` through the
+first 74 instructions; `R2SegLogFinalEvent` composes the following 74
+instructions through source `jumpFactors`, scaled jump/error arithmetic, and
+the signed accumulator commit; and `R2SegLogFinalCommit` frames `rD`, `rErr`,
+and `rTerms` through the ten-instruction tail of the complete 158-instruction
+body.  Fresh source checks for the event, prefix, and complete final commit
+took **0.48 seconds / 550,180 KiB**, **0.95 seconds / 571,396 KiB**, and
+**0.92 seconds / 572,032 KiB** respectively.  The 108-job focused final-body
+target took **1.03 seconds / 592,840 KiB**, all under the one-worker 2/3 GiB
+no-swap cap.  Trust prints contain only `propext`, `Classical.choice`, and
+`Quot.sound`; literal stage identities are axiom-free.  A direct attempt to
+normalize the intervening linear/majorant update expanded past 2.6 GiB, so it
+was stopped and not admitted.  The retained theorem names that source
+invariant explicitly as the post-linear accumulator `d`; it is a theorem
+hypothesis rather than a trust declaration.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its

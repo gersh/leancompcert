@@ -80,8 +80,52 @@ theorem logFactorBody_run (k : Nat) (s : AState)
   rw [logFactorBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   exact ⟨hrun, rfl⟩
 
+/-- Nat-valued form of the selector result, exposing the sign bit in the
+exact `0/1` representation required by the accumulator circuit. -/
+theorem logFactorInstrs_run_exact (k : Nat) (s : RegState)
+    (mode first aux lnN : Nat)
+    (hmode : mode ≤ 3) (hmode0 : mode = 0 → first = 0)
+    (h242 : s 242 = mode)
+    (h243 : s 243 = if 2 ≤ mode then 1 else 0)
+    (h263 : s 263 = first) (h265 : s 265 = aux) (h262 : s 262 = lnN)
+    (haux : aux ≤ lnN) (hlnM : lnN < M) (hfirstM : first < M)
+    (hauxM : aux < M) (hsumM : first + (lnN - aux) < M) :
+    let factors := ClassResult.jumpFactors ⟨true, mode, first, aux⟩ lnN
+    let out := srun k s logFactorInstrs
+    (out 266, out 272, out 278) =
+      (if factors.1 then 1 else 0, factors.2.1, factors.2.2) := by
+  have hsub : denoteOp .sub lnN aux = some (lnN - aux) :=
+    LeanCompCert.Verified.BlockDefined.denoteOp_sub_of_le haux hlnM
+  have hm : mode = 0 ∨ mode = 1 ∨ mode = 2 ∨ mode = 3 := by omega
+  rcases hm with rfl | rfl | rfl | rfl <;>
+    simp_all [logFactorInstrs, srun, RegState.set, sdest, sval,
+      denoteOperand, denoteOp, ClassResult.jumpFactors, M,
+      Nat.mod_eq_of_lt] <;> omega
+
+theorem logFactorBody_run_exact (k : Nat) (s : AState)
+    (mode first aux lnN : Nat)
+    (hmode : mode ≤ 3) (hmode0 : mode = 0 → first = 0)
+    (h242 : s.regs 242 = mode)
+    (h243 : s.regs 243 = if 2 ≤ mode then 1 else 0)
+    (h263 : s.regs 263 = first) (h265 : s.regs 265 = aux)
+    (h262 : s.regs 262 = lnN)
+    (haux : aux ≤ lnN) (hlnM : lnN < M) (hfirstM : first < M)
+    (hauxM : aux < M) (hsumM : first + (lnN - aux) < M) :
+    let factors := ClassResult.jumpFactors ⟨true, mode, first, aux⟩ lnN
+    let out := LeanCompCert.Verified.ArrayFoldBridge.arun k s logFactorBody
+    (out.regs 266, out.regs 272, out.regs 278) =
+        (if factors.1 then 1 else 0, factors.2.1, factors.2.2) ∧
+      out.arr = s.arr := by
+  have hrun := logFactorInstrs_run_exact k s.regs mode first aux lnN hmode
+    hmode0 h242 h243 h263 h265 h262 haux hlnM hfirstM hauxM hsumM
+  dsimp only at hrun ⊢
+  rw [logFactorBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  exact ⟨hrun, rfl⟩
+
 #print axioms logFactorBody_eq_slice
 #print axioms logFactorInstrs_run
 #print axioms logFactorBody_run
+#print axioms logFactorInstrs_run_exact
+#print axioms logFactorBody_run_exact
 
 end LeanCompCert.Ports.R2SegSieve

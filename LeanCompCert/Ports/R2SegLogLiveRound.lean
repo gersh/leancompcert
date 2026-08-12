@@ -99,6 +99,56 @@ theorem logLiveRoundBody_continue_run (c : R2Cfg) (k : Nat) (s : AState)
     hstep.2.2.2.2.trans (hecRun.2.2.2.2.trans
       (hl.2.2.2.trans hg.2.2.2.2.2))⟩
 
+/-- The complete live continuation prefix carries the counter island's exact
+mode/no-log words to the following source-payload decoder. -/
+theorem logLiveRoundBody_continue_mode_run (c : R2Cfg) (k : Nat) (s : AState)
+    (ec wc n payload mode j : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = j) (hj0 : j ≠ 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hne : s.regs rNe = n) (hpl : s.regs rPl = payload)
+    (hmode : payload >>> 57 = mode) (hmodeLt : mode < 2)
+    (hnM : n < M) (hpM : payload < M)
+    (hj : j < c.sc) (hSM : c.sc < M) :
+    let out := arun k s (logLiveRoundBody c)
+    out.regs 242 = mode ∧ out.regs 243 = 0 ∧ out.arr = s.arr := by
+  let gated := arun k s (logEntryGateBody c)
+  have hg := logEntryGateBody_live_run c k s ec wc j hec hwc hk hphase
+    hlive hbase haddr
+  dsimp only at hg
+  have hg208 : gated.regs 208 = 0 := by simpa [hj0] using hg.2.2.2.2.1
+  let latched := arun k gated logEntryLatchBody
+  have hl := logEntryLatchBody_continue_run k gated n payload hg208
+    ((arun_frame k rNe (logEntryGateBody c) (by rfl) s).trans hne)
+    ((arun_frame k rPl (logEntryGateBody c) (by rfl) s).trans hpl)
+    hnM hpM
+  dsimp only at hl
+  let exponented := arun k latched logExponentBody
+  have frameE (r : Nat) (hw : writes r logExponentBody = false) :
+      exponented.regs r = latched.regs r :=
+    arun_frame k r logExponentBody hw latched
+  have frameL (r : Nat) (hw : writes r logEntryLatchBody = false) :
+      latched.regs r = gated.regs r :=
+    arun_frame k r logEntryLatchBody hw gated
+  have frameG (r : Nat) (hw : writes r (logEntryGateBody c) = false) :
+      gated.regs r = s.regs r := arun_frame k r (logEntryGateBody c) hw s
+  have hs := logRoundStepBody_mode_run c.sc k exponented payload mode j
+    ((frameE rPl (by rfl)).trans hl.2.2.1) hmode hmodeLt
+    ((frameE rK (by rfl)).trans
+      ((frameL rK (by rfl)).trans ((frameG rK (by rfl)).trans hk)))
+    ((frameE 206 (by rfl)).trans
+      ((frameL 206 (by rfl)).trans hg.2.2.2.1)) hj hSM
+  dsimp only at hs
+  have hExpArr : exponented.arr = latched.arr :=
+    by
+      simpa only [exponented, logExponentBody] using
+        (LeanCompCert.Verified.ArrayScalarBlock.arun_lift_arr
+          k logExponentInstrs latched)
+  rw [logLiveRoundBody, arun_append, arun_append, arun_append]
+  exact ⟨hs.1, hs.2.1,
+    hs.2.2.trans (hExpArr.trans (hl.2.2.2.trans hg.2.2.2.2.2))⟩
+
 /-- Besides advancing the recurrence, a continuation prefix preserves the
 latched entry and its incremental exponent invariant.  This state form is the
 induction interface for consecutive production bodies. -/
@@ -432,6 +482,7 @@ theorem logLiveRoundBody_start_bump_state_run (c : R2Cfg) (k : Nat)
 
 #print axioms logLiveRoundBody_eq_slice
 #print axioms logLiveRoundBody_continue_run
+#print axioms logLiveRoundBody_continue_mode_run
 #print axioms logLiveRoundBody_continue_state_run
 #print axioms logLiveRoundBody_start_no_bump_run
 #print axioms logLiveRoundBody_start_no_bump_state_run

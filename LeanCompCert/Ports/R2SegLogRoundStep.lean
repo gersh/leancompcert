@@ -95,6 +95,44 @@ theorem logRoundStepBody_continue_run (S k : Nat) (s : AState)
     hcounter.2.2.2.1, hcounter.2.2.2.2.1,
     hcounter.2.2.2.2.2.trans (hround.2.2.trans hinit.2.2)⟩
 
+/-- The complete round step exposes the decoded logarithmic mode words from
+its final counter island.  This small interface avoids re-normalizing the
+fixed-log arithmetic when the following payload block only needs the mode. -/
+theorem logRoundStepBody_mode_run (S k : Nat) (s : AState)
+    (payload mode j : Nat)
+    (hpl : s.regs rPl = payload) (hmode : payload >>> 57 = mode)
+    (hmodeLt : mode < 2) (hk : s.regs rK = j)
+    (hlive : s.regs 206 = 1) (hj : j < S) (hSM : S < M) :
+    let out := arun k s (logRoundStepBody S)
+    out.regs 242 = mode ∧ out.regs 243 = 0 ∧ out.arr = s.arr := by
+  let initialized := arun k s logRoundInitBody
+  let rounded := arun k initialized logRoundBody
+  have frameInit (r : Nat) (hw : writes r logRoundInitBody = false) :
+      initialized.regs r = s.regs r := arun_frame k r logRoundInitBody hw s
+  have frameRound (r : Nat) (hw : writes r logRoundBody = false) :
+      rounded.regs r = initialized.regs r :=
+    arun_frame k r logRoundBody hw initialized
+  have hcounter := logRoundCounterBody_run S k rounded payload mode j
+    ((frameRound rPl (by rfl)).trans ((frameInit rPl (by rfl)).trans hpl))
+    hmode hmodeLt
+    ((frameRound rK (by rfl)).trans ((frameInit rK (by rfl)).trans hk))
+    ((frameRound 206 (by rfl)).trans ((frameInit 206 (by rfl)).trans hlive))
+    hj hSM
+  dsimp only at hcounter
+  have hinitArr : initialized.arr = s.arr :=
+    by
+      simpa only [initialized, logRoundInitBody] using
+        (LeanCompCert.Verified.ArrayScalarBlock.arun_lift_arr
+          k logRoundInitInstrs s)
+  have hroundArr : rounded.arr = initialized.arr :=
+    by
+      simpa only [rounded, logRoundBody] using
+        (LeanCompCert.Verified.ArrayScalarBlock.arun_lift_arr
+          k logRoundInstrs initialized)
+  rw [logRoundStepBody, arun_append, arun_append]
+  exact ⟨hcounter.1, hcounter.2.1,
+    hcounter.2.2.2.2.2.trans (hroundArr.trans hinitArr)⟩
+
 /-- The first live round installs the normalized mantissa, starts from zero
 fractional bits, executes recurrence round one, and advances the same
 production counter. -/
@@ -157,6 +195,7 @@ theorem logRoundStepBody_start_run (S k : Nat) (s : AState)
 
 #print axioms logRoundStepBody_eq_slice
 #print axioms logRoundStepBody_continue_run
+#print axioms logRoundStepBody_mode_run
 #print axioms logRoundStepBody_start_run
 
 end LeanCompCert.Ports.R2SegSieve

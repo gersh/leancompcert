@@ -252,6 +252,45 @@ theorem logDecodeThroughFactorBody_run (k : Nat) (s : AState)
   dsimp only at hf ⊢
   exact ⟨hf.1, hf.2.trans hd.2.2⟩
 
+/-- Exact-word form of `logDecodeThroughFactorBody_run`.  In particular the
+sign bit remains a machine word, which is the form consumed by the literal
+jump and accumulator instructions. -/
+theorem logDecodeThroughFactorBody_run_exact (k : Nat) (s : AState)
+    (first aux mode lnN : Nat)
+    (hmode : mode ≤ 3) (hmode0 : mode = 0 → first = 0)
+    (hfirst : first < 2 ^ wtBits) (haux29 : aux < 2 ^ 29)
+    (hpl : s.regs rPl = first + (aux <<< wtBits) + (mode <<< 57))
+    (h242 : s.regs 242 = mode)
+    (h243 : s.regs 243 = if 2 ≤ mode then 1 else 0)
+    (h262 : s.regs 262 = lnN)
+    (haux : aux ≤ lnN) (hlnM : lnN < M)
+    (hfirstM : first < M) (hauxM : aux < M)
+    (hsumM : first + (lnN - aux) < M) :
+    let factors := ClassResult.jumpFactors ⟨true, mode, first, aux⟩ lnN
+    let out := LeanCompCert.Verified.ArrayFoldBridge.arun k s
+      (logPayloadDecodeBody ++ logFactorBody)
+    (out.regs 266, out.regs 272, out.regs 278) =
+        (if factors.1 then 1 else 0, factors.2.1, factors.2.2) ∧
+      out.arr = s.arr := by
+  rw [LeanCompCert.Verified.ArrayFoldBridge.arun_append]
+  let decoded := LeanCompCert.Verified.ArrayFoldBridge.arun k s
+    logPayloadDecodeBody
+  have hd := logPayloadDecodeBody_run k s first aux mode
+    hfirst haux29 hmode hpl
+  dsimp only at hd
+  have frame (r : Nat)
+      (h : LeanCompCert.Verified.ArrayRegFrame.writes r
+        logPayloadDecodeBody = false) :
+      decoded.regs r = s.regs r :=
+    LeanCompCert.Verified.ArrayRegFrame.arun_frame
+      k r logPayloadDecodeBody h s
+  have hf := logFactorBody_run_exact k decoded mode first aux lnN
+    hmode hmode0 ((frame 242 (by rfl)).trans h242)
+    ((frame 243 (by rfl)).trans h243) hd.1 hd.2.1
+    ((frame 262 (by rfl)).trans h262) haux hlnM hfirstM hauxM hsumM
+  dsimp only at hf ⊢
+  exact ⟨hf.1, hf.2.trans hd.2.2⟩
+
 #print axioms decode_log_payload
 #print axioms logModeBody_eq_slice
 #print axioms logModeInstrs_run
@@ -261,5 +300,6 @@ theorem logDecodeThroughFactorBody_run (k : Nat) (s : AState)
 #print axioms logPayloadDecodeBody_run
 #print axioms logDecodeThroughFactorBody_eq_slice
 #print axioms logDecodeThroughFactorBody_run
+#print axioms logDecodeThroughFactorBody_run_exact
 
 end LeanCompCert.Ports.R2SegSieve
