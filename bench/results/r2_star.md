@@ -884,6 +884,20 @@ again contain only `propext`, `Classical.choice`, and `Quot.sound`.  What
 remains is to show that the surrounding live-entry schedule supplies exactly
 these 24 round states before finalization.
 
+The two scalar scheduling islands around that round are now verified too.
+`R2SegLogRoundInit` identifies the literal seven-instruction slice before the
+round and proves its two gated cases: the first round installs
+`n << (62-e)` and clears `rAa`, while continuation rounds preserve both
+recurrence registers.  `R2SegLogRoundCounter` identifies the nine-instruction
+slice after the round and, for logarithmic payload modes, proves the exact
+next counter, finish bit, and final reset.  Both lift to the array machine
+with unchanged arrays.  Fresh source checks peaked at **560,136 KiB** for the
+init island and **530,452 KiB** for the counter; the combined focused target
+took **0.44 seconds / 551,736 KiB**, and the aggregate import-only check took
+**0.62 seconds / 1,754,540 KiB** under the one-worker 2/3 GiB no-swap cap.
+Trust prints contain no axioms beyond `propext`, `Classical.choice`, and
+`Quot.sound`, while both literal slice equalities are axiom-free.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
