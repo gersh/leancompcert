@@ -1450,3 +1450,14 @@ cell below `K+1`. Keeping the table theorem's `let out := fold ...` shape
 identical to its generic producer avoids unfolding the literal configuration
 during typeclass unification. A fresh source check took 0.25 s at 585,388 KiB
 RSS under the same one-worker 3 GiB/no-swap cap.
+
+The production post-sieve state, live resident table, first marking step, and
+complete marking window are likewise kept in separate modules.  Fresh source
+checks for these interfaces took 0.23 s at 577,708 KiB, 0.20 s at 570,172
+KiB, 0.21 s at 576,872 KiB, and 0.26 s at 568,400 KiB respectively.  An
+initial direct full-window specialization was stopped after 3 min 35 s while
+holding about 1.4 GiB: its dependent premise forced unification through
+`first_cursorInv`.  `CDEMAbelMarkPlaneBudget.lean` now exposes the equivalent
+non-dependent `compactMarkBudget` premise and itself checks in 0.24 s at
+554,292 KiB.  This converts an expensive elaboration path into five small,
+independently cached certificates without changing the compiled computation.
