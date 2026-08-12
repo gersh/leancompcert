@@ -832,6 +832,18 @@ and carry stages reduced the successful fresh source check to **0.5 seconds /
 took **0.99 seconds / 1,751,148 KiB**.  Fresh axiom prints contain only
 `propext`, `Classical.choice`, and `Quot.sound`.
 
+`R2SegLogPayload` closes both packed-payload reads.  The literal mode load at
+instruction 242 and the three weight-field instructions 263--265 are proved
+to invert the classifier's 28/29/2-bit layout.  The latter is composed with
+the adjacent factor selector, yielding an exact 16-instruction
+payload-to-`jumpFactors` transition with an array frame.  Direct arithmetic
+over the expanded concrete powers initially approached 2.6 GiB and was
+stopped; the retained generic mixed-radix division/modulus proof completed
+from source in **0.53 seconds / 552,732 KiB**.  The focused target took **0.66
+seconds / 564,208 KiB**, and the cached aggregate import check took **0.92
+seconds / 1,751,564 KiB**.  The new trust prints contain only `propext`,
+`Classical.choice`, and `Quot.sound`.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
