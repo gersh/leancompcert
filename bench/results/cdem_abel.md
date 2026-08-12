@@ -111,6 +111,21 @@ bytes and the 101-module target build charged 161,320,960 bytes; both reported
 zero pressure, hard-limit, OOM, and swap events.  This checkpoint deliberately
 leaves the uniform paper jump bound as the next mathematical obligation.
 
+The project-side paper bridge now discharges that obligation and makes the
+scalar/window semantics inductive.  It proves `|paperDelta k| <= K`,
+`|floorConv k| <= k*K`, and exact equality between `Ref.deltaF` and the
+canonical two's-complement encoding of the finite paper divisor sum.  The
+compiled head therefore decodes to `gNat k` throughout the production range.
+An exact future-cell invariant is seeded after the first schedule and
+preserved by every interior `OuterFullAccSpec`; together with the scalar
+recurrence it supplies the next paper entry without evaluating a divisor
+list.  The final direct source check charged 856,055,808 bytes, its 8,800-job
+target build charged 1,073,975,296 bytes, and the focused axiom check charged
+819,048,448 bytes, all with zero pressure, hard-limit, OOM, or swap events.
+Generic arithmetic/telescope theorems use only Lean's standard foundations;
+the two production seed theorems additionally expose the expected compiled
+mark-budget run certificate.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on
