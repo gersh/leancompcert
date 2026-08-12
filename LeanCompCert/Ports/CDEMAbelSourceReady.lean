@@ -288,6 +288,35 @@ theorem firstValues_of_entry (c : Cfg) (idx : Nat) (st : AState)
 
 set_option maxRecDepth 4096 in
 set_option maxHeartbeats 3000000 in
+theorem bodySchedule_preFinal_v_of_entry (c : Cfg) (idx : Nat)
+    (st : AState)
+    (hc : c.wScale = productionW)
+    (hsteps : c.bsSteps = CDEMAbelScan.bsBudget c.wScale)
+    (hidxM : idx < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ idx) (hmarkPos : 0 < c.markSteps)
+    (hmarkM : c.markSteps < M) (hR : c.markSteps ≤ st.regs rR)
+    (hsinkM : c.sink < M) (hperiodM : c.period < M)
+    (hsegM : c.segLen < M)
+    (hstartR : st.regs rR =
+      c.markSteps + st.regs rC * (c.bsSteps + 1))
+    (h : FirstEntryInv c st) (hkmax : nextKey st ≤ productionKMax) :
+    let current := bodyIter c idx (c.bsSteps - 1) (arun idx st c.body)
+    AddWide.wval (current.regs rVLo, current.regs rVHi) =
+      AddWide.wval (st.regs rVLo, st.regs rVHi) := by
+  have hready := firstStepReady_of_entry c idx st hidxM hsieveM hsieve
+    hmarkPos hmarkM hR hsinkM h
+  have hv := firstValues_of_entry c idx st hidxM hsieveM hsieve hmarkPos
+    hmarkM hR hsinkM h
+  exact bodySchedule_preFinal_v_production_ready c idx st
+    (nextKey st) (nextDPos c st) (nextDNeg c st)
+    (nextCeil c st) (nextFloor c st) (st.regs rC)
+    hc hsteps hidxM hsieveM hsieve hmarkPos hmarkM h.steps_word hsinkM
+    hperiodM hsegM h.regs_word h.arr_word h.round0 h.zero rfl
+    h.cell_range hstartR hready hv.1 hv.2.1 hv.2.2.1 hv.2.2.2.1
+    hv.2.2.2.2 h.key_pos hkmax h.delta_sum_word h.ceil_word
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 3000000 in
 theorem bodySchedule_production_of_entry (c : Cfg) (idx : Nat) (st : AState)
     (hc : c.wScale = productionW)
     (hsteps : c.bsSteps = CDEMAbelScan.bsBudget c.wScale)

@@ -405,6 +405,83 @@ structure ProductionCellCursorSpec (c : Cfg) (cell startR startW : Nat)
 
 set_option maxRecDepth 4096 in
 set_option maxHeartbeats 3000000 in
+/-- Before the final production body, the first and middle bisection rounds
+have not changed the wide `V` accumulator.  This exposes the fact needed to
+derive the final no-wrap guard from a global aggregate envelope. -/
+theorem bodySchedule_preFinal_v_production_ready
+    (c : Cfg) (idx : Nat) (st : AState)
+    (k dp dn ceil floor cell : Nat)
+    (hc : c.wScale = productionW)
+    (hsteps : c.bsSteps = CDEMAbelScan.bsBudget c.wScale)
+    (hidxM : idx < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ idx) (hmarkPos : 0 < c.markSteps)
+    (hmarkM : c.markSteps < M) (hbsM : c.bsSteps < M)
+    (hsinkM : c.sink < M) (hperiodM : c.period < M)
+    (hsegM : c.segLen < M)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M)
+    (hround : st.regs rKr = 0) (hzero : st.regs rZero = 0)
+    (hcell : st.regs rC = cell) (hcellRange : cell < c.segLen)
+    (hstartR : st.regs rR =
+      c.markSteps + cell * (c.bsSteps + 1))
+    (hready : FirstStepReady c idx (arun idx st (accPrefix c)))
+    (hkeyVal : (arun idx st (accPrefix c)).regs rW +
+      (arun idx st (accPrefix c)).regs rC = k)
+    (hdpVal :
+      (arun idx (arun idx st (accPrefix c)) c.accHead).regs 169 = dp)
+    (hdnVal :
+      (arun idx (arun idx st (accPrefix c)) c.accHead).regs 170 = dn)
+    (hceilVal :
+      (arun idx (arun idx st (accPrefix c)) c.accHead).regs 167 = ceil)
+    (hfloorVal :
+      (arun idx (arun idx st (accPrefix c)) c.accHead).regs 168 = floor)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax)
+    (hsum : dp + dn < M) (hceil : c.wScale - 1 + k < M) :
+    let current := bodyIter c idx (c.bsSteps - 1) (arun idx st c.body)
+    AddWide.wval (current.regs rVLo, current.regs rVHi) =
+      AddWide.wval (st.regs rVLo, st.regs rVHi) := by
+  have hbsPos : 0 < c.bsSteps := by
+    rw [hsteps]
+    simp [CDEMAbelScan.bsBudget]
+  have hfirst0 := body_first_ready_run c idx st hidxM hsieveM hsieve
+    hmarkPos hmarkM (by rw [hstartR]; omega)
+    (by rw [hcell]; exact hcellRange) hzero hsinkM hword
+    harrword hready
+  have hfirst : OuterFirstSpec c k dp dn ceil floor st
+      (arun idx st c.body) := by
+    simpa only [hkeyVal, hdpVal, hdnVal, hceilVal, hfloorVal] using hfirst0
+  have hfirstCursor := body_cursor_continue_run c idx st hidxM hsieveM
+    hsieve hmarkM hmarkPos (by rw [hstartR]; omega)
+    (by rw [hstartR]; exact first_cursor_lt_period c cell hcellRange hbsPos)
+    (by
+      rw [hstartR]
+      exact Nat.lt_trans (first_cursor_lt_period c cell hcellRange hbsPos)
+        hperiodM)
+    hperiodM hsegM hword harrword
+  dsimp only at hfirstCursor
+  have hcore0 := productionOuterCore_of_first c idx st k dp dn ceil floor
+    cell (c.markSteps + cell * (c.bsSteps + 1) + 1) (st.regs rW)
+    hfirst hround hzero hcell
+    (by rw [hfirstCursor.1, hstartR]) hfirstCursor.2 hword harrword
+  have hmiddle := bodyIter_production_middle_ready c idx
+    (c.bsSteps - 1) (arun idx st c.body) k dp dn cell
+    (c.markSteps + cell * (c.bsSteps + 1) + 1) (st.regs rW)
+    hc hk hkmax hidxM hsieveM hsieve hmarkPos hmarkM (by omega)
+    hbsM hsinkM hsum hceil hperiodM hsegM hfirst.low hfirst.high hcore0
+    (by
+      intro i hi
+      exact middle_cursor_lt_period c cell i hcellRange hi)
+    (by
+      intro i hi
+      exact Nat.lt_trans (middle_cursor_lt_period c cell i hcellRange hi)
+        hperiodM)
+    (by omega)
+  have htrace := bodyIter_middle_contracts c idx (c.bsSteps - 1)
+    (arun idx st c.body) k (initial c.wScale k) hfirst.low hfirst.high
+    hmiddle.1
+  exact htrace.v.trans hfirst.v
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 3000000 in
 theorem bodySchedule_production_ready (c : Cfg) (idx : Nat) (st : AState)
     (k dp dn ceil floor cell : Nat)
     (hc : c.wScale = productionW)

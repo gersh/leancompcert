@@ -126,6 +126,24 @@ Generic arithmetic/telescope theorems use only Lean's standard foundations;
 the two production seed theorems additionally expose the expected compiled
 mark-budget run certificate.
 
+The final wide-`V` guard and the finite first-window interior telescope are
+now closed compositionally.  `bodySchedule_preFinal_v_production_ready`
+proves the first and middle bisection rounds leave `V` unchanged;
+`production_bodySchedule_of_envelope` combines that fact with the aggregate
+paper envelope and `exactRoot <= W`, eliminating the separately supplied
+128-bit fit premise.  Its fresh source checks charged 242,274,304 bytes for
+the low-level theorem and 151,683,072 bytes for the complete envelope; the
+affected target builds charged 253,972,480 bytes or less.  The project-side
+symbolic finite telescope subsequently covered every resident prefix through
+cell `999999` without materializing a million-cell term.  Its source, target,
+and axiom-print checks charged 884,789,248, 1,118,695,424, and 817,856,512
+bytes respectively.  Every run used one Lean worker under `MemoryHigh=2G`,
+`MemoryMax=3G`, disabled swap, and reported zero pressure, hard-limit, OOM,
+or swap events.  Generic scheduler/telescope declarations use only standard
+Lean foundations; the concrete production seed retains the compiled
+mark-budget run certificate.  The next boundary is the final resident-cell
+wrap and regeneration of the following finite paper window.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on

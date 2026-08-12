@@ -28,6 +28,7 @@ open LeanCompCert.Verified.SqrtEquiv
 open LeanCompCert.Ports.CDEMAbelScan
 open LeanCompCert.Ports.CDEMAbelBisection
 open LeanCompCert.Ports.CDEMAbelOuterSchedule
+open LeanCompCert.Ports.CDEMAbelOuterReady
 open LeanCompCert.Ports.CDEMAbelSourceReady
 open LeanCompCert.Ports.CDEMAbelSourceTelescope
 open LeanCompCert.Ports.CDEMAbelMarkTelescope
@@ -60,6 +61,16 @@ theorem production_nextCeil_le (st : AState) (hk : 0 < nextKey st) :
 theorem production_nextFloor_le (st : AState) :
     nextFloor productionCfg st ≤ productionCfg.wScale := by
   exact Nat.div_le_self _ _
+
+theorem production_exactRoot_le_scale (st : AState)
+    (hk : 0 < nextKey st) :
+    exactRoot productionCfg.wScale (nextKey st) ≤
+      productionCfg.wScale := by
+  apply (pred_iff_exactRoot_le productionCfg.wScale (nextKey st)
+    productionCfg.wScale hk).mp
+  unfold pred
+  simpa using Nat.mul_le_mul_left
+    (productionCfg.wScale * productionCfg.wScale) hk
 
 /-- The global production envelope supplies every numerical premise of the
 next interior source entry.  The only cell-local input is the paper bound on
@@ -191,6 +202,92 @@ theorem production_interiorNextBounds_of_envelope (st : AState)
               _ ≤ _ := Nat.mul_le_mul_right _
                 (Nat.mul_le_mul_right _ hkey)
           _ < AddWide.B128 := by decide }
+
+/-- The aggregate envelope also proves the last wide-add guard once the
+first and middle bisection rounds are known to preserve `V`. -/
+theorem production_final_v_fit_of_envelope (idx : Nat) (st : AState)
+    (hkpos : 0 < nextKey st) (hkey : nextKey st ≤ productionKMax)
+    (hdelta : nextDPos productionCfg st + nextDNeg productionCfg st ≤
+      productionCfg.kBound)
+    (henv : ProductionAggregateEnvelope st)
+    (hv :
+      let current := bodyIter productionCfg idx
+        (productionCfg.bsSteps - 1)
+        (arun idx st productionCfg.body)
+      AddWide.wval (current.regs rVLo, current.regs rVHi) =
+        AddWide.wval (st.regs rVLo, st.regs rVHi)) :
+    let current := bodyIter productionCfg idx
+      (productionCfg.bsSteps - 1)
+      (arun idx st productionCfg.body)
+    AddWide.wval (current.regs rVLo, current.regs rVHi) +
+      (nextDPos productionCfg st + nextDNeg productionCfg st) *
+        exactRoot productionCfg.wScale (nextKey st) < AddWide.B128 := by
+  have hroot := production_exactRoot_le_scale st hkpos
+  dsimp only at hv ⊢
+  rw [hv]
+  calc
+    AddWide.wval (st.regs rVLo, st.regs rVHi) +
+          (nextDPos productionCfg st + nextDNeg productionCfg st) *
+            exactRoot productionCfg.wScale (nextKey st) ≤
+        (nextKey st - 1) * productionCfg.kBound *
+            productionCfg.wScale +
+          productionCfg.kBound * productionCfg.wScale := by
+      exact Nat.add_le_add henv.v (Nat.mul_le_mul hdelta hroot)
+    _ ≤ productionKMax * productionCfg.kBound *
+          productionCfg.wScale := by
+      have heq :
+          (nextKey st - 1) * productionCfg.kBound +
+              productionCfg.kBound =
+            nextKey st * productionCfg.kBound := by
+        calc
+          _ = ((nextKey st - 1) + 1) * productionCfg.kBound := by
+            rw [Nat.add_mul, Nat.one_mul]
+          _ = _ := by rw [Nat.sub_add_cancel hkpos]
+      calc
+        (nextKey st - 1) * productionCfg.kBound *
+              productionCfg.wScale +
+            productionCfg.kBound * productionCfg.wScale =
+            ((nextKey st - 1) * productionCfg.kBound +
+              productionCfg.kBound) * productionCfg.wScale := by
+                rw [Nat.add_mul]
+        _ = nextKey st * productionCfg.kBound *
+              productionCfg.wScale := by rw [heq]
+        _ ≤ _ := Nat.mul_le_mul_right _
+          (Nat.mul_le_mul_right _ hkey)
+    _ < AddWide.B128 := by decide
+
+/-- A source entry satisfying the global envelope can execute its production
+cell without a separately trusted final-accumulator guard. -/
+theorem production_bodySchedule_of_envelope (idx : Nat) (st : AState)
+    (hidxM : idx < M) (hsieve : productionCfg.sieveLen ≤ idx)
+    (hWnext : st.regs rW + productionCfg.segLen < M)
+    (hstartR : st.regs rR = productionCfg.markSteps +
+      st.regs rC * (productionCfg.bsSteps + 1))
+    (hentry : FirstEntryInv productionCfg st)
+    (hkey : nextKey st ≤ productionKMax)
+    (hdelta : nextDPos productionCfg st + nextDNeg productionCfg st ≤
+      productionCfg.kBound)
+    (henv : ProductionAggregateEnvelope st) :
+    OuterFullAccSpec productionCfg (nextKey st)
+        (nextDPos productionCfg st) (nextDNeg productionCfg st)
+        (nextCeil productionCfg st) (nextFloor productionCfg st)
+        (exactRoot productionCfg.wScale (nextKey st))
+        (nextDPos productionCfg st + nextDNeg productionCfg st)
+        st (bodySchedule productionCfg idx
+          (productionCfg.bsSteps - 1) st) ∧
+      ProductionCellCursorSpec productionCfg (st.regs rC) (st.regs rR)
+        (st.regs rW) (bodySchedule productionCfg idx
+          (productionCfg.bsSteps - 1) st) := by
+  have hv := bodySchedule_preFinal_v_of_entry productionCfg
+    idx st rfl (by decide) hidxM (by decide)
+    hsieve (by decide) (by decide) (by omega) (by decide) (by decide)
+    (by decide) hstartR hentry hkey
+  have haccFit := production_final_v_fit_of_envelope idx st hentry.key_pos
+    hkey hdelta henv hv
+  exact bodySchedule_production_of_entry productionCfg idx st
+    rfl (by decide) hidxM (by decide) hsieve (by decide)
+    (by decide) (by omega) (by decide) (by decide) (by decide) hWnext
+    hstartR hentry hkey haccFit
 
 private theorem prefix_budget_step {a d k K : Nat} (hk : 0 < k)
     (ha : a ≤ (k - 1) * K) (hd : d ≤ K) : a + d ≤ k * K := by
