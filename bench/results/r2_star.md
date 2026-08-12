@@ -910,6 +910,18 @@ target (including invalidated small dependencies) took **1.14 seconds /
 axiom-free.  The next bridge is from the earlier live-entry gate/load prefix
 to these step hypotheses, followed by a fold over 24 complete body states.
 
+That prefix is now split into two exact leaves.  `R2SegLogEntryGate` proves
+that the first nine instructions address and load the current adjacent stream
+words and compute `live = 1` plus `start = (rK == 0)`.  The following
+seven-instruction `R2SegLogEntryLatch` loads the new test point/payload on a
+start or preserves the resident pair on a continuation.  Both leave the
+array unchanged.  Their fresh source checks peak at **527,224 KiB** and
+**541,120 KiB**; the focused latch target took **0.34 seconds / 550,016
+KiB**, and aggregate import-only took **0.56 seconds / 1,759,060 KiB** under
+the standard cap.  Their trust prints need at most `propext` and `Quot.sound`,
+and both slice equalities are axiom-free.  Only the nine-instruction exponent
+update/check remains between this prefix and the scheduled recurrence step.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
