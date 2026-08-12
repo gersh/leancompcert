@@ -223,4 +223,33 @@ theorem bodyIter_markState_from_start_ready (c : Cfg) (idx n : Nat)
     hspan hidxM hsieveM hsieve hmarkM hsegPos hsegM hkPos hkM hkNextM
     hsinkM hperiodM hwM
 
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 1000000 in
+/-- Changing-index counterpart of `bodyIter_markState_from_start_ready`, in
+the exact index shape consumed by an array fold. -/
+theorem bodyIterFrom_markState_from_start_ready (c : Cfg) (start n : Nat)
+    (st : AState) (w : Nat)
+    (hfirst : MarkStateRep c w 1 (MarkState.first c st)
+      (arun start st c.body))
+    (htable : ∀ d, 1 ≤ d → d ≤ c.kBound →
+      st.arr (d + c.muBase) = Ref.muCodeFor c.kBound d)
+    (hspan : 1 + n ≤ c.markSteps)
+    (hidxM : start + n + 1 < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ start) (hmarkM : c.markSteps < M)
+    (hsegPos : 0 < c.segLen) (hsegM : c.segLen < M)
+    (hkPos : 0 < c.kBound) (hkM : c.kBound < M)
+    (hkNextM : c.kBound + 1 < M) (hsumM : c.segLen + c.kBound < M)
+    (hsinkM : c.sink < M) (hperiodM : c.period < M) (hwM : w < M) :
+    MarkStateRep c w (1 + n)
+      ((MarkState.first c st).iter c w n)
+      (bodyIterFrom c start (n + 1) st) := by
+  have htrace := bodyIterFrom_markState_refines c (start + 1) n
+    (arun start st c.body) w 1 (MarkState.first c st) hfirst
+    (fun i _ => first_iter_ready c st w i htable hkPos hsegM hkNextM
+      hsumM hsinkM)
+    hspan (by omega) hsieveM (by omega) hmarkM (by omega) hsegPos hsegM
+    hkPos hkM hkNextM hsinkM hperiodM hwM
+  rw [bodyIterFrom_succ_seed]
+  exact htrace
+
 end LeanCompCert.Ports.CDEMAbelMarkReady

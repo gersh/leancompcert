@@ -186,8 +186,7 @@ theorem allowancePrefixWith_add (c : Cfg) (primes : List Nat)
   | zero => simp [allowancePrefixWith]
   | succ left ih =>
       rw [Nat.succ_add, allowancePrefixWith, ih]
-      simp [allowancePrefixWith, Nat.add_assoc, Nat.add_comm,
-        Nat.add_left_comm]
+      simp [allowancePrefixWith, Nat.add_comm, Nat.add_left_comm]
 
 theorem allowanceTailWith_split (c : Cfg) (primes : List Nat)
     (rows fuel d acc : Nat) :
@@ -437,6 +436,53 @@ theorem iter_remaining_terminal (c : Cfg) (w : Nat) (s : MarkState)
           dsimp only
           rw [hn0]
           simpa [MarkState.iter] using And.intro hd hm'
+
+theorem MarkState.iter_add (c : Cfg) (w a b : Nat) (s : MarkState) :
+    s.iter c w (a + b) = (s.iter c w a).iter c w b := by
+  induction b with
+  | zero => simp [MarkState.iter]
+  | succ b ih =>
+      rw [Nat.add_succ]
+      simp only [MarkState.iter, ih]
+
+/-- Once outside the final row, further scheduled marking iterations preserve
+the array and remain terminal. -/
+theorem MarkState.iter_terminal (c : Cfg) (w n : Nat) (s : MarkState)
+    (hd : s.divisor = c.kBound) (hm : c.segLen ≤ s.multiple) :
+    let out := s.iter c w n
+    out.arr = s.arr ∧ out.divisor = c.kBound ∧ c.segLen ≤ out.multiple := by
+  induction n with
+  | zero =>
+      change s.arr = s.arr ∧ s.divisor = c.kBound ∧ c.segLen ≤ s.multiple
+      exact ⟨rfl, hd, hm⟩
+  | succ n ih =>
+      dsimp only at ih ⊢
+      simp only [MarkState.iter]
+      have hnot : ¬(s.iter c w n).multiple < c.segLen :=
+        Nat.not_lt.mpr ih.2.2
+      have hdnot : ¬(s.iter c w n).divisor < c.kBound := by
+        rw [ih.2.1]
+        exact Nat.lt_irrefl _
+      simp only [MarkState.step, hnot, hdnot, ↓reduceIte]
+      exact ⟨ih.1, trivial, Nat.le_refl _⟩
+
+/-- Any budget at least the exact remaining-work count has the same completed
+array as that exact countdown and is terminal. -/
+theorem iter_of_remaining_le_terminal (c : Cfg) (w : Nat) (s : MarkState)
+    (h : CursorInv c s) (n : Nat)
+    (hle : remaining c w s h.divisorPos ≤ n) :
+    let rem := remaining c w s h.divisorPos
+    let exact := s.iter c w rem
+    let out := s.iter c w n
+    out.arr = exact.arr ∧ out.divisor = c.kBound ∧
+      c.segLen ≤ out.multiple := by
+  let rem := remaining c w s h.divisorPos
+  obtain ⟨extra, hn⟩ := Nat.exists_eq_add_of_le hle
+  have ht := iter_remaining_terminal c w s h
+  have hp := MarkState.iter_terminal c w extra (s.iter c w rem) ht.1 ht.2
+  dsimp only at ht hp ⊢
+  rw [hn, MarkState.iter_add]
+  exact hp
 
 /-- The first scheduled state has the required resident table invariant. -/
 theorem first_cursorInv (c : Cfg) (st : LeanCompCert.Verified.ArrayState.AState)

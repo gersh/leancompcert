@@ -623,4 +623,97 @@ theorem bodyIter_from_start_window_eq_deltaF_of_budget (c : Cfg) (idx : Nat)
     hp.window_eq_planeValue_of_terminal c w _ _ ht.1 ht.2 j hj,
     planeValue_eq_deltaF]
 
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 1000000 in
+/-- Changing-index production form of the terminal array theorem.  Its output
+is definitionally the fold over `List.range' start (n+1)`, so this theorem can
+be spliced directly after the scheduled sieve prefix. -/
+theorem bodyIterFrom_start_window_eq_deltaF_of_budget (c : Cfg)
+    (start : Nat) (st : LeanCompCert.Verified.ArrayState.AState) (w : Nat)
+    (hfirst : MarkStateRep c w 1 (MarkState.first c st)
+      (LeanCompCert.Verified.ArrayFoldBridge.arun start st c.body))
+    (htable : ∀ d, 1 ≤ d → d ≤ c.kBound →
+      st.arr (d + c.muBase) = Ref.muCodeFor c.kBound d)
+    (hword : ∀ j, j < c.segLen → st.arr (j + c.winBase) < M)
+    (hkPos : 0 < c.kBound)
+    (hidxM :
+      let cinv := first_cursorInv c st htable hkPos
+      start + remaining c w (MarkState.first c st) cinv.divisorPos + 1 < M)
+    (hsieveM : c.sieveLen < M) (hsieve : c.sieveLen ≤ start)
+    (hmarkM : c.markSteps < M) (hsegPos : 0 < c.segLen)
+    (hsegM : c.segLen < M) (hkM : c.kBound < M)
+    (hbudget : 1 + remaining c w (MarkState.first c st)
+      (first_cursorInv c st htable hkPos).divisorPos ≤ c.markSteps)
+    (hkNextM : c.kBound + 1 < M) (hsumM : c.segLen + c.kBound < M)
+    (hsinkM : c.sink < M) (hperiodM : c.period < M) (hwM : w < M) :
+    let cinv := first_cursorInv c st htable hkPos
+    let n := remaining c w (MarkState.first c st) cinv.divisorPos
+    let out := bodyIterFrom c start (n + 1) st
+    ∀ j, j < c.segLen →
+      out.arr (j + c.winBase) =
+        (st.arr (j + c.winBase) + Ref.deltaF c.kBound (w + j)) % M := by
+  let cinv := first_cursorInv c st htable hkPos
+  let n := remaining c w (MarkState.first c st) cinv.divisorPos
+  have hrep := bodyIterFrom_markState_from_start_ready c start n st w hfirst
+    htable hbudget (by simpa [cinv, n] using hidxM) hsieveM hsieve hmarkM
+    hsegPos hsegM hkPos hkM hkNextM hsumM hsinkM hperiodM hwM
+  have hp := PlaneInv.iter c w (fun j => st.arr (j + c.winBase))
+    (MarkState.first c st) (first_planeInv c w st htable hword hkPos) n
+  have ht := iter_remaining_terminal c w (MarkState.first c st) cinv
+  dsimp only at ht ⊢
+  intro j hj
+  have haddr : j + c.winBase ≠ c.sink := by
+    unfold Cfg.sink
+    omega
+  rw [hrep.live _ haddr,
+    hp.window_eq_planeValue_of_terminal c w _ _ ht.1 ht.2 j hj,
+    planeValue_eq_deltaF]
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 1000000 in
+/-- The complete changing-index marking phase, including any slack iterations
+after the cursor first becomes terminal, computes exactly one `deltaF` window.
+This is the form matching the emitted program's full `markSteps` block. -/
+theorem bodyIterFrom_full_mark_window_eq_deltaF (c : Cfg) (start : Nat)
+    (st : LeanCompCert.Verified.ArrayState.AState) (w : Nat)
+    (hfirst : MarkStateRep c w 1 (MarkState.first c st)
+      (LeanCompCert.Verified.ArrayFoldBridge.arun start st c.body))
+    (htable : ∀ d, 1 ≤ d → d ≤ c.kBound →
+      st.arr (d + c.muBase) = Ref.muCodeFor c.kBound d)
+    (hword : ∀ j, j < c.segLen → st.arr (j + c.winBase) < M)
+    (hidxM : start + c.markSteps < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ start) (hmarkPos : 0 < c.markSteps)
+    (hmarkM : c.markSteps < M) (hsegPos : 0 < c.segLen)
+    (hsegM : c.segLen < M) (hkPos : 0 < c.kBound) (hkM : c.kBound < M)
+    (hbudget : 1 + remaining c w (MarkState.first c st)
+      (first_cursorInv c st htable hkPos).divisorPos ≤ c.markSteps)
+    (hkNextM : c.kBound + 1 < M) (hsumM : c.segLen + c.kBound < M)
+    (hsinkM : c.sink < M) (hperiodM : c.period < M) (hwM : w < M) :
+    let out := bodyIterFrom c start c.markSteps st
+    ∀ j, j < c.segLen →
+      out.arr (j + c.winBase) =
+        (st.arr (j + c.winBase) + Ref.deltaF c.kBound (w + j)) % M := by
+  let cinv := first_cursorInv c st htable hkPos
+  let n := c.markSteps - 1
+  have hspan : 1 + n ≤ c.markSteps := by omega
+  have hrep := bodyIterFrom_markState_from_start_ready c start n st w hfirst
+    htable hspan (by dsimp only [n]; omega) hsieveM hsieve hmarkM hsegPos
+    hsegM hkPos hkM hkNextM hsumM hsinkM hperiodM hwM
+  have hp := PlaneInv.iter c w (fun j => st.arr (j + c.winBase))
+    (MarkState.first c st) (first_planeInv c w st htable hword hkPos) n
+  have hrem : remaining c w (MarkState.first c st) cinv.divisorPos ≤ n := by
+    dsimp only [n]
+    omega
+  have ht := iter_of_remaining_le_terminal c w (MarkState.first c st) cinv n hrem
+  have hsteps : n + 1 = c.markSteps := by dsimp only [n]; omega
+  dsimp only at ht ⊢
+  rw [← hsteps]
+  intro j hj
+  have haddr : j + c.winBase ≠ c.sink := by
+    unfold Cfg.sink
+    omega
+  rw [hrep.live _ haddr,
+    hp.window_eq_planeValue_of_terminal c w _ _ ht.2.1 ht.2.2 j hj,
+    planeValue_eq_deltaF]
+
 end LeanCompCert.Ports.CDEMAbelMarkPlane

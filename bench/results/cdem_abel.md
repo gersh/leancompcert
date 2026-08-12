@@ -1390,14 +1390,17 @@ start cell `(d - w % d) % d` followed by increments of `d` visits exactly the
 cells for which `d ∣ w + j`.  It then telescopes the finite divisor fold and
 proves pointwise equality with the independent `Ref.deltaF kBound (w + j)`
 computation.  `PlaneInv` carries that pointwise fold through every resident
-write and divisor advance.  `first_iter_remaining_window_eq_deltaF` attaches
-the terminal pure-cursor array to the complete fold, while
-`bodyIter_from_start_window_eq_deltaF_of_budget` transports the same equality
-through the literal scheduled machine loop.  The latter consumes the finite
-compiled marking-budget inequality rather than reducing a production-sized
-trace in Lean.  This closes the marking-plane array attachment; the remaining
-source-refinement work is the outer window schedule and its accumulator
-invariant.
+write and divisor advance. `first_iter_remaining_window_eq_deltaF` attaches
+the terminal pure-cursor array to the complete fold.
+`bodyIterFrom_markState_refines` then follows the literal changing selector
+index of `List.range'`, rather than reusing a fixed index in a proof-only
+iterator. Finally, `bodyIterFrom_full_mark_window_eq_deltaF` proves that the
+emitted program's entire `markSteps` block computes exactly one `Ref.deltaF`
+window. It uses the finite compiled marking-budget inequality to reach the
+terminal cursor and proves that every slack iteration preserves the completed
+array, without reducing the production trace in Lean. This closes the complete
+changing-index marking-plane attachment; the remaining source-refinement work
+is the outer window schedule and its accumulator invariant.
 
 Fresh checks on 2026-08-11 used one Lean worker in the 3 GiB/no-swap cgroup:
 
@@ -1405,3 +1408,8 @@ Fresh checks on 2026-08-11 used one Lean worker in the 3 GiB/no-swap cgroup:
 | --- | ---: | ---: | ---: |
 | marking-plane source | 0.59 s | 596,948 KiB | 0 |
 | marking-plane module build (59 jobs) | 0.83 s | 642,404 KiB | 0 |
+| changing-index full-block source | 0.68 s | 614,588 KiB | 0 |
+
+Fresh axiom prints for the changing-index telescope and terminal slack theorem
+report `[propext, Quot.sound]`; the full machine-array theorem additionally
+uses `Classical.choice`.

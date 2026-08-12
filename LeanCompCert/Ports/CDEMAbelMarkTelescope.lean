@@ -220,6 +220,63 @@ theorem bodyIter_markState_refines (c : Cfg) (idx n : Nat) (st : AState)
         hkNextM hsinkM hperiodM hwM
       simpa [MarkState.iter, bodyIter, Nat.add_assoc] using hs
 
+/-- Literal changing-index execution beginning at `start`.  This is the shape
+used by the emitted array fold; unlike `bodyIter`, it does not reuse one
+selector index throughout the trace. -/
+def bodyIterFrom (c : Cfg) (start : Nat) : Nat → AState → AState
+  | 0, st => st
+  | n + 1, st => arun (start + n) (bodyIterFrom c start n st) c.body
+
+theorem bodyIterFrom_eq_fold_range' (c : Cfg) (start n : Nat)
+    (st : AState) :
+    bodyIterFrom c start n st =
+      (List.range' start n).foldl (fun s idx => arun idx s c.body) st := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      rw [List.range'_1_concat, List.foldl_append]
+      simp [bodyIterFrom, ih]
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 1000000 in
+theorem bodyIterFrom_markState_refines (c : Cfg) (start n : Nat)
+    (st : AState) (w r : Nat) (model : MarkState)
+    (hrep : MarkStateRep c w r model st)
+    (hready : ∀ i, i < n → MarkStepReady c (model.iter c w i))
+    (hspan : r + n ≤ c.markSteps)
+    (hidxM : start + n < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ start) (hmarkM : c.markSteps < M)
+    (hrPos : 0 < r) (hsegPos : 0 < c.segLen)
+    (hsegM : c.segLen < M) (hkPos : 0 < c.kBound)
+    (hkM : c.kBound < M) (hkNextM : c.kBound + 1 < M)
+    (hsinkM : c.sink < M) (hperiodM : c.period < M) (hwM : w < M) :
+    MarkStateRep c w (r + n) (model.iter c w n)
+      (bodyIterFrom c start n st) := by
+  induction n with
+  | zero => simpa [MarkState.iter, bodyIterFrom] using hrep
+  | succ n ih =>
+      have hpre := ih
+        (fun i hi => hready i (by omega)) (by omega) (by omega)
+      have hs := body_markState_step c (start + n)
+        (bodyIterFrom c start n st) w (r + n) (model.iter c w n)
+        hpre (hready n (by omega)) (by omega) hsieveM (by omega) hmarkM
+        (by omega) (by omega) hsegPos hsegM hkPos hkM hkNextM hsinkM
+        hperiodM hwM
+      simpa [MarkState.iter, bodyIterFrom, Nat.add_assoc] using hs
+
+theorem bodyIterFrom_succ_seed (c : Cfg) (start n : Nat) (st : AState) :
+    bodyIterFrom c start (n + 1) st =
+      bodyIterFrom c (start + 1) n (arun start st c.body) := by
+  induction n with
+  | zero => simp [bodyIterFrom]
+  | succ n ih =>
+      change arun (start + (n + 1)) (bodyIterFrom c start (n + 1) st) c.body =
+        arun (start + 1 + n)
+          (bodyIterFrom c (start + 1) n (arun start st c.body)) c.body
+      rw [ih]
+      congr 1
+      omega
+
 set_option maxRecDepth 4096 in
 set_option maxHeartbeats 600000 in
 theorem body_first_markState_rep (c : Cfg) (idx : Nat) (st : AState)
