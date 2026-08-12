@@ -856,6 +856,21 @@ fresh source check took **1.07 seconds / 573,740 KiB**; the focused target took
 this circuit result to the register-renamed production slice and telescope its
 finite rounds.
 
+`R2SegLogRound` now performs that production relocation.  A reusable
+`InstrRename.srun_rename` theorem proves that any injective register
+allocation commutes with straight-line execution; the concrete allocation
+maps inputs `0,1` to persistent registers `196,197` and scratch registers
+`2,…,19` to `224,…,241`.  The literal `R2Cfg.logBody.drop 32 |>.take 20`
+slice is definitionally the relocated block, so its scalar and array-machine
+outputs are exactly `logMant x` and `(a << 1) + logBit x`, with the array
+unchanged.  The fresh R2 source check took **0.35 seconds / 527,260 KiB**;
+the focused target took **0.44 seconds / 538,252 KiB**, and the cached
+aggregate import-only check took **0.89 seconds / 1,750,068 KiB**.  All ran
+with one Lean worker under the 2/3 GiB no-swap cap.  Trust prints contain only
+`propext`, `Classical.choice`, and `Quot.sound`; the literal slice equality
+uses no axioms.  The remaining round work is the finite multi-round telescope
+and its connection to the log-phase schedule.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its

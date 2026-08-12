@@ -77,6 +77,7 @@ import LeanCompCert.Verified.Montgomery
 import LeanCompCert.Verified.Mont2
 import LeanCompCert.Verified.Straight
 import LeanCompCert.Verified.InstrBlock
+import LeanCompCert.Verified.InstrRename
 import LeanCompCert.Ports.TGProth
 import LeanCompCert.Testing.ProthCertificate
 import LeanCompCert.LCNF.View
@@ -213,6 +214,7 @@ import LeanCompCert.Ports.R2SegMarkingDenotePrefix
 import LeanCompCert.Ports.R2SegDenoteSegments
 import LeanCompCert.Ports.R2SegLogAccumulator
 import LeanCompCert.Ports.R2SegLogFactors
+import LeanCompCert.Ports.R2SegLogRound
 import LeanCompCert.Ports.R2SegLnFixConvert
 import LeanCompCert.Ports.R2SegLogPayload
 import LeanCompCert.Attest
