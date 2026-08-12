@@ -1582,6 +1582,37 @@ peaked at 2,382,568 KiB RSS. This is deliberately isolated in its own module:
 attempting to elaborate it together with the scheduled-prefix instantiation
 hit the cgroup limit and was terminated safely.
 
+## Final-cell latches and logical wrap invariants
+
+The active-cell route now covers the last resident cell as well as ordinary
+interior cells.  `CDEMAbelBody.lean` factors the shared latch proof and proves
+the final bisection round stores the paper key and both signed increments.
+`CDEMAbelOuterReady.lean` and `CDEMAbelSourceReady.lean` lift those values
+through the complete scheduler.  The transient wrap state cannot use the raw
+`rW + rC` key: `rW` has advanced while `rC = segLen` until marking resets it.
+`CDEMAbelSourceTelescope.lean` and `CDEMAbelProductionEnvelope.lean` therefore
+carry explicit logical-key square-root and aggregate invariants across this
+one real machine state, then convert back after regeneration.
+
+Fresh one-worker checks on 2026-08-12 used `MemoryHigh=2G`,
+`MemoryMax=3G`, and `MemorySwapMax=0`:
+
+| check | charged `memory.peak` | hard-limit/OOM/swap events |
+| --- | ---: | ---: |
+| `CDEMAbelBody.lean` source | 364,093,440 B | 0 |
+| `CDEMAbelBody` target | 325,496,832 B | 0 |
+| `CDEMAbelOuterReady.lean` source | 319,217,664 B | 0 |
+| `CDEMAbelOuterReady` target | 336,830,464 B | 0 |
+| `CDEMAbelSourceReady.lean` source | 174,858,240 B | 0 |
+| `CDEMAbelSourceReady` target | 224,788,480 B | 0 |
+| `CDEMAbelSourceTelescope.lean` source | 204,132,352 B | 0 |
+| `CDEMAbelProductionEnvelope.lean` source | 142,802,944 B | 0 |
+| `CDEMAbelProductionEnvelope` target | 405,843,968 B | 0 |
+
+Fresh axiom prints for the new latch, logical square-root, and logical
+aggregate transitions contain only `propext`, `Classical.choice`, and
+`Quot.sound` (the aggregate step itself does not need choice).
+
 The follow-on `CDEMAbelProductionSieveCursor.lean` consumes that isolated
 certificate without re-elaborating it. It instantiates the exact production
 changing-index prefix twice in compact source-shaped forms: the cursor theorem

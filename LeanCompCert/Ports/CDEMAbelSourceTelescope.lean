@@ -42,6 +42,55 @@ structure InteriorStreamStepSpec (c : Cfg) (dp dn : Nat)
       before.arr (before.regs rC + 1 + c.winBase)) % M
   sqrt : SqrtStreamInv after
 
+/-- Square-root stream state indexed by a logical paper key.  Unlike
+`SqrtStreamInv`, this remains meaningful during the transient window-wrap
+state where `rW` has advanced but `rC` has not yet been reset. -/
+structure SqrtStreamInvAt (key : Nat) (st : AState) : Prop where
+  nextSquare : st.regs rT2 = (st.regs rT + 1) * (st.regs rT + 1)
+  lower : st.regs rT * st.regs rT ≤ key
+  oneBump : key < (st.regs rT + 2) * (st.regs rT + 2)
+
+theorem sqrtStreamInvAt_of_full (c : Cfg) (before after : AState)
+    (k dp dn ceil floor root d : Nat)
+    (hentry : FirstEntryInv c before)
+    (hfull : OuterFullAccSpec c k dp dn ceil floor root d before after) :
+    SqrtStreamInvAt (nextKey before + 1) after := by
+  have ht : after.regs rT = Nat.sqrt (nextKey before) := by
+    rw [hfull.t]
+    exact sqrtStream_step before hentry.sqrt
+  have ht2 : after.regs rT2 =
+      (after.regs rT + 1) * (after.regs rT + 1) := by
+    by_cases hlt : nextKey before < before.regs rT2
+    · rw [hfull.t, hfull.t2]
+      simp only [nextKey] at hlt
+      rw [if_pos hlt, if_pos hlt, hentry.sqrt.nextSquare]
+    · rw [hfull.t, hfull.t2]
+      simp only [nextKey] at hlt
+      rw [if_neg hlt, if_neg hlt, hentry.sqrt.nextSquare]
+      simp only [Nat.add_mul, Nat.mul_add, Nat.one_mul, Nat.mul_one]
+      omega
+  have hlower :
+      after.regs rT * after.regs rT ≤
+        nextKey before + 1 := by
+    rw [ht]
+    exact Nat.le_trans (Nat.sqrt_le (nextKey before))
+      (Nat.le_add_right _ _)
+  have honeBump :
+      nextKey before + 1 <
+        (after.regs rT + 2) * (after.regs rT + 2) := by
+    rw [ht]
+    have hs := Nat.lt_succ_sqrt (nextKey before)
+    have hq : Nat.sqrt (nextKey before) + 1 <
+        Nat.sqrt (nextKey before) + 2 := by omega
+    have hsq :
+        (Nat.sqrt (nextKey before) + 1) *
+            (Nat.sqrt (nextKey before) + 1) <
+          (Nat.sqrt (nextKey before) + 2) *
+            (Nat.sqrt (nextKey before) + 2) :=
+      Nat.mul_lt_mul_of_lt_of_lt hq hq
+    exact Nat.lt_of_le_of_lt (Nat.succ_le_of_lt hs) hsq
+  exact ⟨ht2, hlower, honeBump⟩
+
 theorem interior_stream_step_of_full (c : Cfg) (before after : AState)
     (k dp dn ceil floor root d cell startR startW : Nat)
     (hentry : FirstEntryInv c before)

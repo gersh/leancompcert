@@ -392,8 +392,10 @@ theorem accBody_sink_clear_of_head (c : Cfg) (idx : Nat) (st : AState)
   simpa [arun_accBody_eq_parts, h, p, out] using hall
 
 set_option maxHeartbeats 2000000 in
-theorem accBody_middle_latch_of_head (c : Cfg) (idx : Nat) (st : AState)
-    (hh : MiddleHeadSpec c st (arun idx st c.accHead))
+theorem accBody_latch_of_head_values (c : Cfg) (idx : Nat) (st : AState)
+    (hkey : (arun idx st c.accHead).regs rK = st.regs rK)
+    (hdp : (arun idx st c.accHead).regs rDp = st.regs rDp)
+    (hdn : (arun idx st c.accHead).regs rDn = st.regs rDn)
     (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
     let out := arun idx
       (arun idx (arun idx st c.accHead) c.accProd) c.accBisect
@@ -405,7 +407,6 @@ theorem accBody_middle_latch_of_head (c : Cfg) (idx : Nat) (st : AState)
   let h := arun idx st c.accHead
   let p := arun idx h c.accProd
   let out := arun idx p c.accBisect
-  have hh' : MiddleHeadSpec c st h := by simpa [h] using hh
   have headKeep (j : Nat)
       (hw : LeanCompCert.Verified.ArrayRegFrame.writes j c.accHead = false) :
       h.regs j = st.regs j := by
@@ -433,19 +434,19 @@ theorem accBody_middle_latch_of_head (c : Cfg) (idx : Nat) (st : AState)
         (by simp [rK]) (by simp [rK])
         (by simp [rK, Section413G1Denote.NotIn8])
         (by simp [rK, rUpLo]) (by simp [rK, rUpHi])
-        (by simp [rK, rUnLo]) (by simp [rK, rUnHi]) (by simp [rK]), hh'.k]
+        (by simp [rK, rUnLo]) (by simp [rK, rUnHi]) (by simp [rK]), hkey]
     · rw [hb.2.1, prodKeep rDp (by simp [rDp]) (by simp [rDp])
         (by simp [rDp]) (by simp [rDp])
         (by simp [rDp, Section413G1Denote.NotIn8])
         (by simp [rDp, rUpLo]) (by simp [rDp, rUpHi])
         (by simp [rDp, rUnLo]) (by simp [rDp, rUnHi]) (by simp [rDp]),
-        hh'.dPos]
+        hdp]
     · rw [hb.2.2.1, prodKeep rDn (by simp [rDn]) (by simp [rDn])
         (by simp [rDn]) (by simp [rDn])
         (by simp [rDn, Section413G1Denote.NotIn8])
         (by simp [rDn, rUpLo]) (by simp [rDn, rUpHi])
         (by simp [rDn, rUnLo]) (by simp [rDn, rUnHi]) (by simp [rDn]),
-        hh'.dNeg]
+        hdn]
     · rw [hb.2.2.2.1, prodKeep 43 (by decide) (by decide) (by decide)
         (by decide) (by simp [Section413G1Denote.NotIn8])
         (by simp [rUpLo]) (by simp [rUpHi]) (by simp [rUnLo])
@@ -457,6 +458,32 @@ theorem accBody_middle_latch_of_head (c : Cfg) (idx : Nat) (st : AState)
         (by simp [rZero, rUnLo]) (by simp [rZero, rUnHi]) (by simp [rZero]),
         headKeep rZero (by rfl)]
   simpa [h, p, out] using hall
+
+theorem accBody_middle_latch_of_head (c : Cfg) (idx : Nat) (st : AState)
+    (hh : MiddleHeadSpec c st (arun idx st c.accHead))
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
+    let out := arun idx
+      (arun idx (arun idx st c.accHead) c.accProd) c.accBisect
+    out.regs rK = st.regs rK ∧
+      out.regs rDp = st.regs rDp ∧
+      out.regs rDn = st.regs rDn ∧
+      out.regs 43 = st.regs 43 ∧
+      out.regs rZero = st.regs rZero :=
+  accBody_latch_of_head_values c idx st hh.k hh.dPos hh.dNeg hword harrword
+
+/-- The final bisection body preserves the source key and signed-jump
+latches just as an ordinary middle body does. -/
+theorem accBody_last_latch_of_head (c : Cfg) (idx : Nat) (st : AState)
+    (hh : LastHeadSpec c st (arun idx st c.accHead))
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M) :
+    let out := arun idx
+      (arun idx (arun idx st c.accHead) c.accProd) c.accBisect
+    out.regs rK = st.regs rK ∧
+      out.regs rDp = st.regs rDp ∧
+      out.regs rDn = st.regs rDn ∧
+      out.regs 43 = st.regs 43 ∧
+      out.regs rZero = st.regs rZero :=
+  accBody_latch_of_head_values c idx st hh.k hh.dPos hh.dNeg hword harrword
 
 theorem accBody_middle_run (c : Cfg) (idx : Nat) (st : AState)
     (hkr0 : st.regs rKr ≠ 0) (hkrLast : st.regs rKr ≠ c.bsSteps)

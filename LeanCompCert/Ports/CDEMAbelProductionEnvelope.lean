@@ -51,6 +51,33 @@ structure ProductionAggregateEnvelope (st : AState) : Prop where
   v : AddWide.wval (st.regs rVLo, st.regs rVHi) ≤
     (nextKey st - 1) * productionCfg.kBound * productionCfg.wScale
 
+/-- The same accumulator envelope indexed by a logical paper key.  This form
+is needed transiently after a resident-window wrap, when `rW` has advanced
+but marking has not yet reset `rC` from `segLen` to zero. -/
+structure ProductionAggregateEnvelopeAt (key : Nat) (st : AState) : Prop where
+  variation : st.regs rTv ≤ (key - 1) * productionCfg.kBound
+  uPos : AddWide.wval (st.regs rUpLo, st.regs rUpHi) ≤
+    (key - 1) * productionCfg.kBound * productionCfg.wScale
+  uNeg : AddWide.wval (st.regs rUnLo, st.regs rUnHi) ≤
+    (key - 1) * productionCfg.kBound * productionCfg.wScale
+  v : AddWide.wval (st.regs rVLo, st.regs rVHi) ≤
+    (key - 1) * productionCfg.kBound * productionCfg.wScale
+
+theorem production_aggregateEnvelopeAt_nextKey (st : AState)
+    (henv : ProductionAggregateEnvelope st) :
+    ProductionAggregateEnvelopeAt (nextKey st) st :=
+  ⟨henv.variation, henv.uPos, henv.uNeg, henv.v⟩
+
+theorem production_aggregateEnvelope_of_at (key : Nat) (st : AState)
+    (hkey : nextKey st = key)
+    (henv : ProductionAggregateEnvelopeAt key st) :
+    ProductionAggregateEnvelope st := by
+  constructor
+  · simpa only [hkey] using henv.variation
+  · simpa only [hkey] using henv.uPos
+  · simpa only [hkey] using henv.uNeg
+  · simpa only [hkey] using henv.v
+
 theorem production_nextCeil_le (st : AState) (hk : 0 < nextKey st) :
     nextCeil productionCfg st ≤ productionCfg.wScale := by
   unfold nextCeil
@@ -289,6 +316,22 @@ theorem production_bodySchedule_of_envelope (idx : Nat) (st : AState)
     (by decide) (by omega) (by decide) (by decide) (by decide) hWnext
     hstartR hentry hkey haccFit
 
+theorem production_bodySchedule_latches_of_envelope (idx : Nat) (st : AState)
+    (hidxM : idx < M) (hsieve : productionCfg.sieveLen ≤ idx)
+    (hstartR : st.regs rR = productionCfg.markSteps +
+      st.regs rC * (productionCfg.bsSteps + 1))
+    (hentry : FirstEntryInv productionCfg st)
+    (hkey : nextKey st ≤ productionKMax) :
+    let after := bodySchedule productionCfg idx
+      (productionCfg.bsSteps - 1) st
+    after.regs rK = nextKey st ∧
+      after.regs rDp = nextDPos productionCfg st ∧
+      after.regs rDn = nextDNeg productionCfg st ∧
+      after.regs rZero = 0 := by
+  exact bodySchedule_production_latches_of_entry productionCfg idx st rfl
+    (by decide) hidxM (by decide) hsieve (by decide) (by decide) (by omega)
+    (by decide) (by decide) (by decide) hstartR hentry hkey
+
 private theorem prefix_budget_step {a d k K : Nat} (hk : 0 < k)
     (ha : a ≤ (k - 1) * K) (hd : d ≤ K) : a + d ≤ k * K := by
   apply Nat.le_trans (Nat.add_le_add ha hd)
@@ -297,6 +340,74 @@ private theorem prefix_budget_step {a d k K : Nat} (hk : 0 < k)
       rw [Nat.add_mul, Nat.one_mul]
     _ = k * K := by rw [Nat.sub_add_cancel hk]
     _ ≤ k * K := Nat.le_refl _
+
+/-- One full cell advances the aggregate bounds to the following logical
+paper key, independently of the transient machine cursor representation. -/
+theorem production_aggregateEnvelopeAt_step (before after : AState)
+    (dp dn root : Nat) (hkpos : 0 < nextKey before)
+    (hdelta : dp + dn ≤ productionCfg.kBound)
+    (hroot : root ≤ productionCfg.wScale)
+    (henv : ProductionAggregateEnvelope before)
+    (hfull : OuterFullAccSpec productionCfg (nextKey before) dp dn
+      (nextCeil productionCfg before) (nextFloor productionCfg before)
+      root (dp + dn) before after) :
+    ProductionAggregateEnvelopeAt (nextKey before + 1) after := by
+  have hceil := production_nextCeil_le before hkpos
+  have hfloor := production_nextFloor_le before
+  have hdp : dp ≤ productionCfg.kBound :=
+    Nat.le_trans (Nat.le_add_right _ _) hdelta
+  have hdn : dn ≤ productionCfg.kBound :=
+    Nat.le_trans (Nat.le_add_left _ _) hdelta
+  have hdpw : dp * nextCeil productionCfg before ≤
+      productionCfg.kBound * productionCfg.wScale :=
+    Nat.mul_le_mul hdp hceil
+  have hdnw : dn * nextFloor productionCfg before ≤
+      productionCfg.kBound * productionCfg.wScale :=
+    Nat.mul_le_mul hdn hfloor
+  have hdw : (dp + dn) * root ≤
+      productionCfg.kBound * productionCfg.wScale :=
+    Nat.mul_le_mul hdelta hroot
+  constructor
+  · rw [hfull.tv, Nat.add_sub_cancel]
+    simpa only [Nat.add_assoc] using
+      (prefix_budget_step (a := before.regs rTv) (d := dp + dn)
+        hkpos henv.variation hdelta)
+  · rw [hfull.uPos, Nat.add_sub_cancel,
+      Nat.mul_assoc (nextKey before) productionCfg.kBound
+        productionCfg.wScale]
+    have henvPos : AddWide.wval
+        (before.regs rUpLo, before.regs rUpHi) ≤
+        (nextKey before - 1) *
+          (productionCfg.kBound * productionCfg.wScale) := by
+      rw [← Nat.mul_assoc]
+      exact henv.uPos
+    exact prefix_budget_step
+      (K := productionCfg.kBound * productionCfg.wScale)
+      hkpos henvPos hdpw
+  · rw [hfull.uNeg, Nat.add_sub_cancel,
+      Nat.mul_assoc (nextKey before) productionCfg.kBound
+        productionCfg.wScale]
+    have henvNeg : AddWide.wval
+        (before.regs rUnLo, before.regs rUnHi) ≤
+        (nextKey before - 1) *
+          (productionCfg.kBound * productionCfg.wScale) := by
+      rw [← Nat.mul_assoc]
+      exact henv.uNeg
+    exact prefix_budget_step
+      (K := productionCfg.kBound * productionCfg.wScale)
+      hkpos henvNeg hdnw
+  · rw [hfull.v, Nat.add_sub_cancel,
+      Nat.mul_assoc (nextKey before) productionCfg.kBound
+        productionCfg.wScale]
+    have henvV : AddWide.wval
+        (before.regs rVLo, before.regs rVHi) ≤
+        (nextKey before - 1) *
+          (productionCfg.kBound * productionCfg.wScale) := by
+      rw [← Nat.mul_assoc]
+      exact henv.v
+    exact prefix_budget_step
+      (K := productionCfg.kBound * productionCfg.wScale)
+      hkpos henvV hdw
 
 /-- One successful interior cell preserves the aggregate envelope.  This is
 the induction step needed by the eventual whole-window telescope; it depends

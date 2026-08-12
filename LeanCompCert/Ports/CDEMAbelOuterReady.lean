@@ -482,6 +482,112 @@ theorem bodySchedule_preFinal_v_production_ready
 
 set_option maxRecDepth 4096 in
 set_option maxHeartbeats 3000000 in
+/-- The completed production schedule retains the key and split signed jump
+computed by its first head.  These latches are needed while the following
+marking block runs with the accumulator selector disabled. -/
+theorem bodySchedule_production_latches_ready
+    (c : Cfg) (idx : Nat) (st : AState)
+    (k dp dn ceil floor cell : Nat)
+    (hc : c.wScale = productionW)
+    (hsteps : c.bsSteps = CDEMAbelScan.bsBudget c.wScale)
+    (hidxM : idx < M) (hsieveM : c.sieveLen < M)
+    (hsieve : c.sieveLen ≤ idx) (hmarkPos : 0 < c.markSteps)
+    (hmarkM : c.markSteps < M) (hbsM : c.bsSteps < M)
+    (hsinkM : c.sink < M) (hperiodM : c.period < M)
+    (hsegM : c.segLen < M)
+    (hword : ∀ j, st.regs j < M) (harrword : ∀ j, st.arr j < M)
+    (hround : st.regs rKr = 0) (hzero : st.regs rZero = 0)
+    (hcell : st.regs rC = cell) (hcellRange : cell < c.segLen)
+    (hstartR : st.regs rR =
+      c.markSteps + cell * (c.bsSteps + 1))
+    (hready : FirstStepReady c idx (arun idx st (accPrefix c)))
+    (hkeyVal : (arun idx st (accPrefix c)).regs rW +
+      (arun idx st (accPrefix c)).regs rC = k)
+    (hdpVal :
+      (arun idx (arun idx st (accPrefix c)) c.accHead).regs 169 = dp)
+    (hdnVal :
+      (arun idx (arun idx st (accPrefix c)) c.accHead).regs 170 = dn)
+    (hceilVal :
+      (arun idx (arun idx st (accPrefix c)) c.accHead).regs 167 = ceil)
+    (hfloorVal :
+      (arun idx (arun idx st (accPrefix c)) c.accHead).regs 168 = floor)
+    (hk : 0 < k) (hkmax : k ≤ productionKMax)
+    (hsum : dp + dn < M) (hceil : c.wScale - 1 + k < M) :
+    let after := bodySchedule c idx (c.bsSteps - 1) st
+    after.regs rK = k ∧ after.regs rDp = dp ∧
+      after.regs rDn = dn ∧ after.regs rZero = 0 := by
+  have hbsPos : 0 < c.bsSteps := by
+    rw [hsteps]
+    simp [CDEMAbelScan.bsBudget]
+  have hfirst0 := body_first_ready_run c idx st hidxM hsieveM hsieve
+    hmarkPos hmarkM (by rw [hstartR]; omega)
+    (by rw [hcell]; exact hcellRange) hzero hsinkM hword
+    harrword hready
+  have hfirst : OuterFirstSpec c k dp dn ceil floor st
+      (arun idx st c.body) := by
+    simpa only [hkeyVal, hdpVal, hdnVal, hceilVal, hfloorVal] using hfirst0
+  have hfirstCursor := body_cursor_continue_run c idx st hidxM hsieveM
+    hsieve hmarkM hmarkPos (by rw [hstartR]; omega)
+    (by rw [hstartR]; exact first_cursor_lt_period c cell hcellRange hbsPos)
+    (by
+      rw [hstartR]
+      exact Nat.lt_trans (first_cursor_lt_period c cell hcellRange hbsPos)
+        hperiodM)
+    hperiodM hsegM hword harrword
+  dsimp only at hfirstCursor
+  have hcore0 := productionOuterCore_of_first c idx st k dp dn ceil floor
+    cell (c.markSteps + cell * (c.bsSteps + 1) + 1) (st.regs rW)
+    hfirst hround hzero hcell
+    (by rw [hfirstCursor.1, hstartR]) hfirstCursor.2 hword harrword
+  have hmiddle := bodyIter_production_middle_ready c idx
+    (c.bsSteps - 1) (arun idx st c.body) k dp dn cell
+    (c.markSteps + cell * (c.bsSteps + 1) + 1) (st.regs rW)
+    hc hk hkmax hidxM hsieveM hsieve hmarkPos hmarkM (by omega)
+    hbsM hsinkM hsum hceil hperiodM hsegM hfirst.low hfirst.high hcore0
+    (by
+      intro i hi
+      exact middle_cursor_lt_period c cell i hcellRange hi)
+    (by
+      intro i hi
+      exact Nat.lt_trans (middle_cursor_lt_period c cell i hcellRange hi)
+        hperiodM)
+    (by omega)
+  let current := bodyIter c idx (c.bsSteps - 1) (arun idx st c.body)
+  let prefixed := arun idx current (accPrefix c)
+  let accumulated := arun idx prefixed c.accBody
+  have hp := accPrefix_latches c idx current hidxM hsieveM hsieve hmarkM
+    hmarkPos (by rw [hmiddle.2.cursor]; omega)
+    hmiddle.2.regs_word hmiddle.2.arr_word
+  have hwp := arun_word idx (accPrefix c) current hmiddle.2.regs_word
+    hmiddle.2.arr_word
+  have hh := accHead_last_run c idx prefixed
+    (by rw [hp.round, hmiddle.2.round]; omega) hbsPos hp.gate
+    (by rw [hp.zero, hmiddle.2.zero]) hbsM hsinkM hwp.1 hwp.2
+    (by rw [hp.key, hmiddle.2.key]; exact hk)
+    (by rw [hc]; decide)
+    (by rw [hp.dPos, hp.dNeg, hmiddle.2.dPos, hmiddle.2.dNeg]; exact hsum)
+    (by rw [hp.key, hmiddle.2.key]; exact hceil)
+  have hl := accBody_last_latch_of_head c idx prefixed hh hwp.1 hwp.2
+  change accumulated.regs rK = prefixed.regs rK ∧
+    accumulated.regs rDp = prefixed.regs rDp ∧
+    accumulated.regs rDn = prefixed.regs rDn ∧
+    accumulated.regs 43 = prefixed.regs 43 ∧
+    accumulated.regs rZero = prefixed.regs rZero at hl
+  have tailFrame (j : Nat)
+      (hw : ArrayRegFrame.writes j c.tailBody = false) :
+      (arun idx accumulated c.tailBody).regs j = accumulated.regs j :=
+    ArrayRegFrame.arun_frame idx j c.tailBody hw accumulated
+  unfold bodySchedule
+  rw [body_acc_run_decomp]
+  change (arun idx accumulated c.tailBody).regs rK = k ∧ _
+  exact ⟨by rw [tailFrame rK (by rfl), hl.1, hp.key, hmiddle.2.key],
+    by rw [tailFrame rDp (by rfl), hl.2.1, hp.dPos, hmiddle.2.dPos],
+    by rw [tailFrame rDn (by rfl), hl.2.2.1, hp.dNeg, hmiddle.2.dNeg],
+    by rw [tailFrame rZero (by rfl), hl.2.2.2.2, hp.zero,
+      hmiddle.2.zero]⟩
+
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 3000000 in
 theorem bodySchedule_production_ready (c : Cfg) (idx : Nat) (st : AState)
     (k dp dn ceil floor cell : Nat)
     (hc : c.wScale = productionW)
