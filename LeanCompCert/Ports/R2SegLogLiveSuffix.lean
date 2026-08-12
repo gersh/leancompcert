@@ -390,6 +390,66 @@ theorem logBody_start_no_bump_run (c : R2Cfg) (k : Nat) (s : AState)
   dsimp only at hp ⊢
   exact logBody_of_liveRound_run c k s _ _ _ _ hp
 
+/-- Full state after the first nonfinal round when no exponent bump is
+needed.  This is one of the two entry points to the continuation induction. -/
+theorem logBody_start_no_bump_nonfinal_state_run (c : R2Cfg) (k : Nat)
+    (s : AState) (ec wc n payload mode e th viol vlog : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hcell0 : s.arr ((ec <<< 1) + c.streamBase) = n)
+    (hcell1 : s.arr ((ec <<< 1) + c.streamBase + 1) = payload)
+    (hmode : payload >>> 57 = mode) (hmodeLt : mode < 2)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hnth : n < th) (hnM : n < M) (hpM : payload < M)
+    (he62 : e ≤ 62)
+    (hnormLo : LeanCompCert.Verified.LogFixed.B62 ≤ n <<< (62 - e))
+    (hnormHi : n <<< (62 - e) < LeanCompCert.Verified.LogFixed.B63)
+    (hSgt1 : 1 < c.sc) (hSM : c.sc < M)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) (hecM : ec < M) :
+    let x0 := n <<< (62 - e)
+    let out := arun k s c.logBody
+    out.regs rXm = (LeanCompCert.Verified.LogFixed.logIter x0 1).1 ∧
+      out.regs rAa = (LeanCompCert.Verified.LogFixed.logIter x0 1).2 ∧
+      out.regs rNe = n ∧ out.regs rPl = payload ∧
+      out.regs rEx = e ∧ out.regs rTh = th ∧
+      out.regs rViol = viol ∧ out.regs rVLog2 = vlog ∧
+      out.regs 247 = 0 ∧ out.regs rK = 1 ∧
+      out.regs rEc = ec ∧ out.arr = s.arr := by
+  let x0 := n <<< (62 - e)
+  let roundedPrefix := arun k s (logLiveRoundBody c)
+  have hp := logLiveRoundBody_start_no_bump_run c k s ec wc n payload mode e
+    th viol vlog hec hwc hk hphase hlive hbase haddr hcell0 hcell1 hmode
+    hmodeLt he hth hv hvl hnth hnM hpM he62 hnormLo hnormHi (by omega) hSM
+    heM hthM hvM hvlM
+  dsimp only at hp
+  have hstate := logLiveRoundBody_start_no_bump_state_run c k s ec wc n
+    payload e th viol vlog hec hwc hk hphase hlive hbase haddr hcell0 hcell1
+    he hth hv hvl hnth hnM hpM heM hthM hvM hvlM
+  dsimp only at hstate
+  have h1ne : 1 ≠ c.sc := Nat.ne_of_lt hSgt1
+  have hpFin : roundedPrefix.regs 247 = 0 := by
+    simpa [h1ne] using hp.2.2.1
+  have hpEc : roundedPrefix.regs rEc = ec :=
+    (arun_frame k rEc (logLiveRoundBody c) (by rfl) s).trans hec
+  have hs := logAfterLiveRoundBody_nonfinal_frame c k roundedPrefix hpFin
+    (by rw [hstate.2.2.2.2.1]; omega)
+    (by rw [hpEc]; exact hecM)
+  dsimp only at hs
+  rcases hs with ⟨hsNe, hsPl, hsEx, hsTh, hsXm, hsAa, hsViol, hsVlog,
+    hsK, hsFin, hsEc, hsArr⟩
+  rw [logBody_eq_live_round_suffix, arun_append]
+  exact ⟨hsXm.trans hp.1, hsAa.trans hp.2.1,
+    hsNe.trans hstate.1, hsPl.trans hstate.2.1,
+    hsEx.trans hstate.2.2.1, hsTh.trans hstate.2.2.2.1,
+    hsViol.trans hstate.2.2.2.2.1,
+    hsVlog.trans hstate.2.2.2.2.2.1, hsFin,
+    hsK.trans (by simpa [h1ne] using hp.2.2.2.1),
+    hsEc.trans hpEc, hsArr.trans hstate.2.2.2.2.2.2⟩
+
 /-- The one-threshold-crossing new-entry case likewise executes recurrence
 round one across the complete production body. -/
 theorem logBody_start_bump_run (c : R2Cfg) (k : Nat) (s : AState)
@@ -427,6 +487,66 @@ theorem logBody_start_bump_run (c : R2Cfg) (k : Nat) (s : AState)
   dsimp only at hp ⊢
   exact logBody_of_liveRound_run c k s _ _ _ _ hp
 
+/-- Full state after the first nonfinal round in the one-exponent-bump case. -/
+theorem logBody_start_bump_nonfinal_state_run (c : R2Cfg) (k : Nat)
+    (s : AState) (ec wc n payload mode e th viol vlog : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hcell0 : s.arr ((ec <<< 1) + c.streamBase) = n)
+    (hcell1 : s.arr ((ec <<< 1) + c.streamBase + 1) = payload)
+    (hmode : payload >>> 57 = mode) (hmodeLt : mode < 2)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hnlo : th ≤ n) (hnhi : n < th + th)
+    (hnM : n < M) (hpM : payload < M)
+    (he62 : e + 1 ≤ 62)
+    (hnormLo : LeanCompCert.Verified.LogFixed.B62 ≤ n <<< (62 - (e + 1)))
+    (hnormHi : n <<< (62 - (e + 1)) < LeanCompCert.Verified.LogFixed.B63)
+    (hSgt1 : 1 < c.sc) (hSM : c.sc < M)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) (hecM : ec < M) :
+    let x0 := n <<< (62 - (e + 1))
+    let out := arun k s c.logBody
+    out.regs rXm = (LeanCompCert.Verified.LogFixed.logIter x0 1).1 ∧
+      out.regs rAa = (LeanCompCert.Verified.LogFixed.logIter x0 1).2 ∧
+      out.regs rNe = n ∧ out.regs rPl = payload ∧
+      out.regs rEx = e + 1 ∧ out.regs rTh = th + th ∧
+      out.regs rViol = viol ∧ out.regs rVLog2 = vlog ∧
+      out.regs 247 = 0 ∧ out.regs rK = 1 ∧
+      out.regs rEc = ec ∧ out.arr = s.arr := by
+  let x0 := n <<< (62 - (e + 1))
+  let roundedPrefix := arun k s (logLiveRoundBody c)
+  have hp := logLiveRoundBody_start_bump_run c k s ec wc n payload mode e th
+    viol vlog hec hwc hk hphase hlive hbase haddr hcell0 hcell1 hmode
+    hmodeLt he hth hv hvl hnlo hnhi hnM hpM he62 hnormLo hnormHi (by omega)
+    hSM heM hthM hvM hvlM
+  dsimp only at hp
+  have hstate := logLiveRoundBody_start_bump_state_run c k s ec wc n payload
+    e th viol vlog hec hwc hk hphase hlive hbase haddr hcell0 hcell1 he hth
+    hv hvl hnlo hnhi hnM hpM heM hthM hvM hvlM
+  dsimp only at hstate
+  have h1ne : 1 ≠ c.sc := Nat.ne_of_lt hSgt1
+  have hpFin : roundedPrefix.regs 247 = 0 := by
+    simpa [h1ne] using hp.2.2.1
+  have hpEc : roundedPrefix.regs rEc = ec :=
+    (arun_frame k rEc (logLiveRoundBody c) (by rfl) s).trans hec
+  have hs := logAfterLiveRoundBody_nonfinal_frame c k roundedPrefix hpFin
+    (by rw [hstate.2.2.2.2.1]; omega)
+    (by rw [hpEc]; exact hecM)
+  dsimp only at hs
+  rcases hs with ⟨hsNe, hsPl, hsEx, hsTh, hsXm, hsAa, hsViol, hsVlog,
+    hsK, hsFin, hsEc, hsArr⟩
+  rw [logBody_eq_live_round_suffix, arun_append]
+  exact ⟨hsXm.trans hp.1, hsAa.trans hp.2.1,
+    hsNe.trans hstate.1, hsPl.trans hstate.2.1,
+    hsEx.trans hstate.2.2.1, hsTh.trans hstate.2.2.2.1,
+    hsViol.trans hstate.2.2.2.2.1,
+    hsVlog.trans hstate.2.2.2.2.2.1, hsFin,
+    hsK.trans (by simpa [h1ne] using hp.2.2.2.1),
+    hsEc.trans hpEc, hsArr.trans hstate.2.2.2.2.2.2⟩
+
 #print axioms logBody_eq_live_round_suffix
 #print axioms logAfterLiveRoundBody_eq_cursor
 #print axioms logBeforeCursorAdvanceBody_frame
@@ -440,6 +560,8 @@ theorem logBody_start_bump_run (c : R2Cfg) (k : Nat) (s : AState)
 #print axioms logBody_continue_run
 #print axioms logBody_continue_nonfinal_state_run
 #print axioms logBody_start_no_bump_run
+#print axioms logBody_start_no_bump_nonfinal_state_run
 #print axioms logBody_start_bump_run
+#print axioms logBody_start_bump_nonfinal_state_run
 
 end LeanCompCert.Ports.R2SegSieve

@@ -975,6 +975,21 @@ are axiom-free.  The remaining telescope work is to expose the corresponding
 full state after each of the two possible first-entry exponent cases, then
 induct the 23 continuation bodies.
 
+`R2SegLogBodyFold` now completes that induction.  Each first-entry exponent
+case supplies the full round-one state; an arbitrary finite theorem folds
+whole 158-instruction nonfinal bodies; and the production corollaries use 22
+such continuations followed by the verified final body.  Thus both valid
+entry paths execute all 24 literal production bodies from the stream cell to
+exact `logFrac 24`, exact source `lnFix 24 n`, finish one, counter reset, one
+cursor advance, and an unchanged array.  The fresh fold source check took
+**0.75 seconds / 590,784 KiB**, its 105-job focused build **1.33 seconds /
+605,508 KiB**, and cached aggregate import-only **0.54 seconds / 1,737,720
+KiB** under the standard cap.  All five fold/production theorems report only
+`propext`, `Classical.choice`, and `Quot.sound`.  The fixed-log scheduling gap
+is therefore closed; the next composition target is the final payload-factor,
+signed-jump, and carried-accumulator state already verified in separate
+literal slices.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
