@@ -1388,5 +1388,5 @@ plane gap; the remaining step is to attach the terminal `MarkState` array to
 that fold.
 
 A fresh source check on 2026-08-11, with one Lean worker in the 3 GiB/no-swap
-cgroup, took 0.32 s elapsed, used 596,996 KiB peak RSS, and performed no swap.
+cgroup, took 0.38 s elapsed, used 579,360 KiB peak RSS, and performed no swap.
 The Lake target build also completed successfully (59 jobs).

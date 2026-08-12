@@ -13,6 +13,7 @@ namespace LeanCompCert.Ports.CDEMAbelMarkPlane
 
 open LeanCompCert.Ports.CDEMAbelScan
 open LeanCompCert.Ports.CDEMAbelMark
+open LeanCompCert.Ports.CDEMAbelMarkTelescope
 open LeanCompCert.Verified.Reflect
 
 /-- The first cell marked by a nonzero divisor row. -/
@@ -124,6 +125,122 @@ theorem marksCell_progression_iff (w d j : Nat) (hd : 0 < d) :
 theorem marksCell_iff_dvd (w d j : Nat) (hd : 0 < d) :
     MarksCell w d j ↔ d ∣ w + j :=
   mod_eq_firstCell_iff w d j hd
+
+/-! ## Cursor-local attachment
+
+The following invariant is deliberately local: whenever the cursor is about
+to perform a resident write, its sign is the decoded Möbius coefficient and
+its cell lies in the divisor progression.  This is the induction needed to
+attach the terminal array telescope to `planeValue` without replaying a
+production-size trace.
+-/
+
+structure ArithmeticInv (c : Cfg) (w : Nat) (s : MarkState) : Prop where
+  table : ∀ d, 1 ≤ d → d ≤ c.kBound →
+    s.arr (d + c.muBase) = Ref.muCodeFor c.kBound d
+  divisorPos : 0 < s.divisor
+  divisorBound : s.divisor ≤ c.kBound
+  sign_active : s.multiple < c.segLen →
+    s.sign = markSignOfCode (Ref.muCodeFor c.kBound s.divisor)
+  progression_active : s.multiple < c.segLen →
+    MarksCell w s.divisor s.multiple
+
+theorem first_arithmeticInv (c : Cfg) (w : Nat)
+    (st : LeanCompCert.Verified.ArrayState.AState)
+    (htable : ∀ d, 1 ≤ d → d ≤ c.kBound →
+      st.arr (d + c.muBase) = Ref.muCodeFor c.kBound d)
+    (hkPos : 0 < c.kBound) : ArithmeticInv c w (MarkState.first c st) := by
+  refine
+    { table := ?_
+      divisorPos := by simp [MarkState.first]
+      divisorBound := by simp [MarkState.first]; omega
+      sign_active := ?_
+      progression_active := ?_ }
+  · intro d hd hdK
+    simp only [MarkState.first]
+    rw [if_neg (by unfold Cfg.winBase Cfg.k1; omega)]
+    exact htable d hd hdK
+  · intro _
+    simp [MarkState.first, markSignOfCode, muCodeFor_one]
+  · intro _
+    simp [MarkState.first, MarksCell, firstCell, Nat.mod_one]
+
+theorem ArithmeticInv.step (c : Cfg) (w : Nat) (s : MarkState)
+    (h : ArithmeticInv c w s) : ArithmeticInv c w (s.step c w) := by
+  by_cases hm : s.multiple < c.segLen
+  · refine
+      { table := ?_
+        divisorPos := by simpa [MarkState.step, hm] using h.divisorPos
+        divisorBound := by simpa [MarkState.step, hm] using h.divisorBound
+        sign_active := ?_
+        progression_active := ?_ }
+    · intro d hd hdK
+      simp only [MarkState.step, hm, ↓reduceIte]
+      rw [if_neg (by unfold Cfg.winBase Cfg.k1; omega)]
+      exact h.table d hd hdK
+    · intro hnext
+      simpa [MarkState.step, hm] using h.sign_active hm
+    · intro hnext
+      have hmod := h.progression_active hm
+      unfold MarksCell at hmod ⊢
+      simpa [MarkState.step, hm, Nat.add_mod] using hmod
+  · have hmout : c.segLen ≤ s.multiple := Nat.not_lt.mp hm
+    by_cases hdK : s.divisor < c.kBound
+    · let d := s.divisor + 1
+      have hdPos : 0 < d := by omega
+      have hdBound : d ≤ c.kBound := by omega
+      have hcode : s.arr (d + c.muBase) = Ref.muCodeFor c.kBound d :=
+        h.table d (by omega) hdBound
+      refine
+        { table := by simpa [MarkState.step, hm, hdK] using h.table
+          divisorPos := by simp [MarkState.step, hm, hdK]
+          divisorBound := by
+            simp only [MarkState.step, hm, hdK, ↓reduceIte]
+            omega
+          sign_active := ?_
+          progression_active := ?_ }
+      · intro hactive
+        simp only [MarkState.step, hm, hdK, ↓reduceIte]
+        rw [hcode]
+      · intro hactive
+        simp only [MarkState.step, hm, hdK, ↓reduceIte] at hactive ⊢
+        have hcode' : s.arr (s.divisor + 1 + c.muBase) =
+            Ref.muCodeFor c.kBound (s.divisor + 1) := by
+          simpa [d] using hcode
+        have hnonzero : Ref.muCodeFor c.kBound d ≠ 0 := by
+          intro hz
+          rw [hcode, markCellOfCode, if_pos hz] at hactive
+          exact (Nat.lt_irrefl _ hactive)
+        have hnonzero' : Ref.muCodeFor c.kBound (s.divisor + 1) ≠ 0 := by
+          simpa [d] using hnonzero
+        have hfirstLt := firstCell_lt w (s.divisor + 1) (by omega)
+        simp [MarksCell, markCellOfCode, hcode', hnonzero', firstCell,
+          Nat.mod_eq_of_lt hfirstLt]
+    · have hd : s.divisor = c.kBound :=
+        Nat.le_antisymm h.divisorBound (Nat.le_of_not_gt hdK)
+      exact
+        { table := by simpa [MarkState.step, hm, hdK] using h.table
+          divisorPos := by simpa [MarkState.step, hm, hdK, hd] using
+            h.divisorPos
+          divisorBound := by simp [MarkState.step, hm, hdK]
+          sign_active := by simp [MarkState.step, hm, hdK]
+          progression_active := by simp [MarkState.step, hm, hdK] }
+
+theorem ArithmeticInv.iter (c : Cfg) (w n : Nat) (s : MarkState)
+    (h : ArithmeticInv c w s) : ArithmeticInv c w (s.iter c w n) := by
+  induction n with
+  | zero => simpa [MarkState.iter] using h
+  | succ n ih =>
+      simpa [MarkState.iter] using ih.step c w
+
+theorem active_write_has_mobius_sign_and_divides (c : Cfg) (w : Nat)
+    (s : MarkState) (h : ArithmeticInv c w s)
+    (hm : s.multiple < c.segLen) :
+    s.sign = markSignOfCode (Ref.muCodeFor c.kBound s.divisor) ∧
+      s.divisor ∣ w + s.multiple := by
+  exact ⟨h.sign_active hm,
+    (marksCell_iff_dvd w s.divisor s.multiple h.divisorPos).1
+      (h.progression_active hm)⟩
 
 /-- Pointwise declarative value of the plane produced by all divisor rows.
 This fold is finite and executable; unlike `Ref.deltaF`, its membership test
