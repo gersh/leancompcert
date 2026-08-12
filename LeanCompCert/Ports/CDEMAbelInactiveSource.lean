@@ -15,6 +15,7 @@ open LeanCompCert.Ports.CDEMAbelAccumulation
 open LeanCompCert.Ports.CDEMAbelBisection
 open LeanCompCert.Ports.CDEMAbelBody
 open LeanCompCert.Ports.CDEMAbelMarkSchedule
+open LeanCompCert.Ports.CDEMAbelOuterSchedule
 
 /-- Source-facing state left unchanged when the accumulation selector is
 off.  Scratch registers are deliberately absent. -/
@@ -233,5 +234,12 @@ theorem inactiveAccRun_word (c : Cfg) (idx : Nat) (st : AState)
       ∀ j, (inactiveAccRun c idx st).arr j < M := by
   rw [inactiveAccRun]
   exact arun_word idx c.accBody st hword harrword
+
+theorem inactiveAccRun_cursor (c : Cfg) (idx : Nat) (st : AState) :
+    (inactiveAccRun c idx st).regs rR = st.regs rR ∧
+      (inactiveAccRun c idx st).regs 41 = st.regs 41 := by
+  rw [inactiveAccRun]
+  have h := accBody_cursor_frame c idx st
+  exact ⟨h.cursor, h.phase⟩
 
 end LeanCompCert.Ports.CDEMAbelInactiveSource

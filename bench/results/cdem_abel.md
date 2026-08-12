@@ -38,6 +38,19 @@ took `2.43 s` at `641296 KiB`.  All ran with one worker, `MemoryHigh=2G`,
 `MemoryMax=3G`, swap disabled, and no swapping occurred.  Fresh axiom prints
 for the prelude, stream, carry, and word interfaces report only `propext`.
 
+The finite inactive prefixes are now telescoped as executable LeanCompCert
+state transitions.  `CDEMAbelInactiveSieve` carries the source seed through
+all `17142466` changing-index sieve iterations; its source check took
+`0.21 s` at `575496 KiB`.  `CDEMAbelInactiveMark` simultaneously proves the
+mark selector, period cursor, source frame, and word bounds through all
+`8845158` marking iterations; its source check took `0.25 s` at
+`584328 KiB`.  The literal production specialization checked in `0.19 s` at
+`588928 KiB`, and its targeted live build took `0.73 s` at `590800 KiB`.
+Fresh axiom prints contain only `propext`, `Classical.choice`, and
+`Quot.sound`.  A discarded attempt to instantiate the full marking-model
+refinement at every prefix reached about `2.8 GiB` RSS; it was interrupted
+before the `3 GiB` cap and replaced by the retained selector/tail telescope.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on
