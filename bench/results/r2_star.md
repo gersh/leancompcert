@@ -933,6 +933,17 @@ Trust uses only `propext` and `Quot.sound`; the literal slice equality is
 axiom-free.  All scalar islands in instructions 200--249 are now separately
 proved; their full prefix/step composition is next.
 
+`R2SegLogLiveRound` now composes the literal first 61 log-body instructions
+for every resident continuation round.  From the stream cursors, phase gate,
+latched entry, exponent state, and `logIter x0 j`, it proves exact
+`logIter x0 (j+1)`, finish bit 247, counter increment/final reset, and array
+preservation.  The source check took **0.38 seconds / 545,388 KiB**, the
+focused target **0.44 seconds / 559,240 KiB**, and aggregate import-only
+**0.58 seconds / 1,755,520 KiB** under the standard cap.  Trust remains
+`propext`, `Classical.choice`, and `Quot.sound`; the 61-instruction slice
+identity is axiom-free.  The matching new-entry composition and full-body
+suffix frame are next, after which the 24-state schedule can telescope.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
