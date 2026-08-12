@@ -18,11 +18,12 @@ open LeanCompCert.Ports.CDEMAbelProductionCertificate
 open LeanCompCert.Ports.CDEMAbelProductionSieveMark
 open LeanCompCert.Ports.CDEMAbelProductionSieveCursor
 
-theorem production_sieveEntry_window_zero :
-    (sieveEntry productionCfg).arr productionCfg.winBase = 0 := by
+theorem production_sieveEntry_window_zero (cell : Nat)
+    (hcell : cell < productionCfg.segLen) :
+    (sieveEntry productionCfg).arr (cell + productionCfg.winBase) = 0 := by
   unfold sieveEntry Cfg.init
   rw [arun_append, cdem_seedRegs_arr]
-  rw [cdem_storeLits_arr 0 productionCfg.winBase initialAState
+  rw [cdem_storeLits_arr 0 (cell + productionCfg.winBase) initialAState
     productionCfg.primeCells]
   · rw [cdem_cellWrite_of_forall_ne]
     · rfl
@@ -32,10 +33,10 @@ theorem production_sieveEntry_window_zero :
       have hlt : row.2 < 86 := by
         simpa [Cfg.pn, productionCfg] using hi.1
       unfold Cfg.primeBase Cfg.winBase Cfg.muBase Cfg.k1
-      simp only [Nat.zero_add]
       have hpn : productionCfg.pn = 86 := by decide
       have hkBound : productionCfg.kBound = 199330 := rfl
       rw [hpn, hkBound]
+      change cell < 1000000 at hcell
       omega
   · exact primeCells_word productionCfg (by decide)
       (by
@@ -44,12 +45,13 @@ theorem production_sieveEntry_window_zero :
         simp [productionCfg] at hp
         omega)
 
-/-- The entire 17,142,466-step resident sieve leaves the first marking-window
+/-- The entire 17,142,466-step resident sieve leaves every marking-window
 cell at its physical zero initializer. -/
-theorem productionAfterSieve_window_zero :
-    productionAfterSieve.arr productionCfg.winBase = 0 := by
-  have hframe := bodySieveIter_winBase_frame productionCfg
-    productionCfg.sieveLen (sieveEntry productionCfg)
+theorem productionAfterSieve_window_cell_zero (cell : Nat)
+    (hcell : cell < productionCfg.segLen) :
+    productionAfterSieve.arr (cell + productionCfg.winBase) = 0 := by
+  have hframe := bodySieveIter_window_frame productionCfg
+    productionCfg.sieveLen cell (sieveEntry productionCfg)
     (initialSieveModel productionCfg) (sieveEntry_preRep productionCfg)
     (initialSieveModel_cursor productionCfg
       (by change 0 < 86; decide) production_prime_pos
@@ -60,8 +62,17 @@ theorem productionAfterSieve_window_zero :
     (by change 17142466 < M; decide)
     (by change 86 < M; decide)
     (by change 1199417 < M; decide)
-    (by change 0 < 1000000; decide)
+    hcell
   rw [productionAfterSieve, ← bodySieveIter_eq_fold]
-  exact hframe.trans production_sieveEntry_window_zero
+  exact hframe.trans (production_sieveEntry_window_zero cell hcell)
+
+theorem productionAfterSieve_window_zero :
+    productionAfterSieve.arr productionCfg.winBase = 0 := by
+  simpa only [Nat.zero_add] using
+    productionAfterSieve_window_cell_zero 0 (by decide)
+
+theorem productionAfterSieve_second_window_zero :
+    productionAfterSieve.arr (1 + productionCfg.winBase) = 0 := by
+  exact productionAfterSieve_window_cell_zero 1 (by decide)
 
 end LeanCompCert.Ports.CDEMAbelProductionSieveWindow

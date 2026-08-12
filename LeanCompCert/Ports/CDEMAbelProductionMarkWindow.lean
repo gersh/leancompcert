@@ -79,4 +79,16 @@ theorem production_full_mark_first_cell
   production_full_mark_window_eq_deltaF hbudget 0
     (by change 0 < 1000000; decide)
 
+/-- Compact second-cell projection used by the first active handoff. -/
+theorem production_full_mark_second_cell
+    (hbudget : 1 + compactMarkBudget productionCfg ≤
+      productionCfg.markSteps) :
+    let out := bodyIterFrom productionCfg productionCfg.sieveLen
+      productionCfg.markSteps productionAfterSieve
+    out.arr (1 + productionCfg.winBase) =
+      (productionAfterSieve.arr (1 + productionCfg.winBase) +
+        Ref.deltaF productionCfg.kBound (1 + 1)) % M :=
+  production_full_mark_window_eq_deltaF hbudget 1
+    (by change 1 < 1000000; decide)
+
 end LeanCompCert.Ports.CDEMAbelProductionMarkWindow

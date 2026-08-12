@@ -99,4 +99,35 @@ theorem productionAfterMark_firstEntry
       lower := by rw [ht', hw', hc']; decide
       oneBump := by rw [ht', hw', hc']; decide }
 
+set_option maxRecDepth 4096 in
+/-- Compact source values consumed by the first active scheduler and the
+following interior handoff. -/
+theorem productionAfterMark_first_values
+    (hbudget : 1 + compactMarkBudget productionCfg ≤
+      productionCfg.markSteps) :
+    let out := bodyIterFrom productionCfg productionCfg.sieveLen
+      productionCfg.markSteps productionAfterSieve
+    nextKey out = 1 ∧ nextF productionCfg out = 1 ∧
+      nextDPos productionCfg out = 0 ∧ nextDNeg productionCfg out = 0 := by
+  let out := bodyIterFrom productionCfg productionCfg.sieveLen
+    productionCfg.markSteps productionAfterSieve
+  rcases productionAfterMark_source_seed with
+    ⟨hf0, _ht0, _ht20, he0, _htv0, _hk0, _hdp0, _hdn0, _hzero0⟩
+  rcases productionAfterMark_cursor with ⟨_hr0, hw0, hc0, _hz0⟩
+  have hf : out.regs rF = 0 := hf0
+  have he : out.regs rE = 0 := he0
+  have hw : out.regs rW = 1 := hw0
+  have hc : out.regs rC = 0 := hc0
+  have hcell0 := productionAfterMark_first_cell hbudget
+  dsimp only at hcell0
+  have hcell : out.arr productionCfg.winBase = 1 := hcell0
+  have hkey : nextKey out = 1 := by rw [nextKey, hw, hc]
+  have hnextF : nextF productionCfg out = 1 := by
+    rw [nextF, hf, hc]
+    simp only [Nat.zero_add, hcell]
+    decide
+  exact ⟨hkey, hnextF,
+    by rw [nextDPos, hnextF, he]; decide,
+    by rw [nextDNeg, hnextF, he]; decide⟩
+
 end LeanCompCert.Ports.CDEMAbelProductionFirstEntry

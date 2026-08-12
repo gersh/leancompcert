@@ -85,6 +85,20 @@ Fresh axiom prints for `deltaF_one`, `productionAfterMark_firstEntry`, and
 `Quot.sound`.  A discarded direct production specialization reached about
 `2.7 GiB` RSS; the retained generic boundaries avoid that normalization path.
 
+The same route now completes the first interior handoff.  The sieve frame is
+generalized from the first address to every resident window cell.  For key
+two, the executable divisor tail is framed symbolically above divisor two;
+the only remaining premise is the paper table value `mu(2) = -1`, supplied by
+the project-side proved Möbius-code bridge.  The full first-cell contract then
+reconstructs the streamed `F`, `G`, square-root cursor, total variation, and
+both directed wide sums and establishes the next `FirstEntryInv`.  The final
+source check took under one second with a `177364992`-byte charged cgroup peak;
+the targeted build peaked at `194162688` bytes.  Both had zero pressure,
+hard-limit, OOM, and swap events.  The MathExtras paper bridge checked at a
+`338997248`-byte peak.  A monolithic predecessor was stopped after crossing
+`MemoryHigh` at 2.39 GB and 2,014 reclaim events.  Splitting scalar values and
+using a generic stream-step lemma reduced charged memory by more than 92%.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on

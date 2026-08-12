@@ -73,16 +73,18 @@ theorem bodySieveIter_inactive_source (c : Cfg) (count : Nat) (st : AState)
       rw [bodySieveIter_succ, body_run_eq_inactiveBodyRun]
       exact ⟨hsource, hnextWord⟩
 
-/-- The finite scheduled sieve cannot touch the first window cell: completed
-rows write below `winBase`, and incomplete rows write only to the sink. -/
-theorem bodySieveIter_winBase_frame (c : Cfg) (count : Nat)
+/-- The finite scheduled sieve cannot touch any resident window cell:
+completed rows write below `winBase`, and incomplete rows write only to the
+sink. -/
+theorem bodySieveIter_window_frame (c : Cfg) (count cell : Nat)
     (machine : AState) (model : SieveState)
     (hrep : SievePreRep model machine) (hcursor : SieveCursorInv c model)
     (htable : SieveTableInv c model) (hrank : sieveRank c model = 0)
     (hcount : count ≤ c.sieveLen) (hsieveM : c.sieveLen < M)
     (hpnM : c.pn < M) (hsinkM : c.sink < M)
-    (hsegPos : 0 < c.segLen) :
-    (bodySieveIter c count machine).arr c.winBase = machine.arr c.winBase := by
+    (hcell : cell < c.segLen) :
+    (bodySieveIter c count machine).arr (cell + c.winBase) =
+      machine.arr (cell + c.winBase) := by
   induction count with
   | zero => rw [bodySieveIter_zero]
   | succ n ih =>
@@ -104,25 +106,40 @@ theorem bodySieveIter_winBase_frame (c : Cfg) (count : Nat)
             _ < c.sieveLen := hnlt
             _ = c.k1 * c.pn := rfl
         exact Nat.lt_of_mul_lt_mul_right hmul
-      have haddr : c.winBase ≠ preModel.n + c.muBase := by
+      have haddr : cell + c.winBase ≠ preModel.n + c.muBase := by
         unfold Cfg.winBase
         omega
-      have hsink : c.winBase ≠ c.sink := by
+      have hsink : cell + c.winBase ≠ c.sink := by
         unfold Cfg.sink
         omega
-      have hmodel : (preModel.step c).arr c.winBase =
-          preModel.arr c.winBase := by
+      have hmodel : (preModel.step c).arr (cell + c.winBase) =
+          preModel.arr (cell + c.winBase) := by
         by_cases hlast : preModel.pj = c.pn - 1
         · simp [SieveState.step, hlast, writeCell, haddr]
         · simp [SieveState.step, hlast, writeCell, hsink]
-      have hbefore : before.arr c.winBase = preModel.arr c.winBase := by
-        exact congrFun hpreRep.arr c.winBase
+      have hbefore : before.arr (cell + c.winBase) =
+          preModel.arr (cell + c.winBase) := by
+        exact congrFun hpreRep.arr (cell + c.winBase)
       rw [bodySieveIter_succ, body_run_eq_inactiveBodyRun]
       calc
-        after.arr c.winBase = (preModel.step c).arr c.winBase :=
-          hstep.2 c.winBase hsink
-        _ = preModel.arr c.winBase := hmodel
-        _ = before.arr c.winBase := hbefore.symm
-        _ = machine.arr c.winBase := ih (by omega)
+        after.arr (cell + c.winBase) =
+            (preModel.step c).arr (cell + c.winBase) :=
+          hstep.2 (cell + c.winBase) hsink
+        _ = preModel.arr (cell + c.winBase) := hmodel
+        _ = before.arr (cell + c.winBase) := hbefore.symm
+        _ = machine.arr (cell + c.winBase) := ih (by omega)
+
+/-- First-cell compatibility projection of `bodySieveIter_window_frame`. -/
+theorem bodySieveIter_winBase_frame (c : Cfg) (count : Nat)
+    (machine : AState) (model : SieveState)
+    (hrep : SievePreRep model machine) (hcursor : SieveCursorInv c model)
+    (htable : SieveTableInv c model) (hrank : sieveRank c model = 0)
+    (hcount : count ≤ c.sieveLen) (hsieveM : c.sieveLen < M)
+    (hpnM : c.pn < M) (hsinkM : c.sink < M)
+    (hsegPos : 0 < c.segLen) :
+    (bodySieveIter c count machine).arr c.winBase = machine.arr c.winBase := by
+  simpa only [Nat.zero_add] using
+    bodySieveIter_window_frame c count 0 machine model hrep hcursor htable
+      hrank hcount hsieveM hpnM hsinkM hsegPos
 
 end LeanCompCert.Ports.CDEMAbelInactiveSieve
