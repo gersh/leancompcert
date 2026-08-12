@@ -63,6 +63,28 @@ remaining at `579500 KiB`; it was discarded.  Fresh axiom prints for the
 retained wide interfaces report only `propext`, `Classical.choice`, and
 `Quot.sound`.
 
+The production resident window and first active cell are now proved without
+reducing either multi-million-step iterator.  A generic sieve-frame theorem
+carries the physical zero initializer at `winBase = 199417` through all
+`17142466` scheduled sieve steps.  The marking telescope then identifies the
+first cell with the finite paper formula `deltaF K 1`; a list-fold proof shows
+that value is exactly one for every positive `K`, without `native_decide` over
+the `199330` divisors.  The resulting `FirstEntryInv` supplies every streamed
+square-root, word, cursor, and wide no-wrap condition to the active scheduler.
+Its fresh source check took `0.45 s` at `591688 KiB` RSS.
+
+`CDEMAbelProductionFirstSchedule.production_first_schedule` now verifies the
+complete first active bisection/accumulation cell.  The signed delta is zero,
+and a compact generic lemma derives the last 128-bit guard from the two word
+limbs after the finite 60-step middle schedule.  A fresh source check took
+under one second; the persistent cgroup reported a `137019392`-byte peak,
+zero `memory.max` events, zero OOMs, and zero swap.  Its targeted 99-module
+build reported a `154071040`-byte cgroup peak with the same zero-event result.
+Fresh axiom prints for `deltaF_one`, `productionAfterMark_firstEntry`, and
+`production_first_schedule` contain only `propext`, `Classical.choice`, and
+`Quot.sound`.  A discarded direct production specialization reached about
+`2.7 GiB` RSS; the retained generic boundaries avoid that normalization path.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on
