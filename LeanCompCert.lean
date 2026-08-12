@@ -221,6 +221,7 @@ import LeanCompCert.Ports.R2SegLogRoundCounter
 import LeanCompCert.Ports.R2SegLogRoundStep
 import LeanCompCert.Ports.R2SegLogEntryGate
 import LeanCompCert.Ports.R2SegLogEntryLatch
+import LeanCompCert.Ports.R2SegLogExponent
 import LeanCompCert.Ports.R2SegLnFixConvert
 import LeanCompCert.Ports.R2SegLogPayload
 import LeanCompCert.Attest

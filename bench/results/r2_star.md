@@ -922,6 +922,17 @@ the standard cap.  Their trust prints need at most `propext` and `Quot.sound`,
 and both slice equalities are axiom-free.  Only the nine-instruction exponent
 update/check remains between this prefix and the scheduled recurrence step.
 
+`R2SegLogExponent` closes that nine-instruction gap.  Continuation rounds
+preserve the exponent, power-of-two threshold, and violation counters.  On a
+new entry it proves both valid dense-test-point cases: no threshold crossing,
+or exactly one threshold doubling; in either case the explicit
+one-increment-insufficient counter remains unchanged.  The fresh source check
+took **0.43 seconds / 537,640 KiB**, the focused target **0.54 seconds /
+564,724 KiB**, and aggregate import-only **0.53 seconds / 1,759,676 KiB**.
+Trust uses only `propext` and `Quot.sound`; the literal slice equality is
+axiom-free.  All scalar islands in instructions 200--249 are now separately
+proved; their full prefix/step composition is next.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
