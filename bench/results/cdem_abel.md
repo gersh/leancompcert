@@ -4,6 +4,14 @@
 `LeanCompCert/Testing/AbelScanCertificate.lean`, its emitter
 `bench/AbelEmit.lean`, and its oracle `bench/ref_abel.c`.
 
+The production initializer boundary is also executable and source-facing.
+`CDEMAbelProductionSourceSeed.production_source_seed` proves the literal
+`storeLits ++ seedRegs` program installs `F = G = 0`, `t = 1`, `t² = 4`,
+and zeroes all three wide accumulators and the total-variation counter.  A
+fresh source check with one Lean worker, `MemoryHigh=2G`, `MemoryMax=3G`, and
+swap disabled took `1.64 s` and peaked at `615844 KiB` RSS.  The proof uses
+the emitted register moves rather than reducing the full production run.
+
 ## 1. What is being computed
 
 The residue is `MathExtras.Reductions.CDEMAbel.CDEMAbelNatFamily` on
