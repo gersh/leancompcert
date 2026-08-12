@@ -1664,3 +1664,50 @@ Fresh one-worker checks on 2026-08-12 used `MemoryHigh=2G`,
 Fresh axiom prints report `[propext, Quot.sound]` for the exact schedule
 identity and `[propext, Classical.choice, Quot.sound]` for the concrete
 aggregate seed.
+
+## Fail-safe production audit and compiled-memory observation
+
+The production result is now observed through a second, fail-safe emitted
+program. `CDEMAbelProductionAuditCertificate.lean` retains the original
+production denotation theorem only after the audit computation returns zero;
+`ArrayFinalRelation.lean` exposes the compiler's final source/CCIR relation;
+and the project-side `CDEMAbelProductionCompiledObservation.lean` transports
+the first six retained CompCert memory cells through the literal source
+epilogue to the exact natural Abel sums. Thus the historical literature atom
+is no longer needed by the conditional end-to-end theorem. Until the exact
+audit executable finishes, its zero result remains an explicit theorem
+premise and is not admitted as a run axiom.
+
+`CDEMAbelAuditEmit.lean` emits the exact audit program as well as parameterized
+smoke/control configurations. The production emission has loop count
+`354242932466`, array length `1199434`, and body length `443`; its C source is
+54,774 bytes with SHA-256
+`e8209fbc9e1b21f360513e6826c7f6c652861ebb4f18627ff8a0fbea1ceb5ab3`.
+The CompCert executable has SHA-256
+`de9f7d0c5528c489dbdaa592bcb14469001efd85d536e19dae4cdf10f3282f13`.
+A production-shaped smoke configuration (`W=10^18`, `K=100`, `segLen=1000`,
+`segCount=2`) returned zero, while the deliberately unsafe control
+(`W=1`, `K=1`, `segLen=10`, `segCount=1`) returned one.
+
+The exact executable was started on 2026-08-12 as the memory-capped transient
+unit `cdem-abel-audit-5e9.service`, with `MemoryHigh=128M`, `MemoryMax=256M`,
+swap disabled, and one process. This entry deliberately records no completed
+receipt yet; completion, wall/user time, observation, and the run-admission
+declaration must be added only after a successful exit.
+
+Fresh one-worker checks used `MemoryHigh=2G`, `MemoryMax=3G`, and disabled
+swap:
+
+| check | charged `memory.peak` | hard-limit/OOM/swap events |
+| --- | ---: | ---: |
+| compiled observation source plus paper bridge source | 876,736,512 B | 0 |
+| focused observation plus paper bridge Lake build | 1,081,126,912 B | 0 |
+| `ArrayFinalRelation` focused target build | 138,706,944 B | 0 |
+
+The final-relation theorem is intentionally isolated in a leaf module.
+Putting it in central `ArrayBridge.lean` invalidated the expensive
+`ArraySegSieve` cache: 3 GiB and 4 GiB no-swap builds were terminated cleanly
+by their cgroups instead of crashing the host. A one-worker 6 GiB recovery
+build completed in 217 seconds at a 5,540,675,584-byte charged peak. Moving
+the theorem to the leaf restored the affected CDEM target to about 139 MB and
+avoids repeating that global rebuild.

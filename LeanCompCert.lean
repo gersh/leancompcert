@@ -31,6 +31,7 @@ import LeanCompCert.Verified.Frontend
 import LeanCompCert.Verified.ArrayState
 import LeanCompCert.Verified.MemFragment
 import LeanCompCert.Verified.ArrayBridge
+import LeanCompCert.Verified.ArrayFinalRelation
 import LeanCompCert.Verified.ArrayAudit
 import LeanCompCert.Verified.ArrayRolled
 import LeanCompCert.Ports.ArrayMobius
@@ -143,6 +144,7 @@ import LeanCompCert.Ports.RamarePsiQRBlock
 import LeanCompCert.Ports.SigmaPrincipalHead
 import LeanCompCert.Ports.MoebiusSawtooth
 import LeanCompCert.Ports.CDEMAbelProductionCertificate
+import LeanCompCert.Ports.CDEMAbelProductionAuditCertificate
 import LeanCompCert.Ports.CDEMAbelPrimitives
 import LeanCompCert.Ports.CDEMAbelBisection
 import LeanCompCert.Ports.CDEMAbelAccumulation
