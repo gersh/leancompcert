@@ -1974,3 +1974,33 @@ boundary above instead of forcing the 1,092-window manifest through one
 elaboration.  The remaining proof layer is the concrete manifest schedule,
 its observation/carry composition, and the run-admission declaration backed
 by the now-complete independent fail-safe receipt.
+
+The retained manifest is now also copied into the generated literal module
+`ArraySegMobiusPlatt211ManifestData.lean`, with its source SHA-256 embedded in
+the header.  `ArraySegMobiusPlatt211Manifest.lean` checks all 1,092 row shapes,
+indices, gap-free seams, accumulator carries, and the unique historical
+violation counter in the ordinary kernel.  It separately recomputes the
+paper-faithful strict threshold with denominator `hi + 1`, checks an
+adjacent-square certificate for every literal, and proves each literal equal
+to the formal `platt211Threshold`.  The old artifact threshold with denominator
+`hi` remains a distinct field: the checker does not identify the two.  A
+second kernel pass checks every strict extrema side, with explicit singleton
+cases for the `n = 1` equality and the inherited `n = 2` entry maximum.
+
+Under `MemoryHigh=1G`, `MemoryMax=2G`, zero swap, and one Lean worker, the
+initial generated-data plus checker build took 3.63 seconds wall and peaked at
+687,412 KiB RSS.  The expanded strict-side rebuild took 1.83 seconds and
+711,784 KiB RSS.  Fresh axiom prints show that `manifest_ok`, `thresholds_ok`,
+and `strictSides_ok` use no axioms; the generic threshold-identification
+theorem uses only `propext`, `Classical.choice`, and `Quot.sound`.
+
+`ArraySegMobiusPlatt211Certificate.lean` packages each reconstructed row as
+the exact compiled `mobiusProgram`, observes its output local and three result
+cells, and states the completed production and fail-safe campaigns as two
+finite run contracts quantified over the manifest.  The ordinary run rule
+then uses the audit receipt to establish partial-source definedness and the
+observation receipt to prove that every source program denotes its recorded
+violation count.  This focused target built in 0.33 seconds wall at 570,988
+KiB RSS under the same 1/2 GiB zero-swap profile.  Its axiom print contains
+only the two named physical-run contracts plus the three Lean foundations;
+there is no `sorryAx` or generated native-evaluation axiom.
