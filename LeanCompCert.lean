@@ -210,6 +210,7 @@ import LeanCompCert.Ports.R2SegMarkingRoundPosition
 import LeanCompCert.Ports.R2SegMarkingInit
 import LeanCompCert.Ports.R2SegMarkingDenotePrefix
 import LeanCompCert.Ports.R2SegDenoteSegments
+import LeanCompCert.Ports.R2SegLogAccumulator
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 
