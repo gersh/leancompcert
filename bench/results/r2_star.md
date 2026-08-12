@@ -786,13 +786,22 @@ are stated directly in terms of the live `r2JumpReal`, so the remaining
 whole-state induction need not reopen von Mangoldt convolution or real
 multiplication.
 
+The companion source proof now also verifies the exact production error
+charge.  It proves that `ln2Up 24` is an upward fixed-point enclosure of
+`log 2`, transports `n < 2^(log2 n + 1)` through the literal `>> (24 - 4)`
+quotient, and shows that the following `+2` covers both the final product
+division and the full four-ulp width in every single or doubled jump mode.
+Thus the remaining induction can carry the program's existing `err` word
+directly rather than introducing an analytic error oracle.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
-two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its source
-latest source check completed in **6.7 seconds** at **700,874,752 charged
-bytes** under the
-same 2/3 GiB no-swap profile, with every memory event counter zero.  No native
-evaluator or new trust declaration is introduced.
+two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
+latest source check completed in **7.4 seconds** at **784,674,816 charged
+bytes**, and its live consumer target completed in **9.3 seconds** at
+**879,677,440 charged bytes**, under the same 2/3 GiB no-swap profile.  Every
+memory event counter was zero.  No native evaluator or new trust declaration
+is introduced.
 
 As a regression control, placing the structural theorem in `LogFixed` was
 tested and rejected: it triggered a rebuild of `PsiSegSieve`, crossed the 2
