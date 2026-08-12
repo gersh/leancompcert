@@ -65,4 +65,18 @@ theorem production_full_mark_window_eq_deltaF
   · change 1 < M
     decide
 
+/-- Compact first-cell projection of the complete production marking window.
+This keeps the large configuration and dependent universal theorem behind a
+small cached interface. -/
+theorem production_full_mark_first_cell
+    (hbudget : 1 + compactMarkBudget productionCfg ≤
+      productionCfg.markSteps) :
+    let out := bodyIterFrom productionCfg productionCfg.sieveLen
+      productionCfg.markSteps productionAfterSieve
+    out.arr (0 + productionCfg.winBase) =
+      (productionAfterSieve.arr (0 + productionCfg.winBase) +
+        Ref.deltaF productionCfg.kBound (1 + 0)) % M :=
+  production_full_mark_window_eq_deltaF hbudget 0
+    (by change 0 < 1000000; decide)
+
 end LeanCompCert.Ports.CDEMAbelProductionMarkWindow
