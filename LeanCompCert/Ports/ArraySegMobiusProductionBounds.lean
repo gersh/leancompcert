@@ -69,7 +69,9 @@ theorem indexedProductionRoot_windows_bounds
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.bootstrapBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.bootstrapLastTwo h.bootstrapStartWithin h.bootstrapWithin
-    h.bootstrapCap h.bootstrapCover h.bootFit h.bootstrapFit h.rootCapM
+    h.bootstrapCap h.bootstrapCover (Nat.le_of_lt h.bootFit)
+    (fun n hn k hk => ⟨Nat.le_of_lt (h.bootstrapFit n hn k hk),
+      fun _ => h.bootstrapFit n hn k hk⟩) h.rootCapM
   let crossState := indexedWindowRun 0 c (bootFuel + 1) entry
   let crossed := crossingTable c bootBound bootFuel
   have hcross := indexedBootstrapWindows_mixed_complete c 0 entry
@@ -79,7 +81,9 @@ theorem indexedProductionRoot_windows_bounds
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.crossingBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.crossingStartWithin h.crossingLast h.crossingCap h.crossingCover
-    h.bootFit h.crossingFit h.rootCapM
+    h.bootFit (fun k hk =>
+      ⟨Nat.le_of_lt (h.crossingFit k hk), fun _ => h.crossingFit k hk⟩)
+    h.rootCapM
   let idxCross := (bootFuel + 1) * c.period
   let laterW := laterBase c bootFuel
   have hidxFuelM : rootFuel * c.period < M := by
@@ -115,8 +119,11 @@ theorem indexedProductionRoot_windows_bounds
         (fun n hn => h.bootstrapStartWithin n (by omega))
         (fun n hn => h.bootstrapWithin n (by omega))
         (fun n hn => h.bootstrapCap n (by omega))
-        (fun n hn => h.bootstrapCover n (by omega)) h.bootFit
-        (fun n hn k hk => h.bootstrapFit n (by omega) k hk) h.rootCapM
+        (fun n hn => h.bootstrapCover n (by omega))
+        (Nat.le_of_lt h.bootFit)
+        (fun n hn k hk =>
+          ⟨Nat.le_of_lt (h.bootstrapFit n (by omega) k hk),
+            fun _ => h.bootstrapFit n (by omega) k hk⟩) h.rootCapM
       exact ⟨hqRun.position, hqRun.base, hqRun.zero⟩
     · by_cases hqCross : q = bootFuel + 1
       · subst q

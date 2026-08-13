@@ -532,6 +532,95 @@ theorem indexedBodyRun_mixed_root_acc_complete_transition
     · exact (hstep.2.2.1 j hj hjk).trans
         (hpref.cleared j (by omega))
 
+/-- A final root window wholly covered by the bootstrap table.  No prime is
+appended, but its last candidate still performs the root-to-main transition. -/
+theorem indexedBodyRun_mixed_root_acc_complete_bootstrap_transition
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot : List Nat) (bootBound w delta : Nat)
+    (hInv : RootTableInv c s boot bootBound)
+    (hView : BootstrapTableView c s boot)
+    (hR : s.regs rR = c.markSteps) (hW : s.regs rW = w)
+    (hzero : s.regs rZero = 0)
+    (hcells : ∀ j, j < c.segLen →
+      machineCell c s j = rootCellFold boot (w + j))
+    (hLPos : 0 < c.segLen)
+    (hidxWindow : idx + c.segLen = c.rootSpan)
+    (hwPos : 0 < w) (hboot2 : 2 ≤ bootBound)
+    (hwBoot : w - 1 ≤ bootBound)
+    (hlast2 : 2 ≤ w + c.segLen - 1)
+    (hlast : w + c.segLen - 1 ≤ bootBound)
+    (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
+    (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
+    (hbootLen : boot.length ≤ c.tableLen)
+    (hfit : ∀ k, k < c.segLen →
+      let ps := rootScanMixed boot bootBound w k
+      ps.length ≤ c.tableLen ∧
+        (unmarkedBool ps (w + k) = true → ps.length < c.tableLen))
+    (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hspanM : c.rootSpan < M) (hcapM : c.rootCap < M)
+    (hA : c.arrayLen < M) (hDelta : c.wDelta = delta)
+    (hDeltaM : delta < M) :
+    RootTableInv c (indexedBodyRun idx c c.segLen s) boot bootBound ∧
+      (∀ j, j < c.segLen →
+        machineCell c (indexedBodyRun idx c c.segLen s) j = ⟨0, 0⟩) ∧
+      (indexedBodyRun idx c c.segLen s).regs rR = 0 ∧
+      (indexedBodyRun idx c c.segLen s).regs rW =
+        (w + ((c.segLen + delta) % M)) % M ∧
+      (indexedBodyRun idx c c.segLen s).regs rZero = 0 := by
+  let k := c.segLen - 1
+  let n := w + k
+  have hkSeg : k < c.segLen := by omega
+  have hkSucc : k + 1 = c.segLen := by omega
+  have hpref := indexedBodyRun_mixed_root_acc_prefix c idx k s boot
+    bootBound w hInv hView hR hW hzero hcells hkSeg (by omega) hwPos
+    hboot2 hwBoot (by omega) (by omega) hbootLen
+    (fun q hq => hfit q (by omega)) hTM hPM hspanM hcapM hA
+  let prev := indexedBodyRun idx c k s
+  let curIdx := idx + k
+  have hcurEq : curIdx = c.rootSpan - 1 := by
+    dsimp only [curIdx, k]
+    omega
+  have hcurM : curIdx < M := by omega
+  have hspanPos : 0 < c.rootSpan := by omega
+  have hscan : rootScanMixed boot bootBound w k = boot :=
+    rootScanMixed_eq_boot_of_le boot bootBound w k (by omega)
+  have hbound : max bootBound (w + k - 1) = bootBound := by omega
+  have hprevInv : RootTableInv c prev boot bootBound := by
+    simpa only [prev, hscan, hbound] using hpref.table
+  have hprevR : prev.regs rR = c.markSteps + k := hpref.position
+  have hprevW : prev.regs rW = w := hpref.base
+  have hprevWrite : prev.regs rWrite = c.primeBase + boot.length :=
+    hprevInv.cursor
+  have hprevCell : machineCell c prev k = rootCellFold boot n := by
+    simpa only [prev, n] using hpref.pending k (Nat.le_refl _) hkSeg
+  have hwrap : c.markSteps + k + 1 = c.period := by
+    simp only [Cfg.period]
+    omega
+  have hRM : c.markSteps + k < M := by
+    have : c.markSteps + k < c.period := by
+      simp only [Cfg.period]
+      omega
+    omega
+  have hnBoot : n ≤ bootBound := by dsimp only [n, k]; omega
+  have hnCap : n ≤ c.rootCap := by dsimp only [n, k]; omega
+  have hstep := arun_coreBody_root_acc_bootstrap_transition c curIdx prev
+    boot bootBound (c.markSteps + k) w (c.primeBase + boot.length) k n
+    delta hprevInv hbootLen hprevR hprevW hprevWrite
+    (by omega) (by omega) rfl (by omega) hRM hTM hPM hcurM hspanPos
+    hspanM hcurEq hkSeg (by omega) hwrap (by omega) hnBoot hnCap hcapM
+    hA hpref.zero hprevCell hDelta hDeltaM
+  have hrun : indexedBodyRun idx c c.segLen s =
+      arun curIdx prev c.coreBody := by
+    rw [← hkSucc, indexedBodyRun_succ]
+  rw [hrun]
+  refine ⟨hstep.1, ?_, hstep.2.2.2.1, hstep.2.2.2.2.1,
+    hstep.2.2.2.2.2⟩
+  intro j hj
+  by_cases hjk : j = k
+  · simpa [hjk] using hstep.2.1
+  · exact (hstep.2.2.1 j hj hjk).trans
+      (hpref.cleared j (by omega))
+
 set_option maxHeartbeats 200000
 
 /-- A nonfinal mixed window closes at the actual wrap index.  The last
@@ -672,9 +761,11 @@ theorem indexedBodyRun_mixed_root_acc_complete_bootstrap_wrap
     (hlast : w + c.segLen - 1 ≤ bootBound)
     (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
     (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
-    (hbootLen : boot.length < c.tableLen)
+    (hbootLen : boot.length ≤ c.tableLen)
     (hfit : ∀ k, k < c.segLen →
-      (rootScanMixed boot bootBound w k).length < c.tableLen)
+      let ps := rootScanMixed boot bootBound w k
+      ps.length ≤ c.tableLen ∧
+        (unmarkedBool ps (w + k) = true → ps.length < c.tableLen))
     (hTM : c.markSteps < M) (hPM : c.period < M)
     (hspanM : c.rootSpan < M) (hcapM : c.rootCap < M)
     (hA : c.arrayLen < M) (hwNextM : w + c.segLen < M) :
@@ -691,9 +782,8 @@ theorem indexedBodyRun_mixed_root_acc_complete_bootstrap_wrap
   have hkSucc : k + 1 = c.segLen := by omega
   have hpref := indexedBodyRun_mixed_root_acc_prefix c idx k s boot
     bootBound w hInv hView hR hW hzero hcells hkSeg (by omega) hwPos
-    hboot2 hwBoot (by omega) (by omega) (Nat.le_of_lt hbootLen)
-    (fun q hq => ⟨Nat.le_of_lt (hfit q (by omega)),
-      fun _ => hfit q (by omega)⟩) hTM hPM hspanM hcapM hA
+    hboot2 hwBoot (by omega) (by omega) hbootLen
+    (fun q hq => hfit q (by omega)) hTM hPM hspanM hcapM hA
   let prev := indexedBodyRun idx c k s
   let curIdx := idx + k
   have hcurRoot : curIdx < c.rootSpan := by dsimp [curIdx]; omega
@@ -718,21 +808,22 @@ theorem indexedBodyRun_mixed_root_acc_complete_bootstrap_wrap
   have hnM : n < M := by dsimp [n]; omega
   have hwrap : c.markSteps + k + 1 = c.period := by simp [Cfg.period]; omega
   have hwriteM : c.primeBase + boot.length < M := by
-    have : c.primeBase + boot.length < c.arrayLen := by
-      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase,
-        Cfg.tableLen] at hbootLen ⊢
-      omega
-    omega
+    exact Nat.lt_trans (calc
+      c.primeBase + boot.length ≤ c.primeBase + c.tableLen :=
+        Nat.add_le_add_left hbootLen _
+      _ < c.arrayLen := by
+        simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+        omega) hA
   have hstep := arun_coreBody_root_acc_bootstrap_wrap c curIdx prev boot
     bootBound (c.markSteps + k) w (c.primeBase + boot.length) k n
-    hprevInv (Nat.le_of_lt hbootLen) hprevR hprevW hprevWrite hT hiEq rfl
+    hprevInv hbootLen hprevR hprevW hprevWrite hT hiEq rfl
     hcurRoot hRM hTM hPM hcurM hspanM hcurNe hkSeg hnM hwrap hwNextM
     (by dsimp [n, k]; omega) (by dsimp [n, k]; omega)
     (by dsimp [n, k]; omega) hcapM hA hpref.zero hprevCell
   have hnextView : BootstrapTableView c (arun curIdx prev c.coreBody) boot :=
     BootstrapTableView.bootstrap_retain c curIdx prev boot bootBound
       (c.markSteps + k) w (c.primeBase + boot.length) k n hpref.bootstrap
-      hprevInv hstep.1.table (Nat.le_of_lt hbootLen) hprevR hprevW
+      hprevInv hstep.1.table hbootLen hprevR hprevW
       hprevWrite hT hiEq rfl hcurRoot hRM hTM hcurM hspanM hkSeg hnM
       hwriteM hA (by dsimp [n, k]; omega) (by dsimp [n, k]; omega)
       hprevCell

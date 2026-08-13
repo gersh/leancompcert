@@ -88,10 +88,12 @@ theorem indexedWindowRun_bootstrap_complete
     (hcover : ∀ n, n < fuel →
       w + n * c.segLen + c.segLen <
         (bootBound + 1) * (bootBound + 1))
-    (hbootFit : boot.length < c.tableLen)
+    (hbootFit : boot.length ≤ c.tableLen)
     (hfit : ∀ n, n < fuel → ∀ k, k < c.segLen →
-      (rootScanMixed boot bootBound (w + n * c.segLen) k).length <
-        c.tableLen)
+      let ps := rootScanMixed boot bootBound (w + n * c.segLen) k
+      ps.length ≤ c.tableLen ∧
+        (unmarkedBool ps (w + n * c.segLen + k) = true →
+          ps.length < c.tableLen))
     (hcapM : c.rootCap < M) :
     IndexedBootstrapWindowsInv c idx s boot bootBound w fuel := by
   obtain ⟨tail, rfl⟩ := hbootShape

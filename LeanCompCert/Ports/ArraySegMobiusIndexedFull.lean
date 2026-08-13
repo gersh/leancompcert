@@ -486,7 +486,9 @@ theorem indexedProductionRoot_padded_complete
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.bootstrapBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.bootstrapLastTwo h.bootstrapStartWithin h.bootstrapWithin
-    h.bootstrapCap h.bootstrapCover h.bootFit h.bootstrapFit h.rootCapM
+    h.bootstrapCap h.bootstrapCover (Nat.le_of_lt h.bootFit)
+    (fun n hn k hk => ⟨Nat.le_of_lt (h.bootstrapFit n hn k hk),
+      fun _ => h.bootstrapFit n hn k hk⟩) h.rootCapM
   let crossState := indexedWindowRun 0 c (bootFuel + 1) entry
   let crossed := crossingTable c bootBound bootFuel
   have hcross := indexedBootstrapWindows_mixed_complete c 0 entry
@@ -535,6 +537,82 @@ theorem indexedProductionRoot_padded_complete
       hfinal.1.toMachineTableRep
   · simpa only [mainBase, laterW] using hfinal.2.2.2.1
 
+/-- A padded final root window followed by the ordinary production main
+windows.  Keeping the exact final prime table and bound in the schedule makes
+the root-to-main splice independent of how many inert cells padded the last
+root segment. -/
+structure PaddedProductionCoreSchedule (c : Cfg)
+    (bootBound bootFuel laterFuel valid mainFuel delta : Nat) : Prop
+    extends PaddedProductionRootSchedule c bootBound bootFuel laterFuel valid
+      delta where
+  tableLenPos : 0 < c.tableLen
+  spanPos : 0 < c.rootSpan
+  finalPrime : PrimeTableInv
+    (rootScanFrom
+      (rootLaterWindows c (crossingTable c bootBound bootFuel)
+        (laterBase c bootFuel) laterFuel)
+      (laterBase c bootFuel + laterFuel * c.segLen) valid)
+    c.rootCap
+  firstPrimeLeCap : c.firstPrime ≤ c.rootCap
+  finalBoundSqM : c.rootCap * c.rootCap < M
+  segFinalM : c.segLen + c.rootCap < M
+  mainIndexM : c.rootSpan + mainFuel * c.period < M
+  mainBaseM : mainBase c bootFuel laterFuel delta +
+    mainFuel * c.segLen < M
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 1000000 in
+/-- Complete production core for a root schedule whose final segment is
+padded beyond `rootCap`. -/
+theorem indexedPaddedProductionCore_complete
+    (c : Cfg) (bootBound bootFuel laterFuel valid mainFuel delta : Nat)
+    (h : PaddedProductionCoreSchedule c bootBound bootFuel laterFuel valid
+      mainFuel delta) :
+    let rootFuel := bootFuel + 1 + (laterFuel + 1)
+    let out := indexedWindowRun 0 c (rootFuel + mainFuel) (coreEntry c)
+    let ps := rootScanFrom
+      (rootLaterWindows c (crossingTable c bootBound bootFuel)
+        (laterBase c bootFuel) laterFuel)
+      (laterBase c bootFuel + laterFuel * c.segLen) valid
+    (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      MachineTableRep c out ps ∧ out.regs rR = 0 ∧
+      out.regs rW = mainBase c bootFuel laterFuel delta +
+        mainFuel * c.segLen ∧
+      out.regs rZero = 0 := by
+  let rootFuel := bootFuel + 1 + (laterFuel + 1)
+  let rootOut := indexedWindowRun 0 c rootFuel (coreEntry c)
+  let ps := rootScanFrom
+    (rootLaterWindows c (crossingTable c bootBound bootFuel)
+      (laterBase c bootFuel) laterFuel)
+    (laterBase c bootFuel + laterFuel * c.segLen) valid
+  have hroot := indexedProductionRoot_padded_complete c bootBound bootFuel
+    laterFuel valid delta h.toPaddedProductionRootSchedule
+  change
+    (∀ j, j < c.segLen → machineCell c rootOut j = ⟨0, 0⟩) ∧
+      MachineTableRep c rootOut ps ∧ rootOut.regs rR = 0 ∧
+      rootOut.regs rW = mainBase c bootFuel laterFuel delta ∧
+      rootOut.regs rZero = 0 at hroot
+  have hrootIndex : rootFuel * c.period = c.rootSpan := by
+    have hi := h.finalIndex
+    dsimp only [rootFuel]
+    simp only [Nat.add_mul, Nat.one_mul] at hi ⊢
+    omega
+  have hmain := indexedWindowRun_main_complete c c.rootSpan rootOut ps
+    c.rootCap (mainBase c bootFuel laterFuel delta) mainFuel hroot.2.1
+    h.finalPrime h.finalLen hroot.2.2.1 hroot.2.2.2.1
+    hroot.2.2.2.2 hroot.1 (Nat.le_refl _) h.tableLenPos h.tableLenM
+    h.markPos h.markM h.periodM h.mainIndexM h.spanM h.spanPos
+    h.firstPrimePos h.firstPrimeLeLen
+    h.firstPrimeLeCap h.rootCapM
+    h.finalBoundSqM h.segFinalM h.mainBaseM h.arrayM
+  have hcompose : indexedWindowRun 0 c (rootFuel + mainFuel) (coreEntry c) =
+      indexedWindowRun c.rootSpan c mainFuel rootOut := by
+    rw [indexedWindowRun_add]
+    simpa only [rootOut, hrootIndex, Nat.zero_add]
+  dsimp only
+  rw [hcompose]
+  exact hmain
+
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 1000000 in
 /-- Complete execution of the production sieve core, from its compiled
@@ -567,7 +645,9 @@ theorem indexedProductionCore_complete
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.bootstrapBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.bootstrapLastTwo h.bootstrapStartWithin h.bootstrapWithin
-    h.bootstrapCap h.bootstrapCover h.bootFit h.bootstrapFit h.rootCapM
+    h.bootstrapCap h.bootstrapCover (Nat.le_of_lt h.bootFit)
+    (fun n hn k hk => ⟨Nat.le_of_lt (h.bootstrapFit n hn k hk),
+      fun _ => h.bootstrapFit n hn k hk⟩) h.rootCapM
   let crossState := indexedWindowRun 0 c (bootFuel + 1) entry
   let crossW := crossingBase c bootFuel
   let crossed := crossingTable c bootBound bootFuel
