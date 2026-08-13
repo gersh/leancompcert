@@ -367,6 +367,67 @@ theorem body_clean_outputs (k : Nat) (s : AState) (negate : Bool)
   · simpa only [hqHi, hqGate] using hgate.2.1
   · exact hgate.2.2.trans hqarr
 
+theorem body_clean_outputs_gate_one (k : Nat) (s : AState) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hcleanLo :
+      (arun k
+        (arun k s (lift (loadWord
+          (if negate then rInHi else rInLo) negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hcleanHi :
+      let p := arun k s
+        (oneStage (if negate then rInHi else rInLo) rOutLo negate)
+      (arun k
+        (arun k p (lift (loadWord
+          (if negate then rInLo else rInHi) negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hgate : s.regs rGate = 1) :
+    let out := arun k s (body negate)
+    out.regs rOutLo = encodeZ ((s.regs rFactor : Int) *
+        decodeZ (if negate then
+          LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
+        else s.regs rInLo)) ∧
+      out.regs rOutHi = encodeZ ((s.regs rFactor : Int) *
+        decodeZ (if negate then
+          LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
+        else s.regs rInHi)) ∧
+      out.arr = s.arr := by
+  dsimp only
+  have h := body_clean_outputs k s negate hword harray hcleanLo hcleanHi
+  refine ⟨?_, ?_, h.2.2⟩
+  · rw [h.1, hgate, Nat.mul_one,
+      Nat.mod_eq_of_lt
+        (LeanCompCert.Ports.Section413G1Sound.encodeZ_lt_M _)]
+  · rw [h.2.1, hgate, Nat.mul_one,
+      Nat.mod_eq_of_lt
+        (LeanCompCert.Ports.Section413G1Sound.encodeZ_lt_M _)]
+
+theorem body_clean_outputs_gate_zero (k : Nat) (s : AState) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hcleanLo :
+      (arun k
+        (arun k s (lift (loadWord
+          (if negate then rInHi else rInLo) negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hcleanHi :
+      let p := arun k s
+        (oneStage (if negate then rInHi else rInLo) rOutLo negate)
+      (arun k
+        (arun k p (lift (loadWord
+          (if negate then rInLo else rInHi) negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hgate : s.regs rGate = 0) :
+    let out := arun k s (body negate)
+    out.regs rOutLo = 0 ∧ out.regs rOutHi = 0 ∧ out.arr = s.arr := by
+  dsimp only
+  have h := body_clean_outputs k s negate hword harray hcleanLo hcleanHi
+  rw [h.1, h.2.1, hgate, Nat.mul_zero, Nat.zero_mod]
+  exact ⟨rfl, rfl, h.2.2⟩
+
 def program (arrayLen loopCount : Nat) (negate : Bool) : AProgram :=
   { regCount := 328
     arrayLen := arrayLen
@@ -388,6 +449,8 @@ theorem program_wf (arrayLen loopCount : Nat) (negate : Bool) :
 #print axioms oneStage_clean_output
 #print axioms oneStage_clean_output_range
 #print axioms body_clean_outputs
+#print axioms body_clean_outputs_gate_one
+#print axioms body_clean_outputs_gate_zero
 #print axioms program_wf
 
 end LeanCompCert.Ports.Section413WindowCellScale
