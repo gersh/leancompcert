@@ -22,6 +22,7 @@ open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayScalarBlock
+open LeanCompCert.Verified.ArrayFoldBridge
 
 def slots : Nat := 316
 def productionRows : Nat := 99999
@@ -172,6 +173,164 @@ theorem halfStage_outputs (idx : Nat) (s : RegState)
     simp [heven, hroot, hdiv, hpair, Nat.mod_eq_of_lt hq,
       Nat.mod_eq_of_lt hr, show 1 % M = 1 by decide]
 
+/-- Mathematical schedule decoded from one flat loop index. -/
+structure Slot where
+  n : Nat
+  s : Nat
+  q : Nat
+  active : Nat
+  pair : Nat
+  halfQ : Nat
+  halfActive : Nat
+  halfPair : Nat
+  deriving DecidableEq, Repr
+
+def slotAt (idx : Nat) : Slot :=
+  let n := idx / slots + 1
+  let s := idx % slots + 1
+  { n := n
+    s := s
+    q := n / s
+    active := if s * s ≤ n ∧ n % s = 0 then 1 else 0
+    pair := if s * s ≤ n ∧ n % s = 0 ∧ n / s ≠ s then 1 else 0
+    halfQ := (n / 2) / s
+    halfActive := if n % 2 = 0 ∧ s * s ≤ n / 2 ∧ (n / 2) % s = 0
+      then 1 else 0
+    halfPair := if n % 2 = 0 ∧ s * s ≤ n / 2 ∧
+        (n / 2) % s = 0 ∧ (n / 2) / s ≠ s then 1 else 0 }
+
+private theorem srun_stage_frame (idx : Nat) (st : RegState)
+    (stage : List Instr) (r : Nat)
+    (h : ∀ i ∈ stage, sdest i ≠ r) :
+    srun idx st stage r = st r := by
+  apply srun_untouched
+  intro i hi
+  exact h i hi
+
+/-- The fixed compiled scheduling block produces `slotAt idx`.  This theorem
+is symbolic in `idx`; it does not enumerate any production row. -/
+theorem body_outputs (idx : Nat) (st : AState)
+    (hidx : idx < productionRows * slots) :
+    let out := arun idx st body
+    out.regs rN = (slotAt idx).n ∧
+      out.regs rS = (slotAt idx).s ∧
+      out.regs rQ = (slotAt idx).q ∧
+      out.regs rActive = (slotAt idx).active ∧
+      out.regs rPair = (slotAt idx).pair ∧
+      out.regs rHalfQ = (slotAt idx).halfQ ∧
+      out.regs rHalfActive = (slotAt idx).halfActive ∧
+      out.regs rHalfPair = (slotAt idx).halfPair := by
+  dsimp only
+  let a := srun idx st.regs indexStage
+  let b := srun idx a divisorStage
+  have ha := indexStage_outputs idx st.regs hidx
+  have han : a rN = idx / slots + 1 := by simpa [a] using ha.1
+  have has : a rS = idx % slots + 1 := by simpa [a] using ha.2
+  have hnPos : 0 < a rN := by rw [han]; exact Nat.succ_pos _
+  have hnM : a rN < M := by
+    rw [han]
+    have hrow : idx / slots < productionRows := by
+      apply (Nat.div_lt_iff_lt_mul (by decide : 0 < slots)).2
+      simpa [Nat.mul_comm] using hidx
+    simp only [productionRows, M] at hrow ⊢
+    omega
+  have hsPos : 0 < a rS := by rw [has]; exact Nat.succ_pos _
+  have hsM : a rS < M := by
+    rw [has]
+    have hle : idx % slots + 1 ≤ 316 := by
+      have hm := Nat.mod_lt idx (by decide : 0 < slots)
+      simpa only [slots] using Nat.succ_le_of_lt hm
+    exact Nat.lt_of_le_of_lt hle (by decide)
+  have hsSqM : a rS * a rS < M := by
+    rw [has]
+    have hle : idx % slots + 1 ≤ 316 := by
+      have hm := Nat.mod_lt idx (by decide : 0 < slots)
+      simpa only [slots] using Nat.succ_le_of_lt hm
+    exact Nat.lt_of_le_of_lt (Nat.mul_le_mul hle hle) (by decide)
+  have hb := divisorStage_outputs idx a hnPos hnM hsPos hsM hsSqM
+  have hbn : b rN = a rN := by
+    apply srun_stage_frame
+    intro i hi
+    simp only [divisorStage, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+      simp only [sdest, rN] <;> decide
+  have hbs : b rS = a rS := by
+    apply srun_stage_frame
+    intro i hi
+    simp only [divisorStage, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+      simp only [sdest, rS] <;> decide
+  have hbSquare : b rSquare = a rS * a rS := by
+    simp only [b, divisorStage, srun, sdest, sval, denoteOperand, denoteOp,
+      Option.getD_some, RegState.set, rN, rS, rQ, rRem, rSquare, rInRoot,
+      rDivides, rActive, rPair, Nat.reduceEqDiff, if_false, if_true]
+    exact Nat.mod_eq_of_lt hsSqM
+  have hc := halfStage_outputs idx b (by simpa [hbn] using hnM)
+    (by simpa [hbs] using hsPos) (by simpa [hbs] using hsM)
+    (by simpa [hbs] using hbSquare)
+  have hbq : b rQ = (idx / slots + 1) / (idx % slots + 1) := by
+    simpa [b, han, has] using hb.1
+  have hbactive : b rActive =
+      (if (idx % slots + 1) * (idx % slots + 1) ≤ idx / slots + 1 ∧
+        (idx / slots + 1) % (idx % slots + 1) = 0 then 1 else 0) := by
+    simpa [b, han, has] using hb.2.2.1
+  have hbpair : b rPair =
+      (if (idx % slots + 1) * (idx % slots + 1) ≤ idx / slots + 1 ∧
+        (idx / slots + 1) % (idx % slots + 1) = 0 ∧
+        (idx / slots + 1) / (idx % slots + 1) ≠ idx % slots + 1
+      then 1 else 0) := by
+    simpa [b, han, has] using hb.2.2.2
+  have hcq : srun idx b halfStage rHalfQ =
+      (idx / slots + 1) / 2 / (idx % slots + 1) := by
+    simpa [hbn, hbs, han, has] using hc.2.2.1
+  have hcactive : srun idx b halfStage rHalfActive =
+      (if (idx / slots + 1) % 2 = 0 ∧
+        (idx % slots + 1) * (idx % slots + 1) ≤ (idx / slots + 1) / 2 ∧
+        (idx / slots + 1) / 2 % (idx % slots + 1) = 0
+      then 1 else 0) := by
+    simpa [hbn, hbs, han, has] using hc.2.2.2.1
+  have hcpair : srun idx b halfStage rHalfPair =
+      (if (idx / slots + 1) % 2 = 0 ∧
+        (idx % slots + 1) * (idx % slots + 1) ≤ (idx / slots + 1) / 2 ∧
+        (idx / slots + 1) / 2 % (idx % slots + 1) = 0 ∧
+        (idx / slots + 1) / 2 / (idx % slots + 1) ≠ idx % slots + 1
+      then 1 else 0) := by
+    simpa [hbn, hbs, han, has] using hc.2.2.2.2
+  have frameHalf (r : Nat)
+      (hr0 : r ≠ rEvenRem) (hr1 : r ≠ rEven) (hr2 : r ≠ rHalf)
+      (hr3 : r ≠ rHalfQ) (hr4 : r ≠ rHalfRem)
+      (hr5 : r ≠ rHalfDivides) (hr6 : r ≠ rHalfActive)
+      (hr7 : r ≠ rHalfPair) (hr8 : r ≠ rHalfInRoot) :
+      srun idx b halfStage r = b r := by
+    apply srun_stage_frame
+    intro i hi
+    simp only [halfStage, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+      simp only [sdest] <;> omega
+  rw [body, arun_lift]
+  simp only [srun_append]
+  change (srun idx b halfStage rN = _ ∧
+    srun idx b halfStage rS = _ ∧
+    srun idx b halfStage rQ = _ ∧
+    srun idx b halfStage rActive = _ ∧
+    srun idx b halfStage rPair = _ ∧
+    srun idx b halfStage rHalfQ = _ ∧
+    srun idx b halfStage rHalfActive = _ ∧
+    srun idx b halfStage rHalfPair = _)
+  simp only [slotAt]
+  rw [frameHalf rN (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide),
+    frameHalf rS (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide),
+    frameHalf rQ (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide),
+    frameHalf rActive (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide),
+    frameHalf rPair (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide),
+    hbn, hbs, han, has, hbq, hbactive, hbpair, hcq, hcactive, hcpair]
+  simp
+
 def scheduleProgram (arrayLen rows : Nat) : AProgram :=
   { regCount := 328
     arrayLen := arrayLen
@@ -191,6 +350,7 @@ theorem scheduleProgram_wf (arrayLen rows : Nat) :
 #print axioms indexStage_outputs
 #print axioms divisorStage_outputs
 #print axioms halfStage_outputs
+#print axioms body_outputs
 #print axioms scheduleProgram_wf
 
 end LeanCompCert.Ports.Section413WindowSchedule
