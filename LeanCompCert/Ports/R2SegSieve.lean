@@ -175,37 +175,12 @@ def maskAux : Nat := 2 ^ 29 - 1
 its base prime, and whether it is the base prime itself. -/
 def packEntry (v w f : Nat) : Nat := v + w * 2 ^ valBits + f * 2 ^ 63
 
-/-! ## Emit-time number theory
+/-! ## Static artifact data
 
-Everything in this section runs in Lean when the artifact is built.  None of
-it is compiled; it only produces the literals the program carries.
+These definitions construct only the bounded literals carried by the current
+artifact.  They do not evaluate the literature range.  Large tables are an
+explicit migration target for the compiled root-table builder.
 -/
-
-/-- Smallest-prime-factor table for `[0, n]`. -/
-def spfTable (n : Nat) : Array Nat := Id.run do
-  let mut a : Array Nat := Array.range (n + 1)
-  let mut d := 2
-  while d * d ≤ n do
-    if a[d]! == d then
-      let mut m := d * d
-      while m ≤ n do
-        if a[m]! == m then a := a.set! m d
-        m := m + d
-    d := d + 1
-  return a
-
-/-- The distinct prime factors of `n`, in increasing order. -/
-def factorsOf (a : Array Nat) (n : Nat) : List Nat := Id.run do
-  let mut out : Array Nat := #[]
-  let mut m := n
-  let mut fuel := 64
-  while m > 1 && fuel > 0 do
-    let p := a[m]!
-    out := out.push p
-    while m % p == 0 do
-      m := m / p
-    fuel := fuel - 1
-  return out.toList
 
 /-- `v_p(n)`, by division.  Structurally recursive rather than a `while`, so
 that the kernel can unfold it: `classifyList` is evaluated by `decide` in the
@@ -298,16 +273,7 @@ def jumpOf (S n root : Nat) (ps : List Nat) : Nat × Nat :=
   let c := classifyList S n root ps
   (c.1, if c.1 == 4 then 0 else ((c.2.1 * c.2.2) <<< (c.1 % 2)) >>> S)
 
-/-! ## The head, folded exactly at emit time
-
-`[1, lo−1]` is not swept by the artifact — `lo > ⌊√hi⌋` is what makes an
-unmarked cell a prime — so it is folded here, in Lean, with the identical
-fixed-point arithmetic, and its clauses are tested at **every** integer rather
-than at test points only.  That matters at the bottom of the range, where
-`⌊√n⌋` is coarse and the prev-based weakening of clause 1 is not affordable:
-at `n = 2` the majorant is `1.93·√2·log 2 = 1.892` while `⌊√2⌋ = 1` gives
-`1.338`, below the true `R₂*(2) = 1.828`.
--/
+/-! ## Compiled-head seed -/
 
 structure R2Seed where
   d : Nat
@@ -323,46 +289,24 @@ structure R2Seed where
   viol : Nat
   deriving Repr
 
-/-- Fold `[1, top]` exactly, testing both clauses at every `n ≥ 3`.  `root` is
-the small/large split the artifact will use; in the head every prime factor is
-named directly, so it only picks the convention for mode `1`. -/
-def headFold (S top root : Nat) : R2Seed := Id.run do
-  let spf := spfTable top
-  let bias := biasOf S
-  let g := gammaStep S
-  let l2 := ln2Up S
-  let mut d := bias
-  let mut err := 0
-  let mut terms := 0
-  let mut prev := 0
-  let mut sq := 0
-  let mut sq2 := 1
-  let mut ex := 0
-  let mut th := 2
-  let mut ln := 0
-  let mut thr := 0
-  let mut viol := 0
-  for n in [1:top+1] do
-    d := d + g
-    while n ≥ sq2 do
-      sq := sq + 1
-      sq2 := (sq + 1) * (sq + 1)
-    while n ≥ th do
-      ex := ex + 1
-      th := 2 * th
-    let mt := jumpOf S n root (factorsOf spf n)
-    if mt.1 ≠ 4 then
-      if mt.1 % 2 == 1 then d := d + mt.2 else d := d - mt.2
-      err := err + ((ex + 1) * l2) / 2 ^ (S - 4) + 2
-      terms := terms + 1
-      prev := n
-    ln := lnFix S n
-    thr := a193 * sq * ln / 2 ^ 16
-    if n ≥ 3 then
-      if d + err + n > bias + thr then viol := viol + 1
-      if d + thr < bias + err then viol := viol + 1
-  return { d := d, err := err, prev := prev, terms := terms, sq := sq, sq2 := sq2,
-           ex := ex, th := th, ln := ln, thr := thr, viol := viol }
+/-- Closed two-integer prefix used when the compiled segmented machine starts
+at `3`.  This is symbolic initialization, not a range fold: `1` contributes
+one linear step, and `2` contributes one linear step plus its single
+prime-power jump. -/
+def R2Seed.afterTwo (S : Nat) : R2Seed :=
+  let l2fix := lnFix S 2
+  let jump2 := (l2fix * l2fix) >>> S
+  { d := biasOf S + 2 * gammaStep S - jump2
+    err := (2 * ln2Up S) / 2 ^ (S - 4) + 2
+    prev := 2
+    terms := 1
+    sq := 1
+    sq2 := 4
+    ex := 1
+    th := 4
+    ln := l2fix
+    thr := a193 * l2fix / 2 ^ 16
+    viol := 0 }
 
 /-! ## Configuration -/
 
@@ -387,13 +331,18 @@ structure R2Cfg where
   streamCap : Nat
   /-- The mark table, packed one entry to a cell. -/
   table : List Nat
+  /-- Runtime-built tables carry only compact metadata in Lean.  Ordinary
+  literal-table configurations leave these overrides absent. -/
+  tableLenOverride : Option Nat := none
+  firstEntryOverride : Option Nat := none
   deriving Repr
 
 def R2Cfg.hi (c : R2Cfg) : Nat := c.lo + c.segLen * c.segCount - 1
-def R2Cfg.tableLen (c : R2Cfg) : Nat := c.table.length
+def R2Cfg.tableLen (c : R2Cfg) : Nat := c.tableLenOverride.getD c.table.length
 def R2Cfg.root (c : R2Cfg) : Nat := Nat.sqrt c.hi
 def R2Cfg.period (c : R2Cfg) : Nat := c.markSteps + c.segLen + c.logSteps
-def R2Cfg.firstEntry (c : R2Cfg) : Nat := c.table.headD (packEntry 2 0 1)
+def R2Cfg.firstEntry (c : R2Cfg) : Nat :=
+  c.firstEntryOverride.getD (c.table.headD (packEntry 2 0 1))
 def R2Cfg.q0 (c : R2Cfg) : Nat := c.firstEntry % 2 ^ valBits
 def R2Cfg.w0 (c : R2Cfg) : Nat := c.firstEntry / 2 ^ valBits % 2 ^ wtBits
 
@@ -493,9 +442,9 @@ def R2Cfg.tableBase (c : R2Cfg) : Nat := 5 * c.segLen + 1
 def R2Cfg.streamBase (c : R2Cfg) : Nat := c.tableBase + c.tableLen + 1
 def R2Cfg.streamSink (c : R2Cfg) : Nat := c.streamBase + 2 * c.streamCap
 def R2Cfg.resultBase (c : R2Cfg) : Nat := c.streamSink + 2
-/-- Nineteen result cells: the ten the chain reads, then the nine per-class
-violation counters that sum to slot `9`. -/
-def R2Cfg.arrayLen (c : R2Cfg) : Nat := c.resultBase + 19
+/-- Twenty result cells: the eleven-word carry (including `sq2`), then the
+nine per-class violation counters that sum to carry slot `10`. -/
+def R2Cfg.arrayLen (c : R2Cfg) : Nat := c.resultBase + 20
 
 /-! ## Register allocation
 
@@ -1013,10 +962,9 @@ def R2Cfg.epilogue (c : R2Cfg) : List AInstr :=
   , .scalar (.binop rViol .add (.reg rViol) (.reg 345))
   , .scalar (.binop rVTail .add (.reg rVTail) (.reg 345))
   ] ++
-  storeResult c 0 rD ++ storeResult c 1 rErr ++ storeResult c 2 rPrev ++
-  storeResult c 3 rTerms ++ storeResult c 4 rSq ++ storeResult c 5 rEx ++
-  storeResult c 6 rTh ++ storeResult c 7 rLn ++ storeResult c 8 rThr ++
-  storeResult c 9 rViol ++ storeResults c 10 violRegs
+  storeResults c 0
+    [rD, rErr, rPrev, rTerms, rSq, rSq2, rEx, rTh, rLn, rThr, rViol] ++
+  storeResults c 11 violRegs
 
 def r2Program (c : R2Cfg) (s : R2Seed) : AProgram := {
   regCount := regCount
@@ -1083,18 +1031,11 @@ theorem storeResults_all (c : R2Cfg) : ∀ (slot : Nat) (l : List Nat),
 theorem epilogue_all (c : R2Cfg) :
     c.epilogue.all (ainstrWFB regCount) = true :=
   all_append (by rfl)
-    (all_append (all_append (all_append (all_append (all_append (all_append
-      (all_append (all_append (all_append (all_append
-        (storeResult_all c 0 rD (by decide)) (storeResult_all c 1 rErr (by decide)))
-        (storeResult_all c 2 rPrev (by decide)))
-        (storeResult_all c 3 rTerms (by decide)))
-        (storeResult_all c 4 rSq (by decide)))
-        (storeResult_all c 5 rEx (by decide)))
-        (storeResult_all c 6 rTh (by decide)))
-        (storeResult_all c 7 rLn (by decide)))
-        (storeResult_all c 8 rThr (by decide)))
-        (storeResult_all c 9 rViol (by decide)))
-        (storeResults_all c 10 violRegs (by decide)))
+    (all_append
+      (storeResults_all c 0
+        [rD, rErr, rPrev, rTerms, rSq, rSq2, rEx, rTh, rLn, rThr, rViol]
+        (by decide))
+      (storeResults_all c 11 violRegs (by decide)))
 
 /-- **The bridge's side condition.** -/
 theorem r2Program_wf (c : R2Cfg) (s : R2Seed) : (r2Program c s).WF :=
@@ -1116,39 +1057,6 @@ theorem r2Program_compiled (c : R2Cfg) (s : R2Seed) (base : Int)
         (fun m : Verified.MemFragment.MCCState =>
           m.env ⟨(r2Program c s).output + 1⟩) = some ((n : Nat) : Int) :=
   AProgram.evalCC_compile _ (r2Program_wf c s) base hBase n hDenote
-
-/-! ## The reference
-
-`refR2` is the same residue written directly as a Lean fold over `[lo, hi]`,
-classified from a factorisation rather than from the sieve's three planes, and
-is what the emitter compares the artifact against.  It is also what
-`bench/ref_r2.c` computes, in the same fixed point.
--/
-
-/-- `(D, err, terms, prev)` at `hi`, continuing the head at `lo − 1`. -/
-def refR2 (S lo hi root : Nat) (s : R2Seed) : Nat × Nat × Nat × Nat := Id.run do
-  let spf := spfTable hi
-  let g := gammaStep S
-  let l2 := ln2Up S
-  let mut d := s.d
-  let mut err := s.err
-  let mut terms := s.terms
-  let mut prev := s.prev
-  let mut ex := s.ex
-  let mut th := s.th
-  for n in [lo:hi+1] do
-    let mt := jumpOf S n root (factorsOf spf n)
-    if mt.1 ≠ 4 then
-      while n ≥ th do
-        ex := ex + 1
-        th := 2 * th
-      d := d + g * (n - prev)
-      if mt.1 % 2 == 1 then d := d + mt.2 else d := d - mt.2
-      err := err + ((ex + 1) * l2) / 2 ^ (S - 4) + 2
-      terms := terms + 1
-      prev := n
-  d := d + g * (hi - prev)
-  return (d, err, terms, prev)
 
 /-! ## Reference audit
 

@@ -1,0 +1,77 @@
+{
+  "artifact": "LeanCompCert/Ports/R2DenseHead.lean :: r2DenseHeadProgram",
+  "purpose": "Compiled replacement for the former Lean headFold over [3,144999]",
+  "scale": 24,
+  "range": [3, 144999],
+  "memory_policy": {
+    "memory_high": "1300M",
+    "memory_max": "1900M",
+    "memory_swap_max": "0",
+    "lean_threads": 1
+  },
+  "shards": [
+    {
+      "range": [3, 1000],
+      "mode": "compiled-head-full",
+      "source_sha256": "033e37c5978b087cff2ee5be2adf97d490cd270217e78fc8e673df353899b517",
+      "source_bytes": 52714,
+      "compile": {
+        "ccomp_wall_s": 0.19,
+        "ccomp_peak_rss_kb": 31360,
+        "gcc_wall_s": 0.10,
+        "gcc_peak_rss_kb": 31588
+      },
+      "run_peak_rss_kb": 1264,
+      "violations": 0,
+      "carry": [
+        281475517734600,
+        69492,
+        1000,
+        701,
+        31,
+        1024,
+        9,
+        1024,
+        115892902,
+        6933846013,
+        0
+      ]
+    },
+    {
+      "range": [1001, 144999],
+      "mode": "compiled-head",
+      "source_sha256": "37c9b9f7509a93f61af8b28680e2b4a292944ae6fa6dadeaea85fb85846c587b",
+      "source_bytes": 44184,
+      "compile": {
+        "ccomp_wall_s": 0.14,
+        "ccomp_peak_rss_kb": 27548,
+        "gcc_wall_s": 0.07,
+        "gcc_peak_rss_kb": 30628
+      },
+      "run": {
+        "ccomp_wall_s": 0.14,
+        "ccomp_user_s": 0.14,
+        "ccomp_peak_rss_kb": 6876,
+        "gcc_wall_s": 0.11,
+        "gcc_user_s": 0.10,
+        "gcc_peak_rss_kb": 6928
+      },
+      "violations": 0,
+      "carry": [
+        281482090502886,
+        10983953,
+        144999,
+        61171,
+        380,
+        145161,
+        17,
+        262144,
+        199388523,
+        146230987829,
+        0
+      ]
+    }
+  ],
+  "cross_compiler_agreement": true,
+  "note": "The second shard consumes the exact eleven-word compiled receipt of the first. Both hosted drivers returned PASS with every failure-class counter zero. Lean constructs and proves the fixed program; it does not fold this numerical range."
+}

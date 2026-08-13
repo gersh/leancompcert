@@ -1,0 +1,45 @@
+{
+  "artifact": "LeanCompCert/Ports/R2RuntimeTable.lean",
+  "purpose": "Build the 13,415-entry production R2 prime/log table in compiled code",
+  "configuration": {
+    "root": 144914,
+    "trial_divisor_cap": 380,
+    "scale": 24,
+    "expected_prime_count": 13415,
+    "mark_iterations": 54922027,
+    "mark_body_instructions": 14,
+    "pack_iterations": 3477912,
+    "pack_body_instructions": 70
+  },
+  "memory_policy": {
+    "memory_high": "1300M",
+    "memory_max": "1900M",
+    "memory_swap_max": "0",
+    "lean_threads": 1
+  },
+  "compile": {
+    "ccomp_wall_s": 0.06,
+    "ccomp_peak_rss_kb": 18724,
+    "gcc_wall_s": 0.04,
+    "gcc_peak_rss_kb": 27204
+  },
+  "run": {
+    "ccomp_wall_s": 0.24,
+    "ccomp_user_s": 0.24,
+    "ccomp_peak_rss_kb": 2456,
+    "gcc_wall_s": 0.11,
+    "gcc_user_s": 0.11,
+    "gcc_peak_rss_kb": 2536
+  },
+  "result": {
+    "count": 13415,
+    "first_packed": 9622944148755578882,
+    "first_decoded": [2, 11629079, 1],
+    "last_packed": 16073911806745261571,
+    "last_decoded": [144899, 199376948, 1],
+    "sentinel": 1,
+    "fnv1a_table_and_sentinel": 16301884409418920426
+  },
+  "cross_compiler_agreement": true,
+  "status": "The two compiled construction stages are implemented and independently well-formed. Their shared-memory composition with the production sweep is the active proof task; this prototype is not yet a literature-atom discharge."
+}

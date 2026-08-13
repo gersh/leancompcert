@@ -1037,11 +1037,30 @@ seconds / 574,064 KiB peak RSS**; the focused target took **1.34 seconds /
 621,564 KiB peak RSS**, with one worker and no swap.  Its public carry
 theorems contain no `sorryAx` and close with only `propext` and `Quot.sound`.
 
-One architectural debt remains explicit: the emitter currently obtains the
-small head seed `[1, lo-1]` from `headFold` in Lean before emitting the large
-compiled sweep.  That is finite numerical work and must be moved behind the
-same verified compiled-code/receipt boundary before this route discharges the
-literature atom.  It is not being counted as a Lean proof.
+The former Lean-evaluated head is now retired from the emitter.  The new
+`R2DenseHead` program streams every integer and performs the exact low-range
+checks in compiled code.  Two receipt-linked shards cover `[3,1000]` and
+`[1001,144999]`; CompCert and GCC agree on every result word and every failure
+counter is zero.  The second shard takes **0.14 s / 6,876 KiB** under CompCert
+and **0.11 s / 6,928 KiB** under GCC.  Its final eleven-word receipt begins
+`(281482090502886, 10983953, 144999, 61171, ...)` and is now mandatory as the
+carry-in to a production high-range artifact.  Calling the emitter without a
+compiled predecessor receipt fails closed; there is no `headFold` fallback.
+The complete commands, hashes, limits, timings, and carries are pinned in
+`bench/results/manifests/r2star_compiled_head_144999.json`.
+
+The production prime/log table has also moved off the Lean evaluator in
+`R2RuntimeTable`.  A compiled composite-mark pass followed by a compiled
+24-round fixed-log packing pass produces all **13,415** entries through
+`144,914`.  CompCert and GCC agree on the full table-and-sentinel hash
+`16301884409418920426`.  CompCert compiles the 84-instruction construction
+artifact in **0.06 s / 18,724 KiB** and runs it in **0.24 s / 2,456 KiB**;
+the former literal route took about four minutes of Lean emission and made
+CompCert consume roughly 9.3 GiB.  The detailed receipt is
+`bench/results/manifests/r2star_runtime_table.json`.  The remaining proof task
+is the explicit shared-memory pipeline composition with the production sweep;
+until that theorem is complete, this benchmark is not counted as discharging
+the literature atom.
 
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
