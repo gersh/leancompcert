@@ -39,11 +39,11 @@ theorem logAfterFinalEventBody_frame (c : R2Cfg) (k : Nat) (s : AState) :
 
 /-- End-to-end final body result for one source-classified logarithmic event.
 All factor selection and signed event arithmetic are derived from the packed
-source payload.  The explicit `d` hypothesis remains the source value of the
-intervening linear/majorant update immediately before the literal commit. -/
+source payload.  The intervening linear/majorant update is derived from its
+literal instructions and the incoming `d` and `prev` registers. -/
 theorem logBody_continue_final_commit_run
     (c : R2Cfg) (k : Nat) (s : AState)
-    (ec wc n first aux mode e th viol vlog j d err terms : Nat)
+    (ec wc n first aux mode e th viol vlog j prev d err terms : Nat)
     (positive : Bool) (u v : Nat)
     (hfactors : ClassResult.jumpFactors
       ⟨true, mode, first, aux⟩
@@ -53,6 +53,7 @@ theorem logBody_continue_final_commit_run
     (hlive : ec < wc) (hbase : c.streamBase < M)
     (haddr : (ec <<< 1) + c.streamBase + 1 < M)
     (hne : s.regs rNe = n)
+    (hprev : s.regs rPrev = prev) (hd : s.regs rD = d)
     (hpl : s.regs rPl =
       first + (aux <<< wtBits) + (mode <<< 57))
     (hmode : mode < 2)
@@ -85,26 +86,27 @@ theorem logBody_continue_final_commit_run
     (hshift : ((u * v) <<< (if positive then 1 else 0)) < M)
     (henum : (e + 1) * ln2Up c.sc < M)
     (hcharge : ((e + 1) * ln2Up c.sc / 2 ^ (c.sc - 4)) + 2 < M)
-    (hd : let before := arun k s (logBeforeFinalEventBody c)
-      (arun k
-        (arun k
-          (arun k before (logPayloadDecodeBody ++ logFactorBody))
-          (logJumpErrorBody c.sc (ln2Up c.sc)))
-        (logBetweenJumpAndCommitBody c)).regs rD = d)
+    (hprevn : prev < n) (hgM : gammaStep c.sc < M)
+    (hgap : n - prev < 65536)
+    (hprodM : (n - prev - 1) * gammaStep c.sc < M)
+    (hlinFirstM : d + (n - prev - 1) * gammaStep c.sc < M)
+    (hlinearM : d + (n - prev) * gammaStep c.sc < M)
     (hsub : positive = false →
-      ((u * v) <<< (if positive then 1 else 0)) / 2 ^ c.sc ≤ d)
+      ((u * v) <<< (if positive then 1 else 0)) / 2 ^ c.sc ≤
+        d + (n - prev) * gammaStep c.sc)
     (hdadd : positive = true →
-      d + ((u * v) <<< (if positive then 1 else 0)) / 2 ^ c.sc < M)
-    (hdM : d < M)
+      d + (n - prev) * gammaStep c.sc +
+        ((u * v) <<< (if positive then 1 else 0)) / 2 ^ c.sc < M)
     (htermM : ((u * v) <<< (if positive then 1 else 0)) /
       2 ^ c.sc < M)
     (herradd : err +
       (((e + 1) * ln2Up c.sc) / 2 ^ (c.sc - 4) + 2) < M)
     (htermsadd : terms + 1 < M) :
+    let linear := d + (n - prev) * gammaStep c.sc
     let term := ((u * v) <<< (if positive then 1 else 0)) / 2 ^ c.sc
     let charge := ((e + 1) * ln2Up c.sc) / 2 ^ (c.sc - 4) + 2
     let out := arun k s c.logBody
-    out.regs rD = (if positive then d + term else d - term) ∧
+    out.regs rD = (if positive then linear + term else linear - term) ∧
       out.regs rErr = err + charge ∧ out.regs rTerms = terms + 1 ∧
       out.arr = s.arr := by
   let payload := first + (aux <<< wtBits) + (mode <<< 57)
@@ -119,18 +121,23 @@ theorem logBody_continue_final_commit_run
     hj hjfin hS62 hSM helog heM hthM hvM hvlM hsmall
   dsimp only at hp
   rcases hp with
-    ⟨hpPl, hpEx, hp242, hp243, hp262, hpFin, hpErr, hpTerms, hpArr⟩
+    ⟨hpNe, hpPl, hpEx, hp242, hp243, hp262, hpFin, hpErr, hpTerms, hpArr⟩
   have heEvent : before.regs rEx = e := hpEx.trans helog.symm
+  have hpPrev : before.regs rPrev = prev :=
+    (arun_frame k rPrev (logBeforeFinalEventBody c) (by rfl) s).trans hprev
+  have hpD : before.regs rD = d :=
+    (arun_frame k rD (logBeforeFinalEventBody c) (by rfl) s).trans hd
   have hp243' : before.regs 243 = if 2 ≤ mode then 1 else 0 := by
     rw [hp243]
     simp [show ¬2 ≤ mode by omega]
   have he1 : e + 1 < M := heM
-  have hevent := logFinalEventBody_run c k before first aux mode
-    (LeanCompCert.Ports.PsiSegSieve.lnFix c.sc n) e d err terms positive u v
+  have hevent := logFinalEventBody_linear_run c k before first aux mode
+    (LeanCompCert.Ports.PsiSegSieve.lnFix c.sc n) e n prev d err terms positive u v
     hfactors (Nat.le_of_lt (Nat.lt_trans hmode (by decide))) hmode0 hfirst
     haux29 hpPl hp242 hp243' hp262 haux hlnM hfirstM hauxM hsumM heEvent
-    hpFin hpErr hpTerms hSM hSsub hl2 huv hshift he1 henum hcharge hd hsub
-    hdadd hdM htermM herradd htermsadd
+    hpFin hpNe hpPrev hpD hpErr hpTerms hSM hSsub hl2 huv hshift he1
+    henum hcharge hprevn hnM hgM hgap hprodM hlinFirstM hlinearM hsub
+    hdadd htermM herradd htermsadd
   dsimp only at hevent
   let committed := arun k before (logFinalEventBody c)
   have htail := logAfterFinalEventBody_frame c k committed

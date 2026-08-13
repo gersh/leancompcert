@@ -55,7 +55,8 @@ theorem logBeforeFinalEventBody_continue_run
     (hvM : viol + 1 < M) (hvlM : vlog + 1 < M)
     (hsmall : logFix c.sc n < 2 ^ 30) :
     let out := arun k s (logBeforeFinalEventBody c)
-    out.regs rPl = payload ∧ out.regs rEx = Nat.log2 n ∧
+    out.regs rNe = n ∧ out.regs rPl = payload ∧
+      out.regs rEx = Nat.log2 n ∧
       out.regs 242 = mode ∧ out.regs 243 = 0 ∧
       out.regs 262 = LeanCompCert.Ports.PsiSegSieve.lnFix c.sc n ∧
       out.regs 247 = 1 ∧ out.regs rErr = err ∧
@@ -94,7 +95,8 @@ theorem logBeforeFinalEventBody_continue_run
     simpa only [hjfin, if_pos] using hp.2.2.1
   rw [logBeforeFinalEventBody_eq_stages, arun_append]
   exact
-    ⟨(frameFinal rPl (by rfl)).trans hstate.2.1,
+    ⟨(frameFinal rNe (by rfl)).trans hstate.1,
+     (frameFinal rPl (by rfl)).trans hstate.2.1,
      (frameFinal rEx (by rfl)).trans hpEx,
      (frameFinal 242 (by rfl)).trans hmodeRun.1,
      (frameFinal 243 (by rfl)).trans hmodeRun.2.1,

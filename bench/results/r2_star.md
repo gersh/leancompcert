@@ -1004,9 +1004,28 @@ target took **1.03 seconds / 592,840 KiB**, all under the one-worker 2/3 GiB
 no-swap cap.  Trust prints contain only `propext`, `Classical.choice`, and
 `Quot.sound`; literal stage identities are axiom-free.  A direct attempt to
 normalize the intervening linear/majorant update expanded past 2.6 GiB, so it
-was stopped and not admitted.  The retained theorem names that source
-invariant explicitly as the post-linear accumulator `d`; it is a theorem
-hypothesis rather than a trust declaration.
+was stopped and not admitted.
+
+That last intermediate hypothesis has now been eliminated without performing
+the computation in Lean.  `R2SegLogLinear` splits the 42-instruction block
+into two tiny literal arithmetic islands and register-only frames, proving
+that it advances `rD` from `d` to
+`d + (n-prev) * gammaStep`.  The result is threaded through the complete
+payload event and final log body, so the public final-commit theorem derives
+the post-linear value from the executable state.  Fresh one-worker/no-swap
+checks under the 1,900 MiB hard cap were:
+
+| source check | elapsed | peak RSS | trust closure |
+|---|---:|---:|---|
+| 42-instruction linear block and commit bridge | 0.45 s | 563,652 KiB | `propext`, `Quot.sound` |
+| complete payload-to-commit event | 0.54 s | 557,004 KiB | `propext`, `Classical.choice`, `Quot.sound` |
+| complete 158-instruction final log body | 0.89 s | 572,648 KiB | `propext`, `Classical.choice`, `Quot.sound` |
+
+The cold focused build of the new linear module and its dependency cone took
+27.48 seconds at 659,928 KiB peak.  No check used swap or reported a memory
+limit event.  This is the intended architecture: the production sweep stays
+in CompCert-compiled code; Lean checks small symbolic instruction islands and
+their composition only.
 
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved

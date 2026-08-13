@@ -1,4 +1,5 @@
 import LeanCompCert.Ports.R2SegLogPayload
+import LeanCompCert.Ports.R2SegLogLinear
 
 /-!
 # Complete finished-event commit in the `R₂*` log phase
@@ -105,7 +106,85 @@ theorem logFinalEventBody_run (c : R2Cfg) (k : Nat) (s : AState)
   exact ⟨hjump.1, hjump.2.1, hjump.2.2.1,
     hjump.2.2.2.trans hfactor.2⟩
 
+/-- Finished-event composition with the linear accumulator derived from the
+literal instruction stream, rather than supplied as an external hypothesis.
+-/
+theorem logFinalEventBody_linear_run (c : R2Cfg) (k : Nat) (s : AState)
+    (first aux mode lnN e n prev d err terms : Nat)
+    (positive : Bool) (u v : Nat)
+    (hfactors : ClassResult.jumpFactors
+      ⟨true, mode, first, aux⟩ lnN = (positive, u, v))
+    (hmode : mode ≤ 3) (hmode0 : mode = 0 → first = 0)
+    (hfirst : first < 2 ^ wtBits) (haux29 : aux < 2 ^ 29)
+    (hpl : s.regs rPl = first + (aux <<< wtBits) + (mode <<< 57))
+    (h242 : s.regs 242 = mode)
+    (h243 : s.regs 243 = if 2 ≤ mode then 1 else 0)
+    (h262 : s.regs 262 = lnN)
+    (haux : aux ≤ lnN) (hlnM : lnN < M)
+    (hfirstM : first < M) (hauxM : aux < M)
+    (hsumM : first + (lnN - aux) < M)
+    (he : s.regs rEx = e) (hfin : s.regs 247 = 1)
+    (hne : s.regs rNe = n) (hprev : s.regs rPrev = prev)
+    (hd : s.regs rD = d)
+    (herr : s.regs rErr = err) (hterms : s.regs rTerms = terms)
+    (hS : c.sc < M) (hSm4 : c.sc - 4 < M) (hl2 : ln2Up c.sc < M)
+    (huv : u * v < M)
+    (hshift : ((u * v) <<< (if positive then 1 else 0)) < M)
+    (he1 : e + 1 < M) (henum : (e + 1) * ln2Up c.sc < M)
+    (hcharge : ((e + 1) * ln2Up c.sc / 2 ^ (c.sc - 4)) + 2 < M)
+    (hprevn : prev < n) (hnM : n < M)
+    (hgM : gammaStep c.sc < M) (hgap : n - prev < 65536)
+    (hprodM : (n - prev - 1) * gammaStep c.sc < M)
+    (hlinFirstM : d + (n - prev - 1) * gammaStep c.sc < M)
+    (hlinearM : d + (n - prev) * gammaStep c.sc < M)
+    (hsub : positive = false →
+      ((u * v) <<< (if positive then 1 else 0)) / 2 ^ c.sc ≤
+        d + (n - prev) * gammaStep c.sc)
+    (hdadd : positive = true →
+      d + (n - prev) * gammaStep c.sc +
+        ((u * v) <<< (if positive then 1 else 0)) / 2 ^ c.sc < M)
+    (htermM : ((u * v) <<< (if positive then 1 else 0)) /
+      2 ^ c.sc < M)
+    (herradd : err +
+      (((e + 1) * ln2Up c.sc) / 2 ^ (c.sc - 4) + 2) < M)
+    (htermsadd : terms + 1 < M) :
+    let linear := d + (n - prev) * gammaStep c.sc
+    let term := ((u * v) <<< (if positive then 1 else 0)) / 2 ^ c.sc
+    let charge := ((e + 1) * ln2Up c.sc) / 2 ^ (c.sc - 4) + 2
+    let out := arun k s (logFinalEventBody c)
+    out.regs rD = (if positive then linear + term else linear - term) ∧
+      out.regs rErr = err + charge ∧ out.regs rTerms = terms + 1 ∧
+      out.arr = s.arr := by
+  let factored := arun k s (logPayloadDecodeBody ++ logFactorBody)
+  let afterJump := arun k factored
+    (logJumpErrorBody c.sc (ln2Up c.sc))
+  let linear := d + (n - prev) * gammaStep c.sc
+  have frameFactor (r : Nat)
+      (hw : writes r (logPayloadDecodeBody ++ logFactorBody) = false) :
+      factored.regs r = s.regs r :=
+    arun_frame k r (logPayloadDecodeBody ++ logFactorBody) hw s
+  have frameJump (r : Nat)
+      (hw : writes r (logJumpErrorBody c.sc (ln2Up c.sc)) = false) :
+      afterJump.regs r = factored.regs r :=
+    arun_frame k r (logJumpErrorBody c.sc (ln2Up c.sc)) hw factored
+  have hlinear :
+      (arun k afterJump (logBetweenJumpAndCommitBody c)).regs rD = linear :=
+    logBetweenJumpAndCommitBody_linear_run c k afterJump n prev d
+      ((frameJump rNe (by rfl)).trans ((frameFactor rNe (by rfl)).trans hne))
+      ((frameJump rPrev (by rfl)).trans
+        ((frameFactor rPrev (by rfl)).trans hprev))
+      ((frameJump rD (by rfl)).trans ((frameFactor rD (by rfl)).trans hd))
+      ((frameJump 247 (by rfl)).trans ((frameFactor 247 (by rfl)).trans hfin))
+      hprevn hnM hgM hgap hprodM hlinFirstM hlinearM
+  have hrun := logFinalEventBody_run c k s first aux mode lnN e linear err
+    terms positive u v hfactors hmode hmode0 hfirst haux29 hpl h242 h243
+    h262 haux hlnM hfirstM hauxM hsumM he hfin herr hterms hS hSm4 hl2
+    huv hshift he1 henum hcharge hlinear hsub hdadd hlinearM htermM
+    herradd htermsadd
+  simpa only [linear] using hrun
+
 #print axioms logFinalEventBody_eq_stages
 #print axioms logFinalEventBody_run
+#print axioms logFinalEventBody_linear_run
 
 end LeanCompCert.Ports.R2SegSieve
