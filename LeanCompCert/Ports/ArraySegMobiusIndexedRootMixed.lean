@@ -111,7 +111,7 @@ theorem indexedBodyRun_mixed_root_acc_prefix
     (hwBoot : w - 1 ≤ bootBound)
     (hfuelCap : w + fuel - 1 ≤ c.rootCap)
     (hcover : w + fuel ≤ (bootBound + 1) * (bootBound + 1))
-    (hbootLen : boot.length < c.tableLen)
+    (hbootLen : boot.length ≤ c.tableLen)
     (hfit : ∀ k, k < fuel →
       let ps := rootScanMixed boot bootBound w k
       ps.length ≤ c.tableLen ∧
@@ -198,7 +198,7 @@ theorem indexedBodyRun_mixed_root_acc_prefix
             simpa [cur, hcurEq, hbound] using hkPrefix.table
           have ho := arun_coreBody_root_acc_one_retain c curIdx prev boot
             bootBound (c.markSteps + k) w (c.primeBase + boot.length) k
-            hcurrent (Nat.le_of_lt hbootLen) hprevR hprevW
+            hcurrent hbootLen hprevR hprevW
             (by simpa [cur, hcurEq] using hprevWrite) hT hiEq
             (by dsimp [n] at hnOne; omega) hcurRoot hRM hTM hPM hcurM
             hspanM hcurNe hkSeg hnM hnextPeriod hcapM hA hkPrefix.zero
@@ -219,7 +219,7 @@ theorem indexedBodyRun_mixed_root_acc_prefix
               simpa [cur, hcurEq, hbound] using hkPrefix.table
             have hb := arun_coreBody_root_acc_bootstrap_retain c curIdx prev
               boot bootBound (c.markSteps + k) w (c.primeBase + boot.length)
-              k n hcurrent (Nat.le_of_lt hbootLen) hprevR hprevW
+              k n hcurrent hbootLen hprevR hprevW
               (by simpa [cur, hcurEq] using hprevWrite) hT hiEq rfl
               hcurRoot hRM hTM hPM hcurM hspanM hcurNe hkSeg hnM
               hnextPeriod (by omega) hnBoot (by omega) hcapM hA
@@ -260,7 +260,7 @@ theorem indexedBodyRun_mixed_root_acc_prefix
           exact BootstrapTableView.one_retain c curIdx prev boot
             (c.markSteps + k) w (c.primeBase + boot.length) k
             hkPrefix.bootstrap (by simpa [out, hnextEq] using hstep.1.table)
-            (Nat.le_of_lt hbootLen) hprevR hprevW
+            hbootLen hprevR hprevW
             (by simpa [cur, hcurEq] using hprevWrite) hT hiEq
             (by dsimp [n] at hnOne; omega) hcurRoot hRM hTM hcurM hspanM
             hkSeg hnM (by simpa [cur, hcurEq] using hwriteM) hcapM hA
@@ -282,7 +282,7 @@ theorem indexedBodyRun_mixed_root_acc_prefix
               bootBound (c.markSteps + k) w (c.primeBase + boot.length) k n
               hkPrefix.bootstrap hcurrent
               (by simpa [out, hnextEq] using hstep.1.table)
-              (Nat.le_of_lt hbootLen) hprevR hprevW
+              hbootLen hprevR hprevW
               (by simpa [cur, hcurEq] using hprevWrite) hT hiEq rfl
               hcurRoot hRM hTM hcurM hspanM hkSeg hnM
               (by simpa [cur, hcurEq] using hwriteM) hA (by omega) hnBoot
@@ -304,7 +304,7 @@ theorem indexedBodyRun_mixed_root_acc_prefix
             exact BootstrapTableView.next_rootTableStep c curIdx prev boot cur n
               n (c.markSteps + k) w (c.primeBase + cur.length) k
               hkPrefix.bootstrap (rootScanMixed_has_prefix boot bootBound w k)
-              hc.1 hnM (Nat.le_of_lt hbootLen) hprevR hprevW hprevWrite hT
+              hc.1 hnM hbootLen hprevR hprevW hprevWrite hT
               hiEq hcurRoot hRM hTM hcurM hspanM hkSeg hnM hwriteM hA
               hc.2.2.2.1
       rw [indexedBodyRun_succ]
@@ -362,7 +362,8 @@ theorem indexedBodyRun_mixed_root_acc_padded_transition
       (indexedBodyRun idx c c.segLen s).regs rZero = 0 := by
   have hpref := indexedBodyRun_mixed_root_acc_prefix c idx valid s boot
     bootBound w hInv hView hR hW hzero hcells hvalidLt (by omega) hwPos
-    hboot2 hwBoot (by omega) hcover hbootLen hfit hTM hPM hspanM hcapM hA
+    hboot2 hwBoot (by omega) hcover (Nat.le_of_lt hbootLen) hfit hTM hPM
+    hspanM hcapM hA
   let mid := indexedBodyRun idx c valid s
   let capTable := rootScanMixed boot bootBound w valid
   have hmax : max bootBound (w + valid - 1) = c.rootCap := by
@@ -473,7 +474,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_transition
   have hkSucc : k + 1 = c.segLen := by omega
   have hpref := indexedBodyRun_mixed_root_acc_prefix c idx k s boot
     bootBound w hInv hView hR hW hzero hcells hkSeg (by omega) hwPos
-    hboot2 hwBoot (by omega) (by omega) hbootLen
+    hboot2 hwBoot (by omega) (by omega) (Nat.le_of_lt hbootLen)
     (fun q hq => hfit q (by omega)) hTM hPM hspanM hcapM hA
   let prev := indexedBodyRun idx c k s
   let curIdx := idx + k
@@ -579,7 +580,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_wrap
   have hkSucc : k + 1 = c.segLen := by omega
   have hpref := indexedBodyRun_mixed_root_acc_prefix c idx k s boot
     bootBound w hInv hView hR hW hzero hcells hkSeg (by omega) hwPos
-    hboot2 hwBoot (by omega) (by omega) hbootLen
+    hboot2 hwBoot (by omega) (by omega) (Nat.le_of_lt hbootLen)
     (fun q hq => hfit q (by omega))
     hTM hPM hspanM hcapM hA
   let prev := indexedBodyRun idx c k s
@@ -690,7 +691,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_bootstrap_wrap
   have hkSucc : k + 1 = c.segLen := by omega
   have hpref := indexedBodyRun_mixed_root_acc_prefix c idx k s boot
     bootBound w hInv hView hR hW hzero hcells hkSeg (by omega) hwPos
-    hboot2 hwBoot (by omega) (by omega) hbootLen
+    hboot2 hwBoot (by omega) (by omega) (Nat.le_of_lt hbootLen)
     (fun q hq => ⟨Nat.le_of_lt (hfit q (by omega)),
       fun _ => hfit q (by omega)⟩) hTM hPM hspanM hcapM hA
   let prev := indexedBodyRun idx c k s

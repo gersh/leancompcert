@@ -1714,6 +1714,63 @@ theorem arun_coreBody_root_acc_bootstrap_wrap
     hn2 hnCap hcapM hwrap hwriteNextM hwNextM hbit'
   exact ⟨hc.1, hc.2.1, hc.2.2.1, hp.2.1, hp.2.2, hc.2.2.2.2⟩
 
+/-- A bootstrap-covered candidate on the final root endpoint retains the
+table and performs the root-to-main transition. -/
+theorem arun_coreBody_root_acc_bootstrap_transition
+    (c : Cfg) (idx : Nat) (s : AState)
+    (boot : List Nat) (bootBound r w write i n delta : Nat)
+    (hInv : RootTableInv c s boot bootBound)
+    (hLen : boot.length ≤ c.tableLen)
+    (hR : s.regs rR = r) (hW : s.regs rW = w)
+    (hWrite : s.regs rWrite = write)
+    (hT : c.markSteps ≤ s.regs rR)
+    (hiEq : r - c.markSteps = i) (hn : n = w + i)
+    (hroot : idx < c.rootSpan)
+    (hRM : r < M) (hTM : c.markSteps < M) (hPM : c.period < M)
+    (hidxM : idx < M) (hspanPos : 0 < c.rootSpan)
+    (hspanM : c.rootSpan < M) (hidx : idx = c.rootSpan - 1)
+    (hi : i < c.segLen) (hwM : w + i < M)
+    (hwrap : r + 1 = c.period)
+    (hn2 : 2 ≤ n) (hnBoot : n ≤ bootBound) (hnCap : n ≤ c.rootCap)
+    (hcapM : c.rootCap < M) (hA : c.arrayLen < M)
+    (hzero : s.regs rZero = 0)
+    (hcell : machineCell c s i = rootCellFold boot n)
+    (hDelta : c.wDelta = delta) (hDeltaM : delta < M) :
+    RootTableInv c (arun idx s c.coreBody) boot bootBound ∧
+      machineCell c (arun idx s c.coreBody) i = ⟨0, 0⟩ ∧
+      (∀ j, j < c.segLen → j ≠ i →
+        machineCell c (arun idx s c.coreBody) j = machineCell c s j) ∧
+      (arun idx s c.coreBody).regs rR = 0 ∧
+      (arun idx s c.coreBody).regs rW =
+        (w + ((c.segLen + delta) % M)) % M ∧
+      (arun idx s c.coreBody).regs rZero = 0 := by
+  have hc := arun_coreBody_root_acc_bootstrap_table_cells c idx s boot
+    bootBound r w write i n hInv hLen hR hW hWrite hT hiEq hn hroot hRM
+    hTM hidxM hspanM hi hwM hn2 hnBoot hnCap hcapM hA hzero hcell
+  have hwriteEq : write = c.primeBase + boot.length := by
+    rw [← hInv.cursor, hWrite]
+  have hwriteNextM : write + 1 < M := by
+    have hend : c.primeBase + c.tableLen < c.arrayLen := by
+      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+      omega
+    rw [hwriteEq]
+    omega
+  have hmarked :
+      ¬LeanCompCert.Ports.ArraySegMobiusPrimeInvariant.UnmarkedBy boot n :=
+    not_unmarked_of_primeTableInv_le boot bootBound n hInv.primeTable hn2
+      hnBoot
+  have hbool : unmarkedBool boot n = false :=
+    Bool.eq_false_iff.mpr (fun ht =>
+      hmarked ((unmarkedBool_eq_true_iff boot n).mp ht))
+  have hbit' : (rootStoreInput c idx s).regs 67 =
+      if unmarkedBool boot n then 1 else 0 := by
+    rw [hc.2.2.2.1]
+    simp [hbool]
+  have hp := arun_coreBody_root_acc_transition c idx s boot n r w write i
+    delta hR hW hWrite hT hiEq hn hRM hTM hPM hidxM hspanPos hspanM
+    hidx hi hwM hn2 hnCap hcapM hwrap hwriteNextM hDelta hDeltaM hbit'
+  exact ⟨hc.1, hc.2.1, hc.2.2.1, hp.2.1, hp.2.2, hc.2.2.2.2⟩
+
 /-- Cursor-independent effects of a later sequential root candidate.  This
 factorization is shared by interior, ordinary-wrap, and last-root-transition
 endpoints; it exposes the exact finite candidate bit needed by the separate

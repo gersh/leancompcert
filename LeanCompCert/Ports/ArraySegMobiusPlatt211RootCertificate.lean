@@ -881,11 +881,215 @@ theorem row_historicalSingleCompleteSchedule (row : Row)
       deltaEq := rfl
       deltaM := hdeltaM }
 
+/-- Restate the uniform compiled table certificate using the literal
+historical configuration.  The root-only certificate changed segmentation
+and capacity, but deliberately retained this bootstrap list and fold. -/
+theorem row_historicalRoot_primeTable_closed (row : Row)
+    (hrow : row ∈ rows) :
+    let c := rowCfg row
+    let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+    PrimeTableInv ps (max row.bootBound c.rootCap) ∧
+      ps.length = c.tableLen := by
+  have hcert := row_root_primeTable_closed row hrow
+  simpa only [rootOnlyCfg, rowCfg, Cfg.tableLen] using hcert
+
+theorem row_historicalRoot_primeTable_regular (row : Row)
+    (hrow : row ∈ rows) (hbootCap : row.bootBound ≤ row.rootCap) :
+    let c := rowCfg row
+    let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+    PrimeTableInv ps c.rootCap ∧ ps.length = c.tableLen := by
+  have hcert := row_historicalRoot_primeTable_closed row hrow
+  have hmax : max row.bootBound (rowCfg row).rootCap =
+      (rowCfg row).rootCap := by
+    apply Nat.max_eq_right
+    simpa only [rowCfg] using hbootCap
+  simpa only [hmax] using hcert
+
+/-- Every historical one-root row is either padded or ends exactly at its
+root cap. -/
+def historicalSingleShape (row : Row) : Prop :=
+  row.rootCount = 1 ∧ row.bootBound ≤ row.rootCap →
+    (row.bootBound ≤ row.rootCap ∧ row.rootCap < row.segLen) ∨
+    (row.bootBound < row.rootCap ∧ row.rootCap = row.segLen)
+
+instance (row : Row) : Decidable (historicalSingleShape row) := by
+  unfold historicalSingleShape
+  infer_instance
+
+def historicalSingleShapeOK (row : Row) : Bool :=
+  decide (historicalSingleShape row)
+
+def historicalSingleShapesOK : Bool := rows.all historicalSingleShapeOK
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 4000000 in
+theorem historicalSingleShapes_ok : historicalSingleShapesOK = true := by
+  decide
+
+theorem row_historicalSingleShape (row : Row) (hrow : row ∈ rows)
+    (hroot : row.rootCount = 1) (hbootCap : row.bootBound ≤ row.rootCap) :
+    (row.bootBound ≤ row.rootCap ∧ row.rootCap < row.segLen) ∨
+    (row.bootBound < row.rootCap ∧ row.rootCap = row.segLen) := by
+  have hbool := (List.all_eq_true.mp historicalSingleShapes_ok) row hrow
+  exact (of_decide_eq_true hbool) ⟨hroot, hbootCap⟩
+
+/-- Complete symbolic execution of the actual historical root phase for
+every one-root row, with its tightly allocated compiled table. -/
+theorem row_historicalSingleRoot_complete (row : Row)
+    (hrow : row ∈ rows) (hroot : row.rootCount = 1)
+    (hbootCap : row.bootBound ≤ row.rootCap) :
+    let c := rowCfg row
+    let out := indexedWindowRun 0 c 1 (coreEntry c)
+    let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+    RootTableInv c out ps c.rootCap ∧ ps.length = c.tableLen ∧
+      (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      out.regs rR = 0 ∧
+      out.regs rW = (1 + ((c.segLen + c.wDelta) % M)) % M ∧
+      out.regs rZero = 0 := by
+  let c := rowCfg row
+  let out := indexedWindowRun 0 c 1 (coreEntry c)
+  let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+  have hshape := row_historicalSingleShape row hrow hroot hbootCap
+  rcases hshape with hpadded | hexact
+  · have hs := row_historicalSinglePaddedSchedule row hrow hroot
+      hpadded.1 hpadded.2
+    have hsem := indexedProductionRoot_single_mixed_padded_complete c
+      row.bootBound row.rootCap c.wDelta hs
+    have htable := row_historicalRoot_primeTable_regular row hrow hpadded.1
+    change PrimeTableInv ps c.rootCap ∧ ps.length = c.tableLen at htable
+    change RootTableInv c out ps c.rootCap ∧ _ ∧ _ ∧ _ ∧ _ ∧ _
+    exact ⟨hsem.1, htable.2, hsem.2.1, hsem.2.2.1,
+      hsem.2.2.2.1, hsem.2.2.2.2⟩
+  · have hs := row_historicalSingleCompleteSchedule row hrow hroot
+      hexact.1 hexact.2
+    have hsem := indexedProductionRoot_single_mixed_complete c
+      row.bootBound c.wDelta hs
+    have htable := row_historicalRoot_primeTable_regular row hrow
+      (Nat.le_of_lt hexact.1)
+    change PrimeTableInv ps c.rootCap ∧ ps.length = c.tableLen at htable
+    have hseg : c.segLen = row.rootCap := by
+      simpa only [c, rowCfg] using hexact.2.symm
+    have hpsEq : rootScanMixed c.bootPrimes row.bootBound 1 c.segLen =
+        ps := by
+      rw [hseg]
+    change RootTableInv c out ps c.rootCap ∧ _ ∧ _ ∧ _ ∧ _ ∧ _
+    rw [hpsEq] at hsem
+    exact ⟨hsem.1, htable.2, hsem.2.1, hsem.2.2.1,
+      hsem.2.2.2.1, hsem.2.2.2.2⟩
+
+/-- Scalar bounds for the main suffix following a regular historical
+one-window root phase. -/
+def historicalSingleMainArithmetic (row : Row) : Prop :=
+  let c := rowCfg row
+  row.rootCount = 1 ∧ row.bootBound ≤ row.rootCap →
+    0 < c.tableLen ∧ c.tableLen < M ∧
+    0 < c.markSteps ∧ c.markSteps < M ∧ c.period < M ∧
+    c.rootSpan < M ∧ 0 < c.rootSpan ∧
+    0 < c.firstPrime ∧ c.firstPrime ≤ c.segLen ∧
+    c.firstPrime ≤ c.rootCap ∧ c.rootCap < M ∧
+    c.rootCap * c.rootCap < M ∧ c.segLen + c.rootCap < M ∧
+    c.arrayLen < M ∧
+    c.rootSpan + c.segCount * c.period < M ∧
+    (1 + ((c.segLen + c.wDelta) % M)) % M = c.lo ∧
+    c.lo + c.segCount * c.segLen < M
+
+instance (row : Row) : Decidable (historicalSingleMainArithmetic row) := by
+  unfold historicalSingleMainArithmetic
+  infer_instance
+
+def historicalSingleMainArithmeticOK (row : Row) : Bool :=
+  decide (historicalSingleMainArithmetic row)
+
+def historicalSingleMainArithmeticAllOK : Bool :=
+  rows.all historicalSingleMainArithmeticOK
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 4000000 in
+theorem historicalSingleMainArithmeticAll_ok :
+    historicalSingleMainArithmeticAllOK = true := by
+  decide
+
+theorem row_historicalSingleMainArithmetic (row : Row)
+    (hrow : row ∈ rows) (hroot : row.rootCount = 1)
+    (hbootCap : row.bootBound ≤ row.rootCap) :
+    let c := rowCfg row
+    0 < c.tableLen ∧ c.tableLen < M ∧
+    0 < c.markSteps ∧ c.markSteps < M ∧ c.period < M ∧
+    c.rootSpan < M ∧ 0 < c.rootSpan ∧
+    0 < c.firstPrime ∧ c.firstPrime ≤ c.segLen ∧
+    c.firstPrime ≤ c.rootCap ∧ c.rootCap < M ∧
+    c.rootCap * c.rootCap < M ∧ c.segLen + c.rootCap < M ∧
+    c.arrayLen < M ∧
+    c.rootSpan + c.segCount * c.period < M ∧
+    (1 + ((c.segLen + c.wDelta) % M)) % M = c.lo ∧
+    c.lo + c.segCount * c.segLen < M := by
+  have hbool := (List.all_eq_true.mp
+    historicalSingleMainArithmeticAll_ok) row hrow
+  exact (of_decide_eq_true hbool) ⟨hroot, hbootCap⟩
+
+/-- Complete standalone core execution of a regular one-root historical row,
+through all of its emitted main windows. -/
+theorem row_historicalSingleCore_complete (row : Row)
+    (hrow : row ∈ rows) (hroot : row.rootCount = 1)
+    (hbootCap : row.bootBound ≤ row.rootCap) :
+    let c := rowCfg row
+    let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+    let out := indexedWindowRun 0 c (1 + c.segCount) (coreEntry c)
+    (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      MachineTableRep c out ps ∧ out.regs rR = 0 ∧
+      out.regs rW = c.lo + c.segCount * c.segLen ∧
+      out.regs rZero = 0 := by
+  let c := rowCfg row
+  let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+  let afterRoot := indexedWindowRun 0 c 1 (coreEntry c)
+  let out := indexedWindowRun 0 c (1 + c.segCount) (coreEntry c)
+  have hrootSem := row_historicalSingleRoot_complete row hrow hroot hbootCap
+  change RootTableInv c afterRoot ps c.rootCap ∧ ps.length = c.tableLen ∧
+    (∀ j, j < c.segLen → machineCell c afterRoot j = ⟨0, 0⟩) ∧
+    afterRoot.regs rR = 0 ∧
+    afterRoot.regs rW = (1 + ((c.segLen + c.wDelta) % M)) % M ∧
+    afterRoot.regs rZero = 0 at hrootSem
+  have hn := row_historicalSingleMainArithmetic row hrow hroot hbootCap
+  change 0 < c.tableLen ∧ c.tableLen < M ∧
+    0 < c.markSteps ∧ c.markSteps < M ∧ c.period < M ∧
+    c.rootSpan < M ∧ 0 < c.rootSpan ∧
+    0 < c.firstPrime ∧ c.firstPrime ≤ c.segLen ∧
+    c.firstPrime ≤ c.rootCap ∧ c.rootCap < M ∧
+    c.rootCap * c.rootCap < M ∧ c.segLen + c.rootCap < M ∧
+    c.arrayLen < M ∧
+    c.rootSpan + c.segCount * c.period < M ∧
+    (1 + ((c.segLen + c.wDelta) % M)) % M = c.lo ∧
+    c.lo + c.segCount * c.segLen < M at hn
+  rcases hn with ⟨htablePos, htableM, hmarkPos, hmarkM,
+    hperiodM, hspanM, hspanPos, hpPos, hpLen, hpCap, hcapM, hcapSqM,
+    hsegCapM, harrayM, hmainIdxM, hmainW, hmainWM⟩
+  have hmain := indexedWindowRun_main_complete c c.rootSpan afterRoot ps
+    c.rootCap c.lo c.segCount hrootSem.1.toMachineTableRep
+    hrootSem.1.primeTable hrootSem.2.1 hrootSem.2.2.2.1
+    (by rw [← hmainW]; exact hrootSem.2.2.2.2.1)
+    hrootSem.2.2.2.2.2 hrootSem.2.2.1 (Nat.le_refl _)
+    htablePos htableM hmarkPos hmarkM hperiodM hmainIdxM hspanM
+    hspanPos hpPos hpLen hpCap hcapM hcapSqM hsegCapM hmainWM harrayM
+  have hcompose : indexedWindowRun 0 c (1 + c.segCount) (coreEntry c) =
+      indexedWindowRun c.rootSpan c c.segCount afterRoot := by
+    rw [indexedWindowRun_add]
+    have hspan : c.period = c.rootSpan := by
+      simp only [c, rowCfg, Cfg.rootSpan, hroot, Nat.one_mul]
+    simpa only [Nat.zero_add, Nat.one_mul, hspan, afterRoot]
+  change (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+    MachineTableRep c out ps ∧ out.regs rR = 0 ∧
+    out.regs rW = c.lo + c.segCount * c.segLen ∧ out.regs rZero = 0
+  rw [show out = indexedWindowRun c.rootSpan c c.segCount afterRoot from
+    hcompose]
+  exact hmain
+
 #print axioms row_rootOnly_writeCursor
 #print axioms row_singleRoot_primeTable
 #print axioms row_singleRoot_primeTable_closed
 #print axioms row_root_primeTable_closed
 #print axioms row_historicalSinglePaddedSchedule
 #print axioms row_historicalSingleCompleteSchedule
+#print axioms row_historicalSingleRoot_complete
+#print axioms row_historicalSingleCore_complete
 
 end LeanCompCert.Ports.ArraySegMobiusPlatt211RootCertificate
