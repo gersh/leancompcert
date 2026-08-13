@@ -1,4 +1,5 @@
 import LeanCompCert.Verified.Algorithm.ArrayBridge
+import LeanCompCert.Verified.ArrayRolled
 
 /-!
 # A closed, compiled *array* computation
@@ -91,6 +92,19 @@ def sourceResult (a : AComputation) : Option Int :=
 def Returns (a : AComputation) (value : Int) : Prop :=
   a.sourceResult = some value
 
+/-- Run the constant-size counter-driven trace emitted by `AProgram.emitRolled`.
+Unlike `sourceResult`, this term contains one copy of the loop body rather
+than `loopCount` literal-index copies. -/
+def rolledSourceResult (a : AComputation) : Option Int :=
+  Option.bind
+    (evalMCCSequence (a.program.counterAugment.initialMCC a.base)
+      a.program.rolledCompile)
+    (fun m : MCCState => m.env ⟨a.program.output + 1⟩)
+
+/-- The run-receipt proposition for a constant-size rolled array artifact. -/
+def RolledReturns (a : AComputation) (value : Int) : Prop :=
+  a.rolledSourceResult = some value
+
 /-- Repackage the identical compiled trace with a different final register
 selected for observation.  `AProgram.compile` does not depend on `output`, so
 this changes neither the body nor its memory effects. -/
@@ -138,6 +152,21 @@ theorem value_of_returns (a : AComputation) {n v : Nat}
     (hRun : a.Returns ((v : Nat) : Int)) : v = n :=
   Algorithm.trace_value_unique a.program a.wellFormed a.base a.baseOk n v
     hDenote hRun
+
+/-- Honest run rule for a rolled array artifact.  As for `value_of_returns`,
+the source denotation is proved first; the physical receipt then identifies
+the value returned by the constant-size compiled loop. -/
+theorem value_of_rolledReturns (a : AComputation) {n v : Nat}
+    (hDenote : a.program.counterAugment.denote = some n)
+    (hRun : a.RolledReturns ((v : Nat) : Int)) : v = n := by
+  have hCompiled :=
+    rolledCompile_result_eq_denote a.program a.wellFormed a.base a.baseOk n
+      hDenote
+  unfold RolledReturns rolledSourceResult at hRun
+  rw [hRun] at hCompiled
+  exact Int.ofNat_inj.mp (Option.some_inj.mp hCompiled)
+
+#print axioms value_of_rolledReturns
 
 /-- Honest-run rule for an observed register, parallel to `value_of_returns`.
 The source denotation with that register selected must still be proved first. -/
