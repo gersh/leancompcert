@@ -97,6 +97,27 @@ theorem arun_lift_arr (k : Nat) (xs : List Instr) (s : AState) :
     (arun k s (lift xs)).arr = s.arr := by
   rw [arun_lift]
 
+/-- Structural test for blocks made entirely of scalar instructions.  Unlike
+unfolding `arun`, this remains cheap for a large fixed block. -/
+def ScalarOnly : List AInstr → Prop
+  | [] => True
+  | .scalar _ :: rest => ScalarOnly rest
+  | _ :: _ => False
+
+/-- Any syntactically scalar-only array block preserves caller-owned array
+memory.  The proof is symbolic in the block tail. -/
+theorem arun_scalarOnly_arr (k : Nat) : ∀ (xs : List AInstr) (s : AState),
+    ScalarOnly xs → (arun k s xs).arr = s.arr := by
+  intro xs
+  induction xs with
+  | nil => intro s _; rfl
+  | cons a rest ih =>
+      intro s h
+      cases a with
+      | scalar i => exact ih (astep k s (.scalar i)) h
+      | load dest idx => exact False.elim h
+      | store idx src => exact False.elim h
+
 /-! ## Definedness -/
 
 /-- Definedness of a lifted block is scalar definedness of the block. -/
