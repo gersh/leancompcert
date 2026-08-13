@@ -1459,6 +1459,150 @@ def FlatRoom (n0 f B SL SU : Nat) : Prop :=
     z.1 + incLWord (n0 + i / B - 1) < M ∧
       z.2.1 + incUWord (n0 + i / B - 1) < M
 
+/-- After `q` complete divisor blocks, the two ladder accumulators are bounded
+by `q` copies of their uniform per-candidate bounds.  This is deliberately a
+symbolic induction: it never unfolds a production-sized fold. -/
+private theorem flatObs_blocks_bounds (n0 f B SL SU q : Nat)
+    (hB : 0 < B) (hq : q ≤ f) :
+    let z := (List.range q).foldl
+      (BlockedFold.block B (flatObs n0 B)) (SL, SU, 0)
+    z.1 ≤ SL + q * fpD ∧
+      z.2.1 ≤ SU + q * (fpD + n0 + f) ∧ z.2.2 = 0 := by
+  induction q generalizing SL SU with
+  | zero => simp
+  | succ q ih =>
+      have hqf : q ≤ f := by omega
+      have hq_lt : q < f := by omega
+      rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
+      let z := (List.range q).foldl
+        (BlockedFold.block B (flatObs n0 B)) (SL, SU, 0)
+      have hz := ih SL SU hqf
+      change z.1 ≤ SL + q * fpD ∧
+        z.2.1 ≤ SU + q * (fpD + n0 + f) ∧ z.2.2 = 0 at hz
+      have hzform : z = (z.1, z.2.1, 0) := by
+        apply Prod.ext
+        · rfl
+        · apply Prod.ext
+          · rfl
+          · exact hz.2.2
+      have hblock := flatObs_block n0 B q z.1 z.2.1 hB
+      change
+        (BlockedFold.block B (flatObs n0 B) z q).1 ≤
+            SL + (q + 1) * fpD ∧
+          (BlockedFold.block B (flatObs n0 B) z q).2.1 ≤
+              SU + (q + 1) * (fpD + n0 + f) ∧
+            (BlockedFold.block B (flatObs n0 B) z q).2.2 = 0
+      rw [hzform, hblock]
+      have hU : incUWord (n0 + q - 1) ≤ fpD + n0 + f := by
+        exact Nat.le_trans (incUWord_le (n0 + q - 1)) (by omega)
+      have hL : incLWord (n0 + q - 1) ≤ fpD := incLWord_le _
+      by_cases hs : Sieve.spfScan B (n0 + q) = 0
+      · simp only [hs, if_pos]
+        constructor
+        · have h := Nat.add_le_add hz.1 hL
+          rw [Nat.succ_mul]
+          omega
+        · constructor
+          · have h := Nat.add_le_add hz.2.1 hU
+            rw [Nat.succ_mul]
+            omega
+          · exact True.intro
+      · simp only [hs, if_false, Nat.add_zero]
+        constructor
+        · rw [Nat.succ_mul]
+          omega
+        · constructor
+          · rw [Nat.succ_mul]
+            omega
+          · exact True.intro
+
+/-- A flat prefix consists of complete candidate blocks followed by a strict
+local prefix.  The latter only changes the divisor accumulator, so the same
+candidate-count bounds apply at every machine iteration. -/
+theorem flatObs_prefix_bounds (n0 f B SL SU i : Nat)
+    (hB : 0 < B) (hi : i ≤ f * B) :
+    let z := (List.range i).foldl (flatObs n0 B) (SL, SU, 0)
+    z.1 ≤ SL + (i / B) * fpD ∧
+      z.2.1 ≤ SU + (i / B) * (fpD + n0 + f) := by
+  let q := i / B
+  let r := i % B
+  have hr : r < B := Nat.mod_lt i hB
+  have hiqr : i = q * B + r := by
+    dsimp [q, r]
+    rw [Nat.mul_comm]
+    exact (Nat.div_add_mod i B).symm
+  have hq : q ≤ f := by
+    apply Nat.div_le_of_le_mul
+    simpa [Nat.mul_comm] using hi
+  rw [show List.range i = List.range (q * B + r) by rw [hiqr]]
+  rw [LeanCompCert.Verified.Segment.foldl_range_split]
+  rw [BlockedFold.foldl_range_mul]
+  let z := (List.range q).foldl
+    (BlockedFold.block B (flatObs n0 B)) (SL, SU, 0)
+  rw [show (List.range q).foldl
+      (BlockedFold.block B (flatObs n0 B)) (SL, SU, 0) = z from rfl]
+  have hz := flatObs_blocks_bounds n0 f B SL SU q hB hq
+  change z.1 ≤ SL + q * fpD ∧
+    z.2.1 ≤ SU + q * (fpD + n0 + f) ∧ z.2.2 = 0 at hz
+  rw [BlockedFold.foldl_range'_shift]
+  have hshift :
+      (List.range r).foldl
+          (fun x t => flatObs n0 B x (q * B + t)) z =
+        (List.range r).foldl (localRound B (n0 + q)) z := by
+    apply foldl_congr_mem
+    intro a t ht
+    exact flatObs_shift n0 B q t a hB (by
+      have htr := List.mem_range.mp ht
+      omega)
+  rw [hshift]
+  have hzform : z = (z.1, z.2.1, 0) := by
+    apply Prod.ext
+    · rfl
+    · apply Prod.ext
+      · rfl
+      · exact hz.2.2
+  have htail :
+      (List.range r).foldl (localRound B (n0 + q)) z =
+        (z.1, z.2.1, Sieve.spfScan r (n0 + q)) := by
+    calc
+      _ = (List.range r).foldl (localRound B (n0 + q))
+          (z.1, z.2.1, 0) := congrArg
+            (fun init => (List.range r).foldl (localRound B (n0 + q)) init)
+            hzform
+      _ = _ := localRound_prefix B (n0 + q) r z.1 z.2.1 hr
+  rw [htail]
+  have hb : z.1 ≤ SL + q * fpD ∧
+      z.2.1 ≤ SU + q * (fpD + n0 + f) := ⟨hz.1, hz.2.1⟩
+  simpa only [q] using hb
+
+/-- Endpoint bounds discharge every word-room premise.  Production campaigns
+only need to check these two small inequalities; Lean does not replay their
+flat loop or accumulator checkpoints.  The proof cost is independent of the
+compiled campaign's candidate count. -/
+theorem flatRoom_of_endpoint_bounds (n0 f B SL SU : Nat) (hB : 0 < B)
+    (hSL : SL + f * fpD + fpD < M)
+    (hSU : SU + f * (fpD + n0 + f) + (fpD + n0 + f) < M) :
+    FlatRoom n0 f B SL SU := by
+  intro i hi
+  let z := (List.range i).foldl (flatObs n0 B) (SL, SU, 0)
+  have hz := flatObs_prefix_bounds n0 f B SL SU i hB (by omega)
+  change z.1 ≤ SL + (i / B) * fpD ∧
+    z.2.1 ≤ SU + (i / B) * (fpD + n0 + f) at hz
+  have hq : i / B < f := (Nat.div_lt_iff_lt_mul hB).2 (by
+    simpa [Nat.mul_comm] using hi)
+  have hincL : incLWord (n0 + i / B - 1) ≤ fpD := incLWord_le _
+  have hincU : incUWord (n0 + i / B - 1) ≤ fpD + n0 + f := by
+    exact Nat.le_trans (incUWord_le _) (by omega)
+  have hqle : i / B ≤ f := Nat.le_of_lt hq
+  have hmulL : (i / B) * fpD ≤ f * fpD :=
+    Nat.mul_le_mul_right fpD hqle
+  have hmulU : (i / B) * (fpD + n0 + f) ≤
+      f * (fpD + n0 + f) :=
+    Nat.mul_le_mul_right (fpD + n0 + f) hqle
+  change z.1 + incLWord (n0 + i / B - 1) < M ∧
+    z.2.1 + incUWord (n0 + i / B - 1) < M
+  constructor <;> omega
+
 /-- Every symbolic flat prefix has a matching successful machine execution.
 The proof is indexed by the prefix length and therefore carries exactly the
 state produced at that index; no production fold is elaborated. -/
