@@ -1,15 +1,21 @@
 import LeanCompCert.Ports.PsiSegSieve
 
 /-!
-Emission driver for the `ψ` residue of `Ports.PsiSegSieve`.
+Legacy small-range differential emitter for the `ψ` residue of
+`Ports.PsiSegSieve`.
 
 ```
 lake env lean --run bench/PsiSegEmit.lean LO SEGLEN SEGCOUNT OUT [S] [CAP] [EXPECTED] [ref]
 ```
 
+This driver is intentionally capped at `hi <= 10^8`: it constructs tables and
+the head in Lean and therefore must never be used for a production proof run.
+Production uses `PsiRuntimePrimeTable` and `PsiRuntimePrimePowers`, where the
+finite work happens in CompCert-compiled code.
+
 `LO` must exceed `⌊√hi⌋`, so that an unmarked cell of a main window is a prime;
-the head `[1, LO−1]` is folded at **emit time** with the same `logFix`
-arithmetic, and becomes the artifact's carry-in.  `S` defaults to `48` and
+the small control head `[1, LO−1]` is folded at emit time with the same
+`logFix` arithmetic, and becomes the artifact's carry-in.  `S` defaults to `48` and
 `CAP` — the test points budgeted per window, which sets `logSteps = S·CAP` —
 to `L/(ln LO − 1)` with an `8%` margin.
 
@@ -73,6 +79,8 @@ open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Ports.PsiSegSieve
 
 namespace Bench.PsiSegEmit
+
+def legacyMaxHi : Nat := 100000000
 
 /-- The failure classes in result-slot order: label, and the exit status the
 driver returns when that class is the first nonzero one in *scan* order.  The
@@ -142,6 +150,11 @@ def main (args : List String) : IO UInt32 := do
       let some lo := loS.toNat? | do IO.eprintln "bad LO"; return 1
       let some len := lenS.toNat? | do IO.eprintln "bad SEGLEN"; return 1
       let some cnt := cntS.toNat? | do IO.eprintln "bad SEGCOUNT"; return 1
+      let hi := lo + len * cnt - 1
+      if legacyMaxHi < hi then
+        IO.eprintln s!"refusing hi={hi}: PsiSegEmit is limited to small \
+differential controls through {legacyMaxHi}; use the compiled runtime setup"
+        return 1
       let scale := (rest[0]?.bind String.toNat?).getD defaultS
       if !cUp16Fits scale then
         IO.eprintln s!"S={scale} exceeds the squared clause's range: cUp16 S = \
