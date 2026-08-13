@@ -67,6 +67,43 @@ theorem scannerStateAt_word (c : Cfg) (entry : AState)
       rw [scannerStateAt_succ]
       exact arun_word n (body c) (scannerStateAt c entry n) ih.1 ih.2
 
+/-- A clean checked-add flag at the end of a symbolic scanner prefix implies
+that the flag was clean at every earlier prefix.  The induction is uniform in
+`n`; in particular, using this theorem at the production iteration count does
+not reduce the corresponding `List.range`. -/
+theorem scannerStateAt_add_zero_implies_prefix_clean (c : Cfg)
+    (entry : AState)
+    (hword : ∀ j, entry.regs j < M) (harray : ∀ j, entry.arr j < M)
+    (hlo : c.checkLo < M)
+    (hlimit : LeanCompCert.Ports.Section413WindowRowCheck.commonBound -
+      c.offset < M) :
+    ∀ n,
+      n ≤ LeanCompCert.Ports.Section413WindowSchedule.productionRows *
+        LeanCompCert.Ports.Section413WindowSchedule.slots →
+      (scannerStateAt c entry n).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0 →
+      ∀ k, k ≤ n →
+        (scannerStateAt c entry k).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  intro n hn hfinal
+  induction n with
+  | zero =>
+      intro k hk
+      have : k = 0 := by omega
+      simpa [this] using hfinal
+  | succ n ih =>
+      have hsword := scannerStateAt_word c entry hword harray n
+      have hstep : (arun n (scannerStateAt c entry n) (body c)).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+        simpa only [scannerStateAt_succ] using hfinal
+      have hprev := body_add_zero_implies_input_zero n
+        (scannerStateAt c entry n) c hsword.1 hsword.2 hlo hlimit hstep
+      have hprefix := ih (by omega) hprev
+      intro k hk
+      by_cases hkn : k = n + 1
+      · simpa only [hkn] using hfinal
+      · exact hprefix k (by omega)
+
 /-- Source execution of the scanner from a caller-provided producer table.
 The proof is a uniform fold induction through `runFromArray_eq_foldl_mem`;
 the concrete production range remains opaque to Lean. -/
@@ -500,6 +537,7 @@ theorem program_runFromArray_zero_implies_receipts_and_bounds (c : Cfg)
   exact hall.2.2.2
 
 #print axioms scannerStateAt_word
+#print axioms scannerStateAt_add_zero_implies_prefix_clean
 #print axioms program_runFromArray
 #print axioms program_rolled_output_eq
 #print axioms epilogue_zero_implies_flags
