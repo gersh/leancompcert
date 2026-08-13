@@ -23,6 +23,162 @@ open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Verified.ArrayFoldBridge
 
+def eventPrefix (c : Cfg) (active divisor x : Nat) : List AInstr :=
+  gateStage c.v active divisor ++ readStage c.cap x ++ inputStage
+
+def eventPrefixState (k : Nat) (s : AState) (c : Cfg)
+    (active divisor x : Nat) : AState :=
+  arun k s (eventPrefix c active divisor x)
+
+private theorem gateStage_frame_of (k : Nat) (s : AState)
+    (v active divisor r : Nat)
+    (h : LeanCompCert.Verified.ArrayRegFrame.writes r
+      (gateStage v active divisor) = false) :
+    (arun k s (gateStage v active divisor)).regs r = s.regs r :=
+  LeanCompCert.Verified.ArrayRegFrame.arun_frame k r _ h s
+
+private theorem gateStage_writes_of (v active divisor r : Nat)
+    (hrem : rOddRem ≠ r) (hodd : rOdd ≠ r)
+    (hgate : LeanCompCert.Ports.Section413WindowCellDiv.rGate ≠ r) :
+    LeanCompCert.Verified.ArrayRegFrame.writes r
+      (gateStage v active divisor) = false := by
+  by_cases hv : v = 2 <;>
+    simp [gateStage, hv, LeanCompCert.Verified.ArrayScalarBlock.lift,
+      LeanCompCert.Verified.ArrayRegFrame.writes,
+      LeanCompCert.Verified.ArrayRegFrame.instrWrites,
+      hrem, hodd, hgate]
+
+private theorem readStage_writes_high (cap x r : Nat) (hr : 31 < r) :
+    LeanCompCert.Verified.ArrayRegFrame.writes r
+      (readStage cap x) = false := by
+  simp [readStage, LeanCompCert.Ports.Section413WindowTableRead.body,
+    LeanCompCert.Ports.Section413WindowTableRead.prepStage,
+    LeanCompCert.Ports.Section413WindowTableRead.loadStage,
+    LeanCompCert.Ports.Section413WindowTableRead.diffStage,
+    LeanCompCert.Verified.ArrayScalarBlock.lift,
+    LeanCompCert.Verified.ArrayRegFrame.writes,
+    LeanCompCert.Verified.ArrayRegFrame.instrWrites,
+    LeanCompCert.Ports.Section413WindowTableRead.rX,
+    LeanCompCert.Ports.Section413WindowTableRead.rNZ,
+    LeanCompCert.Ports.Section413WindowTableRead.rInv,
+    LeanCompCert.Ports.Section413WindowTableRead.rSafe,
+    LeanCompCert.Ports.Section413WindowTableRead.rPrev,
+    LeanCompCert.Ports.Section413WindowTableRead.rAddrPrevLo,
+    LeanCompCert.Ports.Section413WindowTableRead.rAddrPrevHi,
+    LeanCompCert.Ports.Section413WindowTableRead.rAddrCurLo,
+    LeanCompCert.Ports.Section413WindowTableRead.rAddrCurHi,
+    LeanCompCert.Ports.Section413WindowTableRead.rPrevLo,
+    LeanCompCert.Ports.Section413WindowTableRead.rPrevHi,
+    LeanCompCert.Ports.Section413WindowTableRead.rCurLo,
+    LeanCompCert.Ports.Section413WindowTableRead.rCurHi,
+    LeanCompCert.Ports.Section413WindowTableRead.rDiffLo,
+    LeanCompCert.Ports.Section413WindowTableRead.rDiffHi] <;> omega
+
+private theorem inputStage_writes_high (r : Nat) (hr : 33 < r) :
+    LeanCompCert.Verified.ArrayRegFrame.writes r inputStage = false := by
+  simp [inputStage, LeanCompCert.Verified.ArrayScalarBlock.lift,
+    LeanCompCert.Verified.ArrayRegFrame.writes,
+    LeanCompCert.Verified.ArrayRegFrame.instrWrites,
+    LeanCompCert.Ports.Section413WindowCellDiv.rInLo,
+    LeanCompCert.Ports.Section413WindowCellDiv.rInHi] <;> omega
+
+private theorem eventPrefix_frame_of (k : Nat) (s : AState) (c : Cfg)
+    (active divisor x r : Nat)
+    (hgate : LeanCompCert.Verified.ArrayRegFrame.writes r
+      (gateStage c.v active divisor) = false)
+    (hread : LeanCompCert.Verified.ArrayRegFrame.writes r
+      (readStage c.cap x) = false)
+    (hinput : LeanCompCert.Verified.ArrayRegFrame.writes r inputStage = false) :
+    (eventPrefixState k s c active divisor x).regs r = s.regs r := by
+  rw [eventPrefixState, eventPrefix, arun_append, arun_append]
+  exact (LeanCompCert.Verified.ArrayRegFrame.arun_frame k r inputStage hinput _).trans
+    ((LeanCompCert.Verified.ArrayRegFrame.arun_frame k r
+      (readStage c.cap x) hread _).trans
+      (LeanCompCert.Verified.ArrayRegFrame.arun_frame k r
+        (gateStage c.v active divisor) hgate s))
+
+/-- The compiled event prefix computes the coprimality gate and reads one
+table difference.  The theorem is symbolic in the table and indices. -/
+theorem eventPrefix_outputs (k : Nat) (s : AState) (c : Cfg)
+    (active divisor x : Nat)
+    (hcapPos : 1 ≤ c.cap)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap < M)
+    (hactive : s.regs active < M) (hdivisor : s.regs divisor < M)
+    (hactiveRem : active ≠ rOddRem) (hactiveOdd : active ≠ rOdd)
+    (hdivisorRem : divisor ≠ rOddRem)
+    (hx : s.regs x ≤ c.cap)
+    (hxGate : LeanCompCert.Verified.ArrayRegFrame.writes x
+      (gateStage c.v active divisor) = false)
+    (harray : ∀ j, s.arr j < M) :
+    let out := eventPrefixState k s c active divisor x
+    out.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate =
+        divisorGate c.v (s.regs active) (s.regs divisor) ∧
+      out.regs LeanCompCert.Ports.Section413WindowCellDiv.rInLo =
+        LeanCompCert.Ports.Section413Cells.encodeZ
+          (tableDiff c.cap s.arr (s.regs x)).lo ∧
+      out.regs LeanCompCert.Ports.Section413WindowCellDiv.rInHi =
+        LeanCompCert.Ports.Section413Cells.encodeZ
+          (tableDiff c.cap s.arr (s.regs x)).hi ∧
+      out.regs rK1Lo = s.regs rK1Lo ∧
+      out.regs rK1Hi = s.regs rK1Hi ∧
+      out.regs rK2Lo = s.regs rK2Lo ∧
+      out.regs rK2Hi = s.regs rK2Hi ∧
+      out.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+        s.regs LeanCompCert.Ports.Section413SignedAdd.rViol ∧
+      out.arr = s.arr := by
+  dsimp only
+  let a := arun k s (gateStage c.v active divisor)
+  let b := arun k a (readStage c.cap x)
+  have haGate := gateStage_output k s c.v active divisor hactive hdivisor
+    hactiveRem hactiveOdd hdivisorRem
+  have haX : a.regs x = s.regs x :=
+    gateStage_frame_of k s c.v active divisor x hxGate
+  have haArr : a.arr = s.arr := by
+    exact LeanCompCert.Verified.ArrayScalarBlock.arun_lift_arr k _ s
+  have haArray : ∀ j, a.arr j < M := by simpa only [haArr] using harray
+  have hr := readStage_outputs k c.cap x a hcapPos htable
+    (by simpa only [haX] using hx) haArray
+  have hbGate : b.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate =
+      a.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate := by
+    apply LeanCompCert.Verified.ArrayRegFrame.arun_frame
+    apply readStage_writes_high
+    decide
+  have hi := inputStage_outputs k b
+  have hout : eventPrefixState k s c active divisor x = arun k b inputStage := by
+    simp only [eventPrefixState, eventPrefix, arun_append, a, b]
+  rw [hout]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · exact hi.2.2.1.trans (hbGate.trans haGate)
+  · rw [hi.1, hr.1, haX, haArr]
+  · rw [hi.2.1, hr.2.1, haX, haArr]
+  · simpa only [hout] using
+      eventPrefix_frame_of k s c active divisor x rK1Lo
+        (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+        (readStage_writes_high _ _ _ (by decide))
+        (inputStage_writes_high _ (by decide))
+  · simpa only [hout] using
+      eventPrefix_frame_of k s c active divisor x rK1Hi
+        (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+        (readStage_writes_high _ _ _ (by decide))
+        (inputStage_writes_high _ (by decide))
+  · simpa only [hout] using
+      eventPrefix_frame_of k s c active divisor x rK2Lo
+        (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+        (readStage_writes_high _ _ _ (by decide))
+        (inputStage_writes_high _ (by decide))
+  · simpa only [hout] using
+      eventPrefix_frame_of k s c active divisor x rK2Hi
+        (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+        (readStage_writes_high _ _ _ (by decide))
+        (inputStage_writes_high _ (by decide))
+  · simpa only [hout] using
+      eventPrefix_frame_of k s c active divisor x
+        LeanCompCert.Ports.Section413SignedAdd.rViol
+        (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+        (readStage_writes_high _ _ _ (by decide))
+        (inputStage_writes_high _ (by decide))
+  · exact hi.2.2.2.trans (hr.2.2.trans haArr)
+
 def k1PrepState (k : Nat) (s : AState) (den : Nat) : AState :=
   arun k s (safeDenStage den ++ lift
     [.mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rSafeDen)])
@@ -414,6 +570,7 @@ theorem k2Stage_clean_outputs (k : Nat) (s : AState) (factor : Nat)
   · exact h.2.2.2.2.2.2.trans (k2Prep_arr k s factor)
 
 #print axioms k1Prep_den
+#print axioms eventPrefix_outputs
 #print axioms k1Stage_clean_outputs
 #print axioms k1TwicePrep_den
 #print axioms k1TwiceStage_clean_outputs
