@@ -1,0 +1,52 @@
+{
+  "artifact": "bench/R2RuntimeProductionEmit.lean",
+  "purpose": "Production R2* pipeline with all finite scans in CompCert-compiled code",
+  "status": "emission-and-compilation-validated; production execution pending",
+  "range": [145000, 21000144999],
+  "compiled_head_receipt_range": [3, 144999],
+  "configuration": {
+    "scale": 24,
+    "segment_length": 1000000,
+    "segment_count": 21000,
+    "root": 144914,
+    "table_count": 13415,
+    "array_length": 5796507,
+    "array_bytes": 46372056,
+    "mark_loop_count": 54922027,
+    "pack_loop_count": 3477912,
+    "sweep_loop_count": 221163768000,
+    "sweep_body_instructions": 334
+  },
+  "memory_policy": {
+    "memory_high": "1300M",
+    "memory_max": "1900M",
+    "memory_swap_max": "0",
+    "lean_threads": 1
+  },
+  "emit": {
+    "command": "lake env lean --run bench/R2RuntimeProductionEmit.lean /tmp/r2_runtime_production.c",
+    "wall_s": 0.29,
+    "user_s": 0.20,
+    "sys_s": 0.09,
+    "peak_rss_kb": 551208,
+    "source_bytes": 75323,
+    "source_sha256": "58d52ef2e6fa088091a2a9145bc3c62f8f0177fdc398e67e03ec90ebb05950d2"
+  },
+  "compile": {
+    "compiler": "CompCert 3.17",
+    "command": "ccomp -O2 /tmp/r2_runtime_production.c -o /tmp/r2_runtime_production.ccomp",
+    "wall_s": 0.16,
+    "user_s": 0.13,
+    "peak_rss_kb": 27800,
+    "binary_bytes": 70800,
+    "binary_sha256": "925183f2aa10d86a0bb5d3b7f73e15f6ee1c0a9693b41f97e6bacdd20e3175ed"
+  },
+  "lean_work": "Emit four rolled verified programs and the hosted driver; no prime enumeration, logarithm table construction, budget scan, head fold, or production sweep is evaluated by Lean.",
+  "compiled_work": [
+    "root composite marking",
+    "fixed-log prime table packing",
+    "table receipt checking",
+    "R2* segmented production sweep"
+  ],
+  "note": "The historical full-range result used an emitter-built literal table and head fold. This emitter removes those Lean computations. A new full physical run and its run-admission certificate are still required before replacing the literature atom."
+}
