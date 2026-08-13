@@ -110,7 +110,7 @@ structure SingleMixedPaddedRootSchedule (c : Cfg)
   bootLeCap : bootBound ≤ c.rootCap
   finalValid : 1 + valid - 1 = c.rootCap
   finalValidLt : valid < c.segLen
-  finalCover : 1 + valid < (bootBound + 1) * (bootBound + 1)
+  finalCover : 1 + valid ≤ (bootBound + 1) * (bootBound + 1)
   bootFit : c.bootPrimes.length < c.tableLen
   finalFit : ∀ k, k < valid →
     (rootScanMixed c.bootPrimes bootBound 1 k).length < c.tableLen

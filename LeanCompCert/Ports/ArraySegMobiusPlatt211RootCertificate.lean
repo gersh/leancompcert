@@ -6,12 +6,12 @@ import LeanCompCert.Verified.ArrayAudit
 /-!
 # Root-only compiled certificate for the Platt (2.11) manifest
 
-Every production row begins by constructing its prime table in
-`rootCount` segmented windows.  Re-running the main window merely to observe
-that table would repeat the completed `10^12`-integer campaign.  This file
-instead retains the identical configuration and root loop, sets the number of
-main windows to zero, and selects the persistent write cursor as the compiled
-return value.  Thus the finite certificate costs `O(sqrt hi)` work per row.
+Every production row begins by constructing its prime table before its main
+window.  Re-running the main window merely to observe that table would repeat
+the completed `10^12`-integer campaign.  This file instead runs the identical
+verified root-sieve core in one finite padded window, with no following main
+window, and selects the persistent write cursor as the compiled return value.
+Thus the finite certificate costs `O(sqrt hi)` work per row.
 
 The two admissions below are physical CompCert receipts.  The ordinary
 compiler theorem and the fail-safe audit turn them into a source-state fact;
@@ -45,24 +45,28 @@ open LeanCompCert.Ports.ArraySegMobiusPlatt211Certificate
 open LeanCompCert.Ports.ArraySegMobiusExtrema
 open LeanCompCert.Ports.ArraySegMobiusIndexedFull
 
-/-- Add one gated padding cell to the four one-window rows whose production
-root interval ended exactly at a segment boundary.  The live interval still
-ends at `rootCap`; this only makes the final-transition proof uniform. -/
-def rootCertificateSegLen (row : Row) : Nat :=
-  if row.rootCount = 1 ∧ row.rootCap = row.segLen then row.segLen + 1
-  else row.segLen
+/-- One inert cell beyond the finite interval makes the certificate's sole
+root window a padded final transition. -/
+def rootCertificateSegLen (row : Row) : Nat := row.rootCap + 1
+
+/-- Exact finite marking allowance for the certificate's one root window. -/
+def rootCertificateMarkSteps (row : Row) : Nat :=
+  ((rowCfg row).bootPrimes.map fun p => rootCertificateSegLen row / p + 2).sum + 16
 
 /-- The production root schedule with no following main window.  Its table is
 deliberately roomy (`rootCap + bootCount` cells), so the refinement proof gets
-a structural capacity bound independent of the recorded prime count.  Exact
-one-window boundaries receive one inert padding cell.  The compiled cursor
-still returns the recorded count. -/
+a structural capacity bound independent of the recorded prime count.  It uses
+one segment through `rootCap` plus an inert gated cell, rather than replaying
+the historical segmentation.  The compiled cursor still returns the recorded
+count. -/
 def rootOnlyCfg (row : Row) : Cfg :=
   { rowCfg row with
       lo := 1
       segLen := rootCertificateSegLen row
       segCount := 0
-      mainCount := row.rootCap + row.bootCount }
+      rootCount := 1
+      mainCount := row.rootCap + row.bootCount
+      markSteps := rootCertificateMarkSteps row }
 
 /-- Root-only source program returning the prime-table write cursor. -/
 def rootOnlyProgram (row : Row) : AProgram :=
@@ -83,13 +87,13 @@ def roomyRootShapeOK (row : Row) : Bool :=
   decide (8 * (3 * rootCertificateSegLen row +
     (row.rootCap + row.bootCount) + 18) ≤ M)
 
-def paddedBoundaryBudgetOK (row : Row) : Bool :=
-  decide (row.rootCount = 1 ∧ row.rootCap = row.segLen →
-    ((rootOnlyCfg row).bootPrimes.map fun p =>
-      (rootOnlyCfg row).segLen / p + 2).sum ≤ (rootOnlyCfg row).markSteps)
+def rootCertificateMachineBoundOK (row : Row) : Bool :=
+  decide (row.bootCount * (rootCertificateSegLen row + 2) + 16 +
+    rootCertificateSegLen row < M)
 
 def roomyRootShapesOK : Bool := rows.all roomyRootShapeOK
-def paddedBoundaryBudgetsOK : Bool := rows.all paddedBoundaryBudgetOK
+def rootCertificateMachineBoundsOK : Bool :=
+  rows.all rootCertificateMachineBoundOK
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 4000000 in
@@ -97,8 +101,8 @@ theorem roomyRootShapes_ok : roomyRootShapesOK = true := by decide
 
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 4000000 in
-theorem paddedBoundaryBudgets_ok : paddedBoundaryBudgetsOK = true := by
-  decide
+theorem rootCertificateMachineBounds_ok :
+    rootCertificateMachineBoundsOK = true := by decide
 
 theorem row_roomyRootShape (row : Row) (hrow : row ∈ rows) :
     8 * (3 * rootCertificateSegLen row +
@@ -109,12 +113,49 @@ theorem row_roomyRootShape (row : Row) (hrow : row ∈ rows) :
 theorem row_rootCertificateBudget (row : Row) (hrow : row ∈ rows) :
     let c := rootOnlyCfg row
     (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps := by
-  by_cases hboundary : row.rootCount = 1 ∧ row.rootCap = row.segLen
-  · have hbool :=
-      (List.all_eq_true.mp paddedBoundaryBudgets_ok) row hrow
-    exact (of_decide_eq_true hbool) hboundary
-  · have hold := row_bootBudget row hrow
-    simpa [rootOnlyCfg, rootCertificateSegLen, hboundary, rowCfg] using hold
+  simp [rootOnlyCfg, rootCertificateMarkSteps]
+
+theorem weightedMarkSum_le (ps : List Nat) (len : Nat) :
+    (ps.map fun p => len / p + 2).sum ≤ ps.length * (len + 2) := by
+  induction ps with
+  | nil => simp
+  | cons p ps ih =>
+      simp only [List.map_cons, List.sum_cons, List.length_cons]
+      rw [Nat.succ_mul]
+      have hdiv := Nat.div_le_self len p
+      omega
+
+theorem row_rootCertificateMarkBounds (row : Row) (hrow : row ∈ rows)
+    (hcount : (rootOnlyCfg row).bootCount = row.bootCount) :
+    let c := rootOnlyCfg row
+    0 < c.markSteps ∧ c.markSteps < M ∧ c.period < M ∧ c.rootSpan < M := by
+  let c := rootOnlyCfg row
+  have hcheap := of_decide_eq_true
+    ((List.all_eq_true.mp rootCertificateMachineBounds_ok) row hrow)
+  have hsum := weightedMarkSum_le c.bootPrimes c.segLen
+  have hmark : c.markSteps ≤ c.bootCount * (c.segLen + 2) + 16 := by
+    change (c.bootPrimes.map fun p => c.segLen / p + 2).sum + 16 ≤ _
+    simp only [Cfg.bootCount]
+    omega
+  change 0 < c.markSteps ∧ c.markSteps < M ∧
+    c.markSteps + c.segLen < M ∧ c.rootCount * c.period < M
+  change row.bootCount * (rootCertificateSegLen row + 2) + 16 +
+    rootCertificateSegLen row < M at hcheap
+  have hcRoot : c.rootCount = 1 := rfl
+  have hcLen : c.segLen = rootCertificateSegLen row := rfl
+  have hcCount : c.bootCount = row.bootCount := hcount
+  rw [hcLen, hcCount] at hmark
+  constructor
+  · simp [c, rootOnlyCfg, rootCertificateMarkSteps]
+  constructor
+  · omega
+  constructor
+  · rw [hcLen]
+    omega
+  · rw [hcRoot, Nat.one_mul]
+    change c.markSteps + c.segLen < M
+    rw [hcLen]
+    omega
 
 /-- Cheap arithmetic side conditions for the dominant one-root-window rows.
 The prime-table contents and marking budget remain separate proved facts. -/
@@ -122,16 +163,15 @@ def singleRootArithmetic (row : Row) : Prop :=
   let c := rootOnlyCfg row
   c.bootCount = row.bootCount ∧ 0 < c.bootCount ∧
   c.tableLen = c.bootCount + c.rootCap ∧ c.tableLen < M ∧
-  0 < c.markSteps ∧ c.markSteps < M ∧ c.period < M ∧
-  c.rootSpan < M ∧ 0 < c.firstPrime ∧
+  0 < c.firstPrime ∧
   c.firstPrime ≤ c.segLen ∧ c.firstPrime ≤ row.bootBound ∧
   row.bootBound < M ∧ row.bootBound * row.bootBound < M ∧
   c.segLen + row.bootBound < M ∧ 1 + c.segLen < M ∧
   1 + firstOffset 1 c.firstPrime < M ∧ c.arrayLen < M ∧
-  2 ≤ row.bootBound ∧ c.period = c.rootSpan ∧
+  2 ≤ row.bootBound ∧
   1 - 1 ≤ row.bootBound ∧ row.bootBound ≤ c.rootCap ∧
   1 + row.rootCap - 1 = c.rootCap ∧ row.rootCap < c.segLen ∧
-  1 + row.rootCap < (row.bootBound + 1) * (row.bootBound + 1) ∧
+  1 + row.rootCap ≤ (row.bootBound + 1) * (row.bootBound + 1) ∧
   c.rootCap < M ∧ c.wDelta < M
 
 instance (row : Row) : Decidable (singleRootArithmetic row) := by
@@ -139,9 +179,7 @@ instance (row : Row) : Decidable (singleRootArithmetic row) := by
   infer_instance
 
 def singleRootArithmeticOK (row : Row) : Bool :=
-  decide (row.rootCount = 1 ∧ row.bootBound ≤ row.rootCap ∧
-    row.rootCap < (rootOnlyCfg row).segLen →
-    singleRootArithmetic row)
+  decide (row.bootBound ≤ row.rootCap → singleRootArithmetic row)
 
 def singleRootArithmeticAllOK : Bool := rows.all singleRootArithmeticOK
 
@@ -151,40 +189,41 @@ theorem singleRootArithmeticAll_ok : singleRootArithmeticAllOK = true := by
   decide
 
 theorem row_singleRootArithmetic (row : Row) (hrow : row ∈ rows)
-    (hcount : row.rootCount = 1) (hbootCap : row.bootBound ≤ row.rootCap)
-    (hpadded : row.rootCap < (rootOnlyCfg row).segLen) :
+    (hbootCap : row.bootBound ≤ row.rootCap) :
     singleRootArithmetic row := by
   have hbool := (List.all_eq_true.mp singleRootArithmeticAll_ok) row hrow
-  exact (of_decide_eq_true hbool) ⟨hcount, hbootCap, hpadded⟩
+  exact (of_decide_eq_true hbool) hbootCap
 
 /-- Every one-root-window row has a complete padded production schedule.  Its
 fit proof uses the roomy table and the structural one-append-per-candidate
 bound, never the recorded prime count. -/
 theorem row_singleRootSchedule (row : Row) (hrow : row ∈ rows)
-    (hcount : row.rootCount = 1) (hbootCap : row.bootBound ≤ row.rootCap)
-    (hpadded : row.rootCap < (rootOnlyCfg row).segLen) :
+    (hbootCap : row.bootBound ≤ row.rootCap) :
     SingleMixedPaddedRootSchedule (rootOnlyCfg row) row.bootBound
       row.rootCap (rootOnlyCfg row).wDelta := by
   let c := rootOnlyCfg row
-  have hn := row_singleRootArithmetic row hrow hcount hbootCap hpadded
+  have hn := row_singleRootArithmetic row hrow hbootCap
   change
     c.bootCount = row.bootCount ∧ 0 < c.bootCount ∧
     c.tableLen = c.bootCount + c.rootCap ∧ c.tableLen < M ∧
-    0 < c.markSteps ∧ c.markSteps < M ∧ c.period < M ∧
-    c.rootSpan < M ∧ 0 < c.firstPrime ∧
+    0 < c.firstPrime ∧
     c.firstPrime ≤ c.segLen ∧ c.firstPrime ≤ row.bootBound ∧
     row.bootBound < M ∧ row.bootBound * row.bootBound < M ∧
     c.segLen + row.bootBound < M ∧ 1 + c.segLen < M ∧
     1 + firstOffset 1 c.firstPrime < M ∧ c.arrayLen < M ∧
-    2 ≤ row.bootBound ∧ c.period = c.rootSpan ∧
+    2 ≤ row.bootBound ∧
     1 - 1 ≤ row.bootBound ∧ row.bootBound ≤ c.rootCap ∧
     1 + row.rootCap - 1 = c.rootCap ∧ row.rootCap < c.segLen ∧
-    1 + row.rootCap < (row.bootBound + 1) * (row.bootBound + 1) ∧
+    1 + row.rootCap ≤ (row.bootBound + 1) * (row.bootBound + 1) ∧
     c.rootCap < M ∧ c.wDelta < M at hn
-  rcases hn with ⟨hbootCount, hbootPos, htable, htableM, hmarkPos,
-    hmarkM, hperiodM, hspanM, hpPos, hpLen, hpBoot, hbootM, hbootSqM,
-    hsegBootM, hwindowM, hoffsetM, harrayM, hbootTwo, hrootIndex,
+  rcases hn with ⟨hbootCount, hbootPos, htable, htableM,
+    hpPos, hpLen, hpBoot, hbootM, hbootSqM,
+    hsegBootM, hwindowM, hoffsetM, harrayM, hbootTwo,
     hbootStart, hbootCap, hvalid, hvalidLt, hcover, hcapM, hdeltaM⟩
+  obtain ⟨hmarkPos, hmarkM, hperiodM, hspanM⟩ :=
+    row_rootCertificateMarkBounds row hrow hbootCount
+  have hrootIndex : c.period = c.rootSpan := by
+    simp [c, rootOnlyCfg, Cfg.rootSpan]
   have hprime : PrimeTableInv c.bootPrimes row.bootBound := by
     simpa [c, rootOnlyCfg, rowCfg] using row_bootPrime row hrow
   have hshape : ∃ tail, c.bootPrimes = c.firstPrime :: tail := by
@@ -348,7 +387,7 @@ theorem row_rootOnly_core_projection (row : Row) (hrow : row ∈ rows) :
     let sLoop := (List.range a.program.loopCount).foldl
       (fun s idx => arun idx s a.program.body) sEntry
     CoreAgree sLoop
-      (indexedWindowRun 0 (rootOnlyCfg row) row.rootCount
+      (indexedWindowRun 0 (rootOnlyCfg row) (rootOnlyCfg row).rootCount
         (coreEntry (rootOnlyCfg row))) := by
   have hcore := historicalCombinedFold_core (rootOnlyCfg row) tBias
     ((rootOnlyProgram row).loopCount)
@@ -356,21 +395,66 @@ theorem row_rootOnly_core_projection (row : Row) (hrow : row ∈ rows) :
     ((List.range (rootOnlyProgram row).loopCount).foldl
       (fun q idx => arun idx q (rootOnlyProgram row).body)
       (arun 0 initialAState (rootOnlyProgram row).init))
-    (indexedWindowRun 0 (rootOnlyCfg row) row.rootCount
+    (indexedWindowRun 0 (rootOnlyCfg row) (rootOnlyCfg row).rootCount
       (coreEntry (rootOnlyCfg row)))
   change CoreAgree _
     (indexedBodyRun 0 (rootOnlyCfg row)
-      (row.rootCount * (rootOnlyCfg row).period)
+      ((rootOnlyCfg row).rootCount * (rootOnlyCfg row).period)
       (coreEntry (rootOnlyCfg row)))
   simpa only [rootOnlyProgram, mobiusProgram, Cfg.program, rootOnlyCfg, rowCfg,
     Nat.add_zero, Nat.mul_comm, coreEntry] using hcore
+
+set_option maxRecDepth 10000 in
+/-- The physical receipt identifies the verified one-window core cursor. -/
+theorem row_rootOnly_core_writeCursor (row : Row) (hrow : row ∈ rows) :
+    let c := rootOnlyCfg row
+    let core := indexedWindowRun 0 c 1 (coreEntry c)
+    core.regs rWrite = c.primeBase + row.mainCount := by
+  let c := rootOnlyCfg row
+  let core := indexedWindowRun 0 c 1 (coreEntry c)
+  have hagree := row_rootOnly_core_projection row hrow
+  let a := rootOnlyComputation row hrow
+  let sEntry := arun 0 initialAState a.program.init
+  let sLoop := (List.range a.program.loopCount).foldl
+    (fun s idx => arun idx s a.program.body) sEntry
+  change CoreAgree sLoop (indexedWindowRun 0 c c.rootCount (coreEntry c)) at hagree
+  have hc : c.rootCount = 1 := rfl
+  rw [hc] at hagree
+  have hphysical := row_rootOnly_loop_writeCursor row hrow
+  change sLoop.regs rWrite = c.primeBase + row.mainCount at hphysical
+  change core.regs rWrite = c.primeBase + row.mainCount
+  rw [← hagree.2 rWrite (by rfl)]
+  exact hphysical
+
+/-- Only rows 0--2 have a bootstrap bound larger than `rootCap`.  Evaluating
+their tiny one-window source executions confirms that no table entry is
+appended, so the cursor remains at the bootstrap length. -/
+def tinyRootCursorOK (row : Row) : Bool :=
+  let c := rootOnlyCfg row
+  decide (row.rootCap < row.bootBound →
+    (indexedWindowRun 0 c 1 (coreEntry c)).regs rWrite =
+      c.primeBase + c.bootCount)
+
+def tinyRootCursorsOK : Bool := rows.all tinyRootCursorOK
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 4000000 in
+theorem tinyRootCursors_ok : tinyRootCursorsOK = true := by decide
+
+theorem row_tinyRootCursor (row : Row) (hrow : row ∈ rows)
+    (htiny : row.rootCap < row.bootBound) :
+    let c := rootOnlyCfg row
+    (indexedWindowRun 0 c 1 (coreEntry c)).regs rWrite =
+      c.primeBase + c.bootCount := by
+  have hbool := (List.all_eq_true.mp tinyRootCursors_ok) row hrow
+  exact (of_decide_eq_true hbool) htiny
 
 /-- For a one-window manifest row, the physical cursor receipt and the
 verified padded-window refinement identify the exact final prime-table length.
 This is the finite bridge needed before the arithmetic campaign may consume
 the recorded `mainCount`. -/
 theorem row_singleRoot_primeTable (row : Row) (hrow : row ∈ rows)
-    (hcount : row.rootCount = 1) (valid delta : Nat)
+    (valid delta : Nat)
     (hschedule : SingleMixedPaddedRootSchedule (rootOnlyCfg row)
       row.bootBound valid delta) :
     let ps := rootScanMixed (rootOnlyCfg row).bootPrimes row.bootBound 1 valid
@@ -382,8 +466,9 @@ theorem row_singleRoot_primeTable (row : Row) (hrow : row ∈ rows)
     row.bootBound valid delta hschedule
   change RootTableInv c core ps c.rootCap ∧ _ at hsem
   have hagree := row_rootOnly_core_projection row hrow
-  change CoreAgree _ (indexedWindowRun 0 c row.rootCount (coreEntry c)) at hagree
-  rw [hcount] at hagree
+  change CoreAgree _ (indexedWindowRun 0 c c.rootCount (coreEntry c)) at hagree
+  have hc : c.rootCount = 1 := rfl
+  rw [hc] at hagree
   have hphysical := row_rootOnly_loop_writeCursor row hrow
   let a := rootOnlyComputation row hrow
   let sEntry := arun 0 initialAState a.program.init
@@ -402,17 +487,65 @@ theorem row_singleRoot_primeTable (row : Row) (hrow : row ∈ rows)
 /-- Closed computation-backed prime-table certificate for every padded
 one-root-window row in the production manifest. -/
 theorem row_singleRoot_primeTable_closed (row : Row) (hrow : row ∈ rows)
-    (hcount : row.rootCount = 1) (hbootCap : row.bootBound ≤ row.rootCap)
-    (hpadded : row.rootCap < (rootOnlyCfg row).segLen) :
+    (hbootCap : row.bootBound ≤ row.rootCap) :
     let c := rootOnlyCfg row
     let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
     PrimeTableInv ps c.rootCap ∧ ps.length = row.mainCount := by
-  exact row_singleRoot_primeTable row hrow hcount row.rootCap
+  exact row_singleRoot_primeTable row hrow row.rootCap
     (rootOnlyCfg row).wDelta
-    (row_singleRootSchedule row hrow hcount hbootCap hpadded)
+    (row_singleRootSchedule row hrow hbootCap)
+
+set_option maxRecDepth 10000 in
+/-- The three degenerate rows retain their deliberately widened bootstrap
+table.  Its exact length is still identified by the CompCert cursor receipt. -/
+theorem row_tinyRoot_primeTable_closed (row : Row) (hrow : row ∈ rows)
+    (htiny : row.rootCap < row.bootBound) :
+    let c := rootOnlyCfg row
+    let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+    PrimeTableInv ps (max row.bootBound c.rootCap) ∧
+      ps.length = row.mainCount := by
+  let c := rootOnlyCfg row
+  let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+  have hscan : ps = c.bootPrimes := by
+    dsimp only [ps]
+    apply rootScanMixed_eq_boot_of_le
+    omega
+  have hinv : PrimeTableInv c.bootPrimes row.bootBound := by
+    simpa [c, rootOnlyCfg, rowCfg] using row_bootPrime row hrow
+  have hcompiled := row_rootOnly_core_writeCursor row hrow
+  have htinyCursor := row_tinyRootCursor row hrow htiny
+  change (indexedWindowRun 0 c 1 (coreEntry c)).regs rWrite =
+    c.primeBase + row.mainCount at hcompiled
+  change (indexedWindowRun 0 c 1 (coreEntry c)).regs rWrite =
+    c.primeBase + c.bootCount at htinyCursor
+  have hlen : c.bootCount = row.mainCount := by omega
+  have hcCap : c.rootCap = row.rootCap := rfl
+  have hmax : max row.bootBound c.rootCap = row.bootBound := by
+    rw [hcCap]
+    exact Nat.max_eq_left (Nat.le_of_lt htiny)
+  change PrimeTableInv ps (max row.bootBound c.rootCap) ∧
+    ps.length = row.mainCount
+  rw [hscan, hmax]
+  exact ⟨hinv, by simpa only [Cfg.bootCount] using hlen⟩
+
+/-- Uniform finite certificate for every retained manifest row. -/
+theorem row_root_primeTable_closed (row : Row) (hrow : row ∈ rows) :
+    let c := rootOnlyCfg row
+    let ps := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+    PrimeTableInv ps (max row.bootBound c.rootCap) ∧
+      ps.length = row.mainCount := by
+  by_cases hregular : row.bootBound ≤ row.rootCap
+  · have h := row_singleRoot_primeTable_closed row hrow hregular
+    have hmax : max row.bootBound (rootOnlyCfg row).rootCap =
+        (rootOnlyCfg row).rootCap := by
+      apply Nat.max_eq_right
+      simpa only [rootOnlyCfg, rowCfg] using hregular
+    simpa only [hmax] using h
+  · exact row_tinyRoot_primeTable_closed row hrow (by omega)
 
 #print axioms row_rootOnly_writeCursor
 #print axioms row_singleRoot_primeTable
 #print axioms row_singleRoot_primeTable_closed
+#print axioms row_root_primeTable_closed
 
 end LeanCompCert.Ports.ArraySegMobiusPlatt211RootCertificate

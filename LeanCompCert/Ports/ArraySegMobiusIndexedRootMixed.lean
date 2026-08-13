@@ -110,7 +110,7 @@ theorem indexedBodyRun_mixed_root_acc_prefix
     (hboot2 : 2 ≤ bootBound)
     (hwBoot : w - 1 ≤ bootBound)
     (hfuelCap : w + fuel - 1 ≤ c.rootCap)
-    (hcover : w + fuel < (bootBound + 1) * (bootBound + 1))
+    (hcover : w + fuel ≤ (bootBound + 1) * (bootBound + 1))
     (hbootLen : boot.length < c.tableLen)
     (hfit : ∀ k, k < fuel →
       (rootScanMixed boot bootBound w k).length < c.tableLen)
@@ -338,7 +338,7 @@ theorem indexedBodyRun_mixed_root_acc_padded_transition
     (hidxWindow : idx + c.segLen = c.rootSpan)
     (hwPos : 0 < w) (hboot2 : 2 ≤ bootBound) (hwBoot : w - 1 ≤ bootBound)
     (hbootLtCap : bootBound ≤ c.rootCap)
-    (hcover : w + valid < (bootBound + 1) * (bootBound + 1))
+    (hcover : w + valid ≤ (bootBound + 1) * (bootBound + 1))
     (hbootLen : boot.length < c.tableLen)
     (hfit : ∀ k, k < valid → (rootScanMixed boot bootBound w k).length < c.tableLen)
     (hcapFit : (rootScanMixed boot bootBound w valid).length ≤ c.tableLen)

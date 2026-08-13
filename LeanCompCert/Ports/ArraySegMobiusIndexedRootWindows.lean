@@ -258,7 +258,7 @@ theorem indexedRootWindow_mixed_padded_transition
     (hwPos : 0 < w) (hboot2 : 2 ≤ bootBound)
     (hwBoot : w - 1 ≤ bootBound) (hbootLtCap : bootBound ≤ c.rootCap)
     (hvalid : w + valid - 1 = c.rootCap) (hvalidLt : valid < c.segLen)
-    (hcover : w + valid < (bootBound + 1) * (bootBound + 1))
+    (hcover : w + valid ≤ (bootBound + 1) * (bootBound + 1))
     (hbootFit : (c.firstPrime :: tail).length < c.tableLen)
     (hfit : ∀ k, k < valid →
       (rootScanMixed (c.firstPrime :: tail) bootBound w k).length < c.tableLen)
