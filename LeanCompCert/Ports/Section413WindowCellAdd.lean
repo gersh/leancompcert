@@ -93,6 +93,90 @@ theorem oneStage_clean_output (k : Nat) (s : AState) (acc term : Nat)
       hpA, hpB] using hadd
   · rfl
 
+theorem oneStage_clean_viol (k : Nat) (s : AState) (acc term : Nat)
+    (hacc : acc ≠ LeanCompCert.Ports.Section413SignedAdd.rViol)
+    (hclean :
+      (arun k
+        (arun k s (lift (loadAdd acc term)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    (arun k s (oneStage acc term)).regs
+        LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let p := arun k s (lift (loadAdd acc term))
+  let q := arun k p LeanCompCert.Ports.Section413SignedAdd.aBody
+  rw [oneStage, arun_append, arun_append, arun_lift]
+  change srun k q.regs
+    [.mov acc (.reg LeanCompCert.Ports.Section413SignedAdd.rOut)]
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0
+  rw [srun_untouched]
+  · simpa only [q, p] using hclean
+  · intro i hi
+    simp only [List.mem_singleton] at hi
+    subst i
+    simpa only [sdest] using hacc
+
+private theorem firstStage_accHi_frame (k : Nat) (s : AState) :
+    (arun k s (oneStage rAccLo rTermLo)).regs rAccHi = s.regs rAccHi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rAccHi
+    (oneStage rAccLo rTermLo) (by decide) s
+
+private theorem firstStage_termHi_frame (k : Nat) (s : AState) :
+    (arun k s (oneStage rAccLo rTermLo)).regs rTermHi = s.regs rTermHi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rTermHi
+    (oneStage rAccLo rTermLo) (by decide) s
+
+private theorem secondStage_accLo_frame (k : Nat) (s : AState) :
+    (arun k s (oneStage rAccHi rTermHi)).regs rAccLo = s.regs rAccLo := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rAccLo
+    (oneStage rAccHi rTermHi) (by decide) s
+
+/-- Both compiled endpoint additions agree with mathematical signed addition.
+Only the two constant-size sticky-flag receipts are inspected by Lean. -/
+theorem body_clean_outputs (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hviol : s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0)
+    (hcleanLo :
+      (arun k
+        (arun k s (lift (loadAdd rAccLo rTermLo)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0)
+    (hcleanHi :
+      let p := arun k s (oneStage rAccLo rTermLo)
+      (arun k
+        (arun k p (lift (loadAdd rAccHi rTermHi)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    let out := arun k s body
+    decodeZ (out.regs rAccLo) =
+        decodeZ (s.regs rAccLo) + decodeZ (s.regs rTermLo) ∧
+      decodeZ (out.regs rAccHi) =
+        decodeZ (s.regs rAccHi) + decodeZ (s.regs rTermHi) ∧
+      out.arr = s.arr := by
+  dsimp only
+  let p := arun k s (oneStage rAccLo rTermLo)
+  let q := arun k p (oneStage rAccHi rTermHi)
+  have hlow := oneStage_clean_output k s rAccLo rTermLo (by decide)
+    hword harray hviol hcleanLo
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hpViol : p.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 :=
+    oneStage_clean_viol k s rAccLo rTermLo (by decide) hcleanLo
+  have hpAccHi : p.regs rAccHi = s.regs rAccHi :=
+    firstStage_accHi_frame k s
+  have hpTermHi : p.regs rTermHi = s.regs rTermHi :=
+    firstStage_termHi_frame k s
+  have hhigh := oneStage_clean_output k p rAccHi rTermHi (by decide)
+    hpword hparray hpViol (by simpa only [p] using hcleanHi)
+  have hqAccLo : q.regs rAccLo = p.regs rAccLo :=
+    secondStage_accLo_frame k p
+  rw [body, arun_append]
+  change decodeZ (q.regs rAccLo) = _ ∧ decodeZ (q.regs rAccHi) = _ ∧ _
+  refine ⟨?_, ?_, ?_⟩
+  · rw [hqAccLo]
+    exact hlow.1
+  · simpa only [q, hpAccHi, hpTermHi] using hhigh.1
+  · exact hhigh.2.trans hlow.2
+
 def program (arrayLen loopCount : Nat) : AProgram :=
   { regCount := 328
     arrayLen := arrayLen
@@ -111,6 +195,7 @@ theorem program_wf (arrayLen loopCount : Nat) :
 
 #print axioms loadAdd_outputs
 #print axioms oneStage_clean_output
+#print axioms body_clean_outputs
 #print axioms program_wf
 
 end LeanCompCert.Ports.Section413WindowCellAdd
