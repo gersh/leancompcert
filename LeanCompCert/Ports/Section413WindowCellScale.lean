@@ -428,6 +428,91 @@ theorem body_clean_outputs_gate_zero (k : Nat) (s : AState) (negate : Bool)
   rw [h.1, h.2.1, hgate, Nat.mul_zero, Nat.zero_mod]
   exact ⟨rfl, rfl, h.2.2⟩
 
+theorem body_clean_outputs_gate_one_decoded (k : Nat) (s : AState)
+    (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hcleanLo :
+      (arun k
+        (arun k s (lift (loadWord
+          (if negate then rInHi else rInLo) negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hcleanHi :
+      let p := arun k s
+        (oneStage (if negate then rInHi else rInLo) rOutLo negate)
+      (arun k
+        (arun k p (lift (loadWord
+          (if negate then rInLo else rInHi) negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hgate : s.regs rGate = 1) :
+    let out := arun k s (body negate)
+    decodeZ (out.regs rOutLo) = (s.regs rFactor : Int) *
+        decodeZ (if negate then
+          LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
+        else s.regs rInLo) ∧
+      decodeZ (out.regs rOutHi) = (s.regs rFactor : Int) *
+        decodeZ (if negate then
+          LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
+        else s.regs rInHi) ∧
+      out.arr = s.arr := by
+  dsimp only
+  let p := arun k s
+    (oneStage (if negate then rInHi else rInLo) rOutLo negate)
+  have henc := body_clean_outputs_gate_one k s negate hword harray
+    hcleanLo hcleanHi hgate
+  have hlo := oneStage_clean_output_range k s
+    (if negate then rInHi else rInLo) rOutLo negate
+    (by cases negate <;> decide) hword harray hcleanLo
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hpFactor : p.regs rFactor = s.regs rFactor := by
+    exact oneStage_factor_frame k s
+      (if negate then rInHi else rInLo) rOutLo negate (by decide)
+  have hpInLo : p.regs rInLo = s.regs rInLo := by
+    exact oneStage_inLo_frame k s
+      (if negate then rInHi else rInLo) rOutLo negate (by decide)
+  have hpInHi : p.regs rInHi = s.regs rInHi := by
+    exact oneStage_inHi_frame k s
+      (if negate then rInHi else rInLo) rOutLo negate (by decide)
+  have hhi := oneStage_clean_output_range k p
+    (if negate then rInLo else rInHi) rOutHi negate
+    (by cases negate <;> decide) hpword hparray
+    (by simpa only [p] using hcleanHi)
+  have hloLower : -(H63 : Int) ≤ (s.regs rFactor : Int) *
+      decodeZ (if negate then
+        LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
+      else s.regs rInLo) := by
+    cases hneg : negate
+    · simpa only [hneg, Bool.false_eq_true, if_false] using hlo.2.1
+    · simpa only [hneg, if_true] using hlo.2.1
+  have hloUpper : (s.regs rFactor : Int) *
+      decodeZ (if negate then
+        LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
+      else s.regs rInLo) < (H63 : Int) := by
+    cases hneg : negate
+    · simpa only [hneg, Bool.false_eq_true, if_false] using hlo.2.2.1
+    · simpa only [hneg, if_true] using hlo.2.2.1
+  have hhiLower : -(H63 : Int) ≤ (s.regs rFactor : Int) *
+      decodeZ (if negate then
+        LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
+      else s.regs rInHi) := by
+    cases hneg : negate
+    · simpa only [hneg, Bool.false_eq_true, if_false, hpFactor, hpInHi]
+        using hhi.2.1
+    · simpa only [hneg, if_true, hpFactor, hpInLo] using hhi.2.1
+  have hhiUpper : (s.regs rFactor : Int) *
+      decodeZ (if negate then
+        LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
+      else s.regs rInHi) < (H63 : Int) := by
+    cases hneg : negate
+    · simpa only [hneg, Bool.false_eq_true, if_false, hpFactor, hpInHi]
+        using hhi.2.2.1
+    · simpa only [hneg, if_true, hpFactor, hpInLo] using hhi.2.2.1
+  refine ⟨?_, ?_, henc.2.2⟩
+  · rw [henc.1, decodeZ_encodeZ _ hloLower hloUpper]
+  · rw [henc.2.1, decodeZ_encodeZ _ hhiLower hhiUpper]
+
 def program (arrayLen loopCount : Nat) (negate : Bool) : AProgram :=
   { regCount := 328
     arrayLen := arrayLen
@@ -451,6 +536,7 @@ theorem program_wf (arrayLen loopCount : Nat) (negate : Bool) :
 #print axioms body_clean_outputs
 #print axioms body_clean_outputs_gate_one
 #print axioms body_clean_outputs_gate_zero
+#print axioms body_clean_outputs_gate_one_decoded
 #print axioms program_wf
 
 end LeanCompCert.Ports.Section413WindowCellScale

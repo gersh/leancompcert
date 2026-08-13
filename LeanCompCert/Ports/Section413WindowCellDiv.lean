@@ -299,6 +299,47 @@ theorem body_outputs_gate_zero (k : Nat) (s : AState) (negate : Bool)
   rw [h.1, h.2.1, hgate, Nat.mul_zero, Nat.zero_mod]
   exact ⟨rfl, rfl, h.2.2⟩
 
+theorem body_outputs_gate_one_decoded (k : Nat) (s : AState)
+    (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hden : 0 < s.regs rDen) (hgate : s.regs rGate = 1) :
+    let out := arun k s (body negate)
+    decodeZ (out.regs rOutLo) =
+        decodeZ (if negate then
+          LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
+        else s.regs rInLo) / (s.regs rDen : Int) ∧
+      decodeZ (out.regs rOutHi) =
+        -((-decodeZ (if negate then
+          LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
+        else s.regs rInHi)) / (s.regs rDen : Int)) ∧
+      out.arr = s.arr := by
+  dsimp only
+  have h := body_outputs_gate_one k s negate hword harray hden hgate
+  have hloWord : (if negate then
+      LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
+      else s.regs rInLo) < M := by
+    cases negate
+    · exact hword rInLo
+    · exact LeanCompCert.Ports.Section413G1Sound.tsub_lt _ _
+  have hhiWord : (if negate then
+      LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
+      else s.regs rInHi) < M := by
+    cases negate
+    · exact hword rInHi
+    · exact LeanCompCert.Ports.Section413G1Sound.tsub_lt _ _
+  rw [h.1, h.2.1,
+    decodeZ_encodeZ _
+      (LeanCompCert.Ports.Section413SignedDiv.floorSource_range _ _
+        hloWord hden).1
+      (LeanCompCert.Ports.Section413SignedDiv.floorSource_range _ _
+        hloWord hden).2,
+    decodeZ_encodeZ _
+      (LeanCompCert.Ports.Section413SignedDiv.ceilSource_range _ _
+        hhiWord hden).1
+      (LeanCompCert.Ports.Section413SignedDiv.ceilSource_range _ _
+        hhiWord hden).2]
+  exact ⟨rfl, rfl, h.2.2⟩
+
 def program (arrayLen loopCount : Nat) (negate : Bool) : AProgram :=
   { regCount := 328
     arrayLen := arrayLen
@@ -322,6 +363,7 @@ theorem program_wf (arrayLen loopCount : Nat) (negate : Bool) :
 #print axioms body_outputs
 #print axioms body_outputs_gate_one
 #print axioms body_outputs_gate_zero
+#print axioms body_outputs_gate_one_decoded
 #print axioms program_wf
 
 end LeanCompCert.Ports.Section413WindowCellDiv
