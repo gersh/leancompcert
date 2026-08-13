@@ -23,6 +23,9 @@ def rootPackLnValue (e a : Nat) : Nat :=
   (e * 2 ^ runtimeScale + a) *
     LeanCompCert.Ports.PsiSegSieve.L2 / 2 ^ 64
 
+def rootPackNorm (index : Nat) : Nat :=
+  rootPackN index <<< (62 - Nat.log2 (rootPackN index))
+
 /-- The small observation needed to state the pack loop invariant.  It omits
 all scratch registers and keeps the zero register explicit because array
 stores take their value from a register, not from a literal. -/
@@ -132,6 +135,35 @@ structure RootPackStepSafe (c : R2Cfg) (index : Nat)
     (rootPackLnValue (rootPackExNext index m) (rootPackAaNext index m)) 1 < M
   writeWord : m.write + rootPackHit index m < M
 
+/-- Algebraic loop invariant used to prove word and array safety without
+executing the production range in Lean. -/
+structure RootPackInvariant (index : Nat) (m : RootPackModel) : Prop where
+  zeroIsZero : m.zero = 0
+  exLe : m.ex ≤ 17
+  thEq : m.th = 2 ^ (m.ex + 1)
+  candidateLeTh : rootPackN index ≤ m.th
+  nextEx : rootPackExNext index m = Nat.log2 (rootPackN index)
+  nextTh : rootPackThNext index m =
+    2 ^ (Nat.log2 (rootPackN index) + 1)
+  writeLe : m.write ≤ index / runtimeScale
+  xmWord : m.xm < M
+  aaWord : m.aa < M
+  logState :
+    rootPackXmInit index m =
+        (logIter (rootPackNorm index) (rootPackRound index)).1 ∧
+      rootPackAaInit index m =
+        (logIter (rootPackNorm index) (rootPackRound index)).2
+
+/-- Configuration inequalities needed by the packer.  They are all small
+layout facts for the production configuration, independent of the scan. -/
+structure RootPackCfgSafe (c : R2Cfg) : Prop where
+  rootCell : runtimeRoot < c.arrayLen
+  tableWord : c.tableBase < M
+  sinkWord : c.streamSink < M
+  sinkCell : c.streamSink < c.arrayLen
+  rootTableWord : runtimeRoot + c.tableBase < M
+  rootTableCell : runtimeRoot + c.tableBase < c.arrayLen
+
 /-- One mathematical candidate/log round.  This is a specification, not an
 evaluator used for the production range; the loop theorem rewrites one
 compiled body to this expression symbolically. -/
@@ -163,6 +195,437 @@ theorem rootPack_index_bounds {index : Nat}
   constructor
   · exact Nat.lt_trans hi (by decide)
   constructor <;> omega
+
+theorem rootPackN_pos (index : Nat) : 0 < rootPackN index := by
+  simp [rootPackN]
+
+theorem rootPackNorm_range {index : Nat}
+    (hi : index < (runtimeRoot - 1) * runtimeScale) :
+    B62 ≤ rootPackNorm index ∧ rootPackNorm index < B63 := by
+  have hb := rootPack_index_bounds (index := index) hi
+  let n := rootPackN index
+  have hn0 : n ≠ 0 := by simp [n, rootPackN]
+  have he : Nat.log2 n ≤ 17 := by
+    have hlt : Nat.log2 n < 18 := (Nat.log2_lt hn0).mpr (by
+      exact Nat.lt_of_le_of_lt (by simpa [n] using hb.2.1) (by decide))
+    omega
+  have hlo : 2 ^ Nat.log2 n ≤ n := Nat.log2_self_le hn0
+  have hhi : n < 2 ^ (Nat.log2 n + 1) := Nat.lt_log2_self
+  have hsplit : Nat.log2 n + (62 - Nat.log2 n) = 62 := by omega
+  rw [rootPackNorm, Nat.shiftLeft_eq]
+  change B62 ≤ n * 2 ^ (62 - Nat.log2 n) ∧
+    n * 2 ^ (62 - Nat.log2 n) < B63
+  constructor
+  · calc
+      B62 = 2 ^ Nat.log2 n * 2 ^ (62 - Nat.log2 n) := by
+        rw [← Nat.pow_add, hsplit, B62_eq]
+      _ ≤ n * 2 ^ (62 - Nat.log2 n) := Nat.mul_le_mul_right _ hlo
+  · calc
+      n * 2 ^ (62 - Nat.log2 n) <
+          2 ^ (Nat.log2 n + 1) * 2 ^ (62 - Nat.log2 n) :=
+        Nat.mul_lt_mul_of_pos_right hhi (Nat.pow_pos (by decide : 0 < 2))
+      _ = B63 := by
+        rw [← Nat.pow_add]
+        have : Nat.log2 n + 1 + (62 - Nat.log2 n) = 63 := by omega
+        rw [this, B63_eq]
+
+theorem errB_mono {a b : Nat} (hab : a ≤ b) : errB a ≤ errB b := by
+  induction hab with
+  | refl => exact Nat.le_refl _
+  | @step b _ ih =>
+      calc
+        errB a ≤ errB b := ih
+        _ ≤ errB (b + 1) := by
+          rw [errB_succ]
+          have hnonneg : 0 ≤ errB b * errB b / B62 := Nat.zero_le _
+          omega
+
+theorem errB_le_of_le_48 {k : Nat} (hk : k ≤ 48) : errB k ≤ B62 :=
+  Nat.le_trans (errB_mono hk) errB_le_48
+
+theorem rootPackLogIter_range {index : Nat}
+    (hi : index < (runtimeRoot - 1) * runtimeScale) :
+    B62 ≤ (logIter (rootPackNorm index) (rootPackRound index)).1 ∧
+      (logIter (rootPackNorm index) (rootPackRound index)).1 < B63 := by
+  have hn := rootPackNorm_range hi
+  have hr48 : rootPackRound index ≤ 48 := by
+    have hr := (rootPack_index_bounds hi).2.2
+    simp only [runtimeScale] at hr
+    omega
+  have h := logIter_spec (rootPackNorm index) hn.1 hn.2
+    (rootPackRound index)
+    (errB_le_of_le_48 hr48)
+  exact ⟨h.1, h.2.1⟩
+
+theorem rootPackLnValue_lt (e a : Nat)
+    (hfix : e * 2 ^ runtimeScale + a < 18 * 2 ^ runtimeScale) :
+    rootPackLnValue e a < 13 * 2 ^ runtimeScale := by
+  have hL : 18 * LeanCompCert.Ports.PsiSegSieve.L2 < 13 * 2 ^ 64 := by decide
+  have hLpos : 0 < LeanCompCert.Ports.PsiSegSieve.L2 := by decide
+  have hprod :
+      (e * 2 ^ runtimeScale + a) * LeanCompCert.Ports.PsiSegSieve.L2 <
+        (13 * 2 ^ runtimeScale) * 2 ^ 64 := by
+    calc
+      (e * 2 ^ runtimeScale + a) * LeanCompCert.Ports.PsiSegSieve.L2 <
+          (18 * 2 ^ runtimeScale) * LeanCompCert.Ports.PsiSegSieve.L2 :=
+        Nat.mul_lt_mul_of_pos_right hfix hLpos
+      _ = (18 * LeanCompCert.Ports.PsiSegSieve.L2) * 2 ^ runtimeScale := by
+        ac_rfl
+      _ < (13 * 2 ^ 64) * 2 ^ runtimeScale :=
+        Nat.mul_lt_mul_of_pos_right hL (Nat.pow_pos (by decide : 0 < 2))
+      _ = (13 * 2 ^ runtimeScale) * 2 ^ 64 := by ac_rfl
+  rw [rootPackLnValue]
+  exact (Nat.div_lt_iff_lt_mul (Nat.pow_pos (by decide : 0 < 2))).mpr hprod
+
+theorem rootPack_succ_before_finish {index : Nat}
+    (h : rootPackRound index + 1 < runtimeScale) :
+    rootPackN (index + 1) = rootPackN index ∧
+      rootPackRound (index + 1) = rootPackRound index + 1 := by
+  have hs : 0 < runtimeScale := by decide
+  have hdm := Nat.div_add_mod index runtimeScale
+  have hdecomp : index / runtimeScale * runtimeScale +
+      index % runtimeScale = index := by
+    simpa [Nat.mul_comm] using hdm
+  have hrem : index % runtimeScale + 1 < runtimeScale := by
+    simpa only [rootPackRound] using h
+  have hq : (index + 1) / runtimeScale = index / runtimeScale := by
+    apply Nat.div_eq_of_lt_le
+    · omega
+    · rw [Nat.add_mul, Nat.one_mul]
+      omega
+  have hm : (index + 1) % runtimeScale = index % runtimeScale + 1 := by
+    rw [Nat.add_mod]
+    rw [Nat.mod_eq_of_lt (by decide : 1 < runtimeScale)]
+    apply Nat.mod_eq_of_lt
+    exact hrem
+  exact ⟨by simp [rootPackN, hq], by simpa [rootPackRound] using hm⟩
+
+theorem rootPack_succ_at_finish {index : Nat}
+    (h : rootPackRound index + 1 = runtimeScale) :
+    rootPackN (index + 1) = rootPackN index + 1 ∧
+      rootPackRound (index + 1) = 0 := by
+  have hs : 0 < runtimeScale := by decide
+  have hdm := Nat.div_add_mod index runtimeScale
+  have hdecomp : index / runtimeScale * runtimeScale +
+      index % runtimeScale = index := by
+    simpa [Nat.mul_comm] using hdm
+  have hrem : index % runtimeScale + 1 = runtimeScale := by
+    simpa only [rootPackRound] using h
+  have hq : (index + 1) / runtimeScale = index / runtimeScale + 1 := by
+    apply Nat.div_eq_of_lt_le
+    · rw [Nat.add_mul, Nat.one_mul]
+      omega
+    · rw [Nat.add_mul, Nat.one_mul, Nat.add_mul, Nat.one_mul]
+      omega
+  have hm : (index + 1) % runtimeScale = 0 := by
+    rw [Nat.add_mod]
+    rw [Nat.mod_eq_of_lt (by decide : 1 < runtimeScale)]
+    rw [hrem, Nat.mod_self]
+  exact ⟨by simp [rootPackN, hq], by simpa [rootPackRound] using hm⟩
+
+theorem log2_succ_step {n : Nat} (hn : n ≠ 0) :
+    Nat.log2 (n + 1) = Nat.log2 n +
+      (if 2 ^ (Nat.log2 n + 1) ≤ n + 1 then 1 else 0) := by
+  have hlo : 2 ^ Nat.log2 n ≤ n := Nat.log2_self_le hn
+  have hhi : n < 2 ^ (Nat.log2 n + 1) := Nat.lt_log2_self
+  split <;> rename_i hcut
+  · have heq : n + 1 = 2 ^ (Nat.log2 n + 1) := by omega
+    apply (Nat.log2_eq_iff (by omega)).mpr
+    constructor
+    · rw [heq]
+      exact Nat.le_refl _
+    · rw [heq]
+      exact Nat.pow_lt_pow_right (by decide) (by omega)
+  · apply (Nat.log2_eq_iff (by omega)).mpr
+    constructor
+    · exact Nat.le_trans hlo (by omega)
+    · exact Nat.lt_of_not_ge hcut
+
+theorem rootPackInvariant_safe (c : R2Cfg) (index : Nat) (m : RootPackModel)
+    (hcfg : RootPackCfgSafe c)
+    (hi : index < (r2RootPackProgram c).loopCount)
+    (hinv : RootPackInvariant index m) : RootPackStepSafe c index m := by
+  have hi' : index < (runtimeRoot - 1) * runtimeScale := by
+    simpa [r2RootPackProgram] using hi
+  have hb := rootPack_index_bounds hi'
+  let n := rootPackN index
+  let r := rootPackRound index
+  let aNext := rootPackAaNext index m
+  let fix := rootPackExNext index m * 2 ^ runtimeScale + aNext
+  let ln := rootPackLnValue (rootPackExNext index m) aNext
+  have hexNext : rootPackExNext index m ≤ 17 := by
+    rw [hinv.nextEx]
+    have hn0 : n ≠ 0 := by simp [n, rootPackN]
+    have : Nat.log2 n < 18 := (Nat.log2_lt hn0).mpr (by
+      exact Nat.lt_of_le_of_lt (by simpa [n] using hb.2.1) (by decide))
+    have hlog : Nat.log2 (rootPackN index) < 17 + 1 := by
+      simpa only [n] using this
+    exact Nat.lt_succ_iff.mp hlog
+  have hth : m.th ≤ 2 ^ 18 := by
+    rw [hinv.thEq]
+    exact Nat.pow_le_pow_of_le (by decide)
+      (Nat.add_le_add_right hinv.exLe 1)
+  have hnorm := rootPackNorm_range hi'
+  have hiter := rootPackLogIter_range hi'
+  have hxInit : rootPackXmInit index m =
+      (logIter (rootPackNorm index) r).1 := by
+    simpa only [r] using hinv.logState.1
+  have haInit : rootPackAaInit index m =
+      (logIter (rootPackNorm index) r).2 := by
+    simpa only [r] using hinv.logState.2
+  have hr : r < runtimeScale := by simpa only [r] using hb.2.2
+  have haIter : (logIter (rootPackNorm index) r).2 < 2 ^ r :=
+    logIter_snd_lt_two_pow _ r
+  have haInitBound : rootPackAaInit index m < B62 := by
+    rw [haInit]
+    have hp : 2 ^ r ≤ 2 ^ runtimeScale :=
+      Nat.pow_le_pow_of_le (by decide) (Nat.le_of_lt hr)
+    exact Nat.lt_of_lt_of_le haIter
+      (Nat.le_trans hp (by decide))
+  have haNextEq : aNext =
+      (logIter (rootPackNorm index) (r + 1)).2 := by
+    simp [aNext, rootPackAaNext, haInit, hxInit, logIter, logStep,
+      Nat.shiftLeft_eq, Nat.mul_comm]
+  have hr1 : r + 1 ≤ runtimeScale := by omega
+  have haNextBound : aNext < 2 ^ runtimeScale := by
+    rw [haNextEq]
+    exact Nat.lt_of_lt_of_le (logIter_snd_lt_two_pow _ (r + 1))
+      (Nat.pow_le_pow_of_le (by decide) hr1)
+  have hfix18 : fix < 18 * 2 ^ runtimeScale := by
+    dsimp only [fix]
+    have heMul := Nat.mul_le_mul_right (2 ^ runtimeScale) hexNext
+    omega
+  have hfix30 : fix < 2 ^ 30 :=
+    Nat.lt_trans hfix18 (by decide)
+  have hln13 : ln < 13 * 2 ^ runtimeScale := by
+    exact rootPackLnValue_lt _ _ hfix18
+  have hln28 : ln < 2 ^ 28 := Nat.lt_trans hln13 (by decide)
+  have hshift : ln * 2 ^ valBits < M := by
+    exact Nat.lt_trans
+      (Nat.mul_lt_mul_of_pos_right hln13 (Nat.pow_pos (by decide : 0 < 2)))
+      (by decide)
+  have hlnLe : ln ≤ 2 ^ 28 - 1 := by omega
+  have hshiftLe : ln * 2 ^ valBits ≤ B63 - 2 ^ valBits := by
+    have h := Nat.mul_le_mul_right (2 ^ valBits) hlnLe
+    simpa [valBits, B63_eq] using h
+  have hn35 : n < 2 ^ valBits :=
+    Nat.lt_of_le_of_lt (by simpa [n] using hb.2.1) (by decide)
+  have hlow : n + ln * 2 ^ valBits < M := by
+    exact Nat.lt_trans (Nat.add_lt_add_of_lt_of_le hn35 hshiftLe) (by decide)
+  have hlow63 : n + ln * 2 ^ valBits < B63 := by
+    have hpartition : 2 ^ valBits + (B63 - 2 ^ valBits) = B63 := by decide
+    omega
+  have hpack : packEntry n ln 1 < M := by
+    rw [packEntry, Nat.one_mul]
+    calc
+      n + ln * 2 ^ valBits + B63 < B63 + B63 :=
+        Nat.add_lt_add_right hlow63 B63
+      _ = M := by decide
+  have hq : index / runtimeScale < runtimeRoot := by
+    have := hb.2.1
+    simp only [rootPackN] at this
+    omega
+  have hwRoot : m.write < runtimeRoot := Nat.lt_of_le_of_lt hinv.writeLe hq
+  have hwriteTableWord : m.write + c.tableBase < M :=
+    Nat.lt_of_lt_of_le (Nat.add_lt_add_right hwRoot c.tableBase)
+      (Nat.le_of_lt hcfg.rootTableWord)
+  have hwriteTableCell : m.write + c.tableBase < c.arrayLen :=
+    Nat.lt_of_lt_of_le (Nat.add_lt_add_right hwRoot c.tableBase)
+      (Nat.le_of_lt hcfg.rootTableCell)
+  have hhit : rootPackHit index m ≤ 1 := by
+    unfold rootPackHit rootPackFinish rootPackPrime
+    split <;> split <;> simp
+  refine
+    { loop := hi
+      zeroIsZero := hinv.zeroIsZero
+      exWord := by
+        have hle : m.ex + 1 ≤ 17 + 1 :=
+          Nat.add_le_add_right hinv.exLe 1
+        exact Nat.lt_of_le_of_lt hle (by decide)
+      thWord := by
+        exact Nat.lt_of_le_of_lt (Nat.add_le_add hth hth) (by decide)
+      exLe62 := by omega
+      normWord := by
+        rw [hinv.nextEx]
+        simpa only [rootPackNorm] using Nat.lt_trans hnorm.2 (by decide)
+      xmWord := hinv.xmWord
+      aaWord := hinv.aaWord
+      xmInitLo := by rw [hxInit]; exact hiter.1
+      xmInitHi := by rw [hxInit]; exact hiter.2
+      aaInitBound := haInitBound
+      fixBound := by simpa only [fix, aNext] using hfix30
+      tableWord := hcfg.tableWord
+      sinkWord := hcfg.sinkWord
+      writeTableWord := hwriteTableWord
+      rootCell := hcfg.rootCell
+      candidateCell := Nat.lt_of_le_of_lt hb.2.1 hcfg.rootCell
+      sinkCell := hcfg.sinkCell
+      writeTableCell := hwriteTableCell
+      lnShiftWord := by simpa only [ln, aNext] using hshift
+      lnLowWord := by simpa only [ln, n, aNext] using hlow
+      packedWord := by simpa only [ln, n, aNext] using hpack
+      writeWord := by
+        have hle : m.write + rootPackHit index m ≤
+            index / runtimeScale + 1 := Nat.add_le_add hinv.writeLe hhit
+        have hqLe : index / runtimeScale + 1 ≤ runtimeRoot := by omega
+        exact Nat.lt_of_le_of_lt (Nat.le_trans hle hqLe) (by decide) }
+
+theorem runtimeProductionCfg_rootPackSafe :
+    RootPackCfgSafe runtimeProductionCfg := by
+  constructor <;> decide
+
+def rootPackInitialModel (arr : Nat → Nat) : RootPackModel :=
+  { zero := 0, ex := 1, th := 4, xm := 0, aa := 0, write := 0, arr := arr }
+
+theorem rootPackInitialModel_invariant (arr : Nat → Nat) :
+    RootPackInvariant 0 (rootPackInitialModel arr) := by
+  refine
+    { zeroIsZero := rfl
+      exLe := by change 1 ≤ 17; decide
+      thEq := by change 4 = 2 ^ (1 + 1); decide
+      candidateLeTh := by change rootPackN 0 ≤ 4; decide
+      nextEx := by rfl
+      nextTh := by rfl
+      writeLe := by change 0 ≤ 0 / runtimeScale; decide
+      xmWord := by change 0 < M; decide
+      aaWord := by change 0 < M; decide
+      logState := by
+        have hN : rootPackN 0 = 2 := by decide
+        have hR : rootPackRound 0 = 0 := by decide
+        have hS : rootPackStart 0 = 1 := by decide
+        have hE : rootPackExNext 0 (rootPackInitialModel arr) = 1 := by rfl
+        have hL : Nat.log2 2 = 1 := by decide
+        constructor
+        · rw [rootPackXmInit, hS, if_pos rfl, rootPackNorm, hE, hN, hL,
+            hR, logIter]
+        · rw [rootPackAaInit, hS, if_pos rfl, hR, logIter] }
+
+theorem rootPackInvariant_step (c : R2Cfg) (index : Nat) (m : RootPackModel)
+    (hcfg : RootPackCfgSafe c)
+    (hi : index < (r2RootPackProgram c).loopCount)
+    (hinv : RootPackInvariant index m) :
+    RootPackInvariant (index + 1) (rootPackModelStep c index m) := by
+  have hsafe := rootPackInvariant_safe c index m hcfg hi hinv
+  have hi' : index < (runtimeRoot - 1) * runtimeScale := by
+    simpa [r2RootPackProgram] using hi
+  have hb := rootPack_index_bounds hi'
+  have hex : rootPackExNext index m ≤ 17 := by
+    rw [hinv.nextEx]
+    have hn0 := rootPackN_pos index
+    have hlt : Nat.log2 (rootPackN index) < 18 :=
+      (Nat.log2_lt (Nat.ne_of_gt hn0)).mpr
+        (Nat.lt_of_le_of_lt hb.2.1 (by decide))
+    exact Nat.lt_succ_iff.mp (by simpa using hlt)
+  have hxm := logMant_range hsafe.xmInitLo hsafe.xmInitHi
+  have haa : rootPackAaNext index m < M := by
+    exact Nat.lt_trans (Nat.lt_of_le_of_lt (Nat.le_add_left _ _)
+      hsafe.fixBound) (by decide)
+  have hround : rootPackRound index + 1 ≤ runtimeScale := by
+    have := hb.2.2
+    omega
+  have hmEx : (rootPackModelStep c index m).ex =
+      Nat.log2 (rootPackN index) := by
+    simpa only [rootPackModelStep] using hinv.nextEx
+  have hmTh : (rootPackModelStep c index m).th =
+      2 ^ (Nat.log2 (rootPackN index) + 1) := by
+    simpa only [rootPackModelStep] using hinv.nextTh
+  by_cases hf : rootPackRound index + 1 = runtimeScale
+  · have hrel := rootPack_succ_at_finish hf
+    have hn0 := rootPackN_pos index
+    have hnhi : rootPackN index + 1 ≤
+        2 ^ (Nat.log2 (rootPackN index) + 1) := by
+      have := Nat.lt_log2_self (n := rootPackN index)
+      omega
+    have hstart : rootPackStart (index + 1) = 1 := by
+      simp [rootPackStart, hrel.2]
+    have hnextEx : rootPackExNext (index + 1)
+        (rootPackModelStep c index m) =
+        Nat.log2 (rootPackN (index + 1)) := by
+      simpa [rootPackExNext, rootPackBump, hstart, hmEx, hmTh, hrel.1]
+        using (log2_succ_step (Nat.ne_of_gt hn0)).symm
+    have hnextTh : rootPackThNext (index + 1)
+        (rootPackModelStep c index m) =
+        2 ^ (Nat.log2 (rootPackN (index + 1)) + 1) := by
+      rw [rootPackThNext, rootPackBump, hstart, hmTh, hrel.1,
+        log2_succ_step (Nat.ne_of_gt hn0)]
+      by_cases hcut : 2 ^ (Nat.log2 (rootPackN index) + 1) ≤
+          rootPackN index + 1
+      · have hcut' : 2 * 2 ^ Nat.log2 (rootPackN index) ≤
+            rootPackN index + 1 := by
+          simpa [Nat.pow_succ, Nat.mul_comm] using hcut
+        simp [hcut', Nat.pow_succ, Nat.mul_comm]
+        simp only [Nat.two_mul]
+      · simp [hcut]
+    refine
+      { zeroIsZero := by simpa [rootPackModelStep] using hinv.zeroIsZero
+        exLe := by simpa [rootPackModelStep] using hex
+        thEq := by rw [hmTh, hmEx]
+        candidateLeTh := by
+          rw [hrel.1, hmTh]
+          exact hnhi
+        nextEx := hnextEx
+        nextTh := hnextTh
+        writeLe := ?_
+        xmWord := Nat.lt_trans hxm.2 (by decide)
+        aaWord := by simpa [rootPackModelStep] using haa
+        logState := ?_ }
+    · have hhit : rootPackHit index m ≤ 1 := by
+        unfold rootPackHit rootPackFinish rootPackPrime
+        split <;> split <;> simp
+      have hq : (index + 1) / runtimeScale = index / runtimeScale + 1 := by
+        have h := hrel.1
+        simp only [rootPackN] at h
+        omega
+      rw [rootPackModelStep, hq]
+      exact Nat.add_le_add hinv.writeLe hhit
+    · rw [rootPackXmInit, rootPackAaInit, hstart]
+      simp only [if_pos, hrel.2, logIter]
+      constructor
+      · simpa only [rootPackNorm] using congrArg
+          (fun e => rootPackN (index + 1) <<< (62 - e)) hnextEx
+      · trivial
+  · have hbefore : rootPackRound index + 1 < runtimeScale := by omega
+    have hrel := rootPack_succ_before_finish hbefore
+    have hstart : rootPackStart (index + 1) = 0 := by
+      simp [rootPackStart, hrel.2]
+    have hnextEx : rootPackExNext (index + 1)
+        (rootPackModelStep c index m) =
+        Nat.log2 (rootPackN (index + 1)) := by
+      simp [rootPackExNext, rootPackBump, hstart, hmEx, hrel.1]
+    have hnextTh : rootPackThNext (index + 1)
+        (rootPackModelStep c index m) =
+        2 ^ (Nat.log2 (rootPackN (index + 1)) + 1) := by
+      simp [rootPackThNext, rootPackBump, hstart, hmTh, hrel.1]
+    refine
+      { zeroIsZero := by simpa [rootPackModelStep] using hinv.zeroIsZero
+        exLe := by simpa [rootPackModelStep] using hex
+        thEq := by rw [hmTh, hmEx]
+        candidateLeTh := by
+          rw [hrel.1, hmTh]
+          exact Nat.le_of_lt Nat.lt_log2_self
+        nextEx := hnextEx
+        nextTh := hnextTh
+        writeLe := ?_
+        xmWord := Nat.lt_trans hxm.2 (by decide)
+        aaWord := by simpa [rootPackModelStep] using haa
+        logState := ?_ }
+    · have hq : (index + 1) / runtimeScale = index / runtimeScale := by
+        have h := hrel.1
+        simp only [rootPackN] at h
+        omega
+      rw [rootPackModelStep, hq]
+      have hfinish : rootPackFinish index = 0 := by
+        simp [rootPackFinish, hf]
+      simp [rootPackHit, hfinish, hinv.writeLe]
+    · rw [rootPackXmInit, rootPackAaInit, hstart]
+      simp only [Nat.zero_ne_one, if_false, rootPackModelStep]
+      have hnorm : rootPackNorm (index + 1) = rootPackNorm index := by
+        simp only [rootPackNorm, hrel.1]
+      rw [hrel.2, hnorm]
+      simp only [rootPackXmNext, rootPackAaNext, logIter, logStep,
+        hinv.logState.1, hinv.logState.2, Nat.shiftLeft_eq, Nat.pow_one]
+      refine ⟨trivial, ?_⟩
+      rw [Nat.mul_comm _ 2]
 
 theorem rootPackDecode_defined (c : R2Cfg) (index : Nat) (s : AState)
     (hRoot : runtimeRoot < c.arrayLen)
@@ -1368,6 +1831,88 @@ theorem rootPackBody_defined (c : R2Cfg) (index : Nat) (s : AState)
   exact (AllDefined_append c.arrayLen index (rootPackStore c)
     (rootPackClear c) sl).mpr ⟨hStore, hClear⟩
 
+/-! ## Symbolic loop bridge
+
+These folds remain opaque at the production trip count.  The theorem below
+is an induction over the syntax of a prefix and never reduces that prefix. -/
+
+def rootPackMachineFold (c : R2Cfg) (s : AState) (k : Nat) : AState :=
+  (List.range k).foldl
+    (fun st index => arun index st (rootPackBody c)) s
+
+def rootPackModelFold (c : R2Cfg) (m : RootPackModel) (k : Nat) :
+    RootPackModel :=
+  (List.range k).foldl (fun z index => rootPackModelStep c index z) m
+
+theorem rootPackMachineFold_succ (c : R2Cfg) (s : AState) (k : Nat) :
+    rootPackMachineFold c s (k + 1) =
+      arun k (rootPackMachineFold c s k) (rootPackBody c) := by
+  simp [rootPackMachineFold, List.range_succ, List.foldl_append]
+
+theorem rootPackModelFold_succ (c : R2Cfg) (m : RootPackModel) (k : Nat) :
+    rootPackModelFold c m (k + 1) =
+      rootPackModelStep c k (rootPackModelFold c m k) := by
+  simp [rootPackModelFold, List.range_succ, List.foldl_append]
+
+theorem rootPackModelFold_invariant (c : R2Cfg) (m : RootPackModel) (k : Nat)
+    (hcfg : RootPackCfgSafe c)
+    (hinit : RootPackInvariant 0 m)
+    (hk : k ≤ (r2RootPackProgram c).loopCount) :
+    RootPackInvariant k (rootPackModelFold c m k) := by
+  induction k with
+  | zero => simpa [rootPackModelFold] using hinit
+  | succ k ih =>
+      rw [rootPackModelFold_succ]
+      apply rootPackInvariant_step c k (rootPackModelFold c m k) hcfg
+      · omega
+      · exact ih (by omega)
+
+theorem rootPackModelFold_safe (c : R2Cfg) (m : RootPackModel)
+    (hcfg : RootPackCfgSafe c)
+    (hinit : RootPackInvariant 0 m) :
+    ∀ i, i < (r2RootPackProgram c).loopCount →
+      RootPackStepSafe c i (rootPackModelFold c m i) := by
+  intro i hi
+  apply rootPackInvariant_safe c i (rootPackModelFold c m i) hcfg hi
+  exact rootPackModelFold_invariant c m i hcfg hinit (Nat.le_of_lt hi)
+
+theorem rootPackProductionModelFold_safe (arr : Nat → Nat) :
+    ∀ i, i < (r2RootPackProgram runtimeProductionCfg).loopCount →
+      RootPackStepSafe runtimeProductionCfg i
+        (rootPackModelFold runtimeProductionCfg (rootPackInitialModel arr) i) :=
+  rootPackModelFold_safe runtimeProductionCfg (rootPackInitialModel arr)
+    runtimeProductionCfg_rootPackSafe (rootPackInitialModel_invariant arr)
+
+theorem rootPackFold_observe (c : R2Cfg) (s : AState) (k : Nat)
+    (hsafe : ∀ i, i < k →
+      RootPackStepSafe c i (rootPackModelFold c (rootPackObserve s) i)) :
+    rootPackObserve (rootPackMachineFold c s k) =
+      rootPackModelFold c (rootPackObserve s) k := by
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+      have hpre : rootPackObserve (rootPackMachineFold c s k) =
+          rootPackModelFold c (rootPackObserve s) k :=
+        ih (fun i hi => hsafe i (Nat.lt_trans hi (Nat.lt_succ_self k)))
+      have hstepSafe : RootPackStepSafe c k
+          (rootPackObserve (rootPackMachineFold c s k)) := by
+        rw [hpre]
+        exact hsafe k (Nat.lt_succ_self k)
+      rw [rootPackMachineFold_succ, rootPackModelFold_succ,
+        rootPackBody_run c k (rootPackMachineFold c s k) hstepSafe,
+        hpre]
+
+theorem rootPackFold_body_defined (c : R2Cfg) (s : AState) (k i : Nat)
+    (hik : i < k)
+    (hsafe : ∀ j, j < k →
+      RootPackStepSafe c j (rootPackModelFold c (rootPackObserve s) j)) :
+    AllDefined c.arrayLen i (rootPackMachineFold c s i)
+      (rootPackBody c) := by
+  apply rootPackBody_defined
+  rw [rootPackFold_observe c s i (fun j hj =>
+    hsafe j (Nat.lt_trans hj hik))]
+  exact hsafe i hik
+
 #print axioms rootPackDecode_defined
 #print axioms rootPackRoundInit_defined
 #print axioms rootPackLogRound_defined
@@ -1408,5 +1953,7 @@ theorem rootPackBody_defined (c : R2Cfg) (index : Nat) (s : AState)
 #print axioms rootPackClear_run
 #print axioms rootPackBody_run
 #print axioms rootPackBody_defined
+#print axioms rootPackFold_observe
+#print axioms rootPackFold_body_defined
 
 end LeanCompCert.Ports.R2SegSieve
