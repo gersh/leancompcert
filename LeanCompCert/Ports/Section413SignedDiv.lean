@@ -383,6 +383,132 @@ theorem ceilMag_eq_source (w d : Nat) (hw : w < M) (hd : 0 < d) :
         (magnitude_lt w hw)
     simpa [LeanCompCert.Verified.MulWide.B64, M] using hceilM
 
+theorem floorSource_range (w d : Nat) (hw : w < M) (hd : 0 < d) :
+    -(H63 : Int) ≤ decodeZ w / (d : Int) ∧
+      decodeZ w / (d : Int) < (H63 : Int) := by
+  have hM : M = 2 * H63 := by decide
+  have hB : LeanCompCert.Verified.MulWide.B64 = M := by decide
+  have hH : (0 : Int) < (H63 : Int) := by decide
+  have hmag : magnitude w ≤ H63 := by
+    unfold magnitude
+    by_cases hs : H63 ≤ w
+    · simp only [hs, if_true]
+      rw [hM] at hw ⊢
+      omega
+    · simp only [hs, if_false]
+      omega
+  by_cases ha : decodeZ w < 0
+  · rw [zfloorDiv_neg (decodeZ w) d ha hd]
+    have habs := wordMagnitude_natAbs w hw
+    have hadd : (decodeZ w).natAbs + (d - 1) =
+        (decodeZ w).natAbs + d - 1 := by omega
+    rw [hadd, ceilFormula _ d hd]
+    have hceil := div_add_modBit_le_self (magnitude w) d hd
+    rw [← habs] at hceil
+    have hceilZ : (((decodeZ w).natAbs / d +
+        if (decodeZ w).natAbs % d = 0 then 0 else 1 : Nat) : Int) ≤
+        ((decodeZ w).natAbs : Nat) := by exact_mod_cast hceil
+    have hmagZ : ((magnitude w : Nat) : Int) ≤ (H63 : Int) := by
+      exact_mod_cast hmag
+    rw [← habs] at hmagZ
+    constructor
+    · exact Int.neg_le_neg (Int.le_trans hceilZ hmagZ)
+    · exact Int.lt_of_le_of_lt
+        (Int.neg_nonpos_of_nonneg (Int.natCast_nonneg _)) hH
+  · have hnonneg : 0 ≤ decodeZ w := by omega
+    rw [zfloorDiv_nonneg (decodeZ w) d hnonneg]
+    have hdiv := Nat.div_le_self (decodeZ w).natAbs d
+    have hdivZ : (((decodeZ w).natAbs / d : Nat) : Int) ≤
+        ((decodeZ w).natAbs : Int) := by exact_mod_cast hdiv
+    have habsCast : ((decodeZ w).natAbs : Int) = decodeZ w :=
+      Int.natAbs_of_nonneg hnonneg
+    have hupper : decodeZ w < (H63 : Int) := by
+      unfold decodeZ
+      by_cases hs : w < H63
+      · rw [if_pos hs]
+        exact_mod_cast hs
+      · rw [if_neg hs, hB, hM]
+        rw [hM] at hw
+        omega
+    constructor
+    · exact Int.le_trans (by omega : -(H63 : Int) ≤ 0)
+        (Int.natCast_nonneg _)
+    · apply Int.lt_of_le_of_lt _ hupper
+      calc
+        (((decodeZ w).natAbs / d : Nat) : Int) ≤
+            ((decodeZ w).natAbs : Int) := hdivZ
+        _ = decodeZ w := habsCast
+
+theorem ceilSource_range (w d : Nat) (hw : w < M) (hd : 0 < d) :
+    -(H63 : Int) ≤ -((-decodeZ w) / (d : Int)) ∧
+      -((-decodeZ w) / (d : Int)) < (H63 : Int) := by
+  have hM : M = 2 * H63 := by decide
+  have hB : LeanCompCert.Verified.MulWide.B64 = M := by decide
+  have hH : (0 : Int) < (H63 : Int) := by decide
+  have hmag : magnitude w ≤ H63 := by
+    unfold magnitude
+    by_cases hs : H63 ≤ w
+    · simp only [hs, if_true]
+      rw [hM] at hw ⊢
+      omega
+    · simp only [hs, if_false]
+      omega
+  by_cases ha : decodeZ w < 0
+  · rw [zceilDiv_neg (decodeZ w) d ha]
+    have habs := wordMagnitude_natAbs w hw
+    have hdiv := Nat.div_le_self (decodeZ w).natAbs d
+    have hdivZ : (((decodeZ w).natAbs / d : Nat) : Int) ≤
+        ((decodeZ w).natAbs : Int) := by exact_mod_cast hdiv
+    have hmagZ : ((magnitude w : Nat) : Int) ≤ (H63 : Int) := by
+      exact_mod_cast hmag
+    rw [← habs] at hmagZ
+    constructor
+    · exact Int.neg_le_neg (Int.le_trans hdivZ hmagZ)
+    · exact Int.lt_of_le_of_lt
+        (Int.neg_nonpos_of_nonneg (Int.natCast_nonneg _)) hH
+  · have hnonneg : 0 ≤ decodeZ w := by omega
+    rw [zceilDiv_nonneg (decodeZ w) d hnonneg hd]
+    have habs := wordMagnitude_natAbs w hw
+    have hadd : (decodeZ w).natAbs + (d - 1) =
+        (decodeZ w).natAbs + d - 1 := by omega
+    rw [hadd, ceilFormula _ d hd]
+    have hceil := div_add_modBit_le_self (magnitude w) d hd
+    rw [← habs] at hceil
+    have hceilZ : (((decodeZ w).natAbs / d +
+        if (decodeZ w).natAbs % d = 0 then 0 else 1 : Nat) : Int) ≤
+        ((decodeZ w).natAbs : Nat) := by exact_mod_cast hceil
+    have habsCast : ((decodeZ w).natAbs : Int) = decodeZ w :=
+      Int.natAbs_of_nonneg hnonneg
+    have hupper : decodeZ w < (H63 : Int) := by
+      unfold decodeZ
+      by_cases hs : w < H63
+      · rw [if_pos hs]
+        exact_mod_cast hs
+      · rw [if_neg hs, hB, hM]
+        rw [hM] at hw
+        omega
+    constructor
+    · exact Int.le_trans (by omega : -(H63 : Int) ≤ 0)
+        (Int.natCast_nonneg _)
+    · apply Int.lt_of_le_of_lt _ hupper
+      calc
+        (((decodeZ w).natAbs / d +
+            if (decodeZ w).natAbs % d = 0 then 0 else 1 : Nat) : Int) ≤
+            ((decodeZ w).natAbs : Int) := hceilZ
+        _ = decodeZ w := habsCast
+
+theorem decodeZ_floorMag (w d : Nat) (hw : w < M) (hd : 0 < d) :
+    decodeZ (floorMag w d) = decodeZ w / (d : Int) := by
+  rw [floorMag_eq_source w d hw hd]
+  exact decodeZ_encodeZ _ (floorSource_range w d hw hd).1
+    (floorSource_range w d hw hd).2
+
+theorem decodeZ_ceilMag (w d : Nat) (hw : w < M) (hd : 0 < d) :
+    decodeZ (ceilMag w d) = -((-decodeZ w) / (d : Int)) := by
+  rw [ceilMag_eq_source w d hw hd]
+  exact decodeZ_encodeZ _ (ceilSource_range w d hw hd).1
+    (ceilSource_range w d hw hd).2
+
 theorem floorSelectStage_output (k : Nat) (s : RegState)
     (hsign : s rSign = signBit (s rWord))
     (hinv : s rInv = 1 - signBit (s rWord))
@@ -609,6 +735,10 @@ theorem aBody_outputs (k : Nat) (s : AState)
 #print axioms body_outputs
 #print axioms floorMag_eq_source
 #print axioms ceilMag_eq_source
+#print axioms floorSource_range
+#print axioms ceilSource_range
+#print axioms decodeZ_floorMag
+#print axioms decodeZ_ceilMag
 #print axioms aBody_defined
 #print axioms aBody_outputs
 
