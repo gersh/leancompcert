@@ -1,4 +1,4 @@
-import LeanCompCert.Ports.Section413WindowScannerReferenceStep
+import LeanCompCert.Ports.Section413WindowScannerReferenceFold
 import LeanCompCert.Ports.Section413WindowScannerReferenceStepG2
 
 /-!
@@ -42,6 +42,36 @@ theorem flatK2Prefix_succ (G : Nat → Cell) (v n : Nat) :
       (LeanCompCert.Ports.Section413WindowPairingBridge.k2SlotDelta
         G v (slotAt n).n (n % slots)) := by
   simp [flatK2Prefix, List.range_succ, List.foldl_append]
+
+theorem flatK1Prefix_eq_reference (G : Nat → Cell) (v n : Nat) :
+    flatK1Prefix G v n =
+      LeanCompCert.Ports.Section413WindowScannerReferenceFold.flatK1Prefix
+        G v n := rfl
+
+theorem flatK2Prefix_eq_reference (G : Nat → Cell) (v n : Nat) :
+    flatK2Prefix G v n =
+      LeanCompCert.Ports.Section413WindowScannerReferenceFold.flatK2Prefix
+        G v n := rfl
+
+theorem flatK1Prefix_rows (G : Nat → Cell) (v n : Nat)
+    (hn : n ≤ productionRows) :
+    flatK1Prefix G v (n * slots) =
+      LeanCompCert.Ports.Section413WindowScannerReferenceFold.rowK1Prefix
+        G v n := by
+  rw [flatK1Prefix_eq_reference]
+  exact
+    LeanCompCert.Ports.Section413WindowScannerReferenceFold.flatK1Prefix_rows
+      G v n hn
+
+theorem flatK2Prefix_rows (G : Nat → Cell) (v n : Nat)
+    (hn : n ≤ productionRows) :
+    flatK2Prefix G v (n * slots) =
+      LeanCompCert.Ports.Section413WindowScannerReferenceFold.rowK2Prefix
+        G v n := by
+  rw [flatK2Prefix_eq_reference]
+  exact
+    LeanCompCert.Ports.Section413WindowScannerReferenceFold.flatK2Prefix_rows
+      G v n hn
 
 theorem body_eq_checked (k : Nat) (s : AState) (c : Cfg) :
     arun k s (body c) = checkedState k s c := by
@@ -118,6 +148,8 @@ theorem g2_scanner_prefix_matches (entry : AState)
 
 #print axioms flatK1Prefix_succ
 #print axioms flatK2Prefix_succ
+#print axioms flatK1Prefix_rows
+#print axioms flatK2Prefix_rows
 #print axioms body_eq_checked
 #print axioms g2_scanner_prefix_matches
 

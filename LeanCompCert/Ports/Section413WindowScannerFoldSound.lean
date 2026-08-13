@@ -536,6 +536,65 @@ theorem program_runFromArray_zero_implies_receipts_and_bounds (c : Cfg)
       exact Nat.mul_le_mul_right _ hrows) hflags.2.2 hflags.2.1 hflags.1
   exact hall.2.2.2
 
+/-- A successful compiled source run exposes the clean checked-add flag at
+every symbolic scanner prefix.  The physical run supplies only its final
+zero output; the intermediate facts are recovered by uniform backward
+induction, not by evaluating the production loop in Lean. -/
+theorem program_runFromArray_zero_implies_add_prefix_clean (c : Cfg)
+    (arr : Nat → Nat)
+    (harray : ∀ j, arr j < M)
+    (hrows : c.rows ≤
+      LeanCompCert.Ports.Section413WindowSchedule.productionRows)
+    (hrowsCap : LeanCompCert.Ports.Section413WindowSchedule.productionRows ≤
+      c.cap)
+    (hslotsCap : LeanCompCert.Ports.Section413WindowSchedule.slots ≤ c.cap)
+    (hcapH : c.cap < LeanCompCert.Ports.Section413Cells.H63)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap < M)
+    (hdefFrames : EventDefinedFrames c) (hbodyFrames : EventBodyFrames c)
+    (hlo : c.checkLo < M)
+    (hlimit : LeanCompCert.Ports.Section413WindowRowCheck.commonBound -
+      c.offset < M)
+    (out : AState)
+    (hrun : (program c).runFromArray arr = some out)
+    (hzero : out.regs (program c).output = 0) :
+    let entry := arun 0 (initialAStateWithArray arr) init
+    ∀ k, k ≤ c.rows * LeanCompCert.Ports.Section413WindowSchedule.slots →
+      (scannerStateAt c entry k).regs
+        LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  dsimp only
+  let entry := arun 0 (initialAStateWithArray arr) init
+  let total := c.rows *
+    LeanCompCert.Ports.Section413WindowSchedule.slots
+  let symbolicOut := arun 0 (scannerStateAt c entry total) epilogue
+  have hinitialWord : ∀ j, (initialAStateWithArray arr).regs j < M := by
+    intro j
+    simp [initialAStateWithArray, initialState, M]
+  have hinitialArray : ∀ j, (initialAStateWithArray arr).arr j < M := by
+    intro j
+    simpa only [initialAStateWithArray] using harray j
+  have hentryWord : ∀ j, entry.regs j < M :=
+    arun_regs_word 0 _ _ hinitialWord hinitialArray
+  have hentryArray : ∀ j, entry.arr j < M :=
+    arun_arr_word 0 _ _ hinitialWord hinitialArray
+  have hsymbol : (program c).runFromArray arr = some symbolicOut := by
+    simpa only [entry, total, symbolicOut] using
+      program_runFromArray c arr hrows hrowsCap hslotsCap hcapH htable
+        hdefFrames hbodyFrames
+  have houtEq : out = symbolicOut := by
+    rw [hrun] at hsymbol
+    exact Option.some.inj hsymbol
+  subst out
+  have hout : symbolicOut.regs rCombinedViol = 0 := by
+    simpa only [program] using hzero
+  have hfinalWord := scannerStateAt_word c entry hentryWord hentryArray total
+  have hflags := epilogue_zero_implies_flags 0
+    (scannerStateAt c entry total) hfinalWord.1 (by
+      simpa only [symbolicOut] using hout)
+  exact scannerStateAt_add_zero_implies_prefix_clean c entry hentryWord
+    hentryArray hlo hlimit total (by
+      dsimp only [total]
+      exact Nat.mul_le_mul_right _ hrows) hflags.1
+
 #print axioms scannerStateAt_word
 #print axioms scannerStateAt_add_zero_implies_prefix_clean
 #print axioms program_runFromArray
@@ -546,5 +605,6 @@ theorem program_runFromArray_zero_implies_receipts_and_bounds (c : Cfg)
 #print axioms scannerStateAt_flags_zero_implies_receipts_and_bounds
 #print axioms program_denote_zero_implies_receipts_and_bounds
 #print axioms program_runFromArray_zero_implies_receipts_and_bounds
+#print axioms program_runFromArray_zero_implies_add_prefix_clean
 
 end LeanCompCert.Ports.Section413WindowEventScanner

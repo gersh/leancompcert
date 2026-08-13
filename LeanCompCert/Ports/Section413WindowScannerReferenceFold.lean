@@ -20,6 +20,7 @@ open LeanCompCert.Ports.Section413WindowPipelineSound
 open LeanCompCert.Ports.Section413WindowTableReferenceBridge
 open LeanCompCert.Ports.Section413WindowScannerReferenceStep
 open LeanCompCert.Ports.Section413WindowSchedule
+open LeanCompCert.Ports.Section413WindowPairingBridge
 
 def flatK1Prefix (G : Nat → Cell) (v n : Nat) : Cell :=
   (List.range n).foldl (fun z k => cadd z
@@ -42,6 +43,155 @@ theorem flatK2Prefix_succ (G : Nat → Cell) (v n : Nat) :
       (LeanCompCert.Ports.Section413WindowPairingBridge.k2SlotDelta
         G v (slotAt n).n (n % slots)) := by
   simp [flatK2Prefix, List.range_succ, List.foldl_append]
+
+private theorem cadd_assoc (a b c : Cell) :
+    cadd (cadd a b) c = cadd a (cadd b c) := by
+  cases a; cases b; cases c
+  simp [cadd, Int.add_assoc]
+
+private theorem cadd_zero (a : Cell) : cadd a czero = a := by
+  cases a
+  simp [cadd, czero]
+
+private theorem zero_cadd (a : Cell) : cadd czero a = a := by
+  cases a
+  simp [cadd, czero]
+
+private theorem foldCadd_start (xs : List Nat) (f : Nat → Cell)
+    (a : Cell) :
+    xs.foldl (fun z i => cadd z (f i)) a =
+      cadd a (xs.foldl (fun z i => cadd z (f i)) czero) := by
+  induction xs generalizing a with
+  | nil => simp [cadd_zero]
+  | cons i xs ih =>
+      simp only [List.foldl_cons]
+      rw [ih (cadd a (f i))]
+      rw [zero_cadd, ih (f i), cadd_assoc]
+
+theorem slotAt_block (r i : Nat) (hi : i < slots) :
+    (slotAt (r * slots + i)).n = r + 1 ∧
+      (r * slots + i) % slots = i := by
+  have hi316 : i < 316 := by simpa [slots] using hi
+  constructor
+  · simp [slotAt, slots, Nat.add_div, Nat.add_mod,
+      Nat.div_eq_of_lt hi316, Nat.mod_eq_of_lt hi316]
+    exact hi316
+  · simpa [slots] using hi316
+
+private theorem foldl_eq_of_mem (xs : List Nat)
+    (f g : Cell → Nat → Cell) (a : Cell)
+    (h : ∀ i ∈ xs, ∀ z, f z i = g z i) :
+    xs.foldl f a = xs.foldl g a := by
+  induction xs generalizing a with
+  | nil => rfl
+  | cons i xs ih =>
+      simp only [List.foldl_cons]
+      rw [h i (by simp)]
+      apply ih
+      intro j hj
+      exact h j (by simp [hj])
+
+private theorem blockK1 (G : Nat → Cell) (v r : Nat) :
+    (List.range slots).foldl
+        (fun z i => cadd z (k1SlotDelta G v
+          (slotAt (r * slots + i)).n ((r * slots + i) % slots))) czero =
+      k1Slots slots G v (r + 1) := by
+  unfold k1Slots
+  apply foldl_eq_of_mem
+  intro i hi a
+  have hi' : i < slots := List.mem_range.mp hi
+  rw [(slotAt_block r i hi').1, (slotAt_block r i hi').2]
+
+private theorem blockK2 (G : Nat → Cell) (v r : Nat) :
+    (List.range slots).foldl
+        (fun z i => cadd z (k2SlotDelta G v
+          (slotAt (r * slots + i)).n ((r * slots + i) % slots))) czero =
+      k2Slots slots G v (r + 1) := by
+  unfold k2Slots
+  apply foldl_eq_of_mem
+  intro i hi a
+  have hi' : i < slots := List.mem_range.mp hi
+  rw [(slotAt_block r i hi').1, (slotAt_block r i hi').2]
+
+theorem flatK1Prefix_block (G : Nat → Cell) (v r : Nat) :
+    flatK1Prefix G v ((r + 1) * slots) =
+      cadd (flatK1Prefix G v (r * slots))
+        (k1Slots slots G v (r + 1)) := by
+  rw [show (r + 1) * slots = r * slots + slots by simp [Nat.add_mul]]
+  unfold flatK1Prefix
+  rw [List.range_add, List.foldl_append, List.foldl_map]
+  rw [foldCadd_start, blockK1]
+
+theorem flatK2Prefix_block (G : Nat → Cell) (v r : Nat) :
+    flatK2Prefix G v ((r + 1) * slots) =
+      cadd (flatK2Prefix G v (r * slots))
+        (k2Slots slots G v (r + 1)) := by
+  rw [show (r + 1) * slots = r * slots + slots by simp [Nat.add_mul]]
+  unfold flatK2Prefix
+  rw [List.range_add, List.foldl_append, List.foldl_map]
+  rw [foldCadd_start, blockK2]
+
+def rowK1Prefix (G : Nat → Cell) (v n : Nat) : Cell :=
+  (List.range n).foldl
+    (fun z r => cadd z (k1Delta G v (r + 1))) czero
+
+def rowK2Prefix (G : Nat → Cell) (v n : Nat) : Cell :=
+  (List.range n).foldl
+    (fun z r => cadd z (k2Delta G v (r + 1))) czero
+
+theorem rowK1Prefix_succ (G : Nat → Cell) (v n : Nat) :
+    rowK1Prefix G v (n + 1) =
+      cadd (rowK1Prefix G v n) (k1Delta G v (n + 1)) := by
+  simp [rowK1Prefix, List.range_succ, List.foldl_append]
+
+theorem rowK2Prefix_succ (G : Nat → Cell) (v n : Nat) :
+    rowK2Prefix G v (n + 1) =
+      cadd (rowK2Prefix G v n) (k2Delta G v (n + 1)) := by
+  simp [rowK2Prefix, List.range_succ, List.foldl_append]
+
+theorem flatK1Prefix_rows (G : Nat → Cell) (v n : Nat)
+    (hn : n ≤ productionRows) :
+    flatK1Prefix G v (n * slots) = rowK1Prefix G v n := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      rw [flatK1Prefix_block, rowK1Prefix_succ, ih (by omega)]
+      rw [k1Slots_eq_k1Delta]
+      · exact production_sqrt_le_slots (n + 1) (by omega)
+      · exact production_sqrt_le_slots ((n + 1) / 2) (by omega)
+
+theorem flatK2Prefix_rows (G : Nat → Cell) (v n : Nat)
+    (hn : n ≤ productionRows) :
+    flatK2Prefix G v (n * slots) = rowK2Prefix G v n := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      rw [flatK2Prefix_block, rowK2Prefix_succ, ih (by omega)]
+      rw [k2Slots_eq_k2Delta]
+      · exact production_sqrt_le_slots (n + 1) (by omega)
+      · exact production_sqrt_le_slots ((n + 1) / 2) (by omega)
+
+theorem kRun_components (G : Nat → Cell) (v lo : Nat)
+    (boundNum : Int) (boundDen n : Nat) :
+    (kRun G v lo boundNum boundDen n).k1 = rowK1Prefix G v n ∧
+      (kRun G v lo boundNum boundDen n).k2 = rowK2Prefix G v n := by
+  unfold kRun
+  induction n with
+  | zero => constructor <;> rfl
+  | succ n ih =>
+      rw [List.range_succ, List.foldl_append]
+      simp only [List.foldl_cons, List.foldl_nil]
+      constructor
+      · change cadd
+          (List.foldl (fun p i => kStep G v lo boundNum boundDen i p)
+            ⟨czero, czero, true⟩ (List.range n)).k1
+          (k1Delta G v (n + 1)) = rowK1Prefix G v (n + 1)
+        rw [ih.1, rowK1Prefix_succ]
+      · change cadd
+          (List.foldl (fun p i => kStep G v lo boundNum boundDen i p)
+            ⟨czero, czero, true⟩ (List.range n)).k2
+          (k2Delta G v (n + 1)) = rowK2Prefix G v (n + 1)
+        rw [ih.2, rowK2Prefix_succ]
 
 theorem body_eq_checked (k : Nat) (s : AState) (c : Cfg) :
     arun k s (body c) = checkedState k s c := by
@@ -118,6 +268,9 @@ theorem g1_scanner_prefix_matches (entry : AState)
 
 #print axioms flatK1Prefix_succ
 #print axioms flatK2Prefix_succ
+#print axioms flatK1Prefix_rows
+#print axioms flatK2Prefix_rows
+#print axioms kRun_components
 #print axioms body_eq_checked
 #print axioms g1_scanner_prefix_matches
 
