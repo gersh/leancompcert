@@ -1,4 +1,5 @@
 import LeanCompCert.Ports.R2SegSieve
+import LeanCompCert.Verified.ArrayPipeline
 
 /-!
 # Compiled construction of the R2 production mark table
@@ -50,22 +51,28 @@ def runtimeProductionCfg : R2Cfg :=
 
 def rootMarkSink (c : R2Cfg) : Nat := c.segLen
 
-def rootMarkBody (c : R2Cfg) : List AInstr :=
-  let width := runtimeDivCap - 1
+def rootMarkDecode : List AInstr :=
+  let width := 379
   [ .scalar (.binop 10 .udiv .idx (.lit width))
   , .scalar (.binop 11 .add (.reg 10) (.lit 2))       -- n
   , .scalar (.binop 12 .urem .idx (.lit width))
-  , .scalar (.binop 13 .add (.reg 12) (.lit 2))       -- d
-  , .scalar (.binop 14 .mul (.reg 13) (.reg 13))
+  , .scalar (.binop 13 .add (.reg 12) (.lit 2)) ]     -- d
+
+def rootMarkWitness : List AInstr :=
+  [ .scalar (.binop 14 .mul (.reg 13) (.reg 13))
   , .scalar (.binop 15 .le (.reg 14) (.reg 11))
   , .scalar (.binop 16 .urem (.reg 11) (.reg 13))
-  , .scalar (.binop 17 .eq (.reg 16) (.lit 0))
-  , .scalar (.binop 18 .mul (.reg 15) (.reg 17))      -- composite witness
+  , .scalar (.binop 17 .eq (.reg 16) (.lit 0)) ]
+
+def rootMarkTarget (c : R2Cfg) : List AInstr :=
+  [ .scalar (.binop 18 .mul (.reg 15) (.reg 17))      -- composite witness
   , .scalar (.binop 19 .mul (.reg 18) (.reg 11))
   , .scalar (.binop 20 .sub (.lit 1) (.reg 18))
   , .scalar (.binop 21 .mul (.reg 20) (.lit (rootMarkSink c)))
-  , .scalar (.binop 22 .add (.reg 19) (.reg 21))
-  , .store 22 18 ]
+  , .scalar (.binop 22 .add (.reg 19) (.reg 21)) ]
+
+def rootMarkBody (c : R2Cfg) : List AInstr :=
+  rootMarkDecode ++ rootMarkWitness ++ rootMarkTarget c ++ [.store 22 18]
 
 def r2RootMarkProgram (c : R2Cfg := runtimeProductionCfg) : AProgram :=
   { regCount := regCount
@@ -255,11 +262,49 @@ theorem r2RuntimeProgram_compiled (c : R2Cfg) (s : R2Seed) (base : Int)
       some ((n : Nat) : Int) :=
   AProgram.evalCC_compile _ (r2RuntimeProgram_wf c s) base hBase n hDenote
 
+/-- The actual three-function runtime path: composite marking, fixed-log table
+packing, then the sparse R2 sweep, all on one caller-owned array.  The source
+run hypotheses are the remaining algorithmic-refinement layer; the theorem
+below proves that the three compiled CCIR executions compose without resetting
+the resident table between calls. -/
+theorem r2RuntimePipeline_compiled (c : R2Cfg) (s : R2Seed) (base : Int)
+    (hBase : BaseOk c.arrayLen base)
+    (marked packed out : AState)
+    (hMark : (r2RootMarkProgram c).runFromArray (fun _ => 0) = some marked)
+    (hPack : (r2RootPackProgram c).runFromArray marked.arr = some packed)
+    (hMain : (r2RuntimeProgram c s).runFromArray packed.arr = some out) :
+    ∃ mMark mPack mOut,
+      Verified.MemFragment.evalMCCSequence
+          ((r2RootMarkProgram c).initialMCCWithMem base
+            (initialMem c.arrayLen base))
+          (r2RootMarkProgram c).compile = some mMark ∧
+      Verified.MemFragment.evalMCCSequence
+          ((r2RootPackProgram c).initialMCCWithMem base mMark.mem)
+          (r2RootPackProgram c).compile = some mPack ∧
+      Verified.MemFragment.evalMCCSequence
+          ((r2RuntimeProgram c s).initialMCCWithMem base mPack.mem)
+          (r2RuntimeProgram c s).compile = some mOut ∧
+      ARel (r2RuntimeProgram c s).regCount (r2RuntimeProgram c s).arrayLen
+        base out mOut := by
+  apply AProgram.evalCC_compile_fromArray_three
+    (r2RootMarkProgram c) (r2RootPackProgram c) (r2RuntimeProgram c s)
+    (r2RootMarkProgram_wf c) (r2RootPackProgram_wf c)
+    (r2RuntimeProgram_wf c s) rfl rfl base hBase (fun _ => 0)
+    (initialMem c.arrayLen base)
+  · intro k hk
+    exact initialMem_cell c.arrayLen base hk
+  · intro _ _
+    exact M_pos
+  · exact hMark
+  · exact hPack
+  · exact hMain
+
 #print axioms r2RootMarkProgram_wf
 #print axioms r2RootPackProgram_wf
 #print axioms r2RuntimeProgram_wf
 #print axioms r2RootMarkProgram_compiled
 #print axioms r2RootPackProgram_compiled
 #print axioms r2RuntimeProgram_compiled
+#print axioms r2RuntimePipeline_compiled
 
 end LeanCompCert.Ports.R2SegSieve
