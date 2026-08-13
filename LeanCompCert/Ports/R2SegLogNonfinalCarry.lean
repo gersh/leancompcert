@@ -361,9 +361,96 @@ theorem logAfterLiveRoundBody_eq_nonfinal_carry_stages (c : R2Cfg) :
         logAfterFinalEventBody c := by
   rfl
 
+/-- The full scalar suffix carries the source accumulators and previous-event
+word across a nonfinal logarithm round.  This theorem deliberately keeps the
+158-instruction production body symbolic: it composes three already verified
+constant-size slices and never reduces a concrete event schedule. -/
+theorem logAfterLiveRoundBody_nonfinal_accumulator_carry_run
+    (c : R2Cfg) (k : Nat) (s : AState)
+    (d err terms prev ec : Nat)
+    (hfin : s.regs 247 = 0) (hd : s.regs rD = d)
+    (herr : s.regs rErr = err) (hterms : s.regs rTerms = terms)
+    (hprev : s.regs rPrev = prev) (hec : s.regs rEc = ec)
+    (hdM : d < M) (herrM : err < M) (htermsM : terms < M)
+    (hprevM : prev < M) (hecM : ec < M) :
+    let out := arun k s (logAfterLiveRoundBody c)
+    out.regs rD = d ∧ out.regs rErr = err ∧
+      out.regs rTerms = terms ∧ out.regs rPrev = prev ∧
+      out.regs rEc = ec ∧ out.regs 247 = 0 ∧ out.arr = s.arr := by
+  let finalized := arun k s (logLnFinalizeBody c)
+  have frameFinalized (r value : Nat) (hs : s.regs r = value)
+      (hw : writes r (logLnFinalizeBody c) = false) :
+      finalized.regs r = value :=
+    (arun_frame k r (logLnFinalizeBody c) hw s).trans hs
+  have hfD := frameFinalized rD d hd (by rfl)
+  have hfErr := frameFinalized rErr err herr (by rfl)
+  have hfTerms := frameFinalized rTerms terms hterms (by rfl)
+  have hfPrev := frameFinalized rPrev prev hprev (by rfl)
+  have hfEc := frameFinalized rEc ec hec (by rfl)
+  have hfFin := frameFinalized 247 0 hfin (by rfl)
+  have hevent := logFinalEventBody_nonfinal_carry_run c k finalized
+    d err terms prev hfFin hfD hfErr hfTerms hfPrev hdM herrM htermsM
+  dsimp only at hevent
+  let committed := arun k finalized (logFinalEventBody c)
+  have hcEc : committed.regs rEc = ec :=
+    (arun_frame k rEc (logFinalEventBody c) (by rfl) finalized).trans hfEc
+  have htail := logAfterFinalEventBody_nonfinal_carry_run c k committed
+    d err terms prev ec hevent.2.2.2.2.1 hevent.2.2.2.2.2.1
+    hevent.1 hevent.2.1 hevent.2.2.1 hevent.2.2.2.1 hcEc hprevM hecM
+  dsimp only at htail
+  rw [logAfterLiveRoundBody_eq_nonfinal_carry_stages,
+    arun_append, arun_append]
+  exact ⟨htail.1, htail.2.1, htail.2.2.1, htail.2.2.2.1,
+    htail.2.2.2.2.1, htail.2.2.2.2.2.1,
+    htail.2.2.2.2.2.2.trans
+      (hevent.2.2.2.2.2.2.trans
+        (LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+          k (logLnFinalizeBody c) s (by rfl)))⟩
+
+/-- Lift the nonfinal suffix carry through the live recurrence prefix.  The
+caller supplies the prefix's finish-gate result, normally obtained from the
+parameterized recurrence theorem. -/
+theorem logBody_nonfinal_accumulator_carry_run
+    (c : R2Cfg) (k : Nat) (s : AState)
+    (d err terms prev ec : Nat)
+    (hroundedFin :
+      let rounded := arun k s (logLiveRoundBody c)
+      rounded.regs 247 = 0)
+    (hd : s.regs rD = d) (herr : s.regs rErr = err)
+    (hterms : s.regs rTerms = terms) (hprev : s.regs rPrev = prev)
+    (hec : s.regs rEc = ec)
+    (hdM : d < M) (herrM : err < M) (htermsM : terms < M)
+    (hprevM : prev < M) (hecM : ec < M) :
+    let out := arun k s c.logBody
+    out.regs rD = d ∧ out.regs rErr = err ∧
+      out.regs rTerms = terms ∧ out.regs rPrev = prev ∧
+      out.regs rEc = ec ∧ out.regs 247 = 0 ∧ out.arr = s.arr := by
+  let rounded := arun k s (logLiveRoundBody c)
+  have frameRounded (r value : Nat) (hs : s.regs r = value)
+      (hw : writes r (logLiveRoundBody c) = false) :
+      rounded.regs r = value :=
+    (arun_frame k r (logLiveRoundBody c) hw s).trans hs
+  have hsuffix := logAfterLiveRoundBody_nonfinal_accumulator_carry_run
+    c k rounded d err terms prev ec hroundedFin
+    (frameRounded rD d hd (by rfl))
+    (frameRounded rErr err herr (by rfl))
+    (frameRounded rTerms terms hterms (by rfl))
+    (frameRounded rPrev prev hprev (by rfl))
+    (frameRounded rEc ec hec (by rfl))
+    hdM herrM htermsM hprevM hecM
+  dsimp only at hsuffix
+  rw [logBody_eq_live_round_suffix, arun_append]
+  exact ⟨hsuffix.1, hsuffix.2.1, hsuffix.2.2.1,
+    hsuffix.2.2.2.1, hsuffix.2.2.2.2.1, hsuffix.2.2.2.2.2.1,
+    hsuffix.2.2.2.2.2.2.trans
+      (LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+        k (logLiveRoundBody c) s (by rfl))⟩
+
 #print axioms logBetweenJumpAndCommitBody_zero_run
 #print axioms logAccumulatorCommitBody_zero_run
 #print axioms logFinalEventBody_nonfinal_carry_run
 #print axioms logAfterFinalEventBody_nonfinal_carry_run
+#print axioms logAfterLiveRoundBody_nonfinal_accumulator_carry_run
+#print axioms logBody_nonfinal_accumulator_carry_run
 
 end LeanCompCert.Ports.R2SegSieve
