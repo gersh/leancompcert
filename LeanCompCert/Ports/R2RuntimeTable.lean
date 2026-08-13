@@ -188,18 +188,44 @@ def rootPackLnS : List Instr :=
 def rootPackLn : List AInstr :=
   LeanCompCert.Verified.ArrayScalarBlock.lift rootPackLnS
 
-def rootPackStore (c : R2Cfg) : List AInstr :=
-  [ .scalar (.binop 58 .mul (.reg 15) (.reg 17))
-  , .scalar (.binop 59 .add (.reg rpWrite) (.lit c.tableBase))
-  , .scalar (.binop 60 .mul (.reg 58) (.reg 59))
-  , .scalar (.binop 61 .sub (.lit 1) (.reg 58))
-  , .scalar (.binop 62 .mul (.reg 61) (.lit c.streamSink))
-  , .scalar (.binop 63 .add (.reg 60) (.reg 62))
-  , .scalar (.binop 64 .shl (.reg 57) (.lit valBits))
-  , .scalar (.binop 65 .add (.reg 11) (.reg 64))
-  , .scalar (.binop 66 .add (.reg 65) (.lit (1 <<< 63)))
-  , .store 63 66
+def rootPackStoreGateS : List Instr :=
+  [ .binop 58 .mul (.reg 15) (.reg 17) ]
+
+def rootPackStoreGate : List AInstr :=
+  LeanCompCert.Verified.ArrayScalarBlock.lift rootPackStoreGateS
+
+def rootPackStoreTargetS (c : R2Cfg) : List Instr :=
+  [ .binop 59 .add (.reg rpWrite) (.lit c.tableBase)
+  , .binop 60 .mul (.reg 58) (.reg 59)
+  , .binop 61 .sub (.lit 1) (.reg 58)
+  , .binop 62 .mul (.reg 61) (.lit c.streamSink)
+  , .binop 63 .add (.reg 60) (.reg 62) ]
+
+def rootPackStoreTarget (c : R2Cfg) : List AInstr :=
+  LeanCompCert.Verified.ArrayScalarBlock.lift (rootPackStoreTargetS c)
+
+def rootPackStoreShiftI : Instr :=
+  .binop 64 .shl (.reg 57) (.lit valBits)
+
+def rootPackStoreLowI : Instr :=
+  .binop 65 .add (.reg 11) (.reg 64)
+
+def rootPackStoreFlagI : Instr :=
+  .binop 66 .add (.reg 65) (.lit LeanCompCert.Verified.LogFixed.B63)
+
+def rootPackStoreValueS : List Instr :=
+  [rootPackStoreShiftI, rootPackStoreLowI, rootPackStoreFlagI]
+
+def rootPackStoreValue : List AInstr :=
+  LeanCompCert.Verified.ArrayScalarBlock.lift rootPackStoreValueS
+
+def rootPackStoreCommit : List AInstr :=
+  [ .store 63 66
   , .scalar (.binop rpWrite .add (.reg rpWrite) (.reg 58)) ]
+
+def rootPackStore (c : R2Cfg) : List AInstr :=
+  rootPackStoreGate ++ rootPackStoreTarget c ++ rootPackStoreValue ++
+    rootPackStoreCommit
 
 def rootPackClear (c : R2Cfg) : List AInstr :=
   [ .scalar (.binop 67 .mul (.reg 15) (.reg 11))

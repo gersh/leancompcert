@@ -3,6 +3,7 @@ import LeanCompCert.Ports.LogFixRoundSemantics
 import LeanCompCert.Ports.R2SegLnFixConvert
 import LeanCompCert.Verified.InstrRename
 import LeanCompCert.Verified.ArrayRegFrame
+import LeanCompCert.Verified.LogFixedBounds
 
 /-! # Source semantics of the compiled R2 fixed-log table packer -/
 
@@ -356,6 +357,75 @@ theorem rootPackLogRound_run_of_range (k : Nat) (s : AState) (x a : Nat)
     hx ha hxlo hxhi haBound
   exact ⟨h.1, h.2, rfl⟩
 
+theorem rootPack_logIter_fst_range (x0 : Nat)
+    (hxlo : B62 ≤ x0) (hxhi : x0 < B63) : ∀ rounds : Nat,
+    B62 ≤ (logIter x0 rounds).1 ∧ (logIter x0 rounds).1 < B63 := by
+  intro rounds
+  induction rounds with
+  | zero => exact ⟨hxlo, hxhi⟩
+  | succ rounds ih =>
+      simpa only [logIter, logStep] using logMant_range ih.1 ih.2
+
+/-- Symbolic telescope for an arbitrary list of compiled round invocations.
+Only the list length is used; no production candidate range is evaluated. -/
+theorem rootPack_foldl_logRound_from_iter (indices : List Nat) (s : AState)
+    (x0 : Nat) (j : Nat)
+    (hx : s.regs rpXm = (logIter x0 j).1)
+    (ha : s.regs rpAa = (logIter x0 j).2)
+    (hxlo : B62 ≤ x0) (hxhi : x0 < B63)
+    (hcount : j + indices.length ≤ 62) :
+    let out := indices.foldl (fun st k => arun k st rootPackLogRound) s
+    out.regs rpXm = (logIter x0 (j + indices.length)).1 ∧
+      out.regs rpAa = (logIter x0 (j + indices.length)).2 ∧
+      out.arr = s.arr := by
+  induction indices generalizing s j with
+  | nil =>
+      simp only [List.foldl, List.length_nil, Nat.add_zero]
+      exact ⟨hx, ha, trivial⟩
+  | cons k ks ih =>
+      have hj : j < 62 := by
+        simp only [List.length_cons] at hcount
+        omega
+      have haLt := logIter_snd_lt_two_pow x0 j
+      have haBound : (logIter x0 j).2 < B62 := by
+        have hjPow : 2 ^ j ≤ 2 ^ 61 :=
+          Nat.pow_le_pow_right (by decide) (by omega)
+        have hpow : (2 : Nat) ^ 61 < B62 := by decide
+        omega
+      have hrange := rootPack_logIter_fst_range x0 hxlo hxhi j
+      let next := arun k s rootPackLogRound
+      have hstep := rootPackLogRound_run_of_range k s
+        (logIter x0 j).1 (logIter x0 j).2 hx ha
+        hrange.1 hrange.2 haBound
+      dsimp only at hstep
+      have hxNext : next.regs rpXm = (logIter x0 (j + 1)).1 := by
+        simpa only [next, logIter, logStep] using hstep.1
+      have haNext : next.regs rpAa = (logIter x0 (j + 1)).2 := by
+        simpa only [next, logIter, logStep, Nat.shiftLeft_eq,
+          Nat.pow_one, Nat.mul_comm] using hstep.2.1
+      have hrest : j + 1 + ks.length ≤ 62 := by
+        simp only [List.length_cons] at hcount
+        omega
+      have hout := ih next (j + 1) hxNext haNext hrest
+      dsimp only at hout
+      simp only [List.foldl, List.length_cons]
+      have hindex : j + 1 + ks.length = j + (ks.length + 1) := by omega
+      exact ⟨hout.1.trans (congrArg (fun z => (logIter x0 z).1) hindex),
+        hout.2.1.trans (congrArg (fun z => (logIter x0 z).2) hindex),
+        hout.2.2.trans hstep.2.2⟩
+
+theorem rootPack_foldl_logRound_24 (indices : List Nat) (s : AState)
+    (x0 : Nat) (hlen : indices.length = runtimeScale)
+    (hx : s.regs rpXm = x0) (ha : s.regs rpAa = 0)
+    (hxlo : B62 ≤ x0) (hxhi : x0 < B63) :
+    let out := indices.foldl (fun st k => arun k st rootPackLogRound) s
+    out.regs rpXm = (logIter x0 runtimeScale).1 ∧
+      out.regs rpAa = logFrac runtimeScale x0 ∧ out.arr = s.arr := by
+  have h := rootPack_foldl_logRound_from_iter indices s x0 0
+    (by simpa [logIter] using hx) (by simpa [logIter] using ha)
+    hxlo hxhi (by simpa [hlen, runtimeScale])
+  simpa only [Nat.zero_add, hlen, logFrac] using h
+
 /-! ## Relocated natural-log conversion -/
 
 /-- Swap the conversion block's production registers `251,...,262` with the
@@ -458,6 +528,144 @@ theorem rootPackLn_logFix_run (k : Nat) (s : AState) (n : Nat)
   rw [rootPackLn, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   exact ⟨rootPackLnS_logFix_run k s.regs n he ha hfix, rfl⟩
 
+/-! ## Selected-entry store islands -/
+
+theorem rootPackStoreGateS_run (k : Nat) (s : RegState)
+    (finish prime : Nat)
+    (h15 : s 15 = finish) (h17 : s 17 = prime)
+    (hfinish : finish = 0 ∨ finish = 1)
+    (hprime : prime = 0 ∨ prime = 1) :
+    (srun k s rootPackStoreGateS) 58 = finish * prime := by
+  have h1M : (1 : Nat) % M = 1 := Nat.mod_eq_of_lt (by decide)
+  rcases hfinish with rfl | rfl <;> rcases hprime with rfl | rfl <;>
+    simp [rootPackStoreGateS, srun, RegState.set, sdest, sval,
+      denoteOperand, denoteOp, h15, h17, h1M]
+
+theorem rootPackStoreGate_run (k : Nat) (s : AState)
+    (finish prime : Nat)
+    (h15 : s.regs 15 = finish) (h17 : s.regs 17 = prime)
+    (hfinish : finish = 0 ∨ finish = 1)
+    (hprime : prime = 0 ∨ prime = 1) :
+    let out := arun k s rootPackStoreGate
+    out.regs 58 = finish * prime ∧ out.arr = s.arr := by
+  rw [rootPackStoreGate,
+    LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  exact ⟨rootPackStoreGateS_run k s.regs finish prime
+    h15 h17 hfinish hprime, rfl⟩
+
+theorem rootPackStoreTargetS_run (c : R2Cfg) (k : Nat) (s : RegState)
+    (hit w : Nat) (h58 : s 58 = hit) (hw : s rpWrite = w)
+    (hhit : hit = 0 ∨ hit = 1)
+    (htable : c.tableBase < M) (hsink : c.streamSink < M)
+    (hwtable : w + c.tableBase < M) :
+    (srun k s (rootPackStoreTargetS c)) 63 =
+      if hit = 1 then w + c.tableBase else c.streamSink := by
+  have htableM : c.tableBase % M = c.tableBase := Nat.mod_eq_of_lt htable
+  have hsinkM : c.streamSink % M = c.streamSink := Nat.mod_eq_of_lt hsink
+  have hwtableM : (w + c.tableBase) % M = w + c.tableBase :=
+    Nat.mod_eq_of_lt hwtable
+  have hwM : w % M = w := Nat.mod_eq_of_lt (by omega)
+  have hw' : s 4 = w := by simpa only [rpWrite] using hw
+  have hOnePred : 1 + (M - 1) = M := by omega
+  rcases hhit with rfl | rfl <;>
+    simp [rootPackStoreTargetS, srun, RegState.set, sdest, sval,
+      denoteOperand, denoteOp, h58, hw', htableM, hsinkM, hwtableM,
+      hwM, hOnePred, rpWrite]
+
+theorem rootPackStoreTarget_run (c : R2Cfg) (k : Nat) (s : AState)
+    (hit w : Nat) (h58 : s.regs 58 = hit) (hw : s.regs rpWrite = w)
+    (hhit : hit = 0 ∨ hit = 1)
+    (htable : c.tableBase < M) (hsink : c.streamSink < M)
+    (hwtable : w + c.tableBase < M) :
+    let out := arun k s (rootPackStoreTarget c)
+    out.regs 63 =
+      (if hit = 1 then w + c.tableBase else c.streamSink) ∧
+      out.arr = s.arr := by
+  rw [rootPackStoreTarget,
+    LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  exact ⟨rootPackStoreTargetS_run c k s.regs hit w h58 hw hhit
+    htable hsink hwtable, rfl⟩
+
+theorem rootPackStoreValueS_run (k : Nat) (s : RegState) (n ln : Nat)
+    (hn : s 11 = n) (hln : s 57 = ln)
+    (hshift : ln * 2 ^ valBits < M)
+    (hlow : n + ln * 2 ^ valBits < M)
+    (hpack : packEntry n ln 1 < M) :
+    (srun k s rootPackStoreValueS) 66 = packEntry n ln 1 := by
+  have hvalM : valBits % M = valBits := Nat.mod_eq_of_lt (by decide)
+  have hshiftM : (ln * 2 ^ valBits) % M = ln * 2 ^ valBits :=
+    Nat.mod_eq_of_lt hshift
+  have hlowM : (n + ln * 2 ^ valBits) % M = n + ln * 2 ^ valBits :=
+    Nat.mod_eq_of_lt hlow
+  have hpackEq : packEntry n ln 1 = n + ln * 2 ^ valBits + B63 := by
+    rw [packEntry, Nat.one_mul, B63_eq]
+  have hsum : n + ln * 2 ^ valBits + B63 < M := by
+    rw [← hpackEq]
+    exact hpack
+  have h64 : (srun k s [rootPackStoreShiftI]) 64 =
+      ln * 2 ^ valBits := by
+    rw [show [rootPackStoreShiftI] = [] ++ [rootPackStoreShiftI] by rfl,
+      LeanCompCert.Verified.RegFrame.srun_read_last k 64 []
+        rootPackStoreShiftI (by rfl) s]
+    change ((s 57 <<< (valBits % M)) % M) = ln * 2 ^ valBits
+    rw [hln, hvalM, Nat.shiftLeft_eq, hshiftM]
+  have h11frame : (srun k s [rootPackStoreShiftI]) 11 = s 11 :=
+    LeanCompCert.Verified.RegFrame.srun_frame k 11
+      [rootPackStoreShiftI] (by decide) s
+  have h65 : (srun k s [rootPackStoreShiftI, rootPackStoreLowI]) 65 =
+      n + ln * 2 ^ valBits := by
+    rw [show [rootPackStoreShiftI, rootPackStoreLowI] =
+        [rootPackStoreShiftI] ++ [rootPackStoreLowI] by rfl,
+      LeanCompCert.Verified.RegFrame.srun_read_last k 65
+        [rootPackStoreShiftI] rootPackStoreLowI (by rfl) s]
+    change
+      (((srun k s [rootPackStoreShiftI]) 11 +
+        (srun k s [rootPackStoreShiftI]) 64) % M) =
+          n + ln * 2 ^ valBits
+    rw [h11frame, hn, h64, hlowM]
+  rw [show rootPackStoreValueS =
+      [rootPackStoreShiftI, rootPackStoreLowI] ++ [rootPackStoreFlagI] by rfl,
+    LeanCompCert.Verified.RegFrame.srun_read_last k 66
+      [rootPackStoreShiftI, rootPackStoreLowI] rootPackStoreFlagI (by rfl) s]
+  rw [rootPackStoreFlagI]
+  calc
+    sval k (srun k s [rootPackStoreShiftI, rootPackStoreLowI])
+        (.binop 66 .add (.reg 65) (.lit B63)) =
+        n + ln * 2 ^ valBits + B63 :=
+      LeanCompCert.Verified.BlockDefined.sval_binop_val
+        (by
+          rw [LeanCompCert.Verified.BlockDefined.denoteOperand_reg, h65])
+        (LeanCompCert.Verified.BlockDefined.denoteOperand_lit_of_lt
+          k _ (by decide))
+        (LeanCompCert.Verified.BlockDefined.denoteOp_add_of_lt hsum)
+    _ = packEntry n ln 1 := hpackEq.symm
+
+theorem rootPackStoreValue_run (k : Nat) (s : AState) (n ln : Nat)
+    (hn : s.regs 11 = n) (hln : s.regs 57 = ln)
+    (hshift : ln * 2 ^ valBits < M)
+    (hlow : n + ln * 2 ^ valBits < M)
+    (hpack : packEntry n ln 1 < M) :
+    let out := arun k s rootPackStoreValue
+    out.regs 66 = packEntry n ln 1 ∧ out.arr = s.arr := by
+  rw [rootPackStoreValue,
+    LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  exact ⟨rootPackStoreValueS_run k s.regs n ln hn hln
+    hshift hlow hpack, rfl⟩
+
+theorem rootPackStoreCommit_run (k : Nat) (s : AState)
+    (target value w hit : Nat)
+    (h63 : s.regs 63 = target) (h66 : s.regs 66 = value)
+    (hw : s.regs rpWrite = w) (h58 : s.regs 58 = hit)
+    (hsum : w + hit < M) :
+    let out := arun k s rootPackStoreCommit
+    out.regs rpWrite = w + hit ∧
+      ∀ x, out.arr x = if x = target then value else s.arr x := by
+  have hsumM : (w + hit) % M = w + hit := Nat.mod_eq_of_lt hsum
+  have hw' : s.regs 4 = w := by simpa only [rpWrite] using hw
+  simp [rootPackStoreCommit, arun, astep, sval, sdest,
+    denoteOperand, denoteOp, AState.writeReg, AState.writeArr,
+    h63, h66, hw', h58, hsumM, rpWrite]
+
 #print axioms rootPackDecode_defined
 #print axioms rootPackRoundInit_defined
 #print axioms rootPackLogRound_defined
@@ -471,6 +679,9 @@ theorem rootPackLn_logFix_run (k : Nat) (s : AState) (n : Nat)
 #print axioms rootPackLogReg_injective
 #print axioms rootPackLogRoundS_run_of_range
 #print axioms rootPackLogRound_run_of_range
+#print axioms rootPack_logIter_fst_range
+#print axioms rootPack_foldl_logRound_from_iter
+#print axioms rootPack_foldl_logRound_24
 #print axioms rootPackLnReg_injective
 #print axioms rootPackLnConvertS_logFix_run
 #print axioms rootPackLnConvert_logFix_run
@@ -478,5 +689,12 @@ theorem rootPackLn_logFix_run (k : Nat) (s : AState) (n : Nat)
 #print axioms rootPackLnPrefixS_logFix_run
 #print axioms rootPackLnS_logFix_run
 #print axioms rootPackLn_logFix_run
+#print axioms rootPackStoreGateS_run
+#print axioms rootPackStoreGate_run
+#print axioms rootPackStoreTargetS_run
+#print axioms rootPackStoreTarget_run
+#print axioms rootPackStoreValueS_run
+#print axioms rootPackStoreValue_run
+#print axioms rootPackStoreCommit_run
 
 end LeanCompCert.Ports.R2SegSieve
