@@ -477,6 +477,21 @@ theorem runtimeProductionCfg_rootPackSafe :
 def rootPackInitialModel (arr : Nat → Nat) : RootPackModel :=
   { zero := 0, ex := 1, th := 4, xm := 0, aa := 0, write := 0, arr := arr }
 
+theorem rootPackInit_observe (arr : Nat → Nat) :
+    rootPackObserve (arun 0 (initialAStateWithArray arr) rootPackInit) =
+      rootPackInitialModel arr := by
+  simp [rootPackObserve, rootPackInit, PsiSegSieve.seedRegs, arun, astep,
+    initialAStateWithArray, initialState, AState.writeReg,
+    rootPackInitialModel, rpEx, rpTh, rpWrite, rpXm, rpAa, sval,
+    denoteOperand, Nat.mod_eq_of_lt (by decide : 1 < M),
+    Nat.mod_eq_of_lt (by decide : 4 < M)]
+
+theorem rootPackInit_denote (c : R2Cfg) (arr : Nat → Nat) :
+    denoteAInstrs c.arrayLen 0 (initialAStateWithArray arr) rootPackInit =
+      some (arun 0 (initialAStateWithArray arr) rootPackInit) := by
+  apply denoteAInstrs_eq_arun
+  simp [rootPackInit, PsiSegSieve.seedRegs, AllDefined, ADefined]
+
 theorem rootPackInitialModel_invariant (arr : Nat → Nat) :
     RootPackInvariant 0 (rootPackInitialModel arr) := by
   refine
@@ -1912,6 +1927,194 @@ theorem rootPackFold_body_defined (c : R2Cfg) (s : AState) (k i : Nat)
   rw [rootPackFold_observe c s i (fun j hj =>
     hsafe j (Nat.lt_trans hj hik))]
   exact hsafe i hik
+
+theorem rootPackDenoteFold (c : R2Cfg) (s : AState) (k : Nat)
+    (hcfg : RootPackCfgSafe c)
+    (hinit : RootPackInvariant 0 (rootPackObserve s))
+    (hk : k ≤ (r2RootPackProgram c).loopCount) :
+    (List.range k).foldlM
+        (fun st index => denoteAInstrs c.arrayLen index st (rootPackBody c)) s =
+      some (rootPackMachineFold c s k) := by
+  have hsafe := rootPackModelFold_safe c (rootPackObserve s) hcfg hinit
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+      rw [List.range_succ, List.foldlM_append, ih (by omega)]
+      have hsome :
+          (do
+            let init ← (some (rootPackMachineFold c s k) : Option AState)
+            List.foldlM
+              (fun st index => denoteAInstrs c.arrayLen index st
+                (rootPackBody c)) init [k]) =
+            List.foldlM
+              (fun st index => denoteAInstrs c.arrayLen index st
+                (rootPackBody c)) (rootPackMachineFold c s k) [k] :=
+        Option.bind_some _ _
+      rw [hsome]
+      have hdef := rootPackFold_body_defined c s (k + 1) k
+        (Nat.lt_succ_self k)
+        (fun j hj => hsafe j (Nat.lt_of_lt_of_le hj hk))
+      have hden := denoteAInstrs_eq_arun c.arrayLen k (rootPackBody c)
+        (rootPackMachineFold c s k) hdef
+      have htail :
+          (do
+            let init ← some
+              (arun k (rootPackMachineFold c s k) (rootPackBody c))
+            List.foldlM
+              (fun st index => denoteAInstrs c.arrayLen index st
+                (rootPackBody c)) init []) =
+            List.foldlM
+              (fun st index => denoteAInstrs c.arrayLen index st
+                (rootPackBody c))
+              (arun k (rootPackMachineFold c s k) (rootPackBody c)) [] :=
+        Option.bind_some _ _
+      rw [List.foldlM_cons, hden, htail, List.foldlM_nil,
+        rootPackMachineFold_succ]
+      rfl
+
+theorem rootPackEpilogue_defined (c : R2Cfg) (s : AState)
+    (hword : s.regs rpWrite + c.tableBase < M)
+    (hcell : s.regs rpWrite + c.tableBase < c.arrayLen) :
+    AllDefined c.arrayLen 0 s (rootPackEpilogue c) := by
+  have hmod : (s.regs rpWrite + c.tableBase) % M =
+      s.regs rpWrite + c.tableBase := Nat.mod_eq_of_lt hword
+  simp [rootPackEpilogue, AllDefined, ADefined, astep, sval, sdest,
+    denoteOperand, denoteOp, AState.writeReg, hmod, hcell]
+
+theorem rootPackFold_epilogue_defined (c : R2Cfg) (s : AState) (k : Nat)
+    (hcfg : RootPackCfgSafe c)
+    (hinit : RootPackInvariant 0 (rootPackObserve s))
+    (hk : k ≤ (r2RootPackProgram c).loopCount)
+    (hkRoot : k / runtimeScale < runtimeRoot) :
+    AllDefined c.arrayLen 0 (rootPackMachineFold c s k)
+      (rootPackEpilogue c) := by
+  have hsafe := rootPackModelFold_safe c (rootPackObserve s) hcfg hinit
+  have hobs := rootPackFold_observe c s k
+    (fun i hi => hsafe i (Nat.lt_of_lt_of_le hi hk))
+  have hinv := rootPackModelFold_invariant c (rootPackObserve s) k
+    hcfg hinit hk
+  have hwriteEq : (rootPackMachineFold c s k).regs rpWrite =
+      (rootPackModelFold c (rootPackObserve s) k).write := by
+    simpa only [rootPackObserve] using congrArg RootPackModel.write hobs
+  have hwriteRoot : (rootPackMachineFold c s k).regs rpWrite <
+      runtimeRoot := by
+    rw [hwriteEq]
+    exact Nat.lt_of_le_of_lt hinv.writeLe hkRoot
+  apply rootPackEpilogue_defined
+  · exact Nat.lt_of_lt_of_le
+      (Nat.add_lt_add_right hwriteRoot c.tableBase)
+      (Nat.le_of_lt hcfg.rootTableWord)
+  · exact Nat.lt_of_lt_of_le
+      (Nat.add_lt_add_right hwriteRoot c.tableBase)
+      (Nat.le_of_lt hcfg.rootTableCell)
+
+theorem rootPackRunFromArray_of_stages (c : R2Cfg) (arr : Nat → Nat)
+    (s₀ sf out : AState)
+    (hInit : denoteAInstrs (r2RootPackProgram c).arrayLen 0
+      (initialAStateWithArray arr) (r2RootPackProgram c).init = some s₀)
+    (hLoop : (List.range (r2RootPackProgram c).loopCount).foldlM
+      (fun st index => denoteAInstrs (r2RootPackProgram c).arrayLen index st
+        (r2RootPackProgram c).body) s₀ = some sf)
+    (hEpi : denoteAInstrs (r2RootPackProgram c).arrayLen 0 sf
+      (r2RootPackProgram c).epilogue = some out) :
+    (r2RootPackProgram c).runFromArray arr = some out := by
+  have hAfterInit :
+      (do
+        let st ← (some s₀ : Option AState)
+        let st ← (List.range (r2RootPackProgram c).loopCount).foldlM
+          (fun z index => denoteAInstrs (r2RootPackProgram c).arrayLen
+            index z (r2RootPackProgram c).body) st
+        denoteAInstrs (r2RootPackProgram c).arrayLen 0 st
+          (r2RootPackProgram c).epilogue) =
+      (do
+        let st ← (List.range (r2RootPackProgram c).loopCount).foldlM
+          (fun z index => denoteAInstrs (r2RootPackProgram c).arrayLen
+            index z (r2RootPackProgram c).body) s₀
+        denoteAInstrs (r2RootPackProgram c).arrayLen 0 st
+          (r2RootPackProgram c).epilogue) := Option.bind_some _ _
+  have hAfterLoop :
+      (do
+        let st ← (some sf : Option AState)
+        denoteAInstrs (r2RootPackProgram c).arrayLen 0 st
+          (r2RootPackProgram c).epilogue) =
+      denoteAInstrs (r2RootPackProgram c).arrayLen 0 sf
+        (r2RootPackProgram c).epilogue := Option.bind_some _ _
+  unfold AProgram.runFromArray
+  rw [hInit, hAfterInit, hLoop, hAfterLoop, hEpi]
+
+def rootPackedState (c : R2Cfg) (arr : Nat → Nat) : AState :=
+  let s₀ := arun 0 (initialAStateWithArray arr) rootPackInit
+  arun 0 (rootPackMachineFold c s₀ (r2RootPackProgram c).loopCount)
+    (rootPackEpilogue c)
+
+def rootPackStartedState (arr : Nat → Nat) : AState :=
+  arun 0 (initialAStateWithArray arr) rootPackInit
+
+def rootPackLoopState (c : R2Cfg) (arr : Nat → Nat) : AState :=
+  rootPackMachineFold c (rootPackStartedState arr)
+    (r2RootPackProgram c).loopCount
+
+theorem rootPackStartedState_invariant (arr : Nat → Nat) :
+    RootPackInvariant 0 (rootPackObserve (rootPackStartedState arr)) := by
+  rw [rootPackStartedState, rootPackInit_observe]
+  exact rootPackInitialModel_invariant arr
+
+theorem rootPackStartedState_denote (c : R2Cfg) (arr : Nat → Nat) :
+    denoteAInstrs (r2RootPackProgram c).arrayLen 0
+      (initialAStateWithArray arr) (r2RootPackProgram c).init =
+      some (rootPackStartedState arr) := by
+  simpa only [r2RootPackProgram, rootPackStartedState] using
+    rootPackInit_denote c arr
+
+theorem rootPackLoopState_denote (c : R2Cfg) (arr : Nat → Nat)
+    (hcfg : RootPackCfgSafe c) :
+    (List.range (r2RootPackProgram c).loopCount).foldlM
+      (fun st index => denoteAInstrs (r2RootPackProgram c).arrayLen index st
+        (r2RootPackProgram c).body) (rootPackStartedState arr) =
+      some (rootPackLoopState c arr) := by
+  exact rootPackDenoteFold c (rootPackStartedState arr)
+    (r2RootPackProgram c).loopCount hcfg
+    (rootPackStartedState_invariant arr) (Nat.le_refl _)
+
+theorem rootPackLoopState_epilogue_defined (c : R2Cfg) (arr : Nat → Nat)
+    (hcfg : RootPackCfgSafe c) :
+    AllDefined (r2RootPackProgram c).arrayLen 0 (rootPackLoopState c arr)
+      (r2RootPackProgram c).epilogue := by
+  have hkRoot : (r2RootPackProgram c).loopCount / runtimeScale <
+      runtimeRoot := by
+    change ((runtimeRoot - 1) * runtimeScale) / runtimeScale < runtimeRoot
+    rw [Nat.mul_div_cancel _ (by decide : 0 < runtimeScale)]
+    have : 0 < runtimeRoot := by decide
+    omega
+  exact rootPackFold_epilogue_defined c (rootPackStartedState arr)
+    (r2RootPackProgram c).loopCount hcfg
+    (rootPackStartedState_invariant arr) (Nat.le_refl _) hkRoot
+
+theorem rootPackLoopState_epilogue_denote (c : R2Cfg) (arr : Nat → Nat)
+    (hcfg : RootPackCfgSafe c) :
+    denoteAInstrs (r2RootPackProgram c).arrayLen 0 (rootPackLoopState c arr)
+      (r2RootPackProgram c).epilogue =
+      some (arun 0 (rootPackLoopState c arr) (rootPackEpilogue c)) := by
+  exact denoteAInstrs_eq_arun c.arrayLen 0 (rootPackEpilogue c)
+    (rootPackLoopState c arr)
+    (rootPackLoopState_epilogue_defined c arr hcfg)
+
+theorem rootPackProgram_runFromArray (c : R2Cfg) (arr : Nat → Nat)
+    (hcfg : RootPackCfgSafe c) :
+    ∃ out, (r2RootPackProgram c).runFromArray arr = some out := by
+  refine ⟨arun 0 (rootPackLoopState c arr) (rootPackEpilogue c), ?_⟩
+  exact rootPackRunFromArray_of_stages c arr (rootPackStartedState arr)
+    (rootPackLoopState c arr)
+    (arun 0 (rootPackLoopState c arr) (rootPackEpilogue c))
+    (rootPackStartedState_denote c arr)
+    (rootPackLoopState_denote c arr hcfg)
+    (rootPackLoopState_epilogue_denote c arr hcfg)
+
+theorem rootPackProduction_runFromArray (arr : Nat → Nat) :
+    ∃ out, (r2RootPackProgram runtimeProductionCfg).runFromArray arr =
+      some out :=
+  rootPackProgram_runFromArray runtimeProductionCfg arr
+    runtimeProductionCfg_rootPackSafe
 
 #print axioms rootPackDecode_defined
 #print axioms rootPackRoundInit_defined
