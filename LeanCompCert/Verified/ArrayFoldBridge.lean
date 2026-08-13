@@ -363,6 +363,83 @@ theorem AProgram.output_eq_arun_of_denote_eq_some (p : AProgram) {n : Nat}
                 _ = (arun 0 loopOut p.epilogue).regs p.output := by rw [hfinal]
                 _ = _ := by rw [hloopOut, hentry]
 
+/-- A successful program denotation certifies every body invocation at its
+ordinary total-state prefix.  This is useful when a compiled audit supplies
+whole-program definedness but a refinement theorem needs one dynamic guard at
+an arbitrary loop index. -/
+theorem AProgram.body_denotes_at_total_prefix (p : AProgram) {n j : Nat}
+    (h : p.denote = some n) (hj : j < p.loopCount) :
+    ∃ out, denoteAInstrs p.arrayLen j
+      ((List.range j).foldl (fun s index => arun index s p.body)
+        (arun 0 initialAState p.init)) p.body = some out := by
+  unfold AProgram.denote at h
+  cases hinit : denoteAInstrs p.arrayLen 0 initialAState p.init with
+  | none => simp [hinit] at h
+  | some entry =>
+      have hentry : entry = arun 0 initialAState p.init :=
+        eq_arun_of_denoteAInstrs_eq_some p.arrayLen 0 p.init
+          initialAState entry hinit
+      rw [hinit] at h
+      change ((List.range p.loopCount).foldlM
+          (fun s index => denoteAInstrs p.arrayLen index s p.body) entry).bind
+          (fun s => (denoteAInstrs p.arrayLen 0 s p.epilogue).bind
+            (fun s => some (s.regs p.output))) = some n at h
+      cases hloop : (List.range p.loopCount).foldlM
+          (fun s index => denoteAInstrs p.arrayLen index s p.body) entry with
+      | none => simp [hloop] at h
+      | some loopOut =>
+          let tailLen := p.loopCount - (j + 1)
+          have hcount : p.loopCount = (j + 1) + tailLen := by
+            dsimp only [tailLen]
+            omega
+          have hrange : List.range p.loopCount =
+              List.range j ++ j :: List.range' (j + 1) tailLen := by
+            rw [hcount, List.range_eq_range',
+              ← List.range'_append_1 (s := 0) (m := j + 1) (n := tailLen),
+              List.range'_1_concat, ← List.range_eq_range']
+            simp only [Nat.zero_add, List.append_assoc, List.singleton_append]
+          rw [hrange, List.foldlM_append] at hloop
+          cases hpref : (List.range j).foldlM
+              (fun s index => denoteAInstrs p.arrayLen index s p.body)
+              entry with
+          | none => simp [hpref] at hloop
+          | some mid =>
+              rw [hpref] at hloop
+              cases hstep : denoteAInstrs p.arrayLen j mid p.body with
+              | none => simp [hstep] at hloop
+              | some next =>
+                  have hmid : mid =
+                      (List.range j).foldl
+                        (fun s index => arun index s p.body) entry :=
+                    eq_foldl_arun_of_foldlM_denote_eq_some p.arrayLen p.body
+                      (List.range j) entry mid hpref
+                  rw [hmid, hentry] at hstep
+                  exact ⟨next, hstep⟩
+
+/-- If a successful program body is an appended pair of blocks, then both
+blocks denote successfully at every total-state loop prefix.  The statement
+uses the explicit appended body in the prefix, avoiding any need for clients
+to unfold a large concrete `AProgram` under a fold. -/
+theorem AProgram.body_append_denotes_at_total_prefix
+    (p : AProgram) {n j : Nat} (h : p.denote = some n)
+    (hj : j < p.loopCount) (xs ys : List AInstr)
+    (hbody : p.body = xs ++ ys) :
+    ∃ mid out,
+      denoteAInstrs p.arrayLen j
+          ((List.range j).foldl (fun s index => arun index s (xs ++ ys))
+            (arun 0 initialAState p.init)) xs = some mid ∧
+        denoteAInstrs p.arrayLen j mid ys = some out := by
+  obtain ⟨out, hout⟩ := body_denotes_at_total_prefix p h hj
+  rw [hbody] at hout
+  rw [denoteAInstrs_append] at hout
+  cases hxs : denoteAInstrs p.arrayLen j
+      ((List.range j).foldl (fun s index => arun index s (xs ++ ys))
+        (arun 0 initialAState p.init)) xs with
+  | none => simp [hxs] at hout
+  | some mid =>
+      rw [hxs] at hout
+      exact ⟨mid, out, rfl, by simpa using hout⟩
+
 /-! ## Layer 1 — the monadic loop is a pure fold -/
 
 /--

@@ -68,6 +68,13 @@ def sieveWeightedProgram (bound len weight bonus : Nat) : AProgram :=
   , epilogue := []
   , output := 0 }
 
+/-- The same proved weighted sieve followed by a one-word budget verdict.
+The emitted result is `0` exactly when the complete weighted prime sum fits
+`budget`; no prime predicate or large list is reduced by the Lean kernel. -/
+def sieveWeightedBudgetProgram (bound len weight bonus budget : Nat) : AProgram :=
+  { sieveWeightedProgram bound len weight bonus with
+    epilogue := [.scalar (.binop 0 .gt (.reg 0) (.lit budget))] }
+
 abbrev Abs := (Nat → Nat) × Nat
 
 def obs (s : AState) : Abs := (s.arr, s.regs 0)
@@ -488,6 +495,103 @@ theorem sieveWeightedProgram_denote (bound len weight bonus : Nat)
   · simp [h2]
 
 set_option maxHeartbeats 1000000 in
+/-- The budget-verdict form denotes the comparison against the mathematical
+weighted prime sum.  Its loop proof is the same size-independent simulation
+as `sieveWeightedProgram_denote`; only the final comparison differs. -/
+theorem sieveWeightedBudgetProgram_denote
+    (bound len weight bonus budget : Nat)
+    (h0 : 0 < len) (hlm : len < M) (hLC : (bound + 1) * len < M)
+    (hB : (bound + 2) * (bound + 2) < M)
+    (hcover : len ≤ (bound + 2) * (bound + 2))
+    (hw : weight < M) (hb : bonus < M)
+    (hfit : len * (weight + bonus) < M) (hbudgetM : budget < M) :
+    (sieveWeightedBudgetProgram bound len weight bonus budget).denote =
+      some (if primeWeightedSum len weight bonus > budget then 1 else 0) := by
+  have hstep : ∀ index s,
+      index < (sieveWeightedBudgetProgram bound len weight bonus budget).loopCount →
+      CellsFit s →
+      denoteAInstrs
+          (sieveWeightedBudgetProgram bound len weight bonus budget).arrayLen index s
+          (sieveWeightedBudgetProgram bound len weight bonus budget).body =
+        some (arun index s (sieveWeightedBody bound len weight bonus)) := by
+    intro index s hidx hPs
+    have hlt : index < (bound + 1) * len := hidx
+    have hqle : index / len ≤ bound := by
+      have hml : index < len * (bound + 1) := by
+        rw [Nat.mul_comm]
+        exact hlt
+      have := Nat.div_lt_of_lt_mul hml
+      omega
+    exact denoteAInstrs_eq_arun len index _ s
+      (body_spec bound len weight bonus index s h0 hlm (by omega) hqle hB hw hb hPs).1
+  have hclosed : ∀ index s,
+      index < (sieveWeightedBudgetProgram bound len weight bonus budget).loopCount →
+      CellsFit s → CellsFit (arun index s (sieveWeightedBody bound len weight bonus)) := by
+    intro index s hidx hPs
+    have hlt : index < (bound + 1) * len := hidx
+    have hqle : index / len ≤ bound := by
+      have hml : index < len * (bound + 1) := by rw [Nat.mul_comm]; exact hlt
+      have := Nat.div_lt_of_lt_mul hml
+      omega
+    exact body_closed bound len weight bonus index s h0 hlm (by omega) hqle hB hw hb hPs
+  have hobs : ∀ index s,
+      index < (sieveWeightedBudgetProgram bound len weight bonus budget).loopCount →
+      CellsFit s →
+      obs (arun index s (sieveWeightedBody bound len weight bonus)) =
+        gstep bound len weight bonus index (obs s) := by
+    intro index s hidx hPs
+    have hlt : index < (bound + 1) * len := hidx
+    have hqle : index / len ≤ bound := by
+      have hml : index < len * (bound + 1) := by rw [Nat.mul_comm]; exact hlt
+      have := Nat.div_lt_of_lt_mul hml
+      omega
+    have hs := body_spec bound len weight bonus index s h0 hlm (by omega) hqle hB hw hb hPs
+    exact Prod.ext hs.2.1 hs.2.2
+  have hbridge :=
+    AProgram.denote_eq_obs_foldl_mem
+      (sieveWeightedBudgetProgram bound len weight bonus budget) CellsFit
+      (fun index s => arun index s (sieveWeightedBody bound len weight bonus))
+      obs (gstep bound len weight bonus)
+      (fun a => if a.2 > budget then 1 else 0) initialAState rfl
+      (fun c => by have := ArrayFoldBridge.one_lt_M; simp [initialAState]; omega)
+      hstep hclosed hobs (fun s _ => by
+        simp only [sieveWeightedBudgetProgram, sieveWeightedProgram,
+          denoteAInstrs, denoteAInstr,
+          LeanCompCert.Verified.Reflect.denoteInstr, denoteOperand, denoteOp,
+          Option.bind_some, Option.map_some, Function.comp_apply]
+        simp only [Nat.mod_eq_of_lt hbudgetM]
+        simp [RegState.set, obs])
+  rw [hbridge]
+  rw [show (sieveWeightedBudgetProgram bound len weight bonus budget).loopCount =
+      (bound + 1) * len from rfl,
+    LeanCompCert.Ports.BlockedFold.foldl_range_mul (bound + 1) len
+      (fun a index => gstep bound len weight bonus index a) (obs initialAState)]
+  have hinit : obs initialAState = ((fun _ => 0), 0) := rfl
+  rw [hinit, List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
+    markRounds bound len weight bonus h0 (fun _ => 0) bound (Nat.le_refl bound),
+    LeanCompCert.Ports.BlockedFold.block_eq_shift,
+    accPass bound len weight bonus h0 hfit _ len (Nat.le_refl len)]
+  congr 1
+  apply congrArg (fun total => if total > budget then 1 else 0)
+  unfold weightedPrefix primeWeightedSum
+  rw [← foldl_if_eq_filter_map_sum]
+  apply foldl_eq_of_mem
+  intro acc n hn
+  have hnlt : n < len := List.mem_range.mp hn
+  simp only [if_pos hnlt]
+  congr 1
+  by_cases h2 : 2 ≤ n
+  · simp only [h2, true_and]
+    have hc : n < (bound + 2) * (bound + 2) := by omega
+    have hiff := ArraySieveCount.spfScan_eq_zero_iff bound n h2 hc
+    unfold Sieve.spfScan at hiff
+    by_cases hs : (List.range bound).foldl (Sieve.spfStep n) 0 = 0
+    · rw [if_pos hs, if_pos (hiff.mp hs)]
+    · rw [if_neg hs, if_neg]
+      exact fun hp => hs (hiff.mpr hp)
+  · simp [h2]
+
+set_option maxHeartbeats 1000000 in
 theorem sieveWeightedBody_wf (bound len weight bonus : Nat) :
     ∀ a ∈ sieveWeightedBody bound len weight bonus, a.WF regCount := by
   intro a ha
@@ -499,5 +603,19 @@ theorem sieveWeightedProgram_wf (bound len weight bonus : Nat) :
     (sieveWeightedProgram bound len weight bonus).WF :=
   ⟨by show 0 < 14; omega, (by intro a ha; cases ha),
     sieveWeightedBody_wf bound len weight bonus, (by intro a ha; cases ha)⟩
+
+theorem sieveWeightedBudgetProgram_wf
+    (bound len weight bonus budget : Nat) :
+    (sieveWeightedBudgetProgram bound len weight bonus budget).WF := by
+  refine ⟨by change 0 < 14; omega, ?_,
+    sieveWeightedBody_wf bound len weight bonus, ?_⟩
+  · intro a ha
+    cases ha
+  · intro a ha
+    simp only [sieveWeightedBudgetProgram, List.mem_cons, List.not_mem_nil,
+      or_false] at ha
+    subst a
+    simp +decide [sieveWeightedBudgetProgram, sieveWeightedProgram,
+      AInstr.WF, Instr.WF, Operand.WF, regCount]
 
 end LeanCompCert.Ports.ArraySieveWeightedSum

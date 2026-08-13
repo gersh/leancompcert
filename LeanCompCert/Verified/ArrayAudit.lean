@@ -1,6 +1,7 @@
 import LeanCompCert.Verified.ArrayFoldBridge
 import LeanCompCert.Verified.ArrayBridge
 import LeanCompCert.Verified.ArrayComputation
+import LeanCompCert.Verified.ArrayFinalRelation
 
 /-!
 # Fail-safe auditing for partial array programs
@@ -1286,5 +1287,51 @@ theorem source_total_reg_eq_of_audit_and_observesReg
   dsimp only [AComputation.withOutput] at hSource
   dsimp only
   exact hSource.symm.trans hValue.symm
+
+/-- A fail-safe zero receipt plus a selected compiled-memory observation
+identifies the corresponding cell in the ordinary total source final state.
+This is the memory counterpart of `source_total_reg_eq_of_audit_and_observesReg`.
+The compiler bridge is used only after the audit has established a successful
+source denotation. -/
+theorem source_total_cell_eq_of_audit_and_observesCell
+    (a : AComputation) (cell : Nat) (hcell : cell < a.program.arrayLen)
+    (value : Nat)
+    (hlen : 0 < a.program.arrayLen) (hlenM : a.program.arrayLen < M)
+    (hAudit : (auditComputation a).Returns ((0 : Nat) : Int))
+    (hObserve : a.ObservesCell cell ((value : Nat) : Int)) :
+    let sEntry := arun 0 initialAState a.program.init
+    let sLoop := (List.range a.program.loopCount).foldl
+      (fun s idx => arun idx s a.program.body) sEntry
+    let sFinal := arun 0 sLoop a.program.epilogue
+    sFinal.arr cell = value := by
+  obtain ⟨n, hDenote⟩ :=
+    source_denotes_of_audit_returns_zero a hlen hlenM hAudit
+  obtain ⟨s1, s2, s3, m3, hInit, hLoop, hEpi, hEval, hRel⟩ :=
+    AProgram.evalCC_compile_finalRel a.program a.wellFormed a.base a.baseOk
+      n hDenote
+  have hMem : m3.mem (cellAddr a.base cell) =
+      some ((s3.arr cell : Nat) : Int) := hRel.hcells cell hcell
+  have hObserved : m3.mem (cellAddr a.base cell) =
+      some ((value : Nat) : Int) := by
+    unfold AComputation.ObservesCell at hObserve
+    rw [hEval] at hObserve
+    exact hObserve
+  have hCellEq : s3.arr cell = value := by
+    have : ((s3.arr cell : Nat) : Int) = ((value : Nat) : Int) := by
+      exact Option.some.inj (hMem.symm.trans hObserved)
+    exact_mod_cast this
+  have hs1 : s1 = arun 0 initialAState a.program.init :=
+    eq_arun_of_denoteAInstrs_eq_some a.program.arrayLen 0 a.program.init
+      initialAState s1 hInit
+  have hs2 : s2 = (List.range a.program.loopCount).foldl
+      (fun s idx => arun idx s a.program.body) s1 :=
+    eq_foldl_arun_of_foldlM_denote_eq_some a.program.arrayLen a.program.body
+      (List.range a.program.loopCount) s1 s2 hLoop
+  have hs3 : s3 = arun 0 s2 a.program.epilogue :=
+    eq_arun_of_denoteAInstrs_eq_some a.program.arrayLen 0
+      a.program.epilogue s2 s3 hEpi
+  dsimp only
+  rw [← hs1, ← hs2, ← hs3]
+  exact hCellEq
 
 end LeanCompCert.Verified.ArrayAudit

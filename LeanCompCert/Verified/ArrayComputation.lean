@@ -118,6 +118,14 @@ def ObservesReg (a : AComputation) (reg : Nat)
     (hreg : reg < a.program.regCount) (value : Int) : Prop :=
   (a.withOutput reg hreg).Returns value
 
+/-- A selected final array cell from the same compiled execution.  Unlike a
+register observation this needs no program repackaging: the proved array
+compiler relation already retains the final flat memory. -/
+def ObservesCell (a : AComputation) (cell : Nat) (value : Int) : Prop :=
+  Option.bind
+      (evalMCCSequence (a.program.initialMCC a.base) a.program.compile)
+      (fun m : MCCState => m.mem (cellAddr a.base cell)) = some value
+
 /--
 **The honest run rule.**
 

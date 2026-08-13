@@ -99,9 +99,50 @@ theorem readExt_combinedIndexedRun_eq_extRunFrom
     (combinedSignals_schedule_of_residueSchedule
       mu lo idx c k fuel N h hs) (readExt s) he
 
+/-- Observation-facing wrapper.  Keeping this composition generic prevents
+concrete manifest states from forcing the elaborator to normalize the full
+compiled run while it applies the fold theorem. -/
+theorem observedExt_eq_extRunFrom
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k fuel N : Nat)
+    {s t : AState} (h : CoreAgree s t)
+    (hready : ∀ j, j < fuel →
+      (arun (idx + j) (combinedIndexedRun idx c j s) c.coreBody).regs 65 ≠ 0)
+    (hs : ConsecutiveSignalSchedule mu lo
+      (ArraySegMobiusResidueFold.combinedSignals idx c k fuel t) N)
+    (he : ExtOrdered (readExt s)) {observed : Ext}
+    (hobserved : readExt (combinedIndexedRun idx c fuel s) = observed) :
+    observed = extRunFrom mu lo (readExt s) N := by
+  rw [← hobserved]
+  rw [ArraySegMobiusExtrema.readExt_combinedIndexedRun_eq_extFold idx c
+    fuel s hready]
+  exact ArraySegMobiusExtremaFold.ConsecutiveSignalSchedule.extFold_eq_extRunFrom
+    (combinedSignals_schedule_of_residueSchedule
+      mu lo idx c k fuel N h hs) (readExt s) he
+
+/-- Zero-index form used by physical batch receipts.  Stating the readiness
+premise with the literal source index avoids asking downstream elaboration to
+normalize an entire concrete run merely to discharge `0 + j = j`. -/
+theorem observedExt_zero_eq_extRunFrom
+    (mu : Nat → Int) (lo : Nat) (c : Cfg) (k fuel N : Nat)
+    {s t : AState} (h : CoreAgree s t)
+    (hready : ∀ j, j < fuel →
+      (arun j (combinedIndexedRun 0 c j s) c.coreBody).regs 65 ≠ 0)
+    (hs : ConsecutiveSignalSchedule mu lo
+      (ArraySegMobiusResidueFold.combinedSignals 0 c k fuel t) N)
+    (he : ExtOrdered (readExt s)) {observed : Ext}
+    (hobserved : readExt (combinedIndexedRun 0 c fuel s) = observed) :
+    observed = extRunFrom mu lo (readExt s) N := by
+  apply observedExt_eq_extRunFrom mu lo 0 c k fuel N h
+  · simpa only [Nat.zero_add] using hready
+  · exact hs
+  · exact he
+  · exact hobserved
+
 #print axioms combinedEntry_core
 #print axioms combinedEntry_readExt
 #print axioms combined_ready_of_indexedBodyRun_core
 #print axioms readExt_combinedIndexedRun_eq_extRunFrom
+#print axioms observedExt_eq_extRunFrom
+#print axioms observedExt_zero_eq_extRunFrom
 
 end LeanCompCert.Ports.ArraySegMobiusExtremaProduction

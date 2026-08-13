@@ -151,15 +151,16 @@ private theorem perm_sum {xs ys : List Nat} (h : xs.Perm ys) : xs.sum = ys.sum :
   | trans h₁ h₂ ih₁ ih₂ => exact ih₁.trans ih₂
 
 set_option maxRecDepth 100000 in
-/-- An exact prime table through `87903` has the same weighted sum as the
-canonical finite predicate evaluated by the compiled sieve. -/
-theorem primeTable_weightedSum_eq {ps : List Nat} (h : PrimeTableInv ps 87903)
+/-- Any exact finite prime table has the same weighted sum as the canonical
+finite predicate evaluated by the compiled sieve. -/
+theorem primeTable_weightedSum_eq_general {ps : List Nat} {bound : Nat}
+    (h : PrimeTableInv ps bound)
     (weight bonus : Nat) :
     (ps.map (rowWeight weight bonus)).sum =
-      primeWeightedSum 87904 weight bonus := by
+      primeWeightedSum (bound + 1) weight bonus := by
   let pred : Nat → Bool :=
     fun n => decide (2 ≤ n ∧ Sieve.leastFactor n = n)
-  let canonical := (List.range 87904).filter pred
+  let canonical := (List.range (bound + 1)).filter pred
   have hpsNodup : ps.Nodup := h.ordered.imp (by intro a b hab; omega)
   have hcanonicalNodup : canonical.Nodup := List.nodup_range.filter pred
   have hmem : ∀ n, n ∈ ps ↔ n ∈ canonical := by
@@ -179,6 +180,14 @@ theorem primeTable_weightedSum_eq {ps : List Nat} (h : PrimeTableInv ps 87903)
     simp only [hmem n]
   rw [primeWeightedSum_eq]
   exact perm_sum (hperm.map (rowWeight weight bonus))
+
+set_option maxRecDepth 100000 in
+/-- Specialization retained for the two historical `87903` campaigns. -/
+theorem primeTable_weightedSum_eq {ps : List Nat} (h : PrimeTableInv ps 87903)
+    (weight bonus : Nat) :
+    (ps.map (rowWeight weight bonus)).sum =
+      primeWeightedSum 87904 weight bonus := by
+  simpa using primeTable_weightedSum_eq_general h weight bonus
 
 theorem plattFirstMarkBudget_of_primeTable {ps : List Nat}
     (h : PrimeTableInv ps 87903) :
@@ -270,6 +279,42 @@ theorem rootLaterWindows_primeTable {c : Cfg} {ps : List Nat}
           (w + k * c.segLen - 1) + 1 := by omega
       simpa [Nat.add_mul, Nat.add_assoc] using
         rootScanFrom_primeTable ih hbase (by omega)
+
+/-- The abstract exact production schedule determines a complete final prime
+table.  This fact is independent of the concrete Platt configuration and is
+reused by the historical manifest bridge. -/
+theorem ProductionCoreSchedule.finalPrime {c : Cfg}
+    {bootBound bootFuel laterFuel mainFuel delta : Nat}
+    (h : ProductionCoreSchedule c bootBound bootFuel laterFuel mainFuel
+      delta) :
+    PrimeTableInv (finalRootTable c bootBound bootFuel laterFuel)
+      (finalRootBound c bootFuel laterFuel) := by
+  have hseg : 0 < c.segLen := h.segLenPos
+  have hcross0 := rootScanMixed_primeTable (fuel := c.segLen) h.bootPrime
+    (w := crossingBase c bootFuel) h.crossingStartWithin
+    (by simp only [crossingBase]; omega) h.bootTwo
+  have hcrossMax : max bootBound
+      (crossingBase c bootFuel + c.segLen - 1) =
+        crossingBase c bootFuel + c.segLen - 1 := by
+    apply Nat.max_eq_right
+    exact Nat.le_of_lt h.crossingLast
+  have hcross : PrimeTableInv (crossingTable c bootBound bootFuel)
+      (crossingBase c bootFuel + c.segLen - 1) := by
+    simpa only [crossingTable, hcrossMax] using hcross0
+  have hlater : PrimeTableInv
+      (rootLaterWindows c (crossingTable c bootBound bootFuel)
+        (laterBase c bootFuel) laterFuel)
+      (laterBase c bootFuel + laterFuel * c.segLen - 1) := by
+    apply rootLaterWindows_primeTable hcross
+    · simp only [laterBase]
+      omega
+    · simp only [laterBase, crossingBase]
+      omega
+  have hfinal := rootScanFrom_primeTable (fuel := c.segLen) hlater
+    (w := laterBase c bootFuel + laterFuel * c.segLen)
+    (by simp only [laterBase, crossingBase]; omega)
+    (by simp only [laterBase, crossingBase]; omega)
+  simpa only [finalRootTable, finalRootBound] using hfinal
 
 /-- Any exact prefix through the Platt root cap fits the compiled 8,534-slot
 table, and an actually unmarked next candidate has room for its store. -/

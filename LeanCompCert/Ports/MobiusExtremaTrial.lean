@@ -242,6 +242,17 @@ def fullProgram (c : Cfg) (threshold : Nat)
   , epilogue := extremaEpilogue threshold
   , output := ArraySegSieve.outputReg }
 
+/-- Observation variant of the same compiled trace returning the final
+accumulator word.  It is used to certify carry handoffs between independently
+compiled shards without trusting a generated seed literal. -/
+def tProgram (c : Cfg) (e : MobiusExtremaScalar.Ext) : Program :=
+  { regCount := 178
+  , loopCount := c.len * c.rounds
+  , init := initBlock c ++ extremaInit e
+  , body := fullBody c
+  , epilogue := []
+  , output := ArraySegSieve.rT }
+
 theorem fullEntry_init (c : Cfg) (e : MobiusExtremaScalar.Ext) :
     denoteInstrs 0 initialState (initBlock c ++ extremaInit e) =
       some (fullEntry c e) := by
@@ -416,6 +427,33 @@ theorem fullProgram_denote (c : Cfg) (threshold : Nat)
   change some (failures threshold
     (fullObs (indices.foldl (fun s idx => fullStep c idx s)
       (fullEntry c e))).extrema) = _
+  rw [hobs, hentry]
+  rfl
+
+/-- Whole-program denotation of the final-accumulator observation variant. -/
+theorem tProgram_denote (c : Cfg) (e : MobiusExtremaScalar.Ext)
+    (hadm : Admissible c) (hlo : 0 < c.lo)
+    (hw : MobiusExtremaScalar.ExtWord e) :
+    (tProgram c e).denote = some (finalAbs c e).extrema.t := by
+  let indices := List.range (c.len * c.rounds)
+  have hmem : ∀ i ∈ indices, i < c.len * c.rounds :=
+    fun i hi => List.mem_range.mp hi
+  have hrun := fold_denote c hlo hadm indices (fullEntry c e)
+    hmem (fullEntry_inv c e)
+  have hobs := fold_fullObs c hlo hadm indices (fullEntry c e)
+    hmem (fullEntry_inv c e)
+  have hentry := fullEntry_fullObs c e hw
+  unfold Program.denote tProgram
+  simp only
+  rw [fullEntry_init c e]
+  change (List.foldlM (fun s idx => denoteInstrs idx s (fullBody c))
+      (fullEntry c e) indices).bind
+      (fun s => (denoteInstrs 0 s []).bind
+        (fun s => some (s ArraySegSieve.rT))) = _
+  rw [hrun]
+  simp only [denoteInstrs, Option.bind_some]
+  change some (fullObs
+    (indices.foldl (fun s idx => fullStep c idx s) (fullEntry c e))).extrema.t = _
   rw [hobs, hentry]
   rfl
 

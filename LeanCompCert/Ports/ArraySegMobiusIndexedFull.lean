@@ -76,6 +76,27 @@ theorem finalRootTable_shape (c : Cfg) (bootBound bootFuel laterFuel : Nat)
   rw [hfinal, hboot]
   rfl
 
+/-- The padded-final root table retains the same configured bootstrap prefix;
+only the number of live cells in the last segment changes. -/
+theorem paddedFinalRootTable_shape (c : Cfg)
+    (bootBound bootFuel laterFuel valid : Nat)
+    (hboot : ∃ tail, c.bootPrimes = c.firstPrime :: tail) :
+    ∃ tail,
+      rootScanFrom
+          (rootLaterWindows c (crossingTable c bootBound bootFuel)
+            (laterBase c bootFuel) laterFuel)
+          (laterBase c bootFuel + laterFuel * c.segLen) valid =
+        c.firstPrime :: tail := by
+  obtain ⟨bootTail, hboot⟩ := hboot
+  have hcross := rootScanMixed_has_prefix c.bootPrimes bootBound
+    (crossingBase c bootFuel) c.segLen
+  have hlater := rootLaterWindows_has_prefix c hcross
+    (laterBase c bootFuel) laterFuel
+  obtain ⟨tail, hfinal⟩ := rootScanFrom_has_prefix hlater
+    (laterBase c bootFuel + laterFuel * c.segLen) valid
+  refine ⟨bootTail ++ tail, ?_⟩
+  simpa [crossingTable, hboot, List.append_assoc] using hfinal
+
 def mainBase (c : Cfg) (bootFuel laterFuel delta : Nat) : Nat :=
   ((laterBase c bootFuel + laterFuel * c.segLen) +
     ((c.segLen + delta) % M)) % M
