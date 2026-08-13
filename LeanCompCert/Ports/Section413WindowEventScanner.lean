@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Gershon Bialer
 -/
 
-import LeanCompCert.Ports.Section413WindowCellAdd
+import LeanCompCert.Ports.Section413WindowRowCheck
 
 /-!
 # Constant-size compiled Section 4.1.3 event scanner
@@ -27,6 +27,8 @@ structure Cfg where
   cap : Nat
   rows : Nat
   v : Nat
+  checkLo : Nat
+  offset : Nat
   deriving DecidableEq, Repr
 
 def rK1Lo : Nat := 42
@@ -38,8 +40,9 @@ def rOdd : Nat := 47
 def rTwice : Nat := 48
 def rDenInv : Nat := 50
 def rSafeDen : Nat := 51
+def rCombinedViol : Nat := 75
 
-def init : List AInstr := lift
+def eventInit : List AInstr := lift
   [ .mov rK1Lo (.lit 0), .mov rK1Hi (.lit 0)
   , .mov rK2Lo (.lit 0), .mov rK2Hi (.lit 0)
   , .mov LeanCompCert.Ports.Section413SignedAdd.rViol (.lit 0), .mov LeanCompCert.Ports.Section413SignedScale.rViol (.lit 0) ]
@@ -100,7 +103,19 @@ def eventBody (c : Cfg) : List AInstr :=
   event c LeanCompCert.Ports.Section413WindowSchedule.rHalfActive LeanCompCert.Ports.Section413WindowSchedule.rS LeanCompCert.Ports.Section413WindowSchedule.rHalfQ LeanCompCert.Ports.Section413WindowSchedule.rHalfQ true false true ++
   event c LeanCompCert.Ports.Section413WindowSchedule.rHalfPair LeanCompCert.Ports.Section413WindowSchedule.rHalfQ LeanCompCert.Ports.Section413WindowSchedule.rS LeanCompCert.Ports.Section413WindowSchedule.rS true false true
 
-def body (c : Cfg) : List AInstr := LeanCompCert.Ports.Section413WindowSchedule.body ++ eventBody c
+def body (c : Cfg) : List AInstr :=
+  LeanCompCert.Ports.Section413WindowSchedule.body ++ eventBody c ++
+    LeanCompCert.Ports.Section413WindowRowCheck.body c.checkLo c.offset
+
+def init : List AInstr :=
+  eventInit ++ LeanCompCert.Ports.Section413WindowRowCheck.init
+
+def epilogue : List AInstr := lift
+  [ .binop rCombinedViol .bor
+      (.reg LeanCompCert.Ports.Section413SignedAdd.rViol)
+      (.reg LeanCompCert.Ports.Section413SignedScale.rViol)
+  , .binop rCombinedViol .bor (.reg rCombinedViol)
+      (.reg LeanCompCert.Ports.Section413WindowRowCheck.rRowViol) ]
 
 def program (c : Cfg) : AProgram :=
   { regCount := 328
@@ -108,11 +123,11 @@ def program (c : Cfg) : AProgram :=
     loopCount := c.rows * LeanCompCert.Ports.Section413WindowSchedule.slots
     init := init
     body := body c
-    epilogue := []
-    output := LeanCompCert.Ports.Section413SignedScale.rViol }
+    epilogue := epilogue
+    output := rCombinedViol }
 
-def g1Cfg : Cfg := ⟨99999, 99999, 1⟩
-def g2Cfg : Cfg := ⟨99999, 99999, 2⟩
+def g1Cfg : Cfg := ⟨99999, 99999, 1, 40, 8800000000000000⟩
+def g2Cfg : Cfg := ⟨99999, 99999, 2, 16, 0⟩
 
 set_option maxRecDepth 100000 in
 theorem g1Program_wf : (program g1Cfg).WF := by decide
