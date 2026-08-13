@@ -771,6 +771,203 @@ theorem eventTwiceArithmetic_clean_outputs (k : Nat) (s : AState)
     rfl
   · exact hk2.2.2.2.2.2.2.trans hk1.2.2.2.2.2
 
+theorem divisorGate_bit (v active divisor : Nat)
+    (hactive : active = 0 ∨ active = 1) :
+    divisorGate v active divisor = 0 ∨ divisorGate v active divisor = 1 := by
+  rcases hactive with rfl | rfl
+  · simp [divisorGate]
+  · simp only [divisorGate, Nat.one_mul]
+    split
+    · split <;> simp
+    · simp
+
+structure EventReceipts (k : Nat) (s : AState) (c : Cfg)
+    (active divisor x factor : Nat) (negK1 negK2 : Bool) : Prop where
+  arithmetic :
+    let p := eventPrefixState k s c active divisor x
+    EventArithmeticReceipts k p divisor factor negK1 negK2
+
+/-- A complete ordinary-denominator compiled event implements one divisor
+pair contribution using the table difference read from memory.  Production
+events are not enumerated here. -/
+theorem event_clean_outputs (k : Nat) (s : AState) (c : Cfg)
+    (active divisor x factor : Nat) (negK1 negK2 : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hcapPos : 1 ≤ c.cap)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap < M)
+    (hactiveBit : s.regs active = 0 ∨ s.regs active = 1)
+    (hactiveRem : active ≠ rOddRem) (hactiveOdd : active ≠ rOdd)
+    (hdivisorRem : divisor ≠ rOddRem)
+    (hx : s.regs x ≤ c.cap)
+    (hxGate : LeanCompCert.Verified.ArrayRegFrame.writes x
+      (gateStage c.v active divisor) = false)
+    (hdivisorPrefix : LeanCompCert.Verified.ArrayRegFrame.writes divisor
+      (eventPrefix c active divisor x) = false)
+    (hfactorPrefix : LeanCompCert.Verified.ArrayRegFrame.writes factor
+      (eventPrefix c active divisor x) = false)
+    (hdivisorInv : divisor ≠ rDenInv)
+    (hviol : s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0)
+    (hgateFrame : LeanCompCert.Verified.ArrayRegFrame.writes
+      LeanCompCert.Ports.Section413WindowCellScale.rGate
+      (k1Stage divisor negK1) = false)
+    (hinLoFrame : LeanCompCert.Verified.ArrayRegFrame.writes
+      LeanCompCert.Ports.Section413WindowCellScale.rInLo
+      (k1Stage divisor negK1) = false)
+    (hinHiFrame : LeanCompCert.Verified.ArrayRegFrame.writes
+      LeanCompCert.Ports.Section413WindowCellScale.rInHi
+      (k1Stage divisor negK1) = false)
+    (hfactorFrame : LeanCompCert.Verified.ArrayRegFrame.writes factor
+      (k1Stage divisor negK1) = false)
+    (hdiffLoLow : -((LeanCompCert.Ports.Section413Cells.H63 : Nat) : Int) <
+      (tableDiff c.cap s.arr (s.regs x)).lo)
+    (hdiffLoHigh : (tableDiff c.cap s.arr (s.regs x)).lo <
+      ((LeanCompCert.Ports.Section413Cells.H63 : Nat) : Int))
+    (hdiffHiLow : -((LeanCompCert.Ports.Section413Cells.H63 : Nat) : Int) <
+      (tableDiff c.cap s.arr (s.regs x)).hi)
+    (hdiffHiHigh : (tableDiff c.cap s.arr (s.regs x)).hi <
+      ((LeanCompCert.Ports.Section413Cells.H63 : Nat) : Int))
+    (hc : EventReceipts k s c active divisor x factor negK1 negK2) :
+    let gate := divisorGate c.v (s.regs active) (s.regs divisor)
+    let diff := tableDiff c.cap s.arr (s.regs x)
+    let d := safeDen (s.regs divisor)
+    let k1LoTerm := if gate = 0 then 0 else
+      (if negK1 then -diff.hi else diff.lo) / (d : Int)
+    let k1HiTerm := if gate = 0 then 0 else
+      -((-(if negK1 then -diff.lo else diff.hi)) / (d : Int))
+    let k2LoTerm := if gate = 0 then 0 else
+      (s.regs factor : Int) * (if negK2 then -diff.hi else diff.lo)
+    let k2HiTerm := if gate = 0 then 0 else
+      (s.regs factor : Int) * (if negK2 then -diff.lo else diff.hi)
+    let out := arun k s
+      (event c active divisor x factor false negK1 negK2)
+    LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK1Lo) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK1Lo) + k1LoTerm ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK1Hi) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK1Hi) + k1HiTerm ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK2Lo) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK2Lo) + k2LoTerm ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK2Hi) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK2Hi) + k2HiTerm ∧
+      out.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      out.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 ∧
+      out.arr = s.arr := by
+  dsimp only
+  let p := eventPrefixState k s c active divisor x
+  have hp := eventPrefix_outputs k s c active divisor x hcapPos htable
+    (hword active) (hword divisor) hactiveRem hactiveOdd hdivisorRem hx
+    hxGate harray
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hpDivisor : p.regs divisor = s.regs divisor :=
+    LeanCompCert.Verified.ArrayRegFrame.arun_frame k divisor _
+      hdivisorPrefix s
+  have hpFactor : p.regs factor = s.regs factor :=
+    LeanCompCert.Verified.ArrayRegFrame.arun_frame k factor _ hfactorPrefix s
+  have hpGate : p.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate =
+      divisorGate c.v (s.regs active) (s.regs divisor) := hp.1
+  have hpGateBit : p.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate = 0 ∨
+      p.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate = 1 := by
+    simpa only [hpGate] using
+      divisorGate_bit c.v (s.regs active) (s.regs divisor) hactiveBit
+  have hpViol : p.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    rw [hp.2.2.2.2.2.2.2.1, hviol]
+  have ha := eventArithmetic_clean_outputs k p divisor factor negK1 negK2
+    hpword hparray hdivisorInv hpGateBit hpViol hgateFrame hinLoFrame
+    hinHiFrame hfactorFrame (by simpa only [p] using hc.arithmetic)
+  have hdecodeLo : LeanCompCert.Ports.Section413Cells.decodeZ
+      (LeanCompCert.Ports.Section413Cells.encodeZ
+        (tableDiff c.cap s.arr (s.regs x)).lo) =
+      (tableDiff c.cap s.arr (s.regs x)).lo :=
+    LeanCompCert.Ports.Section413Cells.decodeZ_encodeZ _
+      (Int.le_of_lt hdiffLoLow) hdiffLoHigh
+  have hdecodeHi : LeanCompCert.Ports.Section413Cells.decodeZ
+      (LeanCompCert.Ports.Section413Cells.encodeZ
+        (tableDiff c.cap s.arr (s.regs x)).hi) =
+      (tableDiff c.cap s.arr (s.regs x)).hi :=
+    LeanCompCert.Ports.Section413Cells.decodeZ_encodeZ _
+      (Int.le_of_lt hdiffHiLow) hdiffHiHigh
+  have hnegLo : LeanCompCert.Ports.Section413Cells.decodeZ
+      (LeanCompCert.Ports.Section413G1Program.tsub 0
+        (LeanCompCert.Ports.Section413Cells.encodeZ
+          (tableDiff c.cap s.arr (s.regs x)).lo)) =
+      -(tableDiff c.cap s.arr (s.regs x)).lo := by
+    have ht := LeanCompCert.Ports.Section413G1Sound.decodeZ_tsub_zero_of_range
+      (a := LeanCompCert.Ports.Section413Cells.encodeZ
+        (tableDiff c.cap s.arr (s.regs x)).lo)
+      (LeanCompCert.Ports.Section413G1Sound.encodeZ_lt_M _)
+      (by rw [hdecodeLo]
+          simp only [LeanCompCert.Ports.Section413G1Sound.cellsH63_val,
+            LeanCompCert.Ports.Section413G1Sound.H63_val] at *
+          omega)
+      (by rw [hdecodeLo]
+          simp only [LeanCompCert.Ports.Section413G1Sound.cellsH63_val,
+            LeanCompCert.Ports.Section413G1Sound.H63_val] at *
+          omega)
+    exact ht.trans (congrArg Neg.neg hdecodeLo)
+  have hnegHi : LeanCompCert.Ports.Section413Cells.decodeZ
+      (LeanCompCert.Ports.Section413G1Program.tsub 0
+        (LeanCompCert.Ports.Section413Cells.encodeZ
+          (tableDiff c.cap s.arr (s.regs x)).hi)) =
+      -(tableDiff c.cap s.arr (s.regs x)).hi := by
+    have ht := LeanCompCert.Ports.Section413G1Sound.decodeZ_tsub_zero_of_range
+      (a := LeanCompCert.Ports.Section413Cells.encodeZ
+        (tableDiff c.cap s.arr (s.regs x)).hi)
+      (LeanCompCert.Ports.Section413G1Sound.encodeZ_lt_M _)
+      (by rw [hdecodeHi]
+          simp only [LeanCompCert.Ports.Section413G1Sound.cellsH63_val,
+            LeanCompCert.Ports.Section413G1Sound.H63_val] at *
+          omega)
+      (by rw [hdecodeHi]
+          simp only [LeanCompCert.Ports.Section413G1Sound.cellsH63_val,
+            LeanCompCert.Ports.Section413G1Sound.H63_val] at *
+          omega)
+    exact ht.trans (congrArg Neg.neg hdecodeHi)
+  have hpScaleInLo :
+      p.regs LeanCompCert.Ports.Section413WindowCellScale.rInLo =
+        LeanCompCert.Ports.Section413Cells.encodeZ
+          (tableDiff c.cap s.arr (s.regs x)).lo := by
+    simpa only [LeanCompCert.Ports.Section413WindowCellScale.rInLo] using hp.2.1
+  have hpScaleInHi :
+      p.regs LeanCompCert.Ports.Section413WindowCellScale.rInHi =
+        LeanCompCert.Ports.Section413Cells.encodeZ
+          (tableDiff c.cap s.arr (s.regs x)).hi := by
+    simpa only [LeanCompCert.Ports.Section413WindowCellScale.rInHi] using hp.2.2.1
+  have hout : arun k s
+      (event c active divisor x factor false negK1 negK2) =
+      arun k (arun k p (k1Stage divisor negK1))
+        (k2Stage factor negK2) := by
+    dsimp only [p, eventPrefixState, eventPrefix]
+    simp only [event, Bool.false_eq_true, if_false, arun_append]
+  rw [hout]
+  refine ⟨?_, ?_, ?_, ?_, ha.2.2.2.2.1, ha.2.2.2.2.2.1, ?_⟩
+  · rw [ha.1, hp.2.2.2.1, hp.2.1, hp.2.2.1, hpDivisor, hpGate]
+    cases negK1
+    · simp only [Bool.false_eq_true, if_false]
+      rw [hdecodeLo]
+    · simp only [if_true]
+      rw [hnegHi]
+  · rw [ha.2.1, hp.2.2.2.2.1, hp.2.1, hp.2.2.1, hpDivisor, hpGate]
+    cases negK1
+    · simp only [Bool.false_eq_true, if_false]
+      rw [hdecodeHi]
+    · simp only [if_true]
+      rw [hnegLo]
+  · rw [ha.2.2.1, hp.2.2.2.2.2.1, hpFactor,
+      hpScaleInLo, hpScaleInHi, hpGate]
+    cases negK2
+    · simp only [Bool.false_eq_true, if_false]
+      rw [hdecodeLo]
+    · simp only [if_true]
+      rw [hnegHi]
+  · rw [ha.2.2.2.1, hp.2.2.2.2.2.2.1, hpFactor,
+      hpScaleInLo, hpScaleInHi, hpGate]
+    cases negK2
+    · simp only [Bool.false_eq_true, if_false]
+      rw [hdecodeHi]
+    · simp only [if_true]
+      rw [hnegLo]
+  · exact ha.2.2.2.2.2.2.trans hp.2.2.2.2.2.2.2.2
+
 #print axioms k1Prep_den
 #print axioms eventPrefix_outputs
 #print axioms k1Stage_clean_outputs
@@ -780,5 +977,6 @@ theorem eventTwiceArithmetic_clean_outputs (k : Nat) (s : AState)
 #print axioms k2Stage_clean_outputs
 #print axioms eventArithmetic_clean_outputs
 #print axioms eventTwiceArithmetic_clean_outputs
+#print axioms event_clean_outputs
 
 end LeanCompCert.Ports.Section413WindowEventScanner
