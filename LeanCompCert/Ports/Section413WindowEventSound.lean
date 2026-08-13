@@ -569,6 +569,208 @@ theorem k2Stage_clean_outputs (k : Nat) (s : AState) (factor : Nat)
   · rw [h.2.2.2.1, hpK2Hi, hpFactor, hpInLo, hpInHi, hpGate]
   · exact h.2.2.2.2.2.2.trans (k2Prep_arr k s factor)
 
+structure EventArithmeticReceipts (k : Nat) (s : AState)
+    (den factor : Nat) (negK1 negK2 : Bool) : Prop where
+  k1 : K1Receipts k s den negK1
+  k2 :
+    let p := arun k s (k1Stage den negK1)
+    K2Receipts k p factor negK2
+
+/-- Composition of the ordinary-denominator K1 and K2 arithmetic suffixes.
+This is a fixed-block refinement theorem, not an evaluation of any event
+schedule or production table. -/
+theorem eventArithmetic_clean_outputs (k : Nat) (s : AState)
+    (den factor : Nat) (negK1 negK2 : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hdenInv : den ≠ rDenInv)
+    (hgate : s.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate = 0 ∨
+      s.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate = 1)
+    (hviol : s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0)
+    (hgateFrame : LeanCompCert.Verified.ArrayRegFrame.writes
+      LeanCompCert.Ports.Section413WindowCellScale.rGate
+      (k1Stage den negK1) = false)
+    (hinLoFrame : LeanCompCert.Verified.ArrayRegFrame.writes
+      LeanCompCert.Ports.Section413WindowCellScale.rInLo
+      (k1Stage den negK1) = false)
+    (hinHiFrame : LeanCompCert.Verified.ArrayRegFrame.writes
+      LeanCompCert.Ports.Section413WindowCellScale.rInHi
+      (k1Stage den negK1) = false)
+    (hfactorFrame : LeanCompCert.Verified.ArrayRegFrame.writes factor
+      (k1Stage den negK1) = false)
+    (hc : EventArithmeticReceipts k s den factor negK1 negK2) :
+    let gate := s.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate
+    let d := safeDen (s.regs den)
+    let k1LoTerm := if gate = 0 then 0 else
+      LeanCompCert.Ports.Section413Cells.decodeZ (if negK1 then
+        LeanCompCert.Ports.Section413G1Program.tsub 0
+          (s.regs LeanCompCert.Ports.Section413WindowCellDiv.rInHi)
+        else s.regs LeanCompCert.Ports.Section413WindowCellDiv.rInLo) / (d : Int)
+    let k1HiTerm := if gate = 0 then 0 else
+      -((-LeanCompCert.Ports.Section413Cells.decodeZ (if negK1 then
+        LeanCompCert.Ports.Section413G1Program.tsub 0
+          (s.regs LeanCompCert.Ports.Section413WindowCellDiv.rInLo)
+        else s.regs LeanCompCert.Ports.Section413WindowCellDiv.rInHi)) / (d : Int))
+    let k2LoTerm := if gate = 0 then 0 else
+      (s.regs factor : Int) *
+        LeanCompCert.Ports.Section413Cells.decodeZ (if negK2 then
+          LeanCompCert.Ports.Section413G1Program.tsub 0
+            (s.regs LeanCompCert.Ports.Section413WindowCellScale.rInHi)
+          else s.regs LeanCompCert.Ports.Section413WindowCellScale.rInLo)
+    let k2HiTerm := if gate = 0 then 0 else
+      (s.regs factor : Int) *
+        LeanCompCert.Ports.Section413Cells.decodeZ (if negK2 then
+          LeanCompCert.Ports.Section413G1Program.tsub 0
+            (s.regs LeanCompCert.Ports.Section413WindowCellScale.rInLo)
+          else s.regs LeanCompCert.Ports.Section413WindowCellScale.rInHi)
+    let out := arun k (arun k s (k1Stage den negK1))
+      (k2Stage factor negK2)
+    LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK1Lo) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK1Lo) + k1LoTerm ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK1Hi) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK1Hi) + k1HiTerm ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK2Lo) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK2Lo) + k2LoTerm ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK2Hi) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK2Hi) + k2HiTerm ∧
+      out.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      out.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 ∧
+      out.arr = s.arr := by
+  dsimp only
+  let p := arun k s (k1Stage den negK1)
+  have hk1 := k1Stage_clean_outputs k s den negK1 hword harray hdenInv
+    hgate hviol hc.k1
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hpGate : p.regs LeanCompCert.Ports.Section413WindowCellScale.rGate =
+      s.regs LeanCompCert.Ports.Section413WindowCellScale.rGate := by
+    apply LeanCompCert.Verified.ArrayRegFrame.arun_frame
+    exact hgateFrame
+  have hpGateDiv : p.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate =
+      s.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate := by
+    simpa only [LeanCompCert.Ports.Section413WindowCellScale.rGate] using hpGate
+  have hpInLo : p.regs LeanCompCert.Ports.Section413WindowCellScale.rInLo =
+      s.regs LeanCompCert.Ports.Section413WindowCellScale.rInLo := by
+    apply LeanCompCert.Verified.ArrayRegFrame.arun_frame
+    exact hinLoFrame
+  have hpInHi : p.regs LeanCompCert.Ports.Section413WindowCellScale.rInHi =
+      s.regs LeanCompCert.Ports.Section413WindowCellScale.rInHi := by
+    apply LeanCompCert.Verified.ArrayRegFrame.arun_frame
+    exact hinHiFrame
+  have hpFactor : p.regs factor = s.regs factor :=
+    LeanCompCert.Verified.ArrayRegFrame.arun_frame k factor _ hfactorFrame s
+  have hk2 := k2Stage_clean_outputs k p factor negK2 hpword hparray
+    (by rcases hgate with hzero | hone
+        · exact Or.inl (hpGateDiv.trans hzero)
+        · exact Or.inr (hpGateDiv.trans hone))
+    hk1.2.2.2.2.1
+    (by simpa only [p] using hc.k2)
+  refine ⟨?_, ?_, ?_, ?_, hk2.2.2.2.2.1, hk2.2.2.2.2.2.1, ?_⟩
+  · rw [hk2.1, hk1.1]
+  · rw [hk2.2.1, hk1.2.1]
+  · rw [hk2.2.2.1, hk1.2.2.1, hpFactor, hpInLo, hpInHi, hpGate]
+    rfl
+  · rw [hk2.2.2.2.1, hk1.2.2.2.1, hpFactor, hpInLo, hpInHi, hpGate]
+    rfl
+  · exact hk2.2.2.2.2.2.2.trans hk1.2.2.2.2.2
+
+structure EventTwiceArithmeticReceipts (k : Nat) (s : AState)
+    (den factor : Nat) (negK1 negK2 : Bool) : Prop where
+  k1 : K1TwiceReceipts k s den negK1
+  k2 :
+    let p := arun k s (k1TwiceStage den negK1)
+    K2Receipts k p factor negK2
+
+/-- Composition of the doubled-denominator K1 suffix and the K2 suffix. -/
+theorem eventTwiceArithmetic_clean_outputs (k : Nat) (s : AState)
+    (den factor : Nat) (negK1 negK2 : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hdenInv : den ≠ rDenInv) (htwice : safeDen (s.regs den) * 2 < M)
+    (hgate : s.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate = 0 ∨
+      s.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate = 1)
+    (hviol : s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0)
+    (hgateFrame : LeanCompCert.Verified.ArrayRegFrame.writes
+      LeanCompCert.Ports.Section413WindowCellScale.rGate
+      (k1TwiceStage den negK1) = false)
+    (hinLoFrame : LeanCompCert.Verified.ArrayRegFrame.writes
+      LeanCompCert.Ports.Section413WindowCellScale.rInLo
+      (k1TwiceStage den negK1) = false)
+    (hinHiFrame : LeanCompCert.Verified.ArrayRegFrame.writes
+      LeanCompCert.Ports.Section413WindowCellScale.rInHi
+      (k1TwiceStage den negK1) = false)
+    (hfactorFrame : LeanCompCert.Verified.ArrayRegFrame.writes factor
+      (k1TwiceStage den negK1) = false)
+    (hc : EventTwiceArithmeticReceipts k s den factor negK1 negK2) :
+    let gate := s.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate
+    let d := safeDen (s.regs den) * 2
+    let k1LoTerm := if gate = 0 then 0 else
+      LeanCompCert.Ports.Section413Cells.decodeZ (if negK1 then
+        LeanCompCert.Ports.Section413G1Program.tsub 0
+          (s.regs LeanCompCert.Ports.Section413WindowCellDiv.rInHi)
+        else s.regs LeanCompCert.Ports.Section413WindowCellDiv.rInLo) / (d : Int)
+    let k1HiTerm := if gate = 0 then 0 else
+      -((-LeanCompCert.Ports.Section413Cells.decodeZ (if negK1 then
+        LeanCompCert.Ports.Section413G1Program.tsub 0
+          (s.regs LeanCompCert.Ports.Section413WindowCellDiv.rInLo)
+        else s.regs LeanCompCert.Ports.Section413WindowCellDiv.rInHi)) / (d : Int))
+    let k2LoTerm := if gate = 0 then 0 else
+      (s.regs factor : Int) *
+        LeanCompCert.Ports.Section413Cells.decodeZ (if negK2 then
+          LeanCompCert.Ports.Section413G1Program.tsub 0
+            (s.regs LeanCompCert.Ports.Section413WindowCellScale.rInHi)
+          else s.regs LeanCompCert.Ports.Section413WindowCellScale.rInLo)
+    let k2HiTerm := if gate = 0 then 0 else
+      (s.regs factor : Int) *
+        LeanCompCert.Ports.Section413Cells.decodeZ (if negK2 then
+          LeanCompCert.Ports.Section413G1Program.tsub 0
+            (s.regs LeanCompCert.Ports.Section413WindowCellScale.rInLo)
+          else s.regs LeanCompCert.Ports.Section413WindowCellScale.rInHi)
+    let out := arun k (arun k s (k1TwiceStage den negK1))
+      (k2Stage factor negK2)
+    LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK1Lo) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK1Lo) + k1LoTerm ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK1Hi) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK1Hi) + k1HiTerm ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK2Lo) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK2Lo) + k2LoTerm ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK2Hi) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK2Hi) + k2HiTerm ∧
+      out.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      out.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 ∧
+      out.arr = s.arr := by
+  dsimp only
+  let p := arun k s (k1TwiceStage den negK1)
+  have hk1 := k1TwiceStage_clean_outputs k s den negK1 hword harray
+    hdenInv htwice hgate hviol hc.k1
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hpGate : p.regs LeanCompCert.Ports.Section413WindowCellScale.rGate =
+      s.regs LeanCompCert.Ports.Section413WindowCellScale.rGate :=
+    LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _ hgateFrame s
+  have hpGateDiv : p.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate =
+      s.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate := by
+    simpa only [LeanCompCert.Ports.Section413WindowCellScale.rGate] using hpGate
+  have hpInLo : p.regs LeanCompCert.Ports.Section413WindowCellScale.rInLo =
+      s.regs LeanCompCert.Ports.Section413WindowCellScale.rInLo :=
+    LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _ hinLoFrame s
+  have hpInHi : p.regs LeanCompCert.Ports.Section413WindowCellScale.rInHi =
+      s.regs LeanCompCert.Ports.Section413WindowCellScale.rInHi :=
+    LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _ hinHiFrame s
+  have hpFactor : p.regs factor = s.regs factor :=
+    LeanCompCert.Verified.ArrayRegFrame.arun_frame k factor _ hfactorFrame s
+  have hk2 := k2Stage_clean_outputs k p factor negK2 hpword hparray
+    (by rcases hgate with hzero | hone
+        · exact Or.inl (hpGateDiv.trans hzero)
+        · exact Or.inr (hpGateDiv.trans hone))
+    hk1.2.2.2.2.1 (by simpa only [p] using hc.k2)
+  refine ⟨?_, ?_, ?_, ?_, hk2.2.2.2.2.1, hk2.2.2.2.2.2.1, ?_⟩
+  · rw [hk2.1, hk1.1]
+  · rw [hk2.2.1, hk1.2.1]
+  · rw [hk2.2.2.1, hk1.2.2.1, hpFactor, hpInLo, hpInHi, hpGate]
+    rfl
+  · rw [hk2.2.2.2.1, hk1.2.2.2.1, hpFactor, hpInLo, hpInHi, hpGate]
+    rfl
+  · exact hk2.2.2.2.2.2.2.trans hk1.2.2.2.2.2
+
 #print axioms k1Prep_den
 #print axioms eventPrefix_outputs
 #print axioms k1Stage_clean_outputs
@@ -576,5 +778,7 @@ theorem k2Stage_clean_outputs (k : Nat) (s : AState) (factor : Nat)
 #print axioms k1TwiceStage_clean_outputs
 #print axioms k2Prep_factor
 #print axioms k2Stage_clean_outputs
+#print axioms eventArithmetic_clean_outputs
+#print axioms eventTwiceArithmetic_clean_outputs
 
 end LeanCompCert.Ports.Section413WindowEventScanner
