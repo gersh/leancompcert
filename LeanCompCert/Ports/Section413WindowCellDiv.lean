@@ -25,6 +25,7 @@ open LeanCompCert.Verified.BlockDefined
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Verified.ArrayScalarBlock
+open LeanCompCert.Ports.Section413Cells
 
 def rInLo : Nat := 32
 def rInHi : Nat := 33
@@ -247,6 +248,57 @@ theorem body_outputs (k : Nat) (s : AState) (negate : Bool)
     rfl
   · simpa [q, p] using hupper.2.trans hlow.2
 
+theorem body_outputs_gate_one (k : Nat) (s : AState) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hden : 0 < s.regs rDen) (hgate : s.regs rGate = 1) :
+    let out := arun k s (body negate)
+    out.regs rOutLo = encodeZ
+        (decodeZ (if negate then
+          LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
+        else s.regs rInLo) / (s.regs rDen : Int)) ∧
+      out.regs rOutHi = encodeZ
+        (-((-decodeZ (if negate then
+          LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
+        else s.regs rInHi)) / (s.regs rDen : Int))) ∧
+      out.arr = s.arr := by
+  dsimp only
+  have h := body_outputs k s negate hword harray hden
+  have hloWord : (if negate then
+      LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
+      else s.regs rInLo) < M := by
+    cases negate
+    · exact hword rInLo
+    · exact LeanCompCert.Ports.Section413G1Sound.tsub_lt _ _
+  have hhiWord : (if negate then
+      LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
+      else s.regs rInHi) < M := by
+    cases negate
+    · exact hword rInHi
+    · exact LeanCompCert.Ports.Section413G1Sound.tsub_lt _ _
+  refine ⟨?_, ?_, h.2.2⟩
+  · rw [h.1,
+      LeanCompCert.Ports.Section413SignedDiv.floorMag_eq_source _ _
+        hloWord hden,
+      hgate, Nat.mul_one,
+      Nat.mod_eq_of_lt
+        (LeanCompCert.Ports.Section413G1Sound.encodeZ_lt_M _)]
+  · rw [h.2.1,
+      LeanCompCert.Ports.Section413SignedDiv.ceilMag_eq_source _ _
+        hhiWord hden,
+      hgate, Nat.mul_one,
+      Nat.mod_eq_of_lt
+        (LeanCompCert.Ports.Section413G1Sound.encodeZ_lt_M _)]
+
+theorem body_outputs_gate_zero (k : Nat) (s : AState) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hden : 0 < s.regs rDen) (hgate : s.regs rGate = 0) :
+    let out := arun k s (body negate)
+    out.regs rOutLo = 0 ∧ out.regs rOutHi = 0 ∧ out.arr = s.arr := by
+  dsimp only
+  have h := body_outputs k s negate hword harray hden
+  rw [h.1, h.2.1, hgate, Nat.mul_zero, Nat.zero_mod]
+  exact ⟨rfl, rfl, h.2.2⟩
+
 def program (arrayLen loopCount : Nat) (negate : Bool) : AProgram :=
   { regCount := 328
     arrayLen := arrayLen
@@ -268,6 +320,8 @@ theorem program_wf (arrayLen loopCount : Nat) (negate : Bool) :
 #print axioms one_lower_outputs
 #print axioms one_upper_outputs
 #print axioms body_outputs
+#print axioms body_outputs_gate_one
+#print axioms body_outputs_gate_zero
 #print axioms program_wf
 
 end LeanCompCert.Ports.Section413WindowCellDiv
