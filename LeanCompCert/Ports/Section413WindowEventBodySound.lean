@@ -196,10 +196,92 @@ theorem eventBody_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
     LeanCompCert.Ports.Section413WindowSchedule.rQ false true false
     hword harray (by simpa only [afterFirst, firstEvent] using h1zero)
 
+/-- Constant-size receipt bundle for the four fixed events in one scanner
+iteration. -/
+structure EventBodyReceipts (k : Nat) (s : AState) (c : Cfg) : Prop where
+  first : EventReceipts k s c
+    LeanCompCert.Ports.Section413WindowSchedule.rActive
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rQ
+    LeanCompCert.Ports.Section413WindowSchedule.rQ true false
+  second : EventReceipts k (afterFirst k s c) c
+    LeanCompCert.Ports.Section413WindowSchedule.rPair
+    LeanCompCert.Ports.Section413WindowSchedule.rQ
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rS true false
+  third : EventTwiceReceipts k (afterSecond k s c) c
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfActive
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ false true
+  fourth : EventTwiceReceipts k (afterThird k s c) c
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfPair
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rS false true
+
+/-- The two final compiled arithmetic flags recover the receipt bundle for
+all four events and prove both incoming sticky flags clean. -/
+theorem eventBody_flags_zero_receipts_and_input (k : Nat) (s : AState)
+    (c : Cfg) (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hscale : (arun k s (eventBody c)).regs
+      LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hadd : (arun k s (eventBody c)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    EventBodyReceipts k s c ∧
+      s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  have h1word : ∀ j, (afterFirst k s c).regs j < M :=
+    arun_regs_word k _ _ hword harray
+  have h1array : ∀ j, (afterFirst k s c).arr j < M :=
+    arun_arr_word k _ _ hword harray
+  have h2word : ∀ j, (afterSecond k s c).regs j < M :=
+    arun_regs_word k _ _ h1word h1array
+  have h2array : ∀ j, (afterSecond k s c).arr j < M :=
+    arun_arr_word k _ _ h1word h1array
+  have h3word : ∀ j, (afterThird k s c).regs j < M :=
+    arun_regs_word k _ _ h2word h2array
+  have h3array : ∀ j, (afterThird k s c).arr j < M :=
+    arun_arr_word k _ _ h2word h2array
+  have h4 := eventTwice_flags_zero_receipts_and_input k
+    (afterThird k s c) c
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfPair
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rS false true h3word h3array
+    (by simpa only [eventBody_split, arun_append, afterFirst, afterSecond,
+      afterThird, fourthEvent] using hscale)
+    (by simpa only [eventBody_split, arun_append, afterFirst, afterSecond,
+      afterThird, fourthEvent] using hadd)
+  have h3 := eventTwice_flags_zero_receipts_and_input k
+    (afterSecond k s c) c
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfActive
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ false true h2word h2array
+    (by simpa only [afterThird, thirdEvent] using h4.2.1)
+    (by simpa only [afterThird, thirdEvent] using h4.2.2)
+  have h2 := event_flags_zero_receipts_and_input k (afterFirst k s c) c
+    LeanCompCert.Ports.Section413WindowSchedule.rPair
+    LeanCompCert.Ports.Section413WindowSchedule.rQ
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rS true false h1word h1array
+    (by simpa only [afterSecond, secondEvent] using h3.2.1)
+    (by simpa only [afterSecond, secondEvent] using h3.2.2)
+  have h1 := event_flags_zero_receipts_and_input k s c
+    LeanCompCert.Ports.Section413WindowSchedule.rActive
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rQ
+    LeanCompCert.Ports.Section413WindowSchedule.rQ true false hword harray
+    (by simpa only [afterFirst, firstEvent] using h2.2.1)
+    (by simpa only [afterFirst, firstEvent] using h2.2.2)
+  exact ⟨⟨h1.1, h2.1, h3.1, h4.1⟩, h1.2.1, h1.2.2⟩
+
 #print axioms Accumulates.trans
 #print axioms Accumulates.of_outputs
 #print axioms eventBody_accumulates
 #print axioms eventBody_zero_implies_input_zero
+#print axioms eventBody_flags_zero_receipts_and_input
 #print axioms g1EventBodyFrames
 #print axioms g2EventBodyFrames
 

@@ -431,6 +431,50 @@ theorem body_add_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
       (by decide)] at hpzero
   exact hpzero
 
+/-- The final arithmetic flags of one scanner iteration recover all four
+event receipts and both incoming sticky flags. -/
+theorem body_flags_zero_implies_event_receipts_and_input (k : Nat)
+    (s : AState) (c : Cfg)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hlo : c.checkLo < M)
+    (hlimit : LeanCompCert.Ports.Section413WindowRowCheck.commonBound -
+      c.offset < M)
+    (hscale : (arun k s (body c)).regs
+      LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hadd : (arun k s (body c)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    EventBodyReceipts k (scheduledState k s) c ∧
+      s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let p := scheduledState k s
+  let e := eventedState k s c
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have heword : ∀ j, e.regs j < M := arun_regs_word k _ _ hpword hparray
+  have hearray : ∀ j, e.arr j < M := arun_arr_word k _ _ hpword hparray
+  have heScale : e.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    rw [← LeanCompCert.Ports.Section413WindowRowCheck.body_scale_frame k e
+      c.checkLo c.offset]
+    simpa only [body_split, arun_append, scheduledState, eventedState, e]
+      using hscale
+  have heAdd :=
+    LeanCompCert.Ports.Section413WindowRowCheck.body_add_zero_implies_input_zero
+      k e c.checkLo c.offset heword hearray hlo hlimit (by
+        simpa only [body_split, arun_append, scheduledState, eventedState, e]
+          using hadd)
+  have hr := eventBody_flags_zero_receipts_and_input k p c hpword hparray
+    (by simpa only [eventedState, e] using heScale)
+    (by simpa only [eventedState, e] using heAdd)
+  have hsScale : s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    rw [← arun_frame_of k _ LeanCompCert.Ports.Section413WindowSchedule.body s
+      (by decide)]
+    simpa only [p, scheduledState] using hr.2.1
+  have hsAdd : s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    rw [← arun_frame_of k _ LeanCompCert.Ports.Section413WindowSchedule.body s
+      (by decide)]
+    simpa only [p, scheduledState] using hr.2.2
+  exact ⟨by simpa only [p, scheduledState] using hr.1, hsScale, hsAdd⟩
+
 /-- Clean compiled row and addition flags at an enabled final slot imply the
 paper-shaped upper bound.  The two unit receipts are recovered from those
 compiled flags rather than supplied or evaluated separately in Lean. -/
@@ -515,6 +559,7 @@ theorem body_flags_zero_implies_paper_upper (k : Nat) (s : AState) (c : Cfg)
 #print axioms body_unchecked_row
 #print axioms body_zero_implies_input_zero
 #print axioms body_add_zero_implies_input_zero
+#print axioms body_flags_zero_implies_event_receipts_and_input
 #print axioms body_flags_zero_implies_paper_upper
 
 end LeanCompCert.Ports.Section413WindowEventScanner

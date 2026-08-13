@@ -848,6 +848,24 @@ theorem init_output (k : Nat) (s : AState) :
   change srun k s.regs [.mov rRowViol (.lit 0)] rRowViol = 0
   simp [srun, sdest, sval, denoteOperand, RegState.set, rRowViol]
 
+/-- The row checker never writes the checked-scale sticky flag. -/
+theorem body_scale_frame (k : Nat) (s : AState) (lo offset : Nat) :
+    (arun k s (body lo offset)).regs
+        LeanCompCert.Ports.Section413SignedScale.rViol =
+      s.regs LeanCompCert.Ports.Section413SignedScale.rViol := by
+  let d := arun k s divideK2Stage
+  let u := arun k d unitStage
+  rw [body, arun_append, arun_append]
+  rw [LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ (checkStage lo offset)
+    (by
+      simp [checkStage, lift, LeanCompCert.Verified.ArrayRegFrame.writes,
+        LeanCompCert.Verified.ArrayRegFrame.instrWrites,
+        LeanCompCert.Ports.Section413SignedScale.rViol] <;> decide) u]
+  rw [show u.regs LeanCompCert.Ports.Section413SignedScale.rViol =
+      d.regs LeanCompCert.Ports.Section413SignedScale.rViol by
+    exact arun_frame_of k _ unitStage d (by decide)]
+  exact arun_frame_of k _ divideK2Stage s (by decide)
+
 #print axioms firstDivPrep_outputs
 #print axioms secondDivPrep_outputs
 #print axioms secondDivSave_outputs
@@ -872,5 +890,6 @@ theorem init_output (k : Nat) (s : AState) :
 #print axioms bodyUnitState_upper
 #print axioms body_zero_iff_paper_upper
 #print axioms init_output
+#print axioms body_scale_frame
 
 end LeanCompCert.Ports.Section413WindowRowCheck

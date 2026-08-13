@@ -1264,6 +1264,127 @@ theorem k2Stage_flags_zero_receipts_and_input (k : Nat) (s : AState)
   · simpa only [p, q, scaleState] using har.1
   · simpa only [p, q, scaleState] using har.2.1
 
+/-- The two output flags of an ordinary compiled event reconstruct its full
+arithmetic receipt bundle. -/
+theorem event_flags_zero_receipts_and_input (k : Nat) (s : AState) (c : Cfg)
+    (active divisor x factor : Nat) (negK1 negK2 : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hscale : (arun k s
+      (event c active divisor x factor false negK1 negK2)).regs
+        LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hadd : (arun k s
+      (event c active divisor x factor false negK1 negK2)).regs
+        LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    EventReceipts k s c active divisor x factor negK1 negK2 ∧
+      s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let p := eventPrefixState k s c active divisor x
+  let q := arun k p (k1Stage divisor negK1)
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hqword : ∀ j, q.regs j < M := arun_regs_word k _ _ hpword hparray
+  have hqarray : ∀ j, q.arr j < M := arun_arr_word k _ _ hpword hparray
+  have hk2 := k2Stage_flags_zero_receipts_and_input k q factor negK2
+    hqword hqarray
+    (by simpa only [event, eventPrefix, eventPrefixState, Bool.false_eq_true,
+      if_false, arun_append, p, q] using hscale)
+    (by simpa only [event, eventPrefix, eventPrefixState, Bool.false_eq_true,
+      if_false, arun_append, p, q] using hadd)
+  have hk1 := k1Stage_add_zero_receipts_and_input k p divisor negK1
+    hpword hparray (by simpa only [q] using hk2.2.2)
+  have hpScale : p.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    let a := k1PrepState k p divisor
+    let b := arun k a (LeanCompCert.Ports.Section413WindowCellDiv.body negK1)
+    have hq : q = arun k b addK1 := by
+      simp only [q, b, a, k1Stage, k1PrepState, arun_append]
+    have h := hk2.2.1
+    rw [hq, LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ addK1
+      (by decide) b] at h
+    rw [show b.regs LeanCompCert.Ports.Section413SignedScale.rViol =
+      a.regs LeanCompCert.Ports.Section413SignedScale.rViol by
+        exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _
+          (by cases negK1 <;> decide) a] at h
+    rw [show a.regs LeanCompCert.Ports.Section413SignedScale.rViol =
+      p.regs LeanCompCert.Ports.Section413SignedScale.rViol by
+        exact k1Prep_frame_of k p divisor _ (by decide) (by decide)
+          (by decide)] at h
+    exact h
+  have hsScale : s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    rw [← eventPrefix_frame_of k s c active divisor x _
+      (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+      (readStage_writes_high _ _ _ (by decide))
+      (inputStage_writes_high _ (by decide))]
+    simpa only [p] using hpScale
+  have hsAdd : s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    rw [← eventPrefix_frame_of k s c active divisor x _
+      (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+      (readStage_writes_high _ _ _ (by decide))
+      (inputStage_writes_high _ (by decide))]
+    simpa only [p] using hk1.2
+  refine ⟨⟨?_, ?_⟩, hsScale, hsAdd⟩
+  · simpa only [p] using hk1.1
+  · simpa only [p, q] using hk2.1
+
+/-- The corresponding receipt recovery for doubled-denominator events. -/
+theorem eventTwice_flags_zero_receipts_and_input (k : Nat) (s : AState)
+    (c : Cfg) (active divisor x factor : Nat) (negK1 negK2 : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hscale : (arun k s
+      (event c active divisor x factor true negK1 negK2)).regs
+        LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hadd : (arun k s
+      (event c active divisor x factor true negK1 negK2)).regs
+        LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    EventTwiceReceipts k s c active divisor x factor negK1 negK2 ∧
+      s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let p := eventPrefixState k s c active divisor x
+  let q := arun k p (k1TwiceStage divisor negK1)
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hqword : ∀ j, q.regs j < M := arun_regs_word k _ _ hpword hparray
+  have hqarray : ∀ j, q.arr j < M := arun_arr_word k _ _ hpword hparray
+  have hk2 := k2Stage_flags_zero_receipts_and_input k q factor negK2
+    hqword hqarray
+    (by simpa only [event, eventPrefix, eventPrefixState, if_true,
+      arun_append, p, q] using hscale)
+    (by simpa only [event, eventPrefix, eventPrefixState, if_true,
+      arun_append, p, q] using hadd)
+  have hk1 := k1TwiceStage_add_zero_receipts_and_input k p divisor negK1
+    hpword hparray (by simpa only [q] using hk2.2.2)
+  have hpScale : p.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    let a := k1TwicePrepState k p divisor
+    let b := arun k a (LeanCompCert.Ports.Section413WindowCellDiv.body negK1)
+    have hq : q = arun k b addK1 := by
+      simp only [q, b, a, k1TwiceStage, k1TwicePrepState, arun_append]
+    have h := hk2.2.1
+    rw [hq, LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ addK1
+      (by decide) b] at h
+    rw [show b.regs LeanCompCert.Ports.Section413SignedScale.rViol =
+      a.regs LeanCompCert.Ports.Section413SignedScale.rViol by
+        exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _
+          (by cases negK1 <;> decide) a] at h
+    rw [show a.regs LeanCompCert.Ports.Section413SignedScale.rViol =
+      p.regs LeanCompCert.Ports.Section413SignedScale.rViol by
+        exact k1TwicePrep_frame_of k p divisor _ (by decide) (by decide)
+          (by decide) (by decide)] at h
+    exact h
+  have hsScale : s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    rw [← eventPrefix_frame_of k s c active divisor x _
+      (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+      (readStage_writes_high _ _ _ (by decide))
+      (inputStage_writes_high _ (by decide))]
+    simpa only [p] using hpScale
+  have hsAdd : s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    rw [← eventPrefix_frame_of k s c active divisor x _
+      (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+      (readStage_writes_high _ _ _ (by decide))
+      (inputStage_writes_high _ (by decide))]
+    simpa only [p] using hk1.2
+  refine ⟨⟨?_, ?_⟩, hsScale, hsAdd⟩
+  · simpa only [p] using hk1.1
+  · simpa only [p, q] using hk2.1
+
 /-- A clean checked-add flag after one complete compiled event implies that
 the incoming flag was clean.  This is independent of arithmetic receipts. -/
 theorem event_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
@@ -1314,5 +1435,7 @@ theorem event_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
 #print axioms k1Stage_add_zero_receipts_and_input
 #print axioms k1TwiceStage_add_zero_receipts_and_input
 #print axioms k2Stage_flags_zero_receipts_and_input
+#print axioms event_flags_zero_receipts_and_input
+#print axioms eventTwice_flags_zero_receipts_and_input
 
 end LeanCompCert.Ports.Section413WindowEventScanner
