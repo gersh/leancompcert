@@ -2,6 +2,7 @@ import LeanCompCert.Ports.R2RuntimeMarkDenote
 import LeanCompCert.Ports.LogFixRoundSemantics
 import LeanCompCert.Ports.R2SegLnFixConvert
 import LeanCompCert.Verified.InstrRename
+import LeanCompCert.Verified.ArrayRegFrame
 
 /-! # Source semantics of the compiled R2 fixed-log table packer -/
 
@@ -61,6 +62,71 @@ theorem rootPackDecode_defined (c : R2Cfg) (index : Nat) (s : AState)
   · rw [if_neg h24ne, Option.getD_some, h24M, hqM, hnRaw24M]
     simpa [rootPackN, runtimeScale] using hncell
 
+theorem rootPackDecode_run (c : R2Cfg) (index : Nat) (s : AState)
+    (hi : index < (r2RootPackProgram c).loopCount) :
+    let out := arun index s rootPackDecode
+    out.regs 11 = rootPackN index ∧
+      out.regs 12 = rootPackRound index ∧
+      out.regs 13 = (if rootPackRound index = 0 then 1 else 0) ∧
+      out.regs 15 = (if rootPackRound index + 1 = runtimeScale then 1 else 0) ∧
+      out.regs 16 = s.arr (rootPackN index) ∧
+      out.regs 17 = (if s.arr (rootPackN index) = 0 then 1 else 0) ∧
+      out.arr = s.arr := by
+  have hb := rootPack_index_bounds (index := index) (by
+    simpa [r2RootPackProgram] using hi)
+  have hiM : index % M = index := Nat.mod_eq_of_lt hb.1
+  have hsM : runtimeScale % M = runtimeScale := Nat.mod_eq_of_lt (by decide)
+  have hsne : runtimeScale % M ≠ 0 := by rw [hsM]; decide
+  have hnM : rootPackN index % M = rootPackN index :=
+    Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt hb.2.1 (by decide))
+  have hrM : rootPackRound index % M = rootPackRound index :=
+    Nat.mod_eq_of_lt (Nat.lt_trans hb.2.2 (by decide))
+  have hnRawM : (index / runtimeScale + 2) % M =
+      index / runtimeScale + 2 := by
+    simpa [rootPackN] using hnM
+  have hroundRaw :
+      (if runtimeScale % M = 0 then none
+        else some (index % M % (runtimeScale % M))).getD 0 =
+          rootPackRound index := by
+    rw [if_neg hsne, Option.getD_some, hiM, hsM]
+    rfl
+  have hrSuccM : (rootPackRound index + 1) % M =
+      rootPackRound index + 1 := Nat.mod_eq_of_lt (by
+    exact Nat.lt_trans (Nat.add_lt_add_right hb.2.2 1) (by decide))
+  have h24M : 24 % M = 24 := Nat.mod_eq_of_lt (by decide)
+  have h24ne : 24 % M ≠ 0 := by rw [h24M]; decide
+  have hqM : (index / 24) % M = index / 24 :=
+    Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hb.1)
+  have hnRaw24M : (index / 24 + 2) % M = index / 24 + 2 := by
+    simpa [runtimeScale] using hnRawM
+  have hNdecode :
+      ((if 24 % M = 0 then none else some (index / (24 % M) % M)).getD 0 + 2) % M =
+        index / 24 + 2 := by
+    rw [if_neg h24ne, Option.getD_some, h24M, hqM, hnRaw24M]
+  have hRdecode :
+      (if 24 % M = 0 then none else some (index % (24 % M) % M)).getD 0 =
+        index % 24 := by
+    rw [if_neg h24ne, Option.getD_some, h24M]
+    exact Nat.mod_eq_of_lt (Nat.lt_trans (Nat.mod_lt _ (by decide)) (by decide))
+  simp [rootPackDecode, arun, astep, sval, sdest, denoteOperand, denoteOp,
+    AState.writeReg, rootPackN, rootPackRound, runtimeScale, hiM, hsM,
+    hsne, hnM, hnRawM, hroundRaw, hrM, hrSuccM, hNdecode, hRdecode,
+    h24M, h24ne]
+  have hr24M : index % 24 % M = index % 24 := by
+    simpa [rootPackRound, runtimeScale] using hrM
+  have hrSucc24M : (index % 24 + 1) % M = index % 24 + 1 := by
+    simpa [rootPackRound, runtimeScale] using hrSuccM
+  have hfinish :
+      (if (index % 24 + 1) % M = 24 then 1 else 0) =
+        if index % 24 = 23 then 1 else 0 := by
+    rw [hrSucc24M]
+    have hrlt : index % 24 < 24 := Nat.mod_lt _ (by decide)
+    by_cases h : index % 24 = 23 <;> simp [h] <;> omega
+  exact ⟨hnRaw24M, hr24M,
+    congrArg (fun z => if z = 0 then 1 else 0) hr24M,
+    hfinish, congrArg s.arr hnRaw24M,
+    congrArg (fun z => if s.arr z = 0 then 1 else 0) hnRaw24M⟩
+
 theorem rootPackRoundInit_defined (len index : Nat) (s : AState) :
     AllDefined len index s rootPackRoundInit := by
   rw [rootPackRoundInit, AllDefined_append]
@@ -79,6 +145,158 @@ theorem rootPackLn_defined (len index : Nat) (s : AState) :
     AllDefined len index s rootPackLn := by
   exact LeanCompCert.Verified.ArrayScalarBlock.allDefined_lift_of_noDiv
     len index rootPackLnS s (by decide)
+
+/-! ## Incremental exponent and mantissa initialization -/
+
+theorem rootPackExponentS_run (k : Nat) (s : RegState)
+    (n e th start : Nat)
+    (h11 : s 11 = n) (h13 : s 13 = start)
+    (he : s rpEx = e) (hth : s rpTh = th)
+    (hstart : start = 0 ∨ start = 1)
+    (heM : e + 1 < M) (hthM : th + th < M) :
+    let bump := if th ≤ n then start else 0
+    let out := srun k s rootPackExponentS
+    out rpEx = e + bump ∧ out rpTh = th + bump * th := by
+  have he0M : e < M := by omega
+  have hth0M : th < M := by omega
+  have he' : s 2 = e := by simpa only [rpEx] using he
+  have hth' : s 3 = th := by simpa only [rpTh] using hth
+  rcases hstart with rfl | rfl
+  · by_cases hn : th ≤ n <;>
+      simp [rootPackExponentS, srun, RegState.set, sdest, sval,
+        denoteOperand, denoteOp, h11, h13, he', hth', hn,
+        Nat.mod_eq_of_lt he0M, Nat.mod_eq_of_lt hth0M, rpEx, rpTh]
+  · by_cases hn : th ≤ n <;>
+      simp [rootPackExponentS, srun, RegState.set, sdest, sval,
+        denoteOperand, denoteOp, h11, h13, he', hth', hn,
+        Nat.mod_eq_of_lt he0M, Nat.mod_eq_of_lt hth0M,
+        Nat.mod_eq_of_lt heM, Nat.mod_eq_of_lt hthM, rpEx, rpTh]
+
+theorem rootPackExponent_run (k : Nat) (s : AState)
+    (n e th start : Nat)
+    (h11 : s.regs 11 = n) (h13 : s.regs 13 = start)
+    (he : s.regs rpEx = e) (hth : s.regs rpTh = th)
+    (hstart : start = 0 ∨ start = 1)
+    (heM : e + 1 < M) (hthM : th + th < M) :
+    let bump := if th ≤ n then start else 0
+    let out := arun k s rootPackExponent
+    out.regs rpEx = e + bump ∧ out.regs rpTh = th + bump * th ∧
+      out.arr = s.arr := by
+  rw [rootPackExponent,
+    LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  have h := rootPackExponentS_run k s.regs n e th start
+    h11 h13 he hth hstart heM hthM
+  exact ⟨h.1, h.2, rfl⟩
+
+theorem rootPackMantissaInitS_run (k : Nat) (s : RegState)
+    (n e start x a : Nat)
+    (h11 : s 11 = n) (h13 : s 13 = start) (he : s rpEx = e)
+    (hx : s rpXm = x) (ha : s rpAa = a)
+    (hstart : start = 0 ∨ start = 1) (he62 : e ≤ 62)
+    (hnorm : n <<< (62 - e) < M) (hxM : x < M) (haM : a < M) :
+    let out := srun k s rootPackMantissaInitS
+    (out rpXm = if start = 1 then n <<< (62 - e) else x) ∧
+      (out rpAa = if start = 1 then 0 else a) := by
+  have hsub : (62 + (M - e)) % M = 62 - e := by
+    have hs := LeanCompCert.Verified.BlockDefined.denoteOp_sub_of_le
+      (a := 62) (b := e) he62 (by decide)
+    exact Option.some.inj hs
+  have hmask : (63 : Nat) % M = 63 := by decide
+  have hshift : (62 - e) &&& 63 = 62 - e := by
+    have hlt : 62 - e < 64 := by omega
+    change (62 - e) &&& (2 ^ 6 - 1) = 62 - e
+    rw [Nat.and_two_pow_sub_one_eq_mod, Nat.mod_eq_of_lt hlt]
+  have hshiftM : 62 - e < M :=
+    Nat.lt_trans (show 62 - e < 64 by omega) (by decide)
+  have he' : s 2 = e := by simpa only [rpEx] using he
+  have hx' : s 5 = x := by simpa only [rpXm] using hx
+  have ha' : s 6 = a := by simpa only [rpAa] using ha
+  have hOnePred : 1 + (M - 1) = M := by omega
+  rcases hstart with rfl | rfl
+  · simp [rootPackMantissaInitS, srun, RegState.set, sdest, sval,
+      denoteOperand, denoteOp, h11, h13, he', hx', ha', hsub, hmask, hshift,
+      Nat.mod_eq_of_lt hshiftM, Nat.mod_eq_of_lt hnorm,
+      Nat.mod_eq_of_lt hxM, Nat.mod_eq_of_lt haM, hOnePred,
+      rpEx, rpXm, rpAa]
+    all_goals simp [Nat.mod_eq_of_lt hxM, Nat.mod_eq_of_lt haM,
+      Nat.add_mod, Nat.mul_mod, hOnePred]
+  · simp [rootPackMantissaInitS, srun, RegState.set, sdest, sval,
+      denoteOperand, denoteOp, h11, h13, he', hx', ha', hsub, hmask, hshift,
+      Nat.mod_eq_of_lt hshiftM, Nat.mod_eq_of_lt hnorm,
+      Nat.mod_eq_of_lt hxM, Nat.mod_eq_of_lt haM, hOnePred,
+      rpEx, rpXm, rpAa]
+    all_goals simp [Nat.mod_eq_of_lt hnorm, Nat.add_mod, Nat.mul_mod,
+      hOnePred]
+
+theorem rootPackMantissaInit_run (k : Nat) (s : AState)
+    (n e start x a : Nat)
+    (h11 : s.regs 11 = n) (h13 : s.regs 13 = start)
+    (he : s.regs rpEx = e) (hx : s.regs rpXm = x) (ha : s.regs rpAa = a)
+    (hstart : start = 0 ∨ start = 1) (he62 : e ≤ 62)
+    (hnorm : n <<< (62 - e) < M) (hxM : x < M) (haM : a < M) :
+    let out := arun k s rootPackMantissaInit
+    (out.regs rpXm = if start = 1 then n <<< (62 - e) else x) ∧
+      (out.regs rpAa = if start = 1 then 0 else a) ∧ out.arr = s.arr := by
+  rw [rootPackMantissaInit,
+    LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  have h := rootPackMantissaInitS_run k s.regs n e start x a
+    h11 h13 he hx ha hstart he62 hnorm hxM haM
+  exact ⟨h.1, h.2, rfl⟩
+
+/-- Exact composition of the two initialization slices.  This theorem is
+symbolic in the candidate and persistent state; it does not enumerate the
+production table. -/
+theorem rootPackRoundInit_run (k : Nat) (s : AState)
+    (n e th start x a : Nat)
+    (h11 : s.regs 11 = n) (h13 : s.regs 13 = start)
+    (he : s.regs rpEx = e) (hth : s.regs rpTh = th)
+    (hx : s.regs rpXm = x) (ha : s.regs rpAa = a)
+    (hstart : start = 0 ∨ start = 1)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (he62 : e + (if th ≤ n then start else 0) ≤ 62)
+    (hnorm : n <<< (62 - (e + (if th ≤ n then start else 0))) < M)
+    (hxM : x < M) (haM : a < M) :
+    let bump := if th ≤ n then start else 0
+    let out := arun k s rootPackRoundInit
+    out.regs rpEx = e + bump ∧
+      out.regs rpTh = th + bump * th ∧
+      out.regs rpXm =
+        (if start = 1 then n <<< (62 - (e + bump)) else x) ∧
+      out.regs rpAa = (if start = 1 then 0 else a) ∧
+      out.arr = s.arr := by
+  let bump := if th ≤ n then start else 0
+  let mid := arun k s rootPackExponent
+  have hExp := rootPackExponent_run k s n e th start
+    h11 h13 he hth hstart heM hthM
+  dsimp only at hExp
+  have h11mid : mid.regs 11 = n := by
+    exact (LeanCompCert.Verified.ArrayRegFrame.arun_frame
+      k 11 rootPackExponent (by decide) s).trans h11
+  have h13mid : mid.regs 13 = start := by
+    exact (LeanCompCert.Verified.ArrayRegFrame.arun_frame
+      k 13 rootPackExponent (by decide) s).trans h13
+  have hxmid : mid.regs rpXm = x := by
+    exact (LeanCompCert.Verified.ArrayRegFrame.arun_frame
+      k rpXm rootPackExponent (by decide) s).trans hx
+  have hamid : mid.regs rpAa = a := by
+    exact (LeanCompCert.Verified.ArrayRegFrame.arun_frame
+      k rpAa rootPackExponent (by decide) s).trans ha
+  have hMant := rootPackMantissaInit_run k mid n (e + bump) start x a
+    h11mid h13mid (by simpa only [mid, bump] using hExp.1)
+    hxmid hamid hstart (by simpa only [bump] using he62)
+    (by simpa only [bump] using hnorm) hxM haM
+  dsimp only at hMant
+  rw [rootPackRoundInit, arun_append]
+  change
+    (arun k mid rootPackMantissaInit).regs rpEx = e + bump ∧
+      (arun k mid rootPackMantissaInit).regs rpTh = th + bump * th ∧
+      _
+  have hExFrame := LeanCompCert.Verified.ArrayRegFrame.arun_frame
+    k rpEx rootPackMantissaInit (by decide) mid
+  have hThFrame := LeanCompCert.Verified.ArrayRegFrame.arun_frame
+    k rpTh rootPackMantissaInit (by decide) mid
+  exact ⟨hExFrame.trans hExp.1, hThFrame.trans hExp.2.1,
+    hMant.1, hMant.2.1, hMant.2.2.trans hExp.2.2⟩
 
 /-! ## Relocated fixed-log round -/
 
@@ -183,15 +401,82 @@ theorem rootPackLnConvert_logFix_run (k : Nat) (s : AState) (S n : Nat)
   rw [LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   exact ⟨rootPackLnConvertS_logFix_run k s.regs S n ha h46, rfl⟩
 
+/-! ## Fixed-log assembly and natural-log composition -/
+
+theorem rootPackLnPrefixS_run (k : Nat) (s : RegState) (e a : Nat)
+    (he : s rpEx = e) (ha : s rpAa = a)
+    (heM : e * 2 ^ runtimeScale < M)
+    (hsumM : e * 2 ^ runtimeScale + a < M) :
+    (srun k s rootPackLnPrefixS) 46 = e * 2 ^ runtimeScale + a := by
+  have h24M : runtimeScale % M = runtimeScale := by decide
+  have he' : s 2 = e := by simpa only [rpEx] using he
+  have ha' : s 6 = a := by simpa only [rpAa] using ha
+  change
+    ((((s 2 <<< (runtimeScale % M)) % M) + s 6) % M) =
+      e * 2 ^ runtimeScale + a
+  rw [he', ha', h24M, Nat.shiftLeft_eq, Nat.mod_eq_of_lt heM,
+    Nat.mod_eq_of_lt hsumM]
+
+theorem rootPackLnPrefixS_logFix_run (k : Nat) (s : RegState) (n : Nat)
+    (he : s rpEx = Nat.log2 n)
+    (ha : s rpAa = logFrac runtimeScale
+      (n <<< (62 - Nat.log2 n)))
+    (hfix : logFix runtimeScale n < 2 ^ 30) :
+    (srun k s rootPackLnPrefixS) 46 = logFix runtimeScale n := by
+  have hfixM : logFix runtimeScale n < M :=
+    Nat.lt_trans hfix (by decide)
+  have heM : Nat.log2 n * 2 ^ runtimeScale < M := by
+    exact Nat.lt_of_le_of_lt (Nat.le_add_right _ _) (by
+      simpa only [logFix] using hfixM)
+  have hp := rootPackLnPrefixS_run k s (Nat.log2 n)
+    (logFrac runtimeScale (n <<< (62 - Nat.log2 n))) he ha heM (by
+      simpa only [logFix] using hfixM)
+  simpa only [logFix] using hp
+
+theorem rootPackLnS_logFix_run (k : Nat) (s : RegState) (n : Nat)
+    (he : s rpEx = Nat.log2 n)
+    (ha : s rpAa = logFrac runtimeScale
+      (n <<< (62 - Nat.log2 n)))
+    (hfix : logFix runtimeScale n < 2 ^ 30) :
+    (srun k s rootPackLnS) 57 =
+      LeanCompCert.Ports.PsiSegSieve.lnFix runtimeScale n := by
+  let mid := srun k s rootPackLnPrefixS
+  have hprefix := rootPackLnPrefixS_logFix_run k s n he ha hfix
+  have hconvert := rootPackLnConvertS_logFix_run k mid runtimeScale n
+    hfix (by simpa only [mid] using hprefix)
+  rw [rootPackLnS, srun_append]
+  exact hconvert
+
+theorem rootPackLn_logFix_run (k : Nat) (s : AState) (n : Nat)
+    (he : s.regs rpEx = Nat.log2 n)
+    (ha : s.regs rpAa = logFrac runtimeScale
+      (n <<< (62 - Nat.log2 n)))
+    (hfix : logFix runtimeScale n < 2 ^ 30) :
+    let out := arun k s rootPackLn
+    out.regs 57 = LeanCompCert.Ports.PsiSegSieve.lnFix runtimeScale n ∧
+      out.arr = s.arr := by
+  rw [rootPackLn, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  exact ⟨rootPackLnS_logFix_run k s.regs n he ha hfix, rfl⟩
+
 #print axioms rootPackDecode_defined
 #print axioms rootPackRoundInit_defined
 #print axioms rootPackLogRound_defined
 #print axioms rootPackLn_defined
+#print axioms rootPackDecode_run
+#print axioms rootPackExponentS_run
+#print axioms rootPackExponent_run
+#print axioms rootPackMantissaInitS_run
+#print axioms rootPackMantissaInit_run
+#print axioms rootPackRoundInit_run
 #print axioms rootPackLogReg_injective
 #print axioms rootPackLogRoundS_run_of_range
 #print axioms rootPackLogRound_run_of_range
 #print axioms rootPackLnReg_injective
 #print axioms rootPackLnConvertS_logFix_run
 #print axioms rootPackLnConvert_logFix_run
+#print axioms rootPackLnPrefixS_run
+#print axioms rootPackLnPrefixS_logFix_run
+#print axioms rootPackLnS_logFix_run
+#print axioms rootPackLn_logFix_run
 
 end LeanCompCert.Ports.R2SegSieve
