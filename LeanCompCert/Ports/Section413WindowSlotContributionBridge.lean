@@ -13,6 +13,16 @@ namespace LeanCompCert.Ports.Section413WindowSlotContributionBridge
 open LeanCompCert.Ports.Section413Sweep
 open LeanCompCert.Ports.Section413WindowPairingBridge
 open LeanCompCert.Ports.Section413WindowEventScanner
+open LeanCompCert.Ports.Section413WindowTableRead
+
+def referenceDiff (G : Nat → Cell) (x : Nat) : Cell :=
+  let y := safeX x
+  csub (G (y - 1)) (G y)
+
+private theorem referenceDiff_of_pos (G : Nat → Cell) (x : Nat)
+    (hx : 0 < x) :
+    referenceDiff G x = csub (G (x - 1)) (G x) := by
+  simp [referenceDiff, safeX, Nat.ne_of_gt hx]
 
 private theorem gcd_two (d : Nat) : Nat.gcd d 2 = 1 ↔ d % 2 = 1 := by
   rw [Nat.gcd_comm, Nat.gcd_rec]
@@ -35,9 +45,9 @@ theorem ordinaryK1 (G : Nat → Cell) (v n i : Nat)
     let pair := if s * s ≤ n ∧ n % s = 0 ∧ q ≠ s then 1 else 0
     cadd
       (eventK1Contribution (divisorGate v active s)
-        (csub (G (q - 1)) (G q)) (safeDen s) true)
+        (referenceDiff G q) (safeDen s) true)
       (eventK1Contribution (divisorGate v pair q)
-        (csub (G (s - 1)) (G s)) (safeDen q) true) =
+        (referenceDiff G s) (safeDen q) true) =
       slotDelta v n (k1First G n) i := by
   dsimp only
   have hs : 0 < i + 1 := Nat.succ_pos _
@@ -53,6 +63,7 @@ theorem ordinaryK1 (G : Nat → Cell) (v n i : Nat)
         n / (n / (i + 1)) =
             (n / (i + 1) * (i + 1)) / (n / (i + 1)) := by rw [hmul]
         _ = i + 1 := Nat.mul_div_right _ hq
+    rw [referenceDiff_of_pos G _ hs, referenceDiff_of_pos G _ hq]
     by_cases hpair : n / (i + 1) ≠ i + 1
     · rcases hv with rfl | rfl
       · simp [slotDelta, slotStep, hroot, hpair, eventK1Contribution,
@@ -89,9 +100,9 @@ theorem ordinaryK2 (G : Nat → Cell) (v n i : Nat)
     let pair := if s * s ≤ n ∧ n % s = 0 ∧ q ≠ s then 1 else 0
     cadd
       (eventK2Contribution (divisorGate v active s)
-        (csub (G (q - 1)) (G q)) q false)
+        (referenceDiff G q) q false)
       (eventK2Contribution (divisorGate v pair q)
-        (csub (G (s - 1)) (G s)) s false) =
+        (referenceDiff G s) s false) =
       slotDelta v n (k2First G n) i := by
   dsimp only
   by_cases hroot : (i + 1) * (i + 1) ≤ n ∧ n % (i + 1) = 0
@@ -105,6 +116,7 @@ theorem ordinaryK2 (G : Nat → Cell) (v n i : Nat)
         n / (n / (i + 1)) =
             (n / (i + 1) * (i + 1)) / (n / (i + 1)) := by rw [hmul]
         _ = i + 1 := Nat.mul_div_right _ hq
+    rw [referenceDiff_of_pos G _ hs, referenceDiff_of_pos G _ hq]
     by_cases hpair : n / (i + 1) ≠ i + 1
     · rcases hv with rfl | rfl
       · simp [slotDelta, slotStep, hroot, hpair, eventK2Contribution,
@@ -142,9 +154,9 @@ theorem halfK1 (G : Nat → Cell) (v n i : Nat)
       then 1 else 0
     cadd
       (eventK1Contribution (divisorGate v active s)
-        (csub (G (q - 1)) (G q)) (safeDen s * 2) false)
+        (referenceDiff G q) (safeDen s * 2) false)
       (eventK1Contribution (divisorGate v pair q)
-        (csub (G (s - 1)) (G s)) (safeDen q * 2) false) =
+        (referenceDiff G s) (safeDen q * 2) false) =
       (if n % 2 = 0 then
         slotDelta v (n / 2) (k1Second G (n / 2)) i else czero) := by
   dsimp only
@@ -163,6 +175,7 @@ theorem halfK1 (G : Nat → Cell) (v n i : Nat)
               (n / 2 / (i + 1) * (i + 1)) / (n / 2 / (i + 1)) := by
                 rw [hmul]
           _ = i + 1 := Nat.mul_div_right _ hq
+      rw [referenceDiff_of_pos G _ hs, referenceDiff_of_pos G _ hq]
       by_cases hpair : n / 2 / (i + 1) ≠ i + 1
       · rcases hv with rfl | rfl
         · simp [heven, slotDelta, slotStep, hroot, hpair,
@@ -206,9 +219,9 @@ theorem halfK2 (G : Nat → Cell) (v n i : Nat)
       then 1 else 0
     cadd
       (eventK2Contribution (divisorGate v active s)
-        (csub (G (q - 1)) (G q)) q true)
+        (referenceDiff G q) q true)
       (eventK2Contribution (divisorGate v pair q)
-        (csub (G (s - 1)) (G s)) s true) =
+        (referenceDiff G s) s true) =
       (if n % 2 = 0 then
         slotDelta v (n / 2) (k2Second G (n / 2)) i else czero) := by
   dsimp only
@@ -227,6 +240,7 @@ theorem halfK2 (G : Nat → Cell) (v n i : Nat)
               (n / 2 / (i + 1) * (i + 1)) / (n / 2 / (i + 1)) := by
                 rw [hmul]
           _ = i + 1 := Nat.mul_div_right _ hq
+      rw [referenceDiff_of_pos G _ hs, referenceDiff_of_pos G _ hq]
       by_cases hpair : n / 2 / (i + 1) ≠ i + 1
       · rcases hv with rfl | rfl
         · simp [heven, slotDelta, slotStep, hroot, hpair,
