@@ -1,5 +1,6 @@
 import LeanCompCert.Ports.R2SegSieve
 import LeanCompCert.Verified.ArrayPipeline
+import LeanCompCert.Verified.ArrayScalarBlock
 
 /-!
 # Compiled construction of the R2 production mark table
@@ -101,10 +102,7 @@ def rpWrite : Nat := 4
 def rpXm : Nat := 5
 def rpAa : Nat := 6
 
-/-- One scan/log round.  `idx / S + 2` is the candidate and `idx % S` its
-fixed-log round.  Every candidate gets exactly `S` rounds; only an unmarked
-candidate is appended. -/
-def rootPackBody (c : R2Cfg) : List AInstr :=
+def rootPackDecode : List AInstr :=
   let S := runtimeScale
   [ .scalar (.binop 10 .udiv .idx (.lit S))
   , .scalar (.binop 11 .add (.reg 10) (.lit 2))       -- n
@@ -113,59 +111,85 @@ def rootPackBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 14 .add (.reg 12) (.lit 1))
   , .scalar (.binop 15 .eq (.reg 14) (.lit S))        -- finish
   , .load 16 11
-  , .scalar (.binop 17 .eq (.reg 16) (.lit 0))        -- prime
-    -- incremental floor(log2 n), updated only on the first round
-  , .scalar (.binop 18 .ge (.reg 11) (.reg rpTh))
-  , .scalar (.binop 19 .mul (.reg 18) (.reg 13))
-  , .scalar (.binop rpEx .add (.reg rpEx) (.reg 19))
-  , .scalar (.binop 20 .mul (.reg 19) (.reg rpTh))
-  , .scalar (.binop rpTh .add (.reg rpTh) (.reg 20))
-    -- initialise the normalised mantissa and fractional accumulator
-  , .scalar (.binop 21 .sub (.lit 62) (.reg rpEx))
-  , .scalar (.binop 22 .band (.reg 21) (.lit 63))
-  , .scalar (.binop 23 .shl (.reg 11) (.reg 22))
-  , .scalar (.binop 24 .sub (.lit 1) (.reg 13))
-  , .scalar (.binop 25 .mul (.reg 13) (.reg 23))
-  , .scalar (.binop 26 .mul (.reg 24) (.reg rpXm))
-  , .scalar (.binop rpXm .add (.reg 25) (.reg 26))
-  , .scalar (.binop rpAa .mul (.reg rpAa) (.reg 24))
-    -- Ports.LogFixPort.logRoundBody, with local register names
-  , .scalar (.binop 27 .lshr (.reg rpXm) (.lit 32))
-  , .scalar (.binop 28 .band (.reg rpXm) (.lit 4294967295))
-  , .scalar (.binop 29 .mul (.reg 27) (.reg 27))
-  , .scalar (.binop 30 .mul (.reg 27) (.reg 28))
-  , .scalar (.binop 31 .mul (.reg 28) (.reg 28))
-  , .scalar (.binop 32 .lshr (.reg 30) (.lit 29))
-  , .scalar (.binop 33 .band (.reg 30) (.lit 536870911))
-  , .scalar (.binop 34 .lshr (.reg 31) (.lit 62))
-  , .scalar (.binop 35 .band (.reg 31) (.lit 4611686018427387903))
-  , .scalar (.binop 36 .shl (.reg 33) (.lit 33))
-  , .scalar (.binop 37 .add (.reg 36) (.reg 35))
-  , .scalar (.binop 38 .ge (.reg 37) (.lit 4611686018427387904))
-  , .scalar (.binop 39 .shl (.reg 29) (.lit 2))
-  , .scalar (.binop 40 .add (.reg 39) (.reg 32))
-  , .scalar (.binop 41 .add (.reg 40) (.reg 34))
-  , .scalar (.binop 42 .add (.reg 41) (.reg 38))
-  , .scalar (.binop 43 .ge (.reg 42) (.lit 9223372036854775808))
-  , .scalar (.binop rpXm .lshr (.reg 42) (.reg 43))
-  , .scalar (.binop 44 .shl (.reg rpAa) (.lit 1))
-  , .scalar (.binop rpAa .add (.reg 44) (.reg 43))
-    -- lnFix S n: high word of logFix times the fixed ln(2) constant
-  , .scalar (.binop 45 .shl (.reg rpEx) (.lit S))
-  , .scalar (.binop 46 .add (.reg 45) (.reg rpAa))
-  , .scalar (.binop 47 .band (.reg 46) (.lit 4294967295))
-  , .scalar (.binop 48 .lshr (.reg 46) (.lit 32))
-  , .scalar (.binop 49 .mul (.reg 47) (.lit L2lo))
-  , .scalar (.binop 50 .mul (.reg 47) (.lit L2hi))
-  , .scalar (.binop 51 .mul (.reg 48) (.lit L2lo))
-  , .scalar (.binop 52 .mul (.reg 48) (.lit L2hi))
-  , .scalar (.binop 53 .lshr (.reg 49) (.lit 32))
-  , .scalar (.binop 54 .add (.reg 50) (.reg 51))
-  , .scalar (.binop 55 .add (.reg 54) (.reg 53))
-  , .scalar (.binop 56 .lshr (.reg 55) (.lit 32))
-  , .scalar (.binop 57 .add (.reg 52) (.reg 56))        -- lnFix n
-    -- append packed `(n, lnFix n, first=1)` on the final round of a prime
-  , .scalar (.binop 58 .mul (.reg 15) (.reg 17))
+  , .scalar (.binop 17 .eq (.reg 16) (.lit 0)) ]      -- prime
+
+def rootPackExponentS : List Instr :=
+  [ .binop 18 .ge (.reg 11) (.reg rpTh)
+  , .binop 19 .mul (.reg 18) (.reg 13)
+  , .binop rpEx .add (.reg rpEx) (.reg 19)
+  , .binop 20 .mul (.reg 19) (.reg rpTh)
+  , .binop rpTh .add (.reg rpTh) (.reg 20) ]
+
+def rootPackExponent : List AInstr :=
+  LeanCompCert.Verified.ArrayScalarBlock.lift rootPackExponentS
+
+def rootPackMantissaInitS : List Instr :=
+  [ .binop 21 .sub (.lit 62) (.reg rpEx)
+  , .binop 22 .band (.reg 21) (.lit 63)
+  , .binop 23 .shl (.reg 11) (.reg 22)
+  , .binop 24 .sub (.lit 1) (.reg 13)
+  , .binop 25 .mul (.reg 13) (.reg 23)
+  , .binop 26 .mul (.reg 24) (.reg rpXm)
+  , .binop rpXm .add (.reg 25) (.reg 26)
+  , .binop rpAa .mul (.reg rpAa) (.reg 24) ]
+
+def rootPackMantissaInit : List AInstr :=
+  LeanCompCert.Verified.ArrayScalarBlock.lift rootPackMantissaInitS
+
+def rootPackRoundInit : List AInstr :=
+  rootPackExponent ++ rootPackMantissaInit
+
+def rootPackLogRoundS : List Instr :=
+  [ .binop 27 .lshr (.reg rpXm) (.lit 32)
+  , .binop 28 .band (.reg rpXm) (.lit 4294967295)
+  , .binop 29 .mul (.reg 27) (.reg 27)
+  , .binop 30 .mul (.reg 27) (.reg 28)
+  , .binop 31 .mul (.reg 28) (.reg 28)
+  , .binop 32 .lshr (.reg 30) (.lit 29)
+  , .binop 33 .band (.reg 30) (.lit 536870911)
+  , .binop 34 .lshr (.reg 31) (.lit 62)
+  , .binop 35 .band (.reg 31) (.lit 4611686018427387903)
+  , .binop 36 .shl (.reg 33) (.lit 33)
+  , .binop 37 .add (.reg 36) (.reg 35)
+  , .binop 38 .ge (.reg 37) (.lit 4611686018427387904)
+  , .binop 39 .shl (.reg 29) (.lit 2)
+  , .binop 40 .add (.reg 39) (.reg 32)
+  , .binop 41 .add (.reg 40) (.reg 34)
+  , .binop 42 .add (.reg 41) (.reg 38)
+  , .binop 43 .ge (.reg 42) (.lit 9223372036854775808)
+  , .binop rpXm .lshr (.reg 42) (.reg 43)
+  , .binop 44 .shl (.reg rpAa) (.lit 1)
+  , .binop rpAa .add (.reg 44) (.reg 43) ]
+
+def rootPackLogRound : List AInstr :=
+  LeanCompCert.Verified.ArrayScalarBlock.lift rootPackLogRoundS
+
+def rootPackLnPrefixS : List Instr :=
+  let S := runtimeScale
+  [ .binop 45 .shl (.reg rpEx) (.lit S)
+  , .binop 46 .add (.reg 45) (.reg rpAa) ]
+
+def rootPackLnConvertS : List Instr :=
+  [ .binop 47 .band (.reg 46) (.lit 4294967295)
+  , .binop 48 .lshr (.reg 46) (.lit 32)
+  , .binop 49 .mul (.reg 47) (.lit L2lo)
+  , .binop 50 .mul (.reg 47) (.lit L2hi)
+  , .binop 51 .mul (.reg 48) (.lit L2lo)
+  , .binop 52 .mul (.reg 48) (.lit L2hi)
+  , .binop 53 .lshr (.reg 49) (.lit 32)
+  , .binop 54 .add (.reg 50) (.reg 51)
+  , .binop 55 .add (.reg 54) (.reg 53)
+  , .binop 56 .lshr (.reg 55) (.lit 32)
+  , .binop 57 .add (.reg 52) (.reg 56) ]      -- lnFix n
+
+def rootPackLnS : List Instr :=
+  rootPackLnPrefixS ++ rootPackLnConvertS
+
+def rootPackLn : List AInstr :=
+  LeanCompCert.Verified.ArrayScalarBlock.lift rootPackLnS
+
+def rootPackStore (c : R2Cfg) : List AInstr :=
+  [ .scalar (.binop 58 .mul (.reg 15) (.reg 17))
   , .scalar (.binop 59 .add (.reg rpWrite) (.lit c.tableBase))
   , .scalar (.binop 60 .mul (.reg 58) (.reg 59))
   , .scalar (.binop 61 .sub (.lit 1) (.reg 58))
@@ -175,13 +199,22 @@ def rootPackBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 65 .add (.reg 11) (.reg 64))
   , .scalar (.binop 66 .add (.reg 65) (.lit (1 <<< 63)))
   , .store 63 66
-  , .scalar (.binop rpWrite .add (.reg rpWrite) (.reg 58))
-    -- clear the composite plane after the candidate's final round
-  , .scalar (.binop 67 .mul (.reg 15) (.reg 11))
+  , .scalar (.binop rpWrite .add (.reg rpWrite) (.reg 58)) ]
+
+def rootPackClear (c : R2Cfg) : List AInstr :=
+  [ .scalar (.binop 67 .mul (.reg 15) (.reg 11))
   , .scalar (.binop 68 .sub (.lit 1) (.reg 15))
   , .scalar (.binop 69 .mul (.reg 68) (.lit c.streamSink))
   , .scalar (.binop 70 .add (.reg 67) (.reg 69))
   , .store 70 0 ]
+
+/-- One scan/log round.  `idx / S + 2` is the candidate and `idx % S` its
+fixed-log round.  Every candidate gets exactly `S` rounds; only an unmarked
+candidate is appended.  The named slices support bounded proof elaboration;
+their concatenation emits the same straight-line program. -/
+def rootPackBody (c : R2Cfg) : List AInstr :=
+  rootPackDecode ++ rootPackRoundInit ++ rootPackLogRound ++ rootPackLn ++
+    rootPackStore c ++ rootPackClear c
 
 def rootPackInit : List AInstr :=
   seedRegs [(rpEx, 1), (rpTh, 4), (rpWrite, 0)]
