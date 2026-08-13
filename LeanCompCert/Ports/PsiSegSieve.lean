@@ -268,6 +268,10 @@ structure PsiCfg where
   streamCap : Nat
   /-- Prime powers `q ∈ [lo, hi]` with `k ≥ 2`, with weight `lnFix S p`. -/
   pp : List (Nat × Nat)
+  /-- Runtime-built prime-power tables carry their length as compact metadata
+  instead of asking Lean to enumerate the table.  Literal-table smoke tests
+  leave this absent. -/
+  ppLenOverride : Option Nat := none
   deriving Repr
 
 /-- The number of primes in `[lo, lo + len)`, by a segmented sieve over that
@@ -341,7 +345,7 @@ plane and the whole `μ` decoding disappear — nine instructions and `L` cells.
 def PsiCfg.sinkProd (c : PsiCfg) : Nat := c.segLen
 def PsiCfg.primeBase (c : PsiCfg) : Nat := c.segLen + 1
 def PsiCfg.ppBase (c : PsiCfg) : Nat := c.primeBase + c.tableLen + 1
-def PsiCfg.ppLen (c : PsiCfg) : Nat := c.pp.length
+def PsiCfg.ppLen (c : PsiCfg) : Nat := c.ppLenOverride.getD c.pp.length
 def PsiCfg.streamBase (c : PsiCfg) : Nat := c.ppBase + 2 * (c.ppLen + 1)
 def PsiCfg.streamSink (c : PsiCfg) : Nat := c.streamBase + 2 * c.streamCap
 def PsiCfg.primeSink (c : PsiCfg) : Nat := c.streamSink + 2
