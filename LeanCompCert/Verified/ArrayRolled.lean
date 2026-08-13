@@ -345,13 +345,18 @@ def AProgram.rolledCompile (p : AProgram) : List MInstr :=
     compileAInstrs p.augCount 0 p.epilogue
 
 /-- The complete dynamic rolled trace and the counter-augmented program's
-ordinary compiler trace have identical semantics.  The proof is symbolic in
-the trip count: it never materialises or evaluates the unrolled loop. -/
-theorem evalMCCSequence_rolledCompile_eq_counterAugment
-    (p : AProgram) (hWF : p.WF) (base : Int) :
-    evalMCCSequence (p.counterAugment.initialMCC base) p.rolledCompile =
-      evalMCCSequence (p.counterAugment.initialMCC base)
-        p.counterAugment.compile := by
+ordinary compiler trace have identical semantics from any caller-owned
+memory.  The proof is symbolic in the trip count: it never materialises or
+evaluates the unrolled loop. -/
+theorem evalMCCSequence_rolledCompile_eq_counterAugment_withMem
+    (p : AProgram) (hWF : p.WF) (base : Int) (mem : Mem) :
+    let start : MCCState :=
+      { env := (p.counterAugment.initialMCC base).env, mem := mem }
+    evalMCCSequence start p.rolledCompile =
+      evalMCCSequence start p.counterAugment.compile := by
+  dsimp only
+  let start : MCCState :=
+    { env := (p.counterAugment.initialMCC base).env, mem := mem }
   obtain ⟨_, hInit, hBody, _⟩ := hWF
   obtain ⟨env0, hPre, hInv0, _⟩ :=
     apreamble_correct p.counterAugment base
@@ -379,28 +384,27 @@ theorem evalMCCSequence_rolledCompile_eq_counterAugment
     simp [AProgram.compile, AProgram.counterAugment, AProgram.augCount,
       preTrace, literalLoop, epi, List.append_assoc]
   rw [hRolledList, hLiteralList]
-  rw [evalMCCSequence_append (p.counterAugment.initialMCC base) preTrace
+  rw [evalMCCSequence_append start preTrace
       (p.rolledTraceM p.loopCount ++ epi),
-    evalMCCSequence_append (p.counterAugment.initialMCC base) preTrace
+    evalMCCSequence_append start preTrace
       (literalLoop ++ epi)]
-  cases hPrefix : evalMCCSequence (p.counterAugment.initialMCC base) preTrace with
+  cases hPrefix : evalMCCSequence start preTrace with
   | none => rfl
   | some afterInit =>
       simp only [Option.bind_some]
-      let mem0 := (p.counterAugment.initialMCC base).mem
-      have hPre' : evalCCSequence (p.counterAugment.initialMCC base).env
+      have hPre' : evalCCSequence start.env
           (apreambleStraights p.augCount) = some env0 := by
-        simpa [AProgram.counterAugment, AProgram.augCount] using hPre
-      have hPreambleM : evalMCCSequence (p.counterAugment.initialMCC base)
+        simpa [start, AProgram.counterAugment, AProgram.augCount] using hPre
+      have hPreambleM : evalMCCSequence start
           (apreamble p.augCount) =
-          some ({ env := env0, mem := mem0 } : MCCState) := by
+          some ({ env := env0, mem := mem } : MCCState) := by
         unfold apreamble
         rw [evalMCCSequence_straight, hPre']
-        simp [mem0]
+        simp [start]
       have hInitRun : evalMCCSequence
-          { env := env0, mem := mem0 }
+          { env := env0, mem := mem }
           (compileAInstrs p.augCount 0 p.init) = some afterInit := by
-        change evalMCCSequence (p.counterAugment.initialMCC base)
+        change evalMCCSequence start
           (apreamble p.augCount ++ compileAInstrs p.augCount 0 p.init) =
             some afterInit at hPrefix
         rw [evalMCCSequence_append, hPreambleM] at hPrefix
@@ -414,6 +418,16 @@ theorem evalMCCSequence_rolledCompile_eq_counterAugment
         evalMCCSequence_append afterInit literalLoop epi]
       rw [rolledTraceM_eq_foldTraceM p hBody p.loopCount afterInit hCounterInit,
         ← hBodyCompile]
+
+/-- Zero-initialized-memory specialization retained for standalone rolled
+artifacts. -/
+theorem evalMCCSequence_rolledCompile_eq_counterAugment
+    (p : AProgram) (hWF : p.WF) (base : Int) :
+    evalMCCSequence (p.counterAugment.initialMCC base) p.rolledCompile =
+      evalMCCSequence (p.counterAugment.initialMCC base)
+        p.counterAugment.compile := by
+  simpa using evalMCCSequence_rolledCompile_eq_counterAugment_withMem
+    p hWF base (p.counterAugment.initialMCC base).mem
 
 /-- The rolled CCIR result is the counter-augmented source denotation.  This
 is the constant-size array-loop counterpart of
@@ -430,6 +444,7 @@ theorem rolledCompile_result_eq_denote (p : AProgram) (hWF : p.WF)
     base hBase n hDenote
 
 #print axioms counterAugment_WF
+#print axioms evalMCCSequence_rolledCompile_eq_counterAugment_withMem
 #print axioms evalMCCSequence_rolledCompile_eq_counterAugment
 #print axioms rolledCompile_result_eq_denote
 
