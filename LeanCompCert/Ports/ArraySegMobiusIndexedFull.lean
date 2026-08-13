@@ -113,7 +113,9 @@ structure SingleMixedPaddedRootSchedule (c : Cfg)
   finalCover : 1 + valid ≤ (bootBound + 1) * (bootBound + 1)
   bootFit : c.bootPrimes.length < c.tableLen
   finalFit : ∀ k, k < valid →
-    (rootScanMixed c.bootPrimes bootBound 1 k).length < c.tableLen
+    let ps := rootScanMixed c.bootPrimes bootBound 1 k
+    ps.length ≤ c.tableLen ∧
+      (unmarkedBool ps (1 + k) = true → ps.length < c.tableLen)
   finalCapFit :
     (rootScanMixed c.bootPrimes bootBound 1 valid).length ≤ c.tableLen
   rootCapM : c.rootCap < M
@@ -419,7 +421,9 @@ theorem indexedProductionRoot_padded_complete
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.crossingBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.crossingStartWithin h.crossingLast h.crossingCap h.crossingCover
-    h.bootFit h.crossingFit h.rootCapM
+    h.bootFit (fun k hk =>
+      ⟨Nat.le_of_lt (h.crossingFit k hk), fun _ => h.crossingFit k hk⟩)
+    h.rootCapM
   let idxCross := (bootFuel + 1) * c.period
   let laterW := laterBase c bootFuel
   have hlater := indexedWindowRun_later_root_complete_room c idxCross crossState
@@ -499,7 +503,9 @@ theorem indexedProductionCore_complete
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.crossingBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.crossingStartWithin h.crossingLast h.crossingCap h.crossingCover
-    h.bootFit h.crossingFit h.rootCapM
+    h.bootFit (fun k hk =>
+      ⟨Nat.le_of_lt (h.crossingFit k hk), fun _ => h.crossingFit k hk⟩)
+    h.rootCapM
   let idxCross := (bootFuel + 1) * c.period
   let laterW := laterBase c bootFuel
   have hlater := indexedWindowRun_later_root_complete_room c idxCross crossState

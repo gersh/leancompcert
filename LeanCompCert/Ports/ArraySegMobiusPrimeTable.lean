@@ -21,6 +21,32 @@ structure PrimeTableInv (ps : List Nat) (bound : Nat) : Prop where
   upper : ∀ p, p ∈ ps → p ≤ bound
   ordered : ps.Pairwise (· < ·)
 
+/-- The increasing list of all primes through a fixed bound is unique. -/
+theorem PrimeTableInv.eq {ps qs : List Nat} {bound : Nat}
+    (hps : PrimeTableInv ps bound) (hqs : PrimeTableInv qs bound) :
+    ps = qs := by
+  have hmem : ∀ n, n ∈ ps ↔ n ∈ qs := by
+    intro n
+    constructor
+    · intro hn
+      exact hqs.complete n (hps.sound n hn) (hps.upper n hn)
+    · intro hn
+      exact hps.complete n (hqs.sound n hn) (hqs.upper n hn)
+  have hperm : ps.Perm qs := by
+    have hpsNodup : ps.Nodup := List.nodup_iff_pairwise_ne.mpr
+      (hps.ordered.imp fun h => Nat.ne_of_lt h)
+    have hqsNodup : qs.Nodup := List.nodup_iff_pairwise_ne.mpr
+      (hqs.ordered.imp fun h => Nat.ne_of_lt h)
+    rw [List.perm_iff_count]
+    intro n
+    rw [hpsNodup.count, hqsNodup.count]
+    simp only [hmem]
+  apply hperm.eq_of_pairwise (le := fun a b : Nat => a < b)
+  · intro a b _ _ hab hba
+    omega
+  · exact hps.ordered
+  · exact hqs.ordered
+
 /-- Before candidate two, the empty table contains every prime at most one. -/
 theorem empty : PrimeTableInv [] 1 := by
   constructor

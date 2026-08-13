@@ -294,6 +294,33 @@ theorem roomForStep_of_primeTable {c : Cfg} {ps : List Nat} {bound n : Nat}
   rw [htable]
   omega
 
+/-- Generic capacity theorem against any independently certified final prime
+table.  It is the row-wise form used by the Platt (2.11) manifest. -/
+theorem roomForStep_of_finalPrimeTable {c : Cfg} {ps full : List Nat}
+    {bound n cap : Nat} (htable : c.tableLen = full.length)
+    (hInv : PrimeTableInv ps bound) (hFull : PrimeTableInv full cap)
+    (hnext : n = bound + 1) (hn2 : 2 ≤ n) (hnCap : n ≤ cap) :
+    RoomForStep c ps n := by
+  have hRange : List.Sublist (List.range (bound + 1))
+      (List.range (cap + 1)) := (List.range_sublist).mpr (by omega)
+  have hLen : ps.length ≤ full.length := by
+    rw [primeTable_length_eq_primeCount hInv,
+      primeTable_length_eq_primeCount hFull]
+    exact hRange.countP_le
+  refine ⟨by rw [htable]; exact hLen, ?_⟩
+  intro hu
+  have hNextInv : PrimeTableInv (rootTableStep ps n) n :=
+    rootTableStep_preserves hInv hnext hn2
+  have hNextRange : List.Sublist (List.range (n + 1))
+      (List.range (cap + 1)) := (List.range_sublist).mpr (by omega)
+  have hNextLen : (rootTableStep ps n).length ≤ full.length := by
+    rw [primeTable_length_eq_primeCount hNextInv,
+      primeTable_length_eq_primeCount hFull]
+    exact hNextRange.countP_le
+  simp [rootTableStep, hu] at hNextLen
+  rw [htable]
+  omega
+
 /-- Every bootstrap or crossing prefix is strictly shorter than the final
 table, via the smaller compiled count through `29300`. -/
 theorem strictFit_of_primeTable {c : Cfg} {ps : List Nat} {bound : Nat}

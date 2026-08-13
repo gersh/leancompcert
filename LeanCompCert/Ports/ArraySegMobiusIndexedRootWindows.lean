@@ -160,8 +160,9 @@ theorem indexedRootWindow_mixed_complete
     (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
     (hbootFit : (c.firstPrime :: tail).length < c.tableLen)
     (hfit : ∀ k, k < c.segLen →
-      (rootScanMixed (c.firstPrime :: tail) bootBound w k).length <
-        c.tableLen)
+      let ps := rootScanMixed (c.firstPrime :: tail) bootBound w k
+      ps.length ≤ c.tableLen ∧
+        (unmarkedBool ps (w + k) = true → ps.length < c.tableLen))
     (hcapM : c.rootCap < M) :
     RootTableInv c (indexedBodyRun idx c c.period s)
         (rootScanMixed (c.firstPrime :: tail) bootBound w c.segLen)
@@ -261,7 +262,9 @@ theorem indexedRootWindow_mixed_padded_transition
     (hcover : w + valid ≤ (bootBound + 1) * (bootBound + 1))
     (hbootFit : (c.firstPrime :: tail).length < c.tableLen)
     (hfit : ∀ k, k < valid →
-      (rootScanMixed (c.firstPrime :: tail) bootBound w k).length < c.tableLen)
+      let ps := rootScanMixed (c.firstPrime :: tail) bootBound w k
+      ps.length ≤ c.tableLen ∧
+        (unmarkedBool ps (w + k) = true → ps.length < c.tableLen))
     (hcapFit : (rootScanMixed (c.firstPrime :: tail) bootBound w valid).length ≤ c.tableLen)
     (hcapM : c.rootCap < M)
     (hDelta : c.wDelta = delta) (hDeltaM : delta < M) :
