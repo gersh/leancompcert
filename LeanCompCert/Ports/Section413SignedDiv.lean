@@ -245,7 +245,7 @@ private theorem ceilSelectStage_frame (k : Nat) (s : RegState) (j : Nat)
   simp only [ceilSelectStage, List.mem_cons, List.not_mem_nil, or_false] at hi
   rcases hi with rfl | rfl | rfl <;> simp only [sdest] <;> omega
 
-private theorem magnitude_lt (w : Nat) (hw : w < M) : magnitude w < M := by
+theorem magnitude_lt (w : Nat) (hw : w < M) : magnitude w < M := by
   unfold magnitude
   by_cases h : H63 ≤ w
   · rw [if_pos h]
