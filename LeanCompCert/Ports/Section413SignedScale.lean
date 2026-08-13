@@ -381,6 +381,32 @@ theorem body_clean_product_range (k : Nat) (s : AState)
         constructor <;> omega
   exact abs_lt_bounds z hzabslt
 
+/-- The checked-scale violation flag is sticky: a clean compiled result
+certifies that the incoming flag was already clean. -/
+theorem body_zero_implies_input_zero (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hclean : (arun k s body).regs rViol = 0) :
+    s.regs rViol = 0 := by
+  let a := arun k s signMagStage
+  let b := arun k a wideStage
+  have haword : ∀ j, a.regs j < M := arun_regs_word k _ _ hword harray
+  have haarray : ∀ j, a.arr j < M := arun_arr_word k _ _ hword harray
+  have hbword : ∀ j, b.regs j < M := arun_regs_word k _ _ haword haarray
+  have hclean' : srun k b.regs finalStage rViol = 0 := by
+    simpa only [body, arun_append, arun_lift, a, b] using hclean
+  have hviol := finalStage_violation k b.regs
+    (hbword rLo) (hbword rHi) (hbword rViol)
+  have hbzero : b.regs rViol = 0 :=
+    (LeanCompCert.Ports.Section413G1Sound.or_eq_zero
+      (hviol.symm.trans hclean')).1
+  rw [show b.regs rViol = a.regs rViol by
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rViol wideStage
+      (by decide) a] at hbzero
+  rw [show a.regs rViol = s.regs rViol by
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rViol signMagStage
+      (by decide) s] at hbzero
+  exact hbzero
+
 def program (arrayLen loopCount : Nat) : AProgram :=
   { regCount := 328
     arrayLen := arrayLen
@@ -401,6 +427,7 @@ theorem program_wf (arrayLen loopCount : Nat) :
 #print axioms finalStage_violation
 #print axioms body_clean_output_encoded
 #print axioms body_clean_product_range
+#print axioms body_zero_implies_input_zero
 #print axioms program_wf
 
 end LeanCompCert.Ports.Section413SignedScale

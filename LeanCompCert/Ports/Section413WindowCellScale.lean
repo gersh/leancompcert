@@ -199,6 +199,66 @@ theorem oneStage_clean_viol (k : Nat) (s : AState) (src dest : Nat)
     subst i
     simpa only [sdest] using hdest
 
+theorem oneStage_viol_output (k : Nat) (s : AState) (src dest : Nat)
+    (negate : Bool)
+    (hdest : dest ≠ LeanCompCert.Ports.Section413SignedScale.rViol) :
+    (arun k s (oneStage src dest negate)).regs
+        LeanCompCert.Ports.Section413SignedScale.rViol =
+      (arun k
+        (arun k s (lift (loadWord src negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol := by
+  let p := arun k s (lift (loadWord src negate))
+  let q := arun k p LeanCompCert.Ports.Section413SignedScale.body
+  rw [oneStage, arun_append, arun_append, arun_lift]
+  change srun k q.regs
+    [.mov dest (.reg LeanCompCert.Ports.Section413SignedScale.rOut)]
+      LeanCompCert.Ports.Section413SignedScale.rViol = q.regs
+        LeanCompCert.Ports.Section413SignedScale.rViol
+  apply srun_untouched
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  simpa only [sdest] using hdest
+
+/-- A zero flag after one compiled scale yields both its constant-size clean
+receipt and a zero incoming sticky flag. -/
+theorem oneStage_zero_receipt_and_input (k : Nat) (s : AState)
+    (src dest : Nat) (negate : Bool)
+    (hdest : dest ≠ LeanCompCert.Ports.Section413SignedScale.rViol)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s (oneStage src dest negate)).regs
+      LeanCompCert.Ports.Section413SignedScale.rViol = 0) :
+    (arun k
+      (arun k s (lift (loadWord src negate)))
+      LeanCompCert.Ports.Section413SignedScale.body).regs
+        LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+  let p := arun k s (lift (loadWord src negate))
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hreceipt : (arun k p
+      LeanCompCert.Ports.Section413SignedScale.body).regs
+        LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    rw [← oneStage_viol_output k s src dest negate hdest]
+    exact hzero
+  have hpzero :=
+    LeanCompCert.Ports.Section413SignedScale.body_zero_implies_input_zero
+      k p hpword hparray hreceipt
+  rw [show p.regs LeanCompCert.Ports.Section413SignedScale.rViol =
+      s.regs LeanCompCert.Ports.Section413SignedScale.rViol by
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _
+      (lift (loadWord src negate)) (by
+        cases negate <;>
+          simp [lift, loadWord,
+            LeanCompCert.Ports.Section413WindowCellDiv.loadWord,
+            LeanCompCert.Verified.ArrayRegFrame.writes,
+            LeanCompCert.Verified.ArrayRegFrame.instrWrites,
+            LeanCompCert.Ports.Section413SignedScale.rViol,
+            LeanCompCert.Ports.Section413SignedDiv.rDiv,
+            LeanCompCert.Ports.Section413SignedDiv.rWord]) s] at hpzero
+  exact ⟨by simpa only [p] using hreceipt, hpzero⟩
+
 private theorem oneStage_frame_of (k r : Nat) (s : AState)
     (src dest : Nat) (negate : Bool)
     (hload : LeanCompCert.Verified.ArrayRegFrame.writes r
@@ -321,6 +381,43 @@ theorem body_clean_viol (k : Nat) (s : AState) (negate : Bool)
   rw [LeanCompCert.Verified.ArrayRegFrame.arun_frame k
     LeanCompCert.Ports.Section413SignedScale.rViol (lift gateStage)
     (by decide) q, hq]
+
+/-- A clean final scale flag reconstructs both checked-multiplication
+receipts and proves the incoming sticky flag clean. -/
+theorem body_zero_receipts_and_input (k : Nat) (s : AState) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s (body negate)).regs
+      LeanCompCert.Ports.Section413SignedScale.rViol = 0) :
+    (arun k
+      (arun k s (lift (loadWord
+        (if negate then rInHi else rInLo) negate)))
+      LeanCompCert.Ports.Section413SignedScale.body).regs
+        LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      (let p := arun k s
+        (oneStage (if negate then rInHi else rInLo) rOutLo negate)
+      (arun k
+        (arun k p (lift (loadWord
+          (if negate then rInLo else rInHi) negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0) ∧
+      s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+  let p := arun k s
+    (oneStage (if negate then rInHi else rInLo) rOutLo negate)
+  let q := arun k p
+    (oneStage (if negate then rInLo else rInHi) rOutHi negate)
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hqzero : q.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    rw [← LeanCompCert.Verified.ArrayRegFrame.arun_frame k _
+      (lift gateStage) (by decide) q]
+    simpa only [body, arun_append, p, q] using hzero
+  have hhi := oneStage_zero_receipt_and_input k p
+    (if negate then rInLo else rInHi) rOutHi negate (by decide)
+      hpword hparray hqzero
+  have hlo := oneStage_zero_receipt_and_input k s
+    (if negate then rInHi else rInLo) rOutLo negate (by decide)
+      hword harray (by simpa only [p] using hhi.2)
+  exact ⟨hlo.1, by simpa only [p] using hhi.1, hlo.2⟩
 
 /-- Register framing for the complete scale adapter without reflecting over
 the duplicated instruction body.  Clients discharge one load condition and
@@ -608,7 +705,9 @@ theorem program_wf (arrayLen loopCount : Nat) (negate : Bool) :
 
 #print axioms oneStage_clean_output
 #print axioms oneStage_clean_output_range
+#print axioms oneStage_zero_receipt_and_input
 #print axioms body_clean_viol
+#print axioms body_zero_receipts_and_input
 #print axioms body_clean_outputs
 #print axioms body_clean_outputs_gate_one
 #print axioms body_clean_outputs_gate_zero

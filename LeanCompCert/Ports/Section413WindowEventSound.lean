@@ -1163,6 +1163,107 @@ theorem k2Stage_zero_implies_input_zero (k : Nat) (s : AState)
     exact k2Prep_frame_of k s factor _ (by decide)] at hpzero
   exact hpzero
 
+/-- A final clean checked-add flag reconstructs the two K1 accumulator
+receipts.  The divisor computation remains symbolic and is framed out. -/
+theorem k1Stage_add_zero_receipts_and_input (k : Nat) (s : AState)
+    (den : Nat) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s (k1Stage den negate)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    K1Receipts k s den negate ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let prep := k1PrepState k s den
+  let q := arun k prep
+    (LeanCompCert.Ports.Section413WindowCellDiv.body negate)
+  have hprepword : ∀ j, prep.regs j < M := arun_regs_word k _ _ hword harray
+  have hpreparray : ∀ j, prep.arr j < M := arun_arr_word k _ _ hword harray
+  have hqword : ∀ j, q.regs j < M := arun_regs_word k _ _ hprepword hpreparray
+  have hqarray : ∀ j, q.arr j < M := arun_arr_word k _ _ hprepword hpreparray
+  have hr :=
+    LeanCompCert.Ports.Section413WindowCellAdd.twoStages_zero_receipts_and_input
+      k q rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo
+        rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi
+        (by decide) (by decide) (by decide) (by decide) hqword hqarray
+        (by simpa only [k1Stage, k1PrepState, addK1, arun_append, prep, q]
+          using hzero)
+  refine ⟨⟨?_, ?_⟩, k1Stage_zero_implies_input_zero k s den negate
+    hword harray hzero⟩
+  · simpa only [K1Receipts, DivAddK1Receipts, prep, q] using hr.1
+  · simpa only [K1Receipts, DivAddK1Receipts, prep, q] using hr.2.1
+
+theorem k1TwiceStage_add_zero_receipts_and_input (k : Nat) (s : AState)
+    (den : Nat) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s (k1TwiceStage den negate)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    K1TwiceReceipts k s den negate ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let prep := k1TwicePrepState k s den
+  let q := arun k prep
+    (LeanCompCert.Ports.Section413WindowCellDiv.body negate)
+  have hprepword : ∀ j, prep.regs j < M := arun_regs_word k _ _ hword harray
+  have hpreparray : ∀ j, prep.arr j < M := arun_arr_word k _ _ hword harray
+  have hqword : ∀ j, q.regs j < M := arun_regs_word k _ _ hprepword hpreparray
+  have hqarray : ∀ j, q.arr j < M := arun_arr_word k _ _ hprepword hpreparray
+  have hr :=
+    LeanCompCert.Ports.Section413WindowCellAdd.twoStages_zero_receipts_and_input
+      k q rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo
+        rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi
+        (by decide) (by decide) (by decide) (by decide) hqword hqarray
+        (by simpa only [k1TwiceStage, k1TwicePrepState, addK1, arun_append,
+          prep, q]
+          using hzero)
+  refine ⟨⟨?_, ?_⟩, k1TwiceStage_zero_implies_input_zero k s den negate
+    hword harray hzero⟩
+  · simpa only [K1TwiceReceipts, DivAddK1Receipts, prep, q] using hr.1
+  · simpa only [K1TwiceReceipts, DivAddK1Receipts, prep, q] using hr.2.1
+
+/-- The two final arithmetic flags reconstruct all four K2 receipts: both
+checked products and both checked accumulator additions. -/
+theorem k2Stage_flags_zero_receipts_and_input (k : Nat) (s : AState)
+    (factor : Nat) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hscale : (arun k s (k2Stage factor negate)).regs
+      LeanCompCert.Ports.Section413SignedScale.rViol = 0)
+    (hadd : (arun k s (k2Stage factor negate)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    K2Receipts k s factor negate ∧
+      s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let p := k2PrepState k s factor
+  let q := scaleState k p negate
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hqword : ∀ j, q.regs j < M := arun_regs_word k _ _ hpword hparray
+  have hqarray : ∀ j, q.arr j < M := arun_arr_word k _ _ hpword hparray
+  have hscaleQ : q.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    rw [← LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ addK2
+      (by decide) q]
+    simpa only [k2Stage, k2PrepState, scaleState, arun_append, p, q]
+      using hscale
+  have haddQ : (arun k q addK2).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    simpa only [k2Stage, k2PrepState, scaleState, arun_append, p, q]
+      using hadd
+  have hsr :=
+    LeanCompCert.Ports.Section413WindowCellScale.body_zero_receipts_and_input
+      k p negate hpword hparray (by simpa only [q, scaleState] using hscaleQ)
+  have har :=
+    LeanCompCert.Ports.Section413WindowCellAdd.twoStages_zero_receipts_and_input
+      k q rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo
+        rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi
+        (by decide) (by decide) (by decide) (by decide) hqword hqarray
+        (by simpa only [addK2] using haddQ)
+  have hscaleIn : s.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+    rw [k2Prep_frame_of k s factor _ (by decide)] at hsr
+    exact hsr.2.2
+  refine ⟨⟨?_, ?_, ?_, ?_⟩, hscaleIn,
+    k2Stage_zero_implies_input_zero k s factor negate hword harray hadd⟩
+  · simpa only [p] using hsr.1
+  · simpa only [p] using hsr.2.1
+  · simpa only [p, q, scaleState] using har.1
+  · simpa only [p, q, scaleState] using har.2.1
+
 /-- A clean checked-add flag after one complete compiled event implies that
 the incoming flag was clean.  This is independent of arithmetic receipts. -/
 theorem event_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
@@ -1210,5 +1311,8 @@ theorem event_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
 #print axioms event_clean_outputs
 #print axioms eventTwice_clean_outputs
 #print axioms event_zero_implies_input_zero
+#print axioms k1Stage_add_zero_receipts_and_input
+#print axioms k1TwiceStage_add_zero_receipts_and_input
+#print axioms k2Stage_flags_zero_receipts_and_input
 
 end LeanCompCert.Ports.Section413WindowEventScanner

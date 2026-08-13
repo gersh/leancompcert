@@ -183,6 +183,35 @@ theorem twoStages_zero_implies_input_zero (k : Nat) (s : AState)
     htermLo hword harray (by simpa only [p] using hhi.2)
   exact hlo.2
 
+/-- A clean final flag for two consecutive accumulator additions reconstructs
+both constant-size checked-add receipts as well as the incoming flag. -/
+theorem twoStages_zero_receipts_and_input (k : Nat) (s : AState)
+    (accLo termLo accHi termHi : Nat)
+    (haccLo : accLo ≠ LeanCompCert.Ports.Section413SignedAdd.rViol)
+    (haccHi : accHi ≠ LeanCompCert.Ports.Section413SignedAdd.rViol)
+    (htermLo : termLo ≠ LeanCompCert.Ports.Section413SignedAdd.rA)
+    (htermHi : termHi ≠ LeanCompCert.Ports.Section413SignedAdd.rA)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s
+      (oneStage accLo termLo ++ oneStage accHi termHi)).regs
+        LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    (arun k (arun k s (lift (loadAdd accLo termLo)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0 ∧
+      (let p := arun k s (oneStage accLo termLo)
+      (arun k (arun k p (lift (loadAdd accHi termHi)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0) ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let p := arun k s (oneStage accLo termLo)
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hhi := oneStage_zero_receipt_and_input k p accHi termHi haccHi
+    htermHi hpword hparray (by simpa only [arun_append, p] using hzero)
+  have hlo := oneStage_zero_receipt_and_input k s accLo termLo haccLo
+    htermLo hword harray (by simpa only [p] using hhi.2)
+  exact ⟨hlo.1, by simpa only [p] using hhi.1, hlo.2⟩
+
 private theorem firstStage_accHi_frame (k : Nat) (s : AState) :
     (arun k s (oneStage rAccLo rTermLo)).regs rAccHi = s.regs rAccHi := by
   exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rAccHi
@@ -265,6 +294,7 @@ theorem program_wf (arrayLen loopCount : Nat) :
 #print axioms oneStage_clean_output
 #print axioms oneStage_zero_receipt_and_input
 #print axioms twoStages_zero_implies_input_zero
+#print axioms twoStages_zero_receipts_and_input
 #print axioms body_clean_outputs
 #print axioms program_wf
 
