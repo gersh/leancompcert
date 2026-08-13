@@ -34,11 +34,6 @@ open LeanCompCert.Ports.ArraySegMobiusPlattConfig
 
 set_option maxRecDepth 10000
 
-/-- Capacity condition used by the executable root-table step. -/
-def RoomForStep (c : Cfg) (ps : List Nat) (n : Nat) : Prop :=
-  ps.length ≤ c.tableLen ∧
-    (unmarkedBool ps n = true → ps.length < c.tableLen)
-
 /-- A candidate already covered by a complete prime table cannot append, so
 even a full table has room for that machine step. -/
 theorem roomForStep_of_covered {c : Cfg} {ps : List Nat} {bound n : Nat}
@@ -119,8 +114,12 @@ theorem plattAlignedFirst_schedule
   constructor
   case bootPrime => exact e.bootPrime
   case markBudget => exact e.markBudget
-  case bootstrapFit => exact e.bootstrapFit
-  case crossingFit => exact e.crossingFit
+  case bootstrapFit =>
+    exact fun n hn k hk => ⟨Nat.le_of_lt (e.bootstrapFit n hn k hk),
+      fun _ => e.bootstrapFit n hn k hk⟩
+  case crossingFit =>
+    exact fun k hk => ⟨Nat.le_of_lt (e.crossingFit k hk),
+      fun _ => e.crossingFit k hk⟩
   case laterFit =>
     intro n hn k hk
     simpa [RoomForStep] using e.laterRoom n hn k hk
@@ -152,8 +151,12 @@ theorem plattAlignedFirst_legacySchedule
   constructor
   case bootPrime => exact e.bootPrime
   case markBudget => exact e.markBudget
-  case bootstrapFit => exact e.bootstrapFit
-  case crossingFit => exact e.crossingFit
+  case bootstrapFit =>
+    exact fun n hn k hk => ⟨Nat.le_of_lt (e.bootstrapFit n hn k hk),
+      fun _ => e.bootstrapFit n hn k hk⟩
+  case crossingFit =>
+    exact fun k hk => ⟨Nat.le_of_lt (e.crossingFit k hk),
+      fun _ => e.crossingFit k hk⟩
   case laterFit =>
     intro n hn k hk
     exact ⟨Nat.le_of_lt (e.laterFit n hn k hk),
@@ -184,8 +187,12 @@ theorem plattAlignedTail_schedule
   constructor
   case bootPrime => exact e.bootPrime
   case markBudget => exact e.markBudget
-  case bootstrapFit => exact e.bootstrapFit
-  case crossingFit => exact e.crossingFit
+  case bootstrapFit =>
+    exact fun n hn k hk => ⟨Nat.le_of_lt (e.bootstrapFit n hn k hk),
+      fun _ => e.bootstrapFit n hn k hk⟩
+  case crossingFit =>
+    exact fun k hk => ⟨Nat.le_of_lt (e.crossingFit k hk),
+      fun _ => e.crossingFit k hk⟩
   case laterFit =>
     intro n hn k hk
     simpa [RoomForStep] using e.laterRoom n hn k hk
@@ -216,8 +223,12 @@ theorem plattAlignedTail_legacySchedule
   constructor
   case bootPrime => exact e.bootPrime
   case markBudget => exact e.markBudget
-  case bootstrapFit => exact e.bootstrapFit
-  case crossingFit => exact e.crossingFit
+  case bootstrapFit =>
+    exact fun n hn k hk => ⟨Nat.le_of_lt (e.bootstrapFit n hn k hk),
+      fun _ => e.bootstrapFit n hn k hk⟩
+  case crossingFit =>
+    exact fun k hk => ⟨Nat.le_of_lt (e.crossingFit k hk),
+      fun _ => e.crossingFit k hk⟩
   case laterFit =>
     intro n hn k hk
     exact ⟨Nat.le_of_lt (e.laterFit n hn k hk),

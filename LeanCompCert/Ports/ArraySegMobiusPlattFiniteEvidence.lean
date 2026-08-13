@@ -27,6 +27,7 @@ open LeanCompCert.Ports.ArraySieveWeightedSum
 open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusPrimeTable
 open LeanCompCert.Ports.ArraySegMobiusRootCellFold
+open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusRootPrefix
 open LeanCompCert.Ports.ArraySegMobiusIndexedRootMixed
 open LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter

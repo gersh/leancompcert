@@ -153,7 +153,7 @@ theorem indexedProductionRoot_single_mixed_padded_complete
     h.bootBoundM h.bootBoundSqM h.segBootM h.windowBaseM h.firstOffsetM
     h.arrayM (by simpa [hshape] using h.markBudget) (by omega) h.bootTwo
     h.bootStart h.bootLeCap h.finalValid h.finalValidLt h.finalCover
-    (by simpa [hshape] using h.bootFit)
+    (by simpa [hshape] using (Nat.le_of_lt h.bootFit))
     (by simpa [hshape] using h.finalFit)
     (by simpa [hshape] using h.finalCapFit) h.rootCapM h.deltaEq h.deltaM
   simpa only [indexedWindowRun, Nat.one_mul, hshape] using hwindow
@@ -229,7 +229,7 @@ theorem indexedProductionRoot_single_mixed_complete
     (by simpa [hshape] using h.markBudget) (by omega) h.bootTwo h.bootStart
     (by rw [h.finalCap]; exact h.bootLtCap)
     (by rw [h.finalCap]; exact Nat.le_refl c.rootCap) h.finalCover
-    (by simpa [hshape] using h.bootFit)
+    (by simpa [hshape] using (Nat.le_of_lt h.bootFit))
     (by simpa [hshape] using h.finalFit) h.rootCapM h.deltaEq h.deltaM
   simpa only [indexedWindowRun, Nat.one_mul, hshape, h.finalCap] using hwindow
 
@@ -276,10 +276,11 @@ structure ProductionCoreSchedule (c : Cfg)
   bootstrapCover : ∀ n, n < bootFuel →
     1 + n * c.segLen + c.segLen <
       (bootBound + 1) * (bootBound + 1)
-  bootFit : c.bootPrimes.length < c.tableLen
+  bootFit : c.bootPrimes.length ≤ c.tableLen
   bootstrapFit : ∀ n, n < bootFuel → ∀ k, k < c.segLen →
-    (rootScanMixed c.bootPrimes bootBound (1 + n * c.segLen) k).length <
-      c.tableLen
+    let ps := rootScanMixed c.bootPrimes bootBound
+      (1 + n * c.segLen) k
+    RoomForStep c ps (1 + n * c.segLen + k)
 
   crossingRange : bootFuel * c.period + c.period ≤ c.rootSpan - 1
   crossingBaseM : crossingBase c bootFuel + c.segLen < M
@@ -289,8 +290,9 @@ structure ProductionCoreSchedule (c : Cfg)
   crossingCover : crossingBase c bootFuel + c.segLen <
     (bootBound + 1) * (bootBound + 1)
   crossingFit : ∀ k, k < c.segLen →
-    (rootScanMixed c.bootPrimes bootBound (crossingBase c bootFuel) k).length <
-      c.tableLen
+    let ps := rootScanMixed c.bootPrimes bootBound
+      (crossingBase c bootFuel) k
+    RoomForStep c ps (crossingBase c bootFuel + k)
 
   laterRange : (bootFuel + 1) * c.period + laterFuel * c.period ≤
     c.rootSpan - 1
@@ -383,10 +385,11 @@ structure PaddedProductionRootSchedule (c : Cfg)
     1 + (n + 1) * c.segLen - 1 ≤ c.rootCap
   bootstrapCover : ∀ n, n < bootFuel →
     1 + n * c.segLen + c.segLen < (bootBound + 1) * (bootBound + 1)
-  bootFit : c.bootPrimes.length < c.tableLen
+  bootFit : c.bootPrimes.length ≤ c.tableLen
   bootstrapFit : ∀ n, n < bootFuel → ∀ k, k < c.segLen →
-    (rootScanMixed c.bootPrimes bootBound (1 + n * c.segLen) k).length <
-      c.tableLen
+    let ps := rootScanMixed c.bootPrimes bootBound
+      (1 + n * c.segLen) k
+    RoomForStep c ps (1 + n * c.segLen + k)
 
   crossingRange : bootFuel * c.period + c.period ≤ c.rootSpan - 1
   crossingBaseM : crossingBase c bootFuel + c.segLen < M
@@ -396,8 +399,9 @@ structure PaddedProductionRootSchedule (c : Cfg)
   crossingCover : crossingBase c bootFuel + c.segLen <
     (bootBound + 1) * (bootBound + 1)
   crossingFit : ∀ k, k < c.segLen →
-    (rootScanMixed c.bootPrimes bootBound (crossingBase c bootFuel) k).length <
-      c.tableLen
+    let ps := rootScanMixed c.bootPrimes bootBound
+      (crossingBase c bootFuel) k
+    RoomForStep c ps (crossingBase c bootFuel + k)
 
   laterRange : (bootFuel + 1) * c.period + laterFuel * c.period ≤
     c.rootSpan - 1
@@ -486,9 +490,7 @@ theorem indexedProductionRoot_padded_complete
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.bootstrapBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.bootstrapLastTwo h.bootstrapStartWithin h.bootstrapWithin
-    h.bootstrapCap h.bootstrapCover (Nat.le_of_lt h.bootFit)
-    (fun n hn k hk => ⟨Nat.le_of_lt (h.bootstrapFit n hn k hk),
-      fun _ => h.bootstrapFit n hn k hk⟩) h.rootCapM
+    h.bootstrapCap h.bootstrapCover h.bootFit h.bootstrapFit h.rootCapM
   let crossState := indexedWindowRun 0 c (bootFuel + 1) entry
   let crossed := crossingTable c bootBound bootFuel
   have hcross := indexedBootstrapWindows_mixed_complete c 0 entry
@@ -498,9 +500,7 @@ theorem indexedProductionRoot_padded_complete
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.crossingBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.crossingStartWithin h.crossingLast h.crossingCap h.crossingCover
-    h.bootFit (fun k hk =>
-      ⟨Nat.le_of_lt (h.crossingFit k hk), fun _ => h.crossingFit k hk⟩)
-    h.rootCapM
+    h.bootFit h.crossingFit h.rootCapM
   let idxCross := (bootFuel + 1) * c.period
   let laterW := laterBase c bootFuel
   have hlater := indexedWindowRun_later_root_complete_room c idxCross crossState
@@ -912,7 +912,7 @@ theorem indexedMixedFinalCore_complete
     (by simpa [finalW] using h.finalBeyond)
     (by simpa [finalW] using h.finalCap)
     (by simpa [finalW, Nat.add_assoc] using h.finalCover)
-    (by simpa [← hshape] using h.bootFit)
+    (by simpa [← hshape] using (Nat.le_of_lt h.bootFit))
     (by simpa [← hshape, finalW] using h.finalRoom) h.rootCapM
     h.deltaEq h.deltaM
   let ps := rootScanMixed c.bootPrimes bootBound finalW c.segLen
@@ -980,9 +980,7 @@ theorem indexedProductionCore_complete
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.bootstrapBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.bootstrapLastTwo h.bootstrapStartWithin h.bootstrapWithin
-    h.bootstrapCap h.bootstrapCover (Nat.le_of_lt h.bootFit)
-    (fun n hn k hk => ⟨Nat.le_of_lt (h.bootstrapFit n hn k hk),
-      fun _ => h.bootstrapFit n hn k hk⟩) h.rootCapM
+    h.bootstrapCap h.bootstrapCover h.bootFit h.bootstrapFit h.rootCapM
   let crossState := indexedWindowRun 0 c (bootFuel + 1) entry
   let crossW := crossingBase c bootFuel
   let crossed := crossingTable c bootBound bootFuel
@@ -993,9 +991,7 @@ theorem indexedProductionCore_complete
     h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
     h.crossingBaseM h.arrayM h.markBudget (by omega) h.bootTwo
     h.crossingStartWithin h.crossingLast h.crossingCap h.crossingCover
-    h.bootFit (fun k hk =>
-      ⟨Nat.le_of_lt (h.crossingFit k hk), fun _ => h.crossingFit k hk⟩)
-    h.rootCapM
+    h.bootFit h.crossingFit h.rootCapM
   let idxCross := (bootFuel + 1) * c.period
   let laterW := laterBase c bootFuel
   have hlater := indexedWindowRun_later_root_complete_room c idxCross crossState

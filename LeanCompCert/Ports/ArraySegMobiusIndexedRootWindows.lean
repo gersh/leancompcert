@@ -160,7 +160,7 @@ theorem indexedRootWindow_mixed_complete
     (hlast : bootBound < w + c.segLen - 1)
     (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
     (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
-    (hbootFit : (c.firstPrime :: tail).length < c.tableLen)
+    (hbootFit : (c.firstPrime :: tail).length ≤ c.tableLen)
     (hfit : ∀ k, k < c.segLen →
       let ps := rootScanMixed (c.firstPrime :: tail) bootBound w k
       ps.length ≤ c.tableLen ∧
@@ -180,11 +180,12 @@ theorem indexedRootWindow_mixed_complete
   let marked := indexedBodyRun idx c c.markSteps s
   have hwriteM : s.regs rWrite < M := by
     rw [hInv.cursor]
-    have : c.primeBase + (c.firstPrime :: tail).length < c.arrayLen := by
-      simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase,
-        Cfg.tableLen] at hbootFit ⊢
-      omega
-    omega
+    exact Nat.lt_trans (calc
+      c.primeBase + (c.firstPrime :: tail).length ≤
+          c.primeBase + c.tableLen := Nat.add_le_add_left hbootFit _
+      _ < c.arrayLen := by
+        simp only [Cfg.primeBase, Cfg.arrayLen, Cfg.resultBase]
+        omega) hA
   have hsteps : c.markSteps - 1 + 1 = c.markSteps := by omega
   have hLPos : 0 < c.segLen := by omega
   have hmarkRange : idx + c.markSteps ≤ c.rootSpan - 1 := by
@@ -194,7 +195,7 @@ theorem indexedRootWindow_mixed_complete
   have hmarkPair := indexedBodyRun_root_mark_preserves_full_table c idx
     (c.markSteps - 1) s (c.firstPrime :: tail) (c.firstPrime :: tail)
     guard bootBound w 0
-    hInv.toMachineTableRep (Nat.le_of_lt hbootFit) hLimit hInv.primeTable
+    hInv.toMachineTableRep hbootFit hLimit hInv.primeTable
     hbootLen hR hW (by omega) (by simpa [hsteps] using hmarkRange)
     hbootPos hbootLe htableLenM hTM hPM hspanM hwriteM hp1Pos hp1LeL
     hp1LeBound hboundM hboundSqM hsegBoundM hwSegM hnStartM hA
@@ -262,7 +263,7 @@ theorem indexedRootWindow_mixed_padded_transition
     (hwBoot : w - 1 ≤ bootBound) (hbootLtCap : bootBound ≤ c.rootCap)
     (hvalid : w + valid - 1 = c.rootCap) (hvalidLt : valid < c.segLen)
     (hcover : w + valid ≤ (bootBound + 1) * (bootBound + 1))
-    (hbootFit : (c.firstPrime :: tail).length < c.tableLen)
+    (hbootFit : (c.firstPrime :: tail).length ≤ c.tableLen)
     (hfit : ∀ k, k < valid →
       let ps := rootScanMixed (c.firstPrime :: tail) bootBound w k
       ps.length ≤ c.tableLen ∧
@@ -292,7 +293,7 @@ theorem indexedRootWindow_mixed_padded_transition
   have hidxMarkM : idx + c.markSteps < M := by omega
   have hmarkPair := indexedBodyRun_root_mark_preserves_full_table c idx
     (c.markSteps - 1) s (c.firstPrime :: tail) (c.firstPrime :: tail)
-    guard bootBound w 0 hInv.toMachineTableRep (Nat.le_of_lt hbootFit)
+    guard bootBound w 0 hInv.toMachineTableRep hbootFit
     hLimit hInv.primeTable hbootLen hR hW (by omega)
     (by simpa [hsteps] using hmarkRange) hbootPos hbootLe htableLenM hTM
     hPM hspanM hwriteM hp1Pos hp1LeL hp1LeBound hboundM hboundSqM
@@ -358,7 +359,7 @@ theorem indexedRootWindow_mixed_complete_transition
     (hlast : bootBound < w + c.segLen - 1)
     (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
     (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
-    (hbootFit : (c.firstPrime :: tail).length < c.tableLen)
+    (hbootFit : (c.firstPrime :: tail).length ≤ c.tableLen)
     (hfit : ∀ k, k < c.segLen →
       let ps := rootScanMixed (c.firstPrime :: tail) bootBound w k
       ps.length ≤ c.tableLen ∧
@@ -390,7 +391,7 @@ theorem indexedRootWindow_mixed_complete_transition
   have hidxMarkM : idx + c.markSteps < M := by omega
   have hmarkPair := indexedBodyRun_root_mark_preserves_full_table c idx
     (c.markSteps - 1) s (c.firstPrime :: tail) (c.firstPrime :: tail)
-    guard bootBound w 0 hInv.toMachineTableRep (Nat.le_of_lt hbootFit)
+    guard bootBound w 0 hInv.toMachineTableRep hbootFit
     hLimit hInv.primeTable hbootLen hR hW (by omega)
     (by simpa [hsteps] using hmarkRange) hbootPos hbootLe htableLenM hTM
     hPM hspanM hwriteM hp1Pos hp1LeL hp1LeBound hboundM hboundSqM

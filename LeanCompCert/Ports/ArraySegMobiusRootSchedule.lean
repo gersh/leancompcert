@@ -21,6 +21,13 @@ open LeanCompCert.Ports.ArraySegMobiusSignal
 open LeanCompCert.Ports.ArraySegMobiusMark
 open LeanCompCert.Ports.ArraySegMobiusRootCellFold
 
+/-- Capacity condition used by an executable root-table step.  A table may
+be full when the current candidate is marked; only an actual append needs a
+strictly spare slot. -/
+def RoomForStep (c : Cfg) (ps : List Nat) (n : Nat) : Prop :=
+  ps.length ≤ c.tableLen ∧
+    (unmarkedBool ps n = true → ps.length < c.tableLen)
+
 /-- Every marking event frames the represented prime table.  This is the
 cross-event fact that lets the executable schedule use one fixed table rather
 than a different array projection at each induction step. -/

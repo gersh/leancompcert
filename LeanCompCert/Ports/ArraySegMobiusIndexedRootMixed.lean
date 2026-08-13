@@ -343,7 +343,7 @@ theorem indexedBodyRun_mixed_root_acc_padded_transition
     (hwPos : 0 < w) (hboot2 : 2 ≤ bootBound) (hwBoot : w - 1 ≤ bootBound)
     (hbootLtCap : bootBound ≤ c.rootCap)
     (hcover : w + valid ≤ (bootBound + 1) * (bootBound + 1))
-    (hbootLen : boot.length < c.tableLen)
+    (hbootLen : boot.length ≤ c.tableLen)
     (hfit : ∀ k, k < valid →
       let ps := rootScanMixed boot bootBound w k
       ps.length ≤ c.tableLen ∧
@@ -362,7 +362,7 @@ theorem indexedBodyRun_mixed_root_acc_padded_transition
       (indexedBodyRun idx c c.segLen s).regs rZero = 0 := by
   have hpref := indexedBodyRun_mixed_root_acc_prefix c idx valid s boot
     bootBound w hInv hView hR hW hzero hcells hvalidLt (by omega) hwPos
-    hboot2 hwBoot (by omega) hcover (Nat.le_of_lt hbootLen) hfit hTM hPM
+    hboot2 hwBoot (by omega) hcover hbootLen hfit hTM hPM
     hspanM hcapM hA
   let mid := indexedBodyRun idx c valid s
   let capTable := rootScanMixed boot bootBound w valid
@@ -451,7 +451,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_transition
     (hlast : bootBound < w + c.segLen - 1)
     (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
     (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
-    (hbootLen : boot.length < c.tableLen)
+    (hbootLen : boot.length ≤ c.tableLen)
     (hfit : ∀ k, k < c.segLen →
       let ps := rootScanMixed boot bootBound w k
       ps.length ≤ c.tableLen ∧
@@ -474,7 +474,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_transition
   have hkSucc : k + 1 = c.segLen := by omega
   have hpref := indexedBodyRun_mixed_root_acc_prefix c idx k s boot
     bootBound w hInv hView hR hW hzero hcells hkSeg (by omega) hwPos
-    hboot2 hwBoot (by omega) (by omega) (Nat.le_of_lt hbootLen)
+    hboot2 hwBoot (by omega) (by omega) hbootLen
     (fun q hq => hfit q (by omega)) hTM hPM hspanM hcapM hA
   let prev := indexedBodyRun idx c k s
   let curIdx := idx + k
@@ -644,7 +644,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_wrap
     (hlast : bootBound < w + c.segLen - 1)
     (hsegCap : w + c.segLen - 1 ≤ c.rootCap)
     (hcover : w + c.segLen < (bootBound + 1) * (bootBound + 1))
-    (hbootLen : boot.length < c.tableLen)
+    (hbootLen : boot.length ≤ c.tableLen)
     (hfit : ∀ k, k < c.segLen →
       let ps := rootScanMixed boot bootBound w k
       ps.length ≤ c.tableLen ∧
@@ -669,7 +669,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_wrap
   have hkSucc : k + 1 = c.segLen := by omega
   have hpref := indexedBodyRun_mixed_root_acc_prefix c idx k s boot
     bootBound w hInv hView hR hW hzero hcells hkSeg (by omega) hwPos
-    hboot2 hwBoot (by omega) (by omega) (Nat.le_of_lt hbootLen)
+    hboot2 hwBoot (by omega) (by omega) hbootLen
     (fun q hq => hfit q (by omega))
     hTM hPM hspanM hcapM hA
   let prev := indexedBodyRun idx c k s
@@ -723,7 +723,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_wrap
     BootstrapTableView.next_rootTableStep c curIdx prev boot cur n n
       (c.markSteps + k) w (c.primeBase + cur.length) k hpref.bootstrap
       (rootScanMixed_has_prefix boot bootBound w k) hc.1 hnM
-      (Nat.le_of_lt hbootLen) hprevR hprevW hprevWrite hT hiEq hcurRoot
+      hbootLen hprevR hprevW hprevWrite hT hiEq hcurRoot
       hRM hTM hcurM hspanM hkSeg hnM hwriteM hA hc.2.2.2.1
   have hrun : indexedBodyRun idx c c.segLen s =
       arun curIdx prev c.coreBody := by

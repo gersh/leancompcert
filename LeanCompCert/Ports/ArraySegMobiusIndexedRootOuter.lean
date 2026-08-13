@@ -195,7 +195,7 @@ theorem indexedBootstrapWindows_mixed_complete
     (hsegCap : w + fuel * c.segLen + c.segLen - 1 ≤ c.rootCap)
     (hcover : w + fuel * c.segLen + c.segLen <
       (bootBound + 1) * (bootBound + 1))
-    (hbootFit : boot.length < c.tableLen)
+    (hbootFit : boot.length ≤ c.tableLen)
     (hfit : ∀ k, k < c.segLen →
       let ps := rootScanMixed boot bootBound (w + fuel * c.segLen) k
       ps.length ≤ c.tableLen ∧

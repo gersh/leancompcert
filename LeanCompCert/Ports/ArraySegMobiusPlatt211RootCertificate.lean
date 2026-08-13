@@ -30,7 +30,9 @@ open LeanCompCert.Ports.ArraySegSieve
 open LeanCompCert.Ports.ArraySegMobiusSignal
 open LeanCompCert.Ports.ArraySegMobiusMark
 open LeanCompCert.Ports.ArraySegMobiusResidueFrame
+open LeanCompCert.Ports.ArraySegMobiusRootCellFold
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
+open LeanCompCert.Ports.ArraySegMobiusRootPrefix
 open LeanCompCert.Ports.ArraySegMobiusPrimeTable
 open LeanCompCert.Ports.ArraySegMobiusPrimeTableRep
 open LeanCompCert.Ports.ArraySegMobiusRootBootstrapInv
@@ -41,6 +43,7 @@ open LeanCompCert.Ports.ArraySegMobiusIndexedProgram
 open LeanCompCert.Ports.ArraySegMobiusPlatt211ManifestData
 open LeanCompCert.Ports.ArraySegMobiusPlatt211Manifest
 open LeanCompCert.Ports.ArraySegMobiusPlatt211Schedule
+open LeanCompCert.Ports.ArraySegMobiusPlattSchedule
 open LeanCompCert.Ports.ArraySegMobiusPlatt211Certificate
 open LeanCompCert.Ports.ArraySegMobiusExtrema
 open LeanCompCert.Ports.ArraySegMobiusIndexedFull
@@ -953,6 +956,45 @@ theorem row_historicalRoot_primeTable_regular (row : Row)
     apply Nat.max_eq_right
     simpa only [rowCfg] using hbootCap
   simpa only [hmax] using hcert
+
+/-! ## Capacity lemmas against the compiled final table -/
+
+/-- A mixed historical prefix has machine room whenever an independently
+compiled complete table covers its next candidate.  Candidates still inside
+the bootstrap bound are handled without requiring a spare slot. -/
+theorem roomForStep_rootScanMixed_of_final {c : Cfg} {boot full : List Nat}
+    {bootBound w k cap : Nat}
+    (hboot : PrimeTableInv boot bootBound)
+    (hfull : PrimeTableInv full cap)
+    (htable : full.length = c.tableLen)
+    (hbootLen : boot.length ≤ c.tableLen)
+    (hw : w - 1 ≤ bootBound) (hwPos : 0 < w)
+    (hbootTwo : 2 ≤ bootBound) (hnTwo : 2 ≤ w + k)
+    (hnCap : w + k ≤ cap) :
+    RoomForStep c (rootScanMixed boot bootBound w k) (w + k) := by
+  by_cases hcovered : w + k ≤ bootBound
+  · have hscan : rootScanMixed boot bootBound w k = boot :=
+      rootScanMixed_eq_boot_of_le boot bootBound w k (by omega)
+    rw [hscan]
+    exact roomForStep_of_covered hbootLen hboot hnTwo hcovered
+  · have hprefix := rootScanMixed_primeTable (fuel := k) hboot hw hwPos
+      hbootTwo
+    have hmax : max bootBound (w + k - 1) = w + k - 1 := by omega
+    rw [hmax] at hprefix
+    exact roomForStep_of_finalPrimeTable (c := c) (full := full)
+      (cap := cap) htable.symm hprefix hfull (by omega) hnTwo hnCap
+
+/-- The corresponding sequential-prefix capacity lemma, used after the
+single mixed crossing window. -/
+theorem roomForStep_rootScanFrom_of_final {c : Cfg} {ps full : List Nat}
+    {bound w k cap : Nat}
+    (hprefix : PrimeTableInv ps bound) (hw : w = bound + 1)
+    (hwTwo : 2 ≤ w) (hfull : PrimeTableInv full cap)
+    (htable : full.length = c.tableLen) (hnCap : w + k ≤ cap) :
+    RoomForStep c (rootScanFrom ps w k) (w + k) := by
+  have hscan := rootScanFrom_primeTable (fuel := k) hprefix hw hwTwo
+  exact roomForStep_of_finalPrimeTable (c := c) (full := full) (cap := cap)
+    htable.symm hscan hfull (by omega) (by omega) hnCap
 
 /-- Every historical one-root row is either padded or ends exactly at its
 root cap. -/
