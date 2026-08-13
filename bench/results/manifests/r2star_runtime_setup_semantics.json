@@ -1,0 +1,50 @@
+{
+  "purpose": "Cold-target Lean benchmarks for the symbolic semantics of the compiled R2 root marker and table packer",
+  "status": "verified",
+  "date": "2026-08-13",
+  "memory_policy": {
+    "memory_high": "1300M",
+    "memory_max": "1900M",
+    "memory_swap_max": "0",
+    "lean_threads": 1
+  },
+  "root_marker_predicate": {
+    "target": "LeanCompCert.Ports.R2RuntimePrimePredicate",
+    "source": "LeanCompCert/Ports/R2RuntimePrimePredicate.lean",
+    "wall_s": 0.24,
+    "user_s": 0.16,
+    "sys_s": 0.08,
+    "peak_rss_kb": 528776,
+    "source_elaboration_ms": 181,
+    "theorems": [
+      "rootMarkedState_cell",
+      "rootMarkedState_cell_eq_zero_iff"
+    ]
+  },
+  "ranked_table_semantics": {
+    "target": "LeanCompCert.Ports.R2RuntimePackTableSemantics",
+    "source": "LeanCompCert/Ports/R2RuntimePackTableSemantics.lean",
+    "wall_s": 0.94,
+    "user_s": 1.30,
+    "sys_s": 0.11,
+    "peak_rss_kb": 633656,
+    "source_elaboration_ms": 794,
+    "theorems": [
+      "rootPackModelFold_tableInvariant",
+      "rootPackedState_table_entry",
+      "rootProductionPackedState_table_entry"
+    ]
+  },
+  "method": "Before each measurement, only that target's generated .olean/.ilean/IR products were moved aside. Dependencies remained built. The target was then rebuilt under a transient no-swap systemd scope with /usr/bin/time -v inside the scope.",
+  "production_evaluation_in_lean": false,
+  "production_loop_counts": {
+    "root_marker": 54922027,
+    "table_packer": 3477912
+  },
+  "axiom_closure": [
+    "propext",
+    "Classical.choice",
+    "Quot.sound"
+  ],
+  "note": "Both proofs are universally quantified inductions over symbolic prefixes. Specialization to the literal production counts does not construct List.range, enumerate candidates, or normalize either fold."
+}
