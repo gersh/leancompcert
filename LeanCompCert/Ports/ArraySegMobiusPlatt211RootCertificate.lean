@@ -46,6 +46,55 @@ open LeanCompCert.Ports.ArraySegMobiusExtrema
 open LeanCompCert.Ports.ArraySegMobiusIndexedFull
 open LeanCompCert.Ports.ArraySegMobiusPlattFiniteEvidence
 
+/-! ## Historical root-schedule classification -/
+
+/-- Number of complete root windows whose endpoint is at most the recorded
+bootstrap bound. -/
+def historicalBootFuel (row : Row) : Nat := row.bootBound / row.segLen
+
+/-- Number of ordinary later windows between the crossing window and the
+final root window. -/
+def historicalLaterFuel (row : Row) : Nat :=
+  row.rootCount - historicalBootFuel row - 2
+
+/-- Live candidates in the final historical root window. -/
+def historicalFinalValid (row : Row) : Nat :=
+  row.rootCap - (row.rootCount - 1) * row.segLen
+
+/-- Exhaustive, mutually routed shapes of the literal historical root phase.
+The first disjunct is already handled by the one-root schedules below. -/
+def historicalRootShape (row : Row) : Prop :=
+  row.rootCount = 1 ∨
+  (row.rootCount ≠ 1 ∧ row.rootCap ≤ row.bootBound ∧
+    row.rootCount = historicalBootFuel row) ∨
+  (row.rootCount ≠ 1 ∧ row.bootBound < row.rootCap ∧
+    row.rootCount = historicalBootFuel row + 1) ∨
+  (row.rootCount ≠ 1 ∧ row.bootBound < row.rootCap ∧
+    historicalBootFuel row + 2 ≤ row.rootCount ∧
+    row.rootCount = historicalBootFuel row + 2 + historicalLaterFuel row ∧
+    0 < historicalFinalValid row ∧
+    historicalFinalValid row ≤ row.segLen)
+
+instance (row : Row) : Decidable (historicalRootShape row) := by
+  unfold historicalRootShape historicalBootFuel historicalLaterFuel
+    historicalFinalValid
+  infer_instance
+
+def historicalRootShapeOK (row : Row) : Bool :=
+  decide (historicalRootShape row)
+
+def historicalRootShapesOK : Bool := rows.all historicalRootShapeOK
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 4000000 in
+theorem historicalRootShapes_ok : historicalRootShapesOK = true := by
+  decide
+
+theorem row_historicalRootShape (row : Row) (hrow : row ∈ rows) :
+    historicalRootShape row := by
+  exact of_decide_eq_true
+    ((List.all_eq_true.mp historicalRootShapes_ok) row hrow)
+
 /-- One inert cell beyond the finite interval makes the certificate's sole
 root window a padded final transition. -/
 def rootCertificateSegLen (row : Row) : Nat := row.rootCap + 1

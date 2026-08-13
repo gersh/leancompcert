@@ -26,6 +26,7 @@ open LeanCompCert.Ports.ArraySegMobiusPrimeTable
 open LeanCompCert.Ports.ArraySegMobiusRootCellFold
 open LeanCompCert.Ports.ArraySegMobiusRootSchedule
 open LeanCompCert.Ports.ArraySegMobiusRootPrefix
+open LeanCompCert.Ports.ArraySegMobiusRootAccumulation
 open LeanCompCert.Ports.ArraySegMobiusIndexedRootMixed
 open LeanCompCert.Ports.ArraySegMobiusIndexedRootOuter
 open LeanCompCert.Ports.ArraySegMobiusIndexedFull
@@ -37,6 +38,17 @@ set_option maxRecDepth 10000
 def RoomForStep (c : Cfg) (ps : List Nat) (n : Nat) : Prop :=
   ps.length ≤ c.tableLen ∧
     (unmarkedBool ps n = true → ps.length < c.tableLen)
+
+/-- A candidate already covered by a complete prime table cannot append, so
+even a full table has room for that machine step. -/
+theorem roomForStep_of_covered {c : Cfg} {ps : List Nat} {bound n : Nat}
+    (hlen : ps.length ≤ c.tableLen) (hInv : PrimeTableInv ps bound)
+    (hn2 : 2 ≤ n) (hnBound : n ≤ bound) : RoomForStep c ps n := by
+  refine ⟨hlen, ?_⟩
+  intro hu
+  have hmarked := not_unmarked_of_primeTableInv_le ps bound n hInv hn2
+    hnBound
+  exact (hmarked ((unmarkedBool_eq_true_iff ps n).mp hu)).elim
 
 /-- Correct finite, data-dependent remainder of a production schedule. -/
 structure ScheduleFiniteEvidence (c : Cfg)
