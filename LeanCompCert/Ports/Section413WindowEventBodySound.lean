@@ -59,6 +59,37 @@ def afterThird (k : Nat) (s : AState) (c : Cfg) : AState :=
 def afterFourth (k : Nat) (s : AState) (c : Cfg) : AState :=
   arun k (afterThird k s c) (fourthEvent c)
 
+/-- Register-frame facts for the fixed G1/G2 event bodies.  They inspect only
+the constant-size destination list, never production rows or table data. -/
+structure EventBodyFrames (c : Cfg) : Prop where
+  n : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rN (eventBody c) = false
+  s : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rS (eventBody c) = false
+  q : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rQ (eventBody c) = false
+  active : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rActive (eventBody c) = false
+  pair : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rPair (eventBody c) = false
+  halfQ : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ (eventBody c) = false
+  halfActive : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfActive
+      (eventBody c) = false
+  halfPair : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfPair (eventBody c) = false
+  rowViol : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowRowCheck.rRowViol (eventBody c) = false
+
+set_option maxRecDepth 100000 in
+theorem g1EventBodyFrames : EventBodyFrames g1Cfg := by
+  constructor <;> decide
+
+set_option maxRecDepth 100000 in
+theorem g2EventBodyFrames : EventBodyFrames g2Cfg := by
+  constructor <;> decide
+
 /-- A fixed compiled event adds one mathematical interval contribution and
 leaves both sticky arithmetic flags clean. -/
 structure Accumulates (before after : AState)
@@ -123,5 +154,7 @@ theorem eventBody_accumulates (k : Nat) (s : AState) (c : Cfg)
 #print axioms Accumulates.trans
 #print axioms Accumulates.of_outputs
 #print axioms eventBody_accumulates
+#print axioms g1EventBodyFrames
+#print axioms g2EventBodyFrames
 
 end LeanCompCert.Ports.Section413WindowEventScanner

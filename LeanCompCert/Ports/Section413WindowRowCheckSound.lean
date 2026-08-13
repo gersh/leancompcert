@@ -411,6 +411,18 @@ theorem checkStage_clean_add_flag (k : Nat) (s : AState) (lo offset : Nat)
   rw [h.1]
   simp [addViolationRef, hsaved, hunit]
 
+theorem checkStage_nonfinal_row (k : Nat) (s : AState) (lo offset : Nat)
+    (hlo : lo < M) (hlimit : commonBound - offset < M)
+    (hmax : s.regs rMaxHi < M)
+    (hrowWord : s.regs rRowViol < M)
+    (hslot : s.regs LeanCompCert.Ports.Section413WindowSchedule.rS ≠
+      LeanCompCert.Ports.Section413WindowSchedule.slots) :
+    (arun k s (checkStage lo offset)).regs rRowViol = s.regs rRowViol := by
+  have h := checkStage_outputs k s lo offset hlo hlimit hmax
+  rw [h.2.1]
+  simp [rowViolationRef, tooHighRef, checkGateRef, hslot,
+    Nat.mod_eq_of_lt hrowWord]
+
 theorem nonnegativeWord_eq_toNat (w : Nat) (hw : w < M) :
     nonnegativeWord w = (decodeZ w).toNat := by
   unfold nonnegativeWord decodeZ
@@ -633,6 +645,7 @@ theorem init_output (k : Nat) (s : AState) :
 #print axioms checkStage_outputs
 #print axioms checkStage_zero_iff_bound
 #print axioms checkStage_clean_add_flag
+#print axioms checkStage_nonfinal_row
 #print axioms nonnegativeWord_eq_toNat
 #print axioms body_zero_iff_bound
 #print axioms bodyUnitState_upper
