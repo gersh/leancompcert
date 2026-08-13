@@ -113,6 +113,15 @@ where an independent `gpu_prover` supplies remote execution evidence.
 **Setting up?** [Installation](docs/installation.md) — building CompCert,
 verifying it, and requiring this package from your `lakefile.toml`.
 
+**Building on a shared or memory-constrained host?** Use
+`scripts/safe_lake_build.sh` rather than a bare aggregate `lake build`.  It
+defaults to one Lean worker, `MemoryHigh=1300M`, `MemoryMax=1900M`, disabled
+swap, and a checkout lock.  Those deliberately tight defaults make an
+accidental production-sized kernel reduction fail inside its cgroup instead
+of exhausting the machine.  A known proof-only target may opt into a larger
+bounded envelope, for example
+`LCC_MEM_HIGH=2G LCC_MEM_MAX=3G scripts/safe_lake_build.sh TARGET`.
+
 **Want to know what this actually proves?** Read
 **[What is proved, what is observed, and what "program" means](docs/what-is-proved.md)**
 first. It defines the little register-machine language you write in and lists
