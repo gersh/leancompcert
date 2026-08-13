@@ -726,10 +726,166 @@ theorem row_historicalSinglePaddedSchedule (row : Row)
       deltaEq := rfl
       deltaM := hdeltaM }
 
+/-- Scalar side conditions for the four historical rows whose only root
+window ends exactly at `rootCap`. -/
+def historicalSingleCompleteArithmetic (row : Row) : Prop :=
+  let c := rowCfg row
+  (row.rootCount = 1 ∧ row.bootBound < row.rootCap ∧
+      row.rootCap = row.segLen) →
+    c.bootCount = row.bootCount ∧ 0 < c.bootCount ∧
+    c.tableLen = row.mainCount ∧ c.bootCount < c.tableLen ∧
+    c.tableLen < M ∧ 0 < c.markSteps ∧ c.markSteps < M ∧
+    c.period < M ∧ c.rootSpan < M ∧
+    0 < c.firstPrime ∧ c.firstPrime ≤ c.segLen ∧
+    c.firstPrime ≤ row.bootBound ∧ row.bootBound < M ∧
+    row.bootBound * row.bootBound < M ∧
+    c.segLen + row.bootBound < M ∧ 1 + c.segLen < M ∧
+    1 + firstOffset 1 c.firstPrime < M ∧ c.arrayLen < M ∧
+    2 ≤ row.bootBound ∧ c.period = c.rootSpan ∧
+    1 - 1 ≤ row.bootBound ∧ row.bootBound < c.rootCap ∧
+    1 + c.segLen - 1 = c.rootCap ∧
+    1 + c.segLen < (row.bootBound + 1) * (row.bootBound + 1) ∧
+    c.rootCap < M ∧ c.wDelta < M
+
+instance (row : Row) : Decidable (historicalSingleCompleteArithmetic row) := by
+  unfold historicalSingleCompleteArithmetic
+  infer_instance
+
+def historicalSingleCompleteArithmeticOK (row : Row) : Bool :=
+  decide (historicalSingleCompleteArithmetic row)
+
+def historicalSingleCompleteArithmeticAllOK : Bool :=
+  rows.all historicalSingleCompleteArithmeticOK
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 4000000 in
+theorem historicalSingleCompleteArithmeticAll_ok :
+    historicalSingleCompleteArithmeticAllOK = true := by
+  decide
+
+/-- The compiled uniform prime table also closes every exact-full historical
+one-window schedule. -/
+theorem row_historicalSingleCompleteSchedule (row : Row)
+    (hrow : row ∈ rows) (hroot : row.rootCount = 1)
+    (hbootCap : row.bootBound < row.rootCap)
+    (hexact : row.rootCap = row.segLen) :
+    SingleMixedCompleteRootSchedule (rowCfg row) row.bootBound
+      (rowCfg row).wDelta := by
+  let c := rowCfg row
+  have hbool := (List.all_eq_true.mp
+    historicalSingleCompleteArithmeticAll_ok) row hrow
+  have hn := (of_decide_eq_true hbool) ⟨hroot, hbootCap, hexact⟩
+  change
+    c.bootCount = row.bootCount ∧ 0 < c.bootCount ∧
+    c.tableLen = row.mainCount ∧ c.bootCount < c.tableLen ∧
+    c.tableLen < M ∧ 0 < c.markSteps ∧ c.markSteps < M ∧
+    c.period < M ∧ c.rootSpan < M ∧
+    0 < c.firstPrime ∧ c.firstPrime ≤ c.segLen ∧
+    c.firstPrime ≤ row.bootBound ∧ row.bootBound < M ∧
+    row.bootBound * row.bootBound < M ∧
+    c.segLen + row.bootBound < M ∧ 1 + c.segLen < M ∧
+    1 + firstOffset 1 c.firstPrime < M ∧ c.arrayLen < M ∧
+    2 ≤ row.bootBound ∧ c.period = c.rootSpan ∧
+    1 - 1 ≤ row.bootBound ∧ row.bootBound < c.rootCap ∧
+    1 + c.segLen - 1 = c.rootCap ∧
+    1 + c.segLen < (row.bootBound + 1) * (row.bootBound + 1) ∧
+    c.rootCap < M ∧ c.wDelta < M at hn
+  rcases hn with ⟨hbootCount, hbootPos, htable, hbootFit, htableM,
+    hmarkPos, hmarkM, hperiodM, hspanM, hpPos, hpLen, hpBoot,
+    hbootM, hbootSqM, hsegBootM, hwindowM, hoffsetM, harrayM,
+    hbootTwo, hrootIndex, hbootStart, hbootCap', hfinalCap, hcover,
+    hcapM, hdeltaM⟩
+  have hsegCap : c.segLen = c.rootCap := by
+    simpa [Nat.add_comm] using hfinalCap
+  have hprime : PrimeTableInv c.bootPrimes row.bootBound := by
+    simpa [c] using row_bootPrime row hrow
+  have hshape : ∃ tail, c.bootPrimes = c.firstPrime :: tail := by
+    cases hlist : c.bootPrimes with
+    | nil => simp [Cfg.bootCount, hlist] at hbootPos
+    | cons p tail =>
+        refine ⟨tail, ?_⟩
+        simp [Cfg.firstPrime, hlist]
+  have hbudget :
+      (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps := by
+    simpa [c, rowCfg] using row_bootBudget row hrow
+  let full := rootScanMixed c.bootPrimes row.bootBound 1 row.rootCap
+  have hfullCert : PrimeTableInv full c.rootCap ∧
+      full.length = row.mainCount := by
+    have hcert := row_root_primeTable_closed row hrow
+    change PrimeTableInv
+        (rootScanMixed (rootOnlyCfg row).bootPrimes row.bootBound 1
+          row.rootCap)
+        (max row.bootBound (rootOnlyCfg row).rootCap) ∧
+      (rootScanMixed (rootOnlyCfg row).bootPrimes row.bootBound 1
+        row.rootCap).length = row.mainCount at hcert
+    have hmax : max row.bootBound (rootOnlyCfg row).rootCap =
+        (rootOnlyCfg row).rootCap := by
+      apply Nat.max_eq_right
+      simpa only [rootOnlyCfg, rowCfg] using Nat.le_of_lt hbootCap
+    rw [hmax] at hcert
+    simpa only [full, c, rootOnlyCfg, rowCfg] using hcert
+  refine
+    { bootPrime := hprime
+      bootShape := hshape
+      bootLe := Nat.le_of_lt hbootFit
+      tableLenM := htableM
+      markPos := hmarkPos
+      markM := hmarkM
+      periodM := hperiodM
+      spanM := hspanM
+      firstPrimePos := hpPos
+      firstPrimeLeLen := hpLen
+      firstPrimeLeBoot := hpBoot
+      bootBoundM := hbootM
+      bootBoundSqM := hbootSqM
+      segBootM := hsegBootM
+      windowBaseM := hwindowM
+      firstOffsetM := hoffsetM
+      arrayM := harrayM
+      markBudget := hbudget
+      bootTwo := hbootTwo
+      rootIndex := hrootIndex
+      bootStart := hbootStart
+      bootLtCap := hbootCap'
+      finalCap := hfinalCap
+      finalCover := hcover
+      bootFit := by simpa only [Cfg.bootCount] using hbootFit
+      finalFit := by
+        intro k hk
+        by_cases hcovered : 1 + k ≤ row.bootBound
+        · have hscan : rootScanMixed c.bootPrimes row.bootBound 1 k =
+              c.bootPrimes := by
+            apply rootScanMixed_eq_boot_of_le
+            omega
+          rw [hscan]
+          exact ⟨Nat.le_of_lt (by simpa only [Cfg.bootCount] using hbootFit),
+            fun _ => by simpa only [Cfg.bootCount] using hbootFit⟩
+        · have hprefix : PrimeTableInv
+              (rootScanMixed c.bootPrimes row.bootBound 1 k) k := by
+            have hscanInv := rootScanMixed_primeTable hprime
+              (w := 1) (fuel := k) (by omega) (by omega) hbootTwo
+            have hmax : max row.bootBound (1 + k - 1) = k := by omega
+            simpa only [hmax] using hscanInv
+          apply roomForStep_of_finalPrimeTable
+            (full := full) (cap := c.rootCap)
+          · rw [htable, hfullCert.2]
+          · exact hprefix
+          · exact hfullCert.1
+          · omega
+          · omega
+          · calc
+              1 + k = k + 1 := Nat.add_comm 1 k
+              _ ≤ c.segLen := Nat.succ_le_of_lt hk
+              _ = c.rootCap := hsegCap
+      rootCapM := hcapM
+      deltaEq := rfl
+      deltaM := hdeltaM }
+
 #print axioms row_rootOnly_writeCursor
 #print axioms row_singleRoot_primeTable
 #print axioms row_singleRoot_primeTable_closed
 #print axioms row_root_primeTable_closed
 #print axioms row_historicalSinglePaddedSchedule
+#print axioms row_historicalSingleCompleteSchedule
 
 end LeanCompCert.Ports.ArraySegMobiusPlatt211RootCertificate

@@ -158,6 +158,81 @@ theorem indexedProductionRoot_single_mixed_padded_complete
     (by simpa [hshape] using h.finalCapFit) h.rootCapM h.deltaEq h.deltaM
   simpa only [indexedWindowRun, Nat.one_mul, hshape] using hwindow
 
+/-- Finite side conditions for a sole historical root window whose final
+cell is exactly `rootCap`. -/
+structure SingleMixedCompleteRootSchedule (c : Cfg)
+    (bootBound delta : Nat) : Prop where
+  bootPrime : PrimeTableInv c.bootPrimes bootBound
+  bootShape : ∃ tail, c.bootPrimes = c.firstPrime :: tail
+  bootLe : c.bootCount ≤ c.tableLen
+  tableLenM : c.tableLen < M
+  markPos : 0 < c.markSteps
+  markM : c.markSteps < M
+  periodM : c.period < M
+  spanM : c.rootSpan < M
+  firstPrimePos : 0 < c.firstPrime
+  firstPrimeLeLen : c.firstPrime ≤ c.segLen
+  firstPrimeLeBoot : c.firstPrime ≤ bootBound
+  bootBoundM : bootBound < M
+  bootBoundSqM : bootBound * bootBound < M
+  segBootM : c.segLen + bootBound < M
+  windowBaseM : 1 + c.segLen < M
+  firstOffsetM : 1 + firstOffset 1 c.firstPrime < M
+  arrayM : c.arrayLen < M
+  markBudget :
+    (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps
+  bootTwo : 2 ≤ bootBound
+  rootIndex : c.period = c.rootSpan
+  bootStart : 1 - 1 ≤ bootBound
+  bootLtCap : bootBound < c.rootCap
+  finalCap : 1 + c.segLen - 1 = c.rootCap
+  finalCover : 1 + c.segLen < (bootBound + 1) * (bootBound + 1)
+  bootFit : c.bootPrimes.length < c.tableLen
+  finalFit : ∀ k, k < c.segLen →
+    let ps := rootScanMixed c.bootPrimes bootBound 1 k
+    ps.length ≤ c.tableLen ∧
+      (unmarkedBool ps (1 + k) = true → ps.length < c.tableLen)
+  rootCapM : c.rootCap < M
+  deltaEq : c.wDelta = delta
+  deltaM : delta < M
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 1000000 in
+/-- Complete root-only production execution for one exact mixed window. -/
+theorem indexedProductionRoot_single_mixed_complete
+    (c : Cfg) (bootBound delta : Nat)
+    (h : SingleMixedCompleteRootSchedule c bootBound delta) :
+    let out := indexedWindowRun 0 c 1 (coreEntry c)
+    let ps := rootScanMixed c.bootPrimes bootBound 1 c.segLen
+    RootTableInv c out ps c.rootCap ∧
+      (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      out.regs rR = 0 ∧
+      out.regs rW = (1 + ((c.segLen + delta) % M)) % M ∧
+      out.regs rZero = 0 := by
+  let entry := coreEntry c
+  have hbootM : ∀ p, p ∈ c.bootPrimes → p < M := by
+    intro p hp
+    exact Nat.lt_of_le_of_lt (h.bootPrime.upper p hp) h.bootBoundM
+  have hentry := coreEntry_complete c bootBound h.bootPrime h.bootLe
+    hbootM h.arrayM
+  obtain ⟨tail, hshape⟩ := h.bootShape
+  have hbootPos : 0 < c.bootCount := by
+    simp [Cfg.bootCount, hshape]
+  have hwindow := indexedRootWindow_mixed_complete_transition c 0 entry tail
+    bootBound 1 delta (by simpa [hshape] using hentry.table)
+    (by simpa [hshape] using hentry.view) hentry.position hentry.base
+    hentry.zero hentry.cleared (by simp [Cfg.bootCount, hshape])
+    (by simpa using h.rootIndex) hbootPos h.bootLe h.tableLenM h.markPos
+    h.markM h.periodM h.spanM h.firstPrimePos h.firstPrimeLeLen
+    h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
+    h.windowBaseM h.firstOffsetM h.arrayM
+    (by simpa [hshape] using h.markBudget) (by omega) h.bootTwo h.bootStart
+    (by rw [h.finalCap]; exact h.bootLtCap)
+    (by rw [h.finalCap]; exact Nat.le_refl c.rootCap) h.finalCover
+    (by simpa [hshape] using h.bootFit)
+    (by simpa [hshape] using h.finalFit) h.rootCapM h.deltaEq h.deltaM
+  simpa only [indexedWindowRun, Nat.one_mul, hshape, h.finalCap] using hwindow
+
 /-- Finite schedule facts needed to instantiate the symbolic outer proof.
 Every list-length and range field is decidable and can be discharged by a
 LeanCompCert side-condition program for a concrete campaign. -/
