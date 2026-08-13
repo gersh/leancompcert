@@ -2116,6 +2116,49 @@ theorem rootPackProduction_runFromArray (arr : Nat → Nat) :
   rootPackProgram_runFromArray runtimeProductionCfg arr
     runtimeProductionCfg_rootPackSafe
 
+/-- The source-level execution proof transported through the verified array
+compiler.  The large production loop remains symbolic: this theorem proves
+that the emitted CompCert program executes and simulates its source result;
+it does not normalize the loop in Lean. -/
+theorem rootPackProgram_compiled_execution (c : R2Cfg) (arr : Nat → Nat)
+    (base : Int) (mem : Verified.MemFragment.Mem)
+    (hcfg : RootPackCfgSafe c)
+    (hBase : BaseOk (r2RootPackProgram c).arrayLen base)
+    (hCells : ∀ k, k < (r2RootPackProgram c).arrayLen →
+      mem (cellAddr base k) = some (((arr k : Nat) : Int)))
+    (hCellsLt : ∀ k, k < (r2RootPackProgram c).arrayLen → arr k < M) :
+    ∃ out m,
+      (r2RootPackProgram c).runFromArray arr = some out ∧
+      Verified.MemFragment.evalMCCSequence
+          ((r2RootPackProgram c).initialMCCWithMem base mem)
+          (r2RootPackProgram c).compile = some m ∧
+      ARel (r2RootPackProgram c).regCount
+        (r2RootPackProgram c).arrayLen base out m := by
+  obtain ⟨out, hRun⟩ := rootPackProgram_runFromArray c arr hcfg
+  obtain ⟨m, hEval, hRel⟩ :=
+    AProgram.evalCC_compile_fromArray (r2RootPackProgram c)
+      (r2RootPackProgram_wf c) base hBase arr mem hCells hCellsLt out hRun
+  exact ⟨out, m, hRun, hEval, hRel⟩
+
+theorem rootPackProduction_compiled_execution (arr : Nat → Nat)
+    (base : Int) (mem : Verified.MemFragment.Mem)
+    (hBase : BaseOk
+      (r2RootPackProgram runtimeProductionCfg).arrayLen base)
+    (hCells : ∀ k,
+      k < (r2RootPackProgram runtimeProductionCfg).arrayLen →
+      mem (cellAddr base k) = some (((arr k : Nat) : Int)))
+    (hCellsLt : ∀ k,
+      k < (r2RootPackProgram runtimeProductionCfg).arrayLen → arr k < M) :
+    ∃ out m,
+      (r2RootPackProgram runtimeProductionCfg).runFromArray arr = some out ∧
+      Verified.MemFragment.evalMCCSequence
+          ((r2RootPackProgram runtimeProductionCfg).initialMCCWithMem base mem)
+          (r2RootPackProgram runtimeProductionCfg).compile = some m ∧
+      ARel (r2RootPackProgram runtimeProductionCfg).regCount
+        (r2RootPackProgram runtimeProductionCfg).arrayLen base out m :=
+  rootPackProgram_compiled_execution runtimeProductionCfg arr base mem
+    runtimeProductionCfg_rootPackSafe hBase hCells hCellsLt
+
 #print axioms rootPackDecode_defined
 #print axioms rootPackRoundInit_defined
 #print axioms rootPackLogRound_defined
