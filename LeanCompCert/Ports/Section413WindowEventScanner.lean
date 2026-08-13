@@ -36,6 +36,8 @@ def rK2Hi : Nat := 45
 def rOddRem : Nat := 46
 def rOdd : Nat := 47
 def rTwice : Nat := 48
+def rDenInv : Nat := 50
+def rSafeDen : Nat := 51
 
 def init : List AInstr := lift
   [ .mov rK1Lo (.lit 0), .mov rK1Hi (.lit 0)
@@ -64,12 +66,18 @@ def addK1 : List AInstr :=
 def addK2 : List AInstr :=
   LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo ++ LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi
 
+def safeDenStage (den : Nat) : List AInstr := lift
+  [ .binop rDenInv .eq (.reg den) (.lit 0)
+  , .binop rSafeDen .add (.reg den) (.reg rDenInv) ]
+
 def k1Stage (den : Nat) (negate : Bool) : List AInstr :=
-  lift [.mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg den)] ++ LeanCompCert.Ports.Section413WindowCellDiv.body negate ++ addK1
+  safeDenStage den ++
+    lift [.mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rSafeDen)] ++
+      LeanCompCert.Ports.Section413WindowCellDiv.body negate ++ addK1
 
 def k1TwiceStage (den : Nat) (negate : Bool) : List AInstr :=
-  lift
-    [ .binop rTwice .mul (.reg den) (.lit 2)
+  safeDenStage den ++ lift
+    [ .binop rTwice .mul (.reg rSafeDen) (.lit 2)
     , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rTwice) ] ++ LeanCompCert.Ports.Section413WindowCellDiv.body negate ++ addK1
 
 def k2Stage (factor : Nat) (negate : Bool) : List AInstr :=
