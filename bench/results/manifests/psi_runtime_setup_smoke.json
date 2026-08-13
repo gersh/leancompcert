@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-08-13",
+  "purpose": "compiled-only psi prime, prime-power, fixed-log, and head-carry differential control",
+  "configuration": {
+    "lo": 101,
+    "hi": 200,
+    "root": 100,
+    "div_cap": 10,
+    "prime_count": 25,
+    "prime_power_capacity": 16,
+    "scale": 48,
+    "array_cells": 315
+  },
+  "memory_scope": {
+    "workers": 1,
+    "memory_high": "1300M",
+    "memory_max": "1900M",
+    "swap_max": 0
+  },
+  "cold_target_build": {
+    "target": "LeanCompCert.Ports.PsiRuntimeHead",
+    "wall_seconds": 0.44,
+    "user_seconds": 0.44,
+    "system_seconds": 0.10,
+    "max_rss_kib": 568668,
+    "source_elaboration_ms": 297,
+    "result": "pass"
+  },
+  "emission": {
+    "command": "lake env lean --run bench/PsiRuntimeSetupEmit.lean /tmp/psi_runtime_setup_bench.c",
+    "wall_seconds": 0.32,
+    "user_seconds": 0.26,
+    "system_seconds": 0.08,
+    "max_rss_kib": 534472,
+    "c_bytes": 201241,
+    "c_sha256": "29e1af51fefacd23c4535bc74e3f486607939f15da211dcfe1e0488192e33e23"
+  },
+  "compcert": {
+    "command": "ccomp -O2 -o /tmp/psi_runtime_setup_bench.ccomp /tmp/psi_runtime_setup_bench.c",
+    "wall_seconds": 0.13,
+    "user_seconds": 0.10,
+    "system_seconds": 0.02,
+    "max_rss_kib": 26076,
+    "binary_sha256": "9edc1610b9d42b0175a427ff47069f723a79ebde94af658ae2424e16714a2ad8"
+  },
+  "compiled_run": {
+    "exit_status": 0,
+    "max_rss_kib": 1308,
+    "prime_count": 25,
+    "prime_power_overflow": 0,
+    "sorted_prime_powers": [121, 125, 128, 169],
+    "head_cells": [
+      18445067977826515759,
+      127,
+      100,
+      35,
+      10,
+      6,
+      128
+    ],
+    "comparison": "bit-for-bit agreement with the bounded legacy psiHead 48 101 control"
+  },
+  "source_sha256": {
+    "PsiRuntimePrimeTable.lean": "d52e823898623cc3f8d2e7302b8cfa80511aa48c6062a9d9669d7fda98255873",
+    "PsiRuntimePrimePowers.lean": "baa9127f116f558a1d6f5a271c1983ec26b8d3a511f128a980efb05f5bf8139b",
+    "PsiRuntimeHead.lean": "8df799201b97c05465d45c3da7ccb8ea6ff7b2869ec6571519871ce75567f257",
+    "PsiRuntimeSetupEmit.lean": "4b5f7a9bc4f49357eee53e1293ca59322f80335210dd4c133182bdd0bf09eb50"
+  },
+  "proof_boundary": "Lean proves well-formedness and CompCert/CCIR agreement for every stage. This smoke run checks the concrete setup algorithm, but the symbolic table and head-fold refinement to the literature predicate is still pending."
+}
