@@ -92,15 +92,300 @@ theorem gateStage_output (k : Nat) (s : AState) (v active divisor : Nat)
 def readStage (cap x : Nat) : List AInstr :=
   lift [.mov LeanCompCert.Ports.Section413WindowTableRead.rX (.reg x)] ++ LeanCompCert.Ports.Section413WindowTableRead.body cap
 
+def tableCell (cap : Nat) (a : Nat → Nat) (x : Nat) :
+    LeanCompCert.Ports.Section413Sweep.Cell :=
+  ⟨LeanCompCert.Ports.Section413Cells.decodeZ
+      (a (LeanCompCert.Ports.Section413WindowTableRead.tableLo cap + x)),
+    LeanCompCert.Ports.Section413Cells.decodeZ
+      (a (LeanCompCert.Ports.Section413WindowTableRead.tableHi cap + x))⟩
+
+def tableDiff (cap : Nat) (a : Nat → Nat) (x : Nat) :
+    LeanCompCert.Ports.Section413Sweep.Cell :=
+  let y := LeanCompCert.Ports.Section413WindowTableRead.safeX x
+  LeanCompCert.Ports.Section413Sweep.csub
+    (tableCell cap a (y - 1)) (tableCell cap a y)
+
+theorem readStage_outputs (k cap x : Nat) (s : AState)
+    (hcapPos : 1 ≤ cap)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen cap < M)
+    (hx : s.regs x ≤ cap) (harr : ∀ j, s.arr j < M) :
+    let out := arun k s (readStage cap x)
+    out.regs LeanCompCert.Ports.Section413WindowTableRead.rDiffLo =
+        LeanCompCert.Ports.Section413Cells.encodeZ
+          (tableDiff cap s.arr (s.regs x)).lo ∧
+      out.regs LeanCompCert.Ports.Section413WindowTableRead.rDiffHi =
+        LeanCompCert.Ports.Section413Cells.encodeZ
+          (tableDiff cap s.arr (s.regs x)).hi ∧
+      out.arr = s.arr := by
+  dsimp only
+  let p := arun k s (lift
+    [.mov LeanCompCert.Ports.Section413WindowTableRead.rX (.reg x)])
+  have hpX : p.regs LeanCompCert.Ports.Section413WindowTableRead.rX =
+      s.regs x := by
+    simp [p, arun_lift, srun, sdest, sval, denoteOperand, RegState.set]
+  have hpArr : p.arr = s.arr := rfl
+  have hpArrWord : ∀ j, p.arr j < M := by simpa only [hpArr] using harr
+  have h := LeanCompCert.Ports.Section413WindowTableRead.body_outputs_encoded_diff
+    k cap p hcapPos htable (by simpa only [hpX] using hx) hpArrWord
+  rw [readStage, arun_append]
+  simpa only [tableDiff, tableCell,
+    LeanCompCert.Ports.Section413Sweep.csub,
+    LeanCompCert.Ports.Section413Sweep.cadd,
+    LeanCompCert.Ports.Section413Sweep.cneg, hpX, hpArr,
+    Int.sub_eq_add_neg]
+    using h
+
 def inputStage : List AInstr := lift
   [ .mov LeanCompCert.Ports.Section413WindowCellDiv.rInLo (.reg LeanCompCert.Ports.Section413WindowTableRead.rDiffLo)
   , .mov LeanCompCert.Ports.Section413WindowCellDiv.rInHi (.reg LeanCompCert.Ports.Section413WindowTableRead.rDiffHi) ]
+
+theorem inputStage_outputs (k : Nat) (s : AState) :
+    let out := arun k s inputStage
+    out.regs LeanCompCert.Ports.Section413WindowCellDiv.rInLo =
+        s.regs LeanCompCert.Ports.Section413WindowTableRead.rDiffLo ∧
+      out.regs LeanCompCert.Ports.Section413WindowCellDiv.rInHi =
+        s.regs LeanCompCert.Ports.Section413WindowTableRead.rDiffHi ∧
+      out.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate =
+        s.regs LeanCompCert.Ports.Section413WindowCellDiv.rGate ∧
+      out.arr = s.arr := by
+  rw [inputStage, arun_lift]
+  simp [srun, sdest, sval, denoteOperand,
+    RegState.set,
+    LeanCompCert.Ports.Section413WindowCellDiv.rInLo,
+    LeanCompCert.Ports.Section413WindowCellDiv.rInHi,
+    LeanCompCert.Ports.Section413WindowCellDiv.rGate,
+    LeanCompCert.Ports.Section413WindowTableRead.rDiffLo,
+    LeanCompCert.Ports.Section413WindowTableRead.rDiffHi]
 
 def addK1 : List AInstr :=
   LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo ++ LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi
 
 def addK2 : List AInstr :=
   LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo ++ LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi
+
+private theorem addK1_low_k1Hi_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)).regs rK1Hi =
+      s.regs rK1Hi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK1Hi _ (by decide) s
+
+private theorem addK1_low_termHi_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)).regs
+        LeanCompCert.Ports.Section413WindowCellDiv.rOutHi =
+      s.regs LeanCompCert.Ports.Section413WindowCellDiv.rOutHi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k
+    LeanCompCert.Ports.Section413WindowCellDiv.rOutHi _ (by decide) s
+
+private theorem addK1_low_k2Lo_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)).regs rK2Lo =
+      s.regs rK2Lo := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK2Lo _ (by decide) s
+
+private theorem addK1_low_k2Hi_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)).regs rK2Hi =
+      s.regs rK2Hi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK2Hi _ (by decide) s
+
+private theorem addK1_high_k1Lo_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi)).regs rK1Lo =
+      s.regs rK1Lo := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK1Lo _ (by decide) s
+
+private theorem addK1_high_k2Lo_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi)).regs rK2Lo =
+      s.regs rK2Lo := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK2Lo _ (by decide) s
+
+private theorem addK1_high_k2Hi_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi)).regs rK2Hi =
+      s.regs rK2Hi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK2Hi _ (by decide) s
+
+theorem addK1_clean_outputs (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hviol : s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0)
+    (hcleanLo :
+      (arun k
+        (arun k s (lift (LeanCompCert.Ports.Section413WindowCellAdd.loadAdd
+          rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0)
+    (hcleanHi :
+      let p := arun k s
+        (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+          rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)
+      (arun k
+        (arun k p (lift (LeanCompCert.Ports.Section413WindowCellAdd.loadAdd
+          rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    let out := arun k s addK1
+    LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK1Lo) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK1Lo) +
+          LeanCompCert.Ports.Section413Cells.decodeZ
+            (s.regs LeanCompCert.Ports.Section413WindowCellDiv.rOutLo) ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK1Hi) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK1Hi) +
+          LeanCompCert.Ports.Section413Cells.decodeZ
+            (s.regs LeanCompCert.Ports.Section413WindowCellDiv.rOutHi) ∧
+      out.regs rK2Lo = s.regs rK2Lo ∧ out.regs rK2Hi = s.regs rK2Hi ∧
+      out.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 ∧
+      out.arr = s.arr := by
+  dsimp only
+  let p := arun k s
+    (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)
+  let q := arun k p
+    (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi)
+  have hlo := LeanCompCert.Ports.Section413WindowCellAdd.oneStage_clean_output
+    k s rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo (by decide)
+    hword harray hviol hcleanLo
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hpViol : p.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 :=
+    LeanCompCert.Ports.Section413WindowCellAdd.oneStage_clean_viol k s
+      rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo (by decide)
+      hcleanLo
+  have hhi := LeanCompCert.Ports.Section413WindowCellAdd.oneStage_clean_output
+    k p rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi (by decide)
+    hpword hparray hpViol (by simpa only [p] using hcleanHi)
+  have hqViol : q.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 :=
+    LeanCompCert.Ports.Section413WindowCellAdd.oneStage_clean_viol k p
+      rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi (by decide)
+      (by simpa only [p] using hcleanHi)
+  have hqHi : LeanCompCert.Ports.Section413Cells.decodeZ (q.regs rK1Hi) =
+      LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK1Hi) +
+        LeanCompCert.Ports.Section413Cells.decodeZ
+          (s.regs LeanCompCert.Ports.Section413WindowCellDiv.rOutHi) := by
+    rw [hhi.1, addK1_low_k1Hi_frame k s, addK1_low_termHi_frame k s]
+  rw [addK1, arun_append]
+  change _ = _ ∧ _ = _ ∧ _ = _ ∧ _ = _ ∧ _ = 0 ∧ _
+  refine ⟨?_, ?_, ?_, ?_, hqViol, ?_⟩
+  · rw [addK1_high_k1Lo_frame k p]
+    exact hlo.1
+  · exact hqHi
+  · rw [addK1_high_k2Lo_frame k p, addK1_low_k2Lo_frame k s]
+  · rw [addK1_high_k2Hi_frame k p, addK1_low_k2Hi_frame k s]
+  · exact hhi.2.trans hlo.2
+
+private theorem addK2_low_k2Hi_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo)).regs rK2Hi =
+      s.regs rK2Hi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK2Hi _ (by decide) s
+
+private theorem addK2_low_termHi_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo)).regs
+        LeanCompCert.Ports.Section413WindowCellScale.rOutHi =
+      s.regs LeanCompCert.Ports.Section413WindowCellScale.rOutHi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k
+    LeanCompCert.Ports.Section413WindowCellScale.rOutHi _ (by decide) s
+
+private theorem addK2_low_k1Lo_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo)).regs rK1Lo =
+      s.regs rK1Lo := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK1Lo _ (by decide) s
+
+private theorem addK2_low_k1Hi_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo)).regs rK1Hi =
+      s.regs rK1Hi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK1Hi _ (by decide) s
+
+private theorem addK2_high_k2Lo_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi)).regs rK2Lo =
+      s.regs rK2Lo := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK2Lo _ (by decide) s
+
+private theorem addK2_high_k1Lo_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi)).regs rK1Lo =
+      s.regs rK1Lo := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK1Lo _ (by decide) s
+
+private theorem addK2_high_k1Hi_frame (k : Nat) (s : AState) :
+    (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi)).regs rK1Hi =
+      s.regs rK1Hi := by
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK1Hi _ (by decide) s
+
+theorem addK2_clean_outputs (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hviol : s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0)
+    (hcleanLo :
+      (arun k
+        (arun k s (lift (LeanCompCert.Ports.Section413WindowCellAdd.loadAdd
+          rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0)
+    (hcleanHi :
+      let p := arun k s
+        (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+          rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo)
+      (arun k
+        (arun k p (lift (LeanCompCert.Ports.Section413WindowCellAdd.loadAdd
+          rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    let out := arun k s addK2
+    out.regs rK1Lo = s.regs rK1Lo ∧ out.regs rK1Hi = s.regs rK1Hi ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK2Lo) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK2Lo) +
+          LeanCompCert.Ports.Section413Cells.decodeZ
+            (s.regs LeanCompCert.Ports.Section413WindowCellScale.rOutLo) ∧
+      LeanCompCert.Ports.Section413Cells.decodeZ (out.regs rK2Hi) =
+        LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK2Hi) +
+          LeanCompCert.Ports.Section413Cells.decodeZ
+            (s.regs LeanCompCert.Ports.Section413WindowCellScale.rOutHi) ∧
+      out.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 ∧
+      out.arr = s.arr := by
+  dsimp only
+  let p := arun k s
+    (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo)
+  let q := arun k p
+    (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
+      rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi)
+  have hlo := LeanCompCert.Ports.Section413WindowCellAdd.oneStage_clean_output
+    k s rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo (by decide)
+    hword harray hviol hcleanLo
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hpViol : p.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 :=
+    LeanCompCert.Ports.Section413WindowCellAdd.oneStage_clean_viol k s
+      rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo (by decide)
+      hcleanLo
+  have hhi := LeanCompCert.Ports.Section413WindowCellAdd.oneStage_clean_output
+    k p rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi (by decide)
+    hpword hparray hpViol (by simpa only [p] using hcleanHi)
+  have hqViol : q.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 :=
+    LeanCompCert.Ports.Section413WindowCellAdd.oneStage_clean_viol k p
+      rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi (by decide)
+      (by simpa only [p] using hcleanHi)
+  have hqHi : LeanCompCert.Ports.Section413Cells.decodeZ (q.regs rK2Hi) =
+      LeanCompCert.Ports.Section413Cells.decodeZ (s.regs rK2Hi) +
+        LeanCompCert.Ports.Section413Cells.decodeZ
+          (s.regs LeanCompCert.Ports.Section413WindowCellScale.rOutHi) := by
+    rw [hhi.1, addK2_low_k2Hi_frame k s, addK2_low_termHi_frame k s]
+  rw [addK2, arun_append]
+  change _ = _ ∧ _ = _ ∧ _ = _ ∧ _ = _ ∧ _ = 0 ∧ _
+  refine ⟨?_, ?_, ?_, ?_, hqViol, ?_⟩
+  · rw [addK2_high_k1Lo_frame k p, addK2_low_k1Lo_frame k s]
+  · rw [addK2_high_k1Hi_frame k p, addK2_low_k1Hi_frame k s]
+  · rw [addK2_high_k2Lo_frame k p]
+    exact hlo.1
+  · exact hqHi
+  · exact hhi.2.trans hlo.2
 
 def safeDenStage (den : Nat) : List AInstr := lift
   [ .binop rDenInv .eq (.reg den) (.lit 0)
@@ -191,6 +476,10 @@ theorem g2Program_wf : (program g2Cfg).WF := by decide
 #print axioms g1Program_wf
 #print axioms g2Program_wf
 #print axioms gateStage_output
+#print axioms readStage_outputs
+#print axioms inputStage_outputs
+#print axioms addK1_clean_outputs
+#print axioms addK2_clean_outputs
 #print axioms safeDenStage_output
 
 end LeanCompCert.Ports.Section413WindowEventScanner
