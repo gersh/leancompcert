@@ -268,8 +268,146 @@ theorem body_nonfinal_row (k : Nat) (s : AState) (c : Cfg)
       LeanCompCert.Ports.Section413WindowRowCheck.bodyUnitState, e, u]
   rw [hout, hcheck, huRow]
 
+/-- A slot outside the paper check gate (non-final, or before `checkLo`)
+leaves the sticky row-bound flag unchanged. -/
+theorem body_unchecked_row (k : Nat) (s : AState) (c : Cfg)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hk : k < LeanCompCert.Ports.Section413WindowSchedule.productionRows *
+      LeanCompCert.Ports.Section413WindowSchedule.slots)
+    (hf : EventBodyFrames c)
+    (hlo : c.checkLo < M)
+    (hlimit : LeanCompCert.Ports.Section413WindowRowCheck.commonBound -
+      c.offset < M)
+    (hskip : (LeanCompCert.Ports.Section413WindowSchedule.slotAt k).s ≠
+        LeanCompCert.Ports.Section413WindowSchedule.slots ∨
+      (LeanCompCert.Ports.Section413WindowSchedule.slotAt k).n < c.checkLo) :
+    (arun k s (body c)).regs
+      LeanCompCert.Ports.Section413WindowRowCheck.rRowViol =
+        s.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol := by
+  let p := scheduledState k s
+  let e := eventedState k s c
+  let d := LeanCompCert.Ports.Section413WindowRowCheck.bodyDivState k e
+  let u := LeanCompCert.Ports.Section413WindowRowCheck.bodyUnitState k e
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have heword : ∀ j, e.regs j < M := arun_regs_word k _ _ hpword hparray
+  have hearray : ∀ j, e.arr j < M := arun_arr_word k _ _ hpword hparray
+  have hdword : ∀ j, d.regs j < M := arun_regs_word k _ _ heword hearray
+  have hdarray : ∀ j, d.arr j < M := arun_arr_word k _ _ heword hearray
+  have huword : ∀ j, u.regs j < M := arun_regs_word k _ _ hdword hdarray
+  have hsched := evented_schedule k s c hk hf
+  have huN : u.regs LeanCompCert.Ports.Section413WindowSchedule.rN =
+      (LeanCompCert.Ports.Section413WindowSchedule.slotAt k).n := by
+    rw [show u.regs LeanCompCert.Ports.Section413WindowSchedule.rN =
+      d.regs LeanCompCert.Ports.Section413WindowSchedule.rN by
+        exact arun_frame_of k _
+          LeanCompCert.Ports.Section413WindowRowCheck.unitStage d (by decide)]
+    rw [show d.regs LeanCompCert.Ports.Section413WindowSchedule.rN =
+      e.regs LeanCompCert.Ports.Section413WindowSchedule.rN by
+        exact arun_frame_of k _
+          LeanCompCert.Ports.Section413WindowRowCheck.divideK2Stage e
+            (by decide)]
+    exact hsched.1
+  have huS : u.regs LeanCompCert.Ports.Section413WindowSchedule.rS =
+      (LeanCompCert.Ports.Section413WindowSchedule.slotAt k).s := by
+    rw [show u.regs LeanCompCert.Ports.Section413WindowSchedule.rS =
+      d.regs LeanCompCert.Ports.Section413WindowSchedule.rS by
+        exact arun_frame_of k _
+          LeanCompCert.Ports.Section413WindowRowCheck.unitStage d (by decide)]
+    rw [show d.regs LeanCompCert.Ports.Section413WindowSchedule.rS =
+      e.regs LeanCompCert.Ports.Section413WindowSchedule.rS by
+        exact arun_frame_of k _
+          LeanCompCert.Ports.Section413WindowRowCheck.divideK2Stage e
+            (by decide)]
+    exact hsched.2.1
+  have huRow : u.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol =
+      s.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol := by
+    rw [show u.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol =
+      d.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol by
+        exact arun_frame_of k _
+          LeanCompCert.Ports.Section413WindowRowCheck.unitStage d (by decide)]
+    rw [show d.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol =
+      e.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol by
+        exact arun_frame_of k _
+          LeanCompCert.Ports.Section413WindowRowCheck.divideK2Stage e
+            (by decide)]
+    rw [show e.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol =
+      p.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol by
+        exact arun_frame_of k _ (eventBody c) p hf.rowViol]
+    exact arun_frame_of k _ LeanCompCert.Ports.Section413WindowSchedule.body s
+      (by decide)
+  have hcheck := LeanCompCert.Ports.Section413WindowRowCheck.checkStage_unchecked_row
+    k u c.checkLo c.offset hlo hlimit (huword _)
+      (huword LeanCompCert.Ports.Section413WindowRowCheck.rRowViol) (by
+        rcases hskip with hslot | hn
+        · left; rw [huS]; exact hslot
+        · right; rw [huN]; exact hn)
+  have hout : arun k s (body c) = arun k u
+      (LeanCompCert.Ports.Section413WindowRowCheck.checkStage
+        c.checkLo c.offset) := by
+    simp only [body_split, LeanCompCert.Ports.Section413WindowRowCheck.body,
+      arun_append, scheduledState, eventedState,
+      LeanCompCert.Ports.Section413WindowRowCheck.bodyDivState,
+      LeanCompCert.Ports.Section413WindowRowCheck.bodyUnitState, e, u]
+  rw [hout, hcheck, huRow]
+
+/-- The complete compiled scanner iteration preserves the stickiness of the
+row-bound flag, independently of whether this is a final divisor slot. -/
+theorem body_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hf : EventBodyFrames c)
+    (hlo : c.checkLo < M)
+    (hlimit : LeanCompCert.Ports.Section413WindowRowCheck.commonBound -
+      c.offset < M)
+    (hout : (arun k s (body c)).regs
+      LeanCompCert.Ports.Section413WindowRowCheck.rRowViol = 0) :
+    s.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol = 0 := by
+  let p := scheduledState k s
+  let e := eventedState k s c
+  let d := LeanCompCert.Ports.Section413WindowRowCheck.bodyDivState k e
+  let u := LeanCompCert.Ports.Section413WindowRowCheck.bodyUnitState k e
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have heword : ∀ j, e.regs j < M := arun_regs_word k _ _ hpword hparray
+  have hearray : ∀ j, e.arr j < M := arun_arr_word k _ _ hpword hparray
+  have hdword : ∀ j, d.regs j < M := arun_regs_word k _ _ heword hearray
+  have hdarray : ∀ j, d.arr j < M := arun_arr_word k _ _ heword hearray
+  have huword : ∀ j, u.regs j < M := arun_regs_word k _ _ hdword hdarray
+  have huRow : u.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol =
+      s.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol := by
+    rw [show u.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol =
+      d.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol by
+        exact arun_frame_of k _
+          LeanCompCert.Ports.Section413WindowRowCheck.unitStage d (by decide)]
+    rw [show d.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol =
+      e.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol by
+        exact arun_frame_of k _
+          LeanCompCert.Ports.Section413WindowRowCheck.divideK2Stage e
+            (by decide)]
+    rw [show e.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol =
+      p.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol by
+        exact arun_frame_of k _ (eventBody c) p hf.rowViol]
+    exact arun_frame_of k _ LeanCompCert.Ports.Section413WindowSchedule.body s
+      (by decide)
+  have hcheck : (arun k u
+      (LeanCompCert.Ports.Section413WindowRowCheck.checkStage
+        c.checkLo c.offset)).regs
+      LeanCompCert.Ports.Section413WindowRowCheck.rRowViol = 0 := by
+    simpa only [body_split, LeanCompCert.Ports.Section413WindowRowCheck.body,
+      arun_append, scheduledState, eventedState,
+      LeanCompCert.Ports.Section413WindowRowCheck.bodyDivState,
+      LeanCompCert.Ports.Section413WindowRowCheck.bodyUnitState, e, u] using hout
+  have huZero :=
+    LeanCompCert.Ports.Section413WindowRowCheck.checkStage_zero_implies_input_zero
+      k u c.checkLo c.offset hlo hlimit (huword _)
+        (huword LeanCompCert.Ports.Section413WindowRowCheck.rRowViol) hcheck
+  rw [huRow] at huZero
+  exact huZero
+
 #print axioms evented_schedule
 #print axioms body_zero_iff_paper_upper
 #print axioms body_nonfinal_row
+#print axioms body_unchecked_row
+#print axioms body_zero_implies_input_zero
 
 end LeanCompCert.Ports.Section413WindowEventScanner

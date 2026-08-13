@@ -423,6 +423,43 @@ theorem checkStage_nonfinal_row (k : Nat) (s : AState) (lo offset : Nat)
   simp [rowViolationRef, tooHighRef, checkGateRef, hslot,
     Nat.mod_eq_of_lt hrowWord]
 
+theorem checkStage_unchecked_row (k : Nat) (s : AState) (lo offset : Nat)
+    (hlo : lo < M) (hlimit : commonBound - offset < M)
+    (hmax : s.regs rMaxHi < M)
+    (hrowWord : s.regs rRowViol < M)
+    (hskip : s.regs LeanCompCert.Ports.Section413WindowSchedule.rS ≠
+        LeanCompCert.Ports.Section413WindowSchedule.slots ∨
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rN < lo) :
+    (arun k s (checkStage lo offset)).regs rRowViol = s.regs rRowViol := by
+  have h := checkStage_outputs k s lo offset hlo hlimit hmax
+  rw [h.2.1]
+  rcases hskip with hslot | hn
+  · simp [rowViolationRef, tooHighRef, checkGateRef, hslot,
+      Nat.mod_eq_of_lt hrowWord]
+  · have hpast : ¬ lo ≤
+        s.regs LeanCompCert.Ports.Section413WindowSchedule.rN := by omega
+    simp [rowViolationRef, tooHighRef, checkGateRef, hpast,
+      Nat.mod_eq_of_lt hrowWord]
+
+/-- The row-bound failure flag is sticky: a clean compiled check result
+implies that the incoming flag was already clean. -/
+theorem checkStage_zero_implies_input_zero (k : Nat) (s : AState)
+    (lo offset : Nat) (hlo : lo < M)
+    (hlimit : commonBound - offset < M)
+    (hmax : s.regs rMaxHi < M) (hrowWord : s.regs rRowViol < M)
+    (hout : (arun k s (checkStage lo offset)).regs rRowViol = 0) :
+    s.regs rRowViol = 0 := by
+  have h := checkStage_outputs k s lo offset hlo hlimit hmax
+  rw [h.2.1] at hout
+  have hbad : tooHighRef s offset * checkGateRef s lo < M := by
+    simp only [tooHighRef, checkGateRef]
+    split <;> split <;> simp [M]
+  have hor : s.regs rRowViol |||
+      (tooHighRef s offset * checkGateRef s lo) < M :=
+    LeanCompCert.Ports.Section413G1Denote.lor_lt_M hrowWord hbad
+  rw [rowViolationRef, Nat.mod_eq_of_lt hor] at hout
+  exact (LeanCompCert.Ports.Section413G1Sound.or_eq_zero hout).1
+
 theorem nonnegativeWord_eq_toNat (w : Nat) (hw : w < M) :
     nonnegativeWord w = (decodeZ w).toNat := by
   unfold nonnegativeWord decodeZ
@@ -646,6 +683,8 @@ theorem init_output (k : Nat) (s : AState) :
 #print axioms checkStage_zero_iff_bound
 #print axioms checkStage_clean_add_flag
 #print axioms checkStage_nonfinal_row
+#print axioms checkStage_unchecked_row
+#print axioms checkStage_zero_implies_input_zero
 #print axioms nonnegativeWord_eq_toNat
 #print axioms body_zero_iff_bound
 #print axioms bodyUnitState_upper
