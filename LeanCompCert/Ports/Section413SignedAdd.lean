@@ -188,6 +188,14 @@ theorem clean_output_sound (k : Nat) (s : RegState)
   exact LeanCompCert.Ports.Section413G1Sound.decodeZ_add_of_range
     ha hb hrange.1 hrange.2
 
+/-- The checked-add overflow flag is sticky. -/
+theorem body_zero_implies_input_zero (k : Nat) (s : RegState)
+    (ha : s rA < M) (hb : s rB < M) (hv : s rViol < M)
+    (hclean : (srun k s body) rViol = 0) : s rViol = 0 := by
+  have hout := body_outputs k s ha hb hv
+  rw [hout.2] at hclean
+  exact (LeanCompCert.Ports.Section413G1Sound.or_eq_zero hclean).1
+
 def aBody : List AInstr := lift body
 
 theorem aBody_defined (len k : Nat) (s : AState) :
@@ -199,6 +207,7 @@ theorem aBody_defined (len k : Nat) (s : AState) :
 #print axioms body_outputs
 #print axioms overflowBit_zero_range
 #print axioms clean_output_sound
+#print axioms body_zero_implies_input_zero
 #print axioms aBody_defined
 
 end LeanCompCert.Ports.Section413SignedAdd

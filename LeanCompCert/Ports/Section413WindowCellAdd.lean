@@ -115,6 +115,54 @@ theorem oneStage_clean_viol (k : Nat) (s : AState) (acc term : Nat)
     subst i
     simpa only [sdest] using hacc
 
+theorem oneStage_viol_output (k : Nat) (s : AState) (acc term : Nat)
+    (hacc : acc ≠ LeanCompCert.Ports.Section413SignedAdd.rViol) :
+    (arun k s (oneStage acc term)).regs
+        LeanCompCert.Ports.Section413SignedAdd.rViol =
+      (arun k (arun k s (lift (loadAdd acc term)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol := by
+  let p := arun k s (lift (loadAdd acc term))
+  let q := arun k p LeanCompCert.Ports.Section413SignedAdd.aBody
+  rw [oneStage, arun_append, arun_append, arun_lift]
+  change srun k q.regs
+    [.mov acc (.reg LeanCompCert.Ports.Section413SignedAdd.rOut)]
+      LeanCompCert.Ports.Section413SignedAdd.rViol = q.regs
+        LeanCompCert.Ports.Section413SignedAdd.rViol
+  apply srun_untouched
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  simpa only [sdest] using hacc
+
+/-- A zero flag after one compiled accumulator addition yields both its
+constant-size clean receipt and a zero incoming sticky flag. -/
+theorem oneStage_zero_receipt_and_input (k : Nat) (s : AState)
+    (acc term : Nat)
+    (hacc : acc ≠ LeanCompCert.Ports.Section413SignedAdd.rViol)
+    (htermA : term ≠ LeanCompCert.Ports.Section413SignedAdd.rA)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s (oneStage acc term)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    (arun k (arun k s (lift (loadAdd acc term)))
+        LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0 ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let p := arun k s (lift (loadAdd acc term))
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hreceipt : (arun k p
+      LeanCompCert.Ports.Section413SignedAdd.aBody).regs
+        LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    rw [← oneStage_viol_output k s acc term hacc]
+    exact hzero
+  have hpzero := LeanCompCert.Ports.Section413SignedAdd.body_zero_implies_input_zero
+    k p.regs (hpword _) (hpword _) (hpword _) (by
+      simpa [LeanCompCert.Ports.Section413SignedAdd.aBody, arun_lift]
+        using hreceipt)
+  have hload := loadAdd_outputs k s.regs acc term htermA
+  refine ⟨by simpa only [p] using hreceipt, ?_⟩
+  simpa [p, arun_lift, hload.2.2] using hpzero
+
 private theorem firstStage_accHi_frame (k : Nat) (s : AState) :
     (arun k s (oneStage rAccLo rTermLo)).regs rAccHi = s.regs rAccHi := by
   exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rAccHi
@@ -195,6 +243,7 @@ theorem program_wf (arrayLen loopCount : Nat) :
 
 #print axioms loadAdd_outputs
 #print axioms oneStage_clean_output
+#print axioms oneStage_zero_receipt_and_input
 #print axioms body_clean_outputs
 #print axioms program_wf
 

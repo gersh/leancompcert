@@ -176,6 +176,76 @@ structure UnitReceipts (k : Nat) (s : AState) : Prop where
       LeanCompCert.Ports.Section413SignedAdd.aBody).regs
         LeanCompCert.Ports.Section413SignedAdd.rViol = 0
 
+/-- The compiled unit-stage failure bit itself contains the two clean-add
+receipts; no separate production computation is needed to provide them. -/
+theorem unitReceipts_of_unitStage_bad_zero (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hbad : (arun k s unitStage).regs rUnitAddBad = 0) :
+    UnitReceipts k s := by
+  let p := unitMaxLoState k s
+  let q := unitMaxHiState k s
+  let r := unitResetState k s
+  let t := unitAddLoState k s
+  let u := unitAddHiState k s
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hqword : ∀ j, q.regs j < M := arun_regs_word k _ _ hpword hparray
+  have hqarray : ∀ j, q.arr j < M := arun_arr_word k _ _ hpword hparray
+  have hrword : ∀ j, r.regs j < M := arun_regs_word k _ _ hqword hqarray
+  have hrarray : ∀ j, r.arr j < M := arun_arr_word k _ _ hqword hqarray
+  have htword : ∀ j, t.regs j < M := arun_regs_word k _ _ hrword hrarray
+  have htarray : ∀ j, t.arr j < M := arun_arr_word k _ _ hrword hrarray
+  have hout : arun k s unitStage = arun k u unitSave := by
+    simp only [unitStage_split, arun_append, unitMaxLoState,
+      unitMaxHiState, unitResetState, unitAddLoState, unitAddHiState, u]
+  have hsave := unitSave_outputs k u
+  have huZero : u.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    rw [hout, hsave.1] at hbad
+    exact hbad
+  have hhi :=
+    LeanCompCert.Ports.Section413WindowCellAdd.oneStage_zero_receipt_and_input
+      k t rMaxHi rK1Hi (by decide) (by decide) htword htarray
+        (by simpa only [u, unitAddHiState] using huZero)
+  have hlo :=
+    LeanCompCert.Ports.Section413WindowCellAdd.oneStage_zero_receipt_and_input
+      k r rMaxLo rK1Lo (by decide) (by decide) hrword hrarray
+        (by simpa only [t, unitAddLoState] using hhi.2)
+  exact ⟨by simpa only [r, unitResetState] using hlo.1,
+    by simpa only [t, unitAddLoState] using hhi.1⟩
+
+theorem unitStage_saved_add_flag (k : Nat) (s : AState) :
+    (arun k s unitStage).regs rSavedAddViol =
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol := by
+  let p := unitMaxLoState k s
+  let q := unitMaxHiState k s
+  let r := unitResetState k s
+  let t := unitAddLoState k s
+  let u := unitAddHiState k s
+  have hreset := unitReset_outputs k q
+  have hout : arun k s unitStage = arun k u unitSave := by
+    simp only [unitStage_split, arun_append, unitMaxLoState,
+      unitMaxHiState, unitResetState, unitAddLoState, unitAddHiState, u]
+  rw [hout]
+  rw [show (arun k u unitSave).regs rSavedAddViol = u.regs rSavedAddViol by
+    exact arun_frame_of k _ unitSave u (by decide)]
+  rw [show u.regs rSavedAddViol = t.regs rSavedAddViol by
+    exact arun_frame_of k _
+      (LeanCompCert.Ports.Section413WindowCellAdd.oneStage rMaxHi rK1Hi) t
+        (by decide)]
+  rw [show t.regs rSavedAddViol = r.regs rSavedAddViol by
+    exact arun_frame_of k _
+      (LeanCompCert.Ports.Section413WindowCellAdd.oneStage rMaxLo rK1Lo) r
+        (by decide)]
+  rw [show r.regs rSavedAddViol = q.regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol by
+    simpa only [r, unitResetState] using hreset.1]
+  rw [show q.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      p.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+    exact arun_frame_of k _
+      (signedMaxStage rMaxHi rDiv1Hi rDiv2Hi) p (by decide)]
+  exact arun_frame_of k _ (signedMaxStage rMaxLo rDiv1Lo rDiv2Lo) s
+    (by decide)
+
 /-- The fixed compiled unit block chooses the signed endpoint maxima and
 adds `K1` with checked signed arithmetic.  The receipt consists only of the
 two overflow bits emitted by compiled additions. -/
@@ -411,6 +481,28 @@ theorem checkStage_clean_add_flag (k : Nat) (s : AState) (lo offset : Nat)
   rw [h.1]
   simp [addViolationRef, hsaved, hunit]
 
+theorem checkStage_add_zero_implies_unit_clean (k : Nat) (s : AState)
+    (lo offset : Nat) (hlo : lo < M)
+    (hlimit : commonBound - offset < M)
+    (hword : ∀ j, s.regs j < M)
+    (hslot : s.regs LeanCompCert.Ports.Section413WindowSchedule.rS =
+      LeanCompCert.Ports.Section413WindowSchedule.slots)
+    (hpast : lo ≤ s.regs LeanCompCert.Ports.Section413WindowSchedule.rN)
+    (hout : (arun k s (checkStage lo offset)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs rSavedAddViol = 0 ∧ s.regs rUnitAddBad = 0 := by
+  have h := checkStage_outputs k s lo offset hlo hlimit (hword rMaxHi)
+  rw [h.1] at hout
+  have hor : s.regs rSavedAddViol ||| s.regs rUnitAddBad < M :=
+    LeanCompCert.Ports.Section413G1Denote.lor_lt_M
+      (hword rSavedAddViol) (hword rUnitAddBad)
+  have href : addViolationRef s lo =
+      s.regs rSavedAddViol ||| s.regs rUnitAddBad := by
+    simp [addViolationRef, checkGateRef, hslot, hpast,
+      Nat.mod_eq_of_lt (hword rUnitAddBad), Nat.mod_eq_of_lt hor]
+  rw [href] at hout
+  exact LeanCompCert.Ports.Section413G1Sound.or_eq_zero hout
+
 theorem checkStage_nonfinal_row (k : Nat) (s : AState) (lo offset : Nat)
     (hlo : lo < M) (hlimit : commonBound - offset < M)
     (hmax : s.regs rMaxHi < M)
@@ -479,6 +571,43 @@ def bodyDivState (k : Nat) (s : AState) : AState :=
 
 def bodyUnitState (k : Nat) (s : AState) : AState :=
   arun k (bodyDivState k s) unitStage
+
+/-- A zero checked-add flag after an enabled row check reconstructs the two
+unit receipts and proves that the incoming event accumulator flag was zero. -/
+theorem body_add_zero_implies_receipts_and_input (k : Nat) (s : AState)
+    (lo offset : Nat)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hlo : lo < M) (hlimit : commonBound - offset < M)
+    (hslot : (bodyUnitState k s).regs
+      LeanCompCert.Ports.Section413WindowSchedule.rS =
+        LeanCompCert.Ports.Section413WindowSchedule.slots)
+    (hpast : lo ≤ (bodyUnitState k s).regs
+      LeanCompCert.Ports.Section413WindowSchedule.rN)
+    (hout : (arun k s (body lo offset)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    UnitReceipts k (bodyDivState k s) ∧
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let d := bodyDivState k s
+  let u := bodyUnitState k s
+  have hdword : ∀ j, d.regs j < M := arun_regs_word k _ _ hword harray
+  have hdarray : ∀ j, d.arr j < M := arun_arr_word k _ _ hword harray
+  have huword : ∀ j, u.regs j < M := arun_regs_word k _ _ hdword hdarray
+  have hcheck : (arun k u (checkStage lo offset)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    simpa only [body, arun_append, bodyDivState, bodyUnitState, d, u] using hout
+  have hclean := checkStage_add_zero_implies_unit_clean k u lo offset
+    hlo hlimit huword (by simpa only [u] using hslot)
+      (by simpa only [u] using hpast) hcheck
+  refine ⟨unitReceipts_of_unitStage_bad_zero k d hdword hdarray ?_, ?_⟩
+  · simpa only [u, bodyUnitState, d] using hclean.2
+  · have hsaved := unitStage_saved_add_flag k d
+    have hdZero : d.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+      rw [← hsaved]
+      simpa only [u, bodyUnitState, d] using hclean.1
+    rw [show d.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+        exact arun_frame_of k _ divideK2Stage s (by decide)] at hdZero
+    exact hdZero
 
 /-- The actual compiled row-check body accepts exactly when its decoded,
 nonnegative upper endpoint is below the configured limit. -/
@@ -679,14 +808,18 @@ theorem init_output (k : Nat) (s : AState) :
 #print axioms unitSave_outputs
 #print axioms divideK2Stage_outputs
 #print axioms unitStage_clean_outputs
+#print axioms unitReceipts_of_unitStage_bad_zero
+#print axioms unitStage_saved_add_flag
 #print axioms checkStage_outputs
 #print axioms checkStage_zero_iff_bound
 #print axioms checkStage_clean_add_flag
+#print axioms checkStage_add_zero_implies_unit_clean
 #print axioms checkStage_nonfinal_row
 #print axioms checkStage_unchecked_row
 #print axioms checkStage_zero_implies_input_zero
 #print axioms nonnegativeWord_eq_toNat
 #print axioms body_zero_iff_bound
+#print axioms body_add_zero_implies_receipts_and_input
 #print axioms bodyUnitState_upper
 #print axioms body_zero_iff_paper_upper
 #print axioms init_output
