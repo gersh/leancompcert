@@ -20,11 +20,11 @@
   },
   "cold_proof_target": {
     "target": "LeanCompCert.Ports.RS62LadderEncoding",
-    "wall_seconds": 0.43,
-    "user_seconds": 0.34,
-    "system_seconds": 0.10,
-    "max_rss_kib": 546536,
-    "source_elaboration_ms": 291,
+    "wall_seconds": 1.07,
+    "user_seconds": 2.49,
+    "system_seconds": 0.14,
+    "max_rss_kib": 618468,
+    "source_elaboration_ms": 913,
     "result": "pass"
   },
   "emission": {
@@ -51,5 +51,5 @@
     "reference": "bit-for-bit agreement with loopE trialPrime 20 3 0 0, where trialPrime uses Verified.Sieve.leastFactor"
   },
   "emitter_sha256": "4a152320f74012e5461cd841a8aa66fef233350b554fc232bdb6235c9f3a6cc7",
-  "proof_boundary": "The compiled program includes the primality guard and compiler correctness is proved. RS62LadderEncoding still names an incomplete commit-block/reblocking proof, so this control is not yet a proof of registeredReplay. The flat trial grid is also too costly for the full source range; production needs a verified segmented prime-list route."
+  "proof_boundary": "The compiled program includes the primality guard and compiler correctness is proved. RS62LadderEncoding now proves all seven commit-block divisions defined, both increment circuits equal to incLWord/incUWord, and the exact gate/add/reset observation, using only block-sized symbolic proofs. The remaining encoding work is the staged scan observation and flat-to-candidate reblocking, so this control is not yet a proof of registeredReplay. The flat trial grid is also too costly for the full source range; production needs a verified segmented prime-list route."
 }
