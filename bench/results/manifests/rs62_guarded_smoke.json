@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-08-13",
+  "purpose": "guarded compiled RS62 ladder differential control",
+  "configuration": {
+    "start": 3,
+    "count": 20,
+    "trial_bound": 4,
+    "initial_lower": 0,
+    "initial_upper": 0,
+    "loop_count": 80,
+    "body_instructions": 47
+  },
+  "coverage_guard": "START+COUNT <= (BOUND+2)^2; the emitter rejects uncovered windows",
+  "memory_scope": {
+    "workers": 1,
+    "memory_high": "1300M",
+    "memory_max": "1900M",
+    "swap_max": 0
+  },
+  "cold_proof_target": {
+    "target": "LeanCompCert.Ports.RS62LadderEncoding",
+    "wall_seconds": 0.43,
+    "user_seconds": 0.34,
+    "system_seconds": 0.10,
+    "max_rss_kib": 546536,
+    "source_elaboration_ms": 291,
+    "result": "pass"
+  },
+  "emission": {
+    "command": "lake env lean --run bench/RS62GuardedEmit.lean 3 20 4 0 0 /tmp/rs62_guarded_smoke.c 213182061415796 370004878612351",
+    "wall_seconds": 0.24,
+    "user_seconds": 0.17,
+    "system_seconds": 0.07,
+    "max_rss_kib": 520324,
+    "c_bytes": 5815,
+    "c_sha256": "aa38b4939c397ed69d50d95a65866b0770976e46403995d82020442a7021737e"
+  },
+  "compcert": {
+    "wall_seconds": 0.03,
+    "user_seconds": 0.01,
+    "system_seconds": 0.01,
+    "max_rss_kib": 16676,
+    "binary_sha256": "232760cdff0ed2147f7755f64647398af2306b144c5044e57234c64b267c4d41"
+  },
+  "compiled_run": {
+    "exit_status": 0,
+    "max_rss_kib": 1256,
+    "lower": 213182061415796,
+    "upper": 370004878612351,
+    "reference": "bit-for-bit agreement with loopE trialPrime 20 3 0 0, where trialPrime uses Verified.Sieve.leastFactor"
+  },
+  "emitter_sha256": "4a152320f74012e5461cd841a8aa66fef233350b554fc232bdb6235c9f3a6cc7",
+  "proof_boundary": "The compiled program includes the primality guard and compiler correctness is proved. RS62LadderEncoding still names an incomplete commit-block/reblocking proof, so this control is not yet a proof of registeredReplay. The flat trial grid is also too costly for the full source range; production needs a verified segmented prime-list route."
+}
