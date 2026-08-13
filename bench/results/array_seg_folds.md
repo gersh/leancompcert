@@ -2019,3 +2019,43 @@ seconds wall at 1,338,012 KiB peak RSS under `MemoryHigh=1G`,
 `MemoryMax=2G`, one Lean worker, and zero swap.  All three table checks are
 axiom-free, while the two exported schedule facts use only `propext`,
 `Classical.choice`, and `Quot.sound`.
+
+## 2026-08-12 historical Platt root/core memory route
+
+The uniform root-only LeanCompCert campaign was rerun for all 1,092 retained
+Platt (2.11) rows with CompCert 3.17. It emitted, compiled, and executed both
+the ordinary cursor program and fail-safe audit for every row: 2,184 receipts
+completed in 97.69 seconds wall at 598,728 KiB peak RSS with zero swap. The
+pinned manifest hash is
+`3ed737cb9ad2dd5a107d46c08d179e351850c199482ec487443c35d998f4cb3e`;
+the completed receipt transcript hash is
+`e4f10fd903a211c0c2ec946011efb1b97adb78132cd7452f19e31e7a059b950e`.
+
+A transparent replay of the 158 small multi-root historical cores returned
+`true` in 76.53 seconds at 672,624 KiB peak RSS. Turning that replay into one
+kernel proof was not retained: a monolithic elaboration was stopped at
+2,236,252 KiB RSS, and attempted 32-, 16-, and 8-row proof chunks were stopped
+at 2,121,680, 2,190,768, and 2,120,304 KiB respectively. Even a later single
+row reached 2,179,236 KiB. Every run had swap disabled and was interrupted
+before an OOM. These measurements show that the expensive object was the
+normalized machine-state proof term, not the finite computation itself.
+
+The retained route is symbolic and receipt-backed. The final-root theorem now
+supports an exact-full table when the current bootstrap-covered candidate
+cannot append, and separate proved adapters cover a padded final root window,
+a bootstrap-only final window, and a bootstrap-prefix/mixed-final window. The
+manifest classifies without exceptions into 934 one-root, 5 bootstrap-final,
+7 mixed-final, 54 generic exact-final, and 92 generic padded-final rows.
+Representative one-worker, zero-swap builds were:
+
+| focused check | hard cap | wall | peak RSS | result |
+| --- | ---: | ---: | ---: | --- |
+| padded root-to-main core | 2 GiB | 0.81 s | 630,320 KiB | pass |
+| bootstrap final transition window | 2 GiB | 7.83 s | 1,094,636 KiB | pass |
+| exceptional historical core adapters | 2 GiB | 1.02 s | 660,492 KiB | pass |
+| live Platt root certificate | 2.25 GiB | 14.17 s | 1,480,772 KiB | pass |
+
+The commits implementing this retained route are `e916d63`, `87602ac`, and
+`0fbed90`. No full aggregate rebuild was run during this stage; the high-cost
+finite computations are being completed and attached to their live consumers
+before the next repository-wide build.
