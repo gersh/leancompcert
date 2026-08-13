@@ -176,6 +176,29 @@ theorem oneStage_factor_frame (k : Nat) (s : AState) (src dest : Nat)
     subst i
     simpa only [sdest] using hdest
 
+theorem oneStage_clean_viol (k : Nat) (s : AState) (src dest : Nat)
+    (negate : Bool)
+    (hdest : dest ≠ LeanCompCert.Ports.Section413SignedScale.rViol)
+    (hclean :
+      (arun k
+        (arun k s (lift (loadWord src negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0) :
+    (arun k s (oneStage src dest negate)).regs
+        LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+  let p := arun k s (lift (loadWord src negate))
+  let q := arun k p LeanCompCert.Ports.Section413SignedScale.body
+  rw [oneStage, arun_append, arun_append, arun_lift]
+  change srun k q.regs
+    [.mov dest (.reg LeanCompCert.Ports.Section413SignedScale.rOut)]
+      LeanCompCert.Ports.Section413SignedScale.rViol = 0
+  rw [srun_untouched]
+  · simpa only [q, p] using hclean
+  · intro i hi
+    simp only [List.mem_singleton] at hi
+    subst i
+    simpa only [sdest] using hdest
+
 private theorem oneStage_frame_of (k r : Nat) (s : AState)
     (src dest : Nat) (negate : Bool)
     (hload : LeanCompCert.Verified.ArrayRegFrame.writes r
@@ -274,6 +297,58 @@ theorem gateStage_outputs (k : Nat) (s : AState) :
     LeanCompCert.Ports.Section413WindowCellDiv.rOutLo,
     LeanCompCert.Ports.Section413WindowCellDiv.rOutHi,
     LeanCompCert.Ports.Section413WindowCellDiv.rGate]
+
+theorem body_clean_viol (k : Nat) (s : AState) (negate : Bool)
+    (hcleanHi :
+      let p := arun k s
+        (oneStage (if negate then rInHi else rInLo) rOutLo negate)
+      (arun k
+        (arun k p (lift (loadWord
+          (if negate then rInLo else rInHi) negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0) :
+    (arun k s (body negate)).regs
+        LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
+  let p := arun k s
+    (oneStage (if negate then rInHi else rInLo) rOutLo negate)
+  let q := arun k p
+    (oneStage (if negate then rInLo else rInHi) rOutHi negate)
+  have hq : q.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 :=
+    oneStage_clean_viol k p
+      (if negate then rInLo else rInHi) rOutHi negate (by decide)
+      (by simpa only [p] using hcleanHi)
+  rw [body, arun_append, arun_append]
+  rw [LeanCompCert.Verified.ArrayRegFrame.arun_frame k
+    LeanCompCert.Ports.Section413SignedScale.rViol (lift gateStage)
+    (by decide) q, hq]
+
+/-- Register framing for the complete scale adapter without reflecting over
+the duplicated instruction body.  Clients discharge one load condition and
+one checked-multiplier condition, which keeps proof terms constant-size. -/
+theorem body_frame_of (k r : Nat) (s : AState) (negate : Bool)
+    (hload : ∀ src, LeanCompCert.Verified.ArrayRegFrame.writes r
+      (lift (loadWord src negate)) = false)
+    (hscale : LeanCompCert.Verified.ArrayRegFrame.writes r
+      LeanCompCert.Ports.Section413SignedScale.body = false)
+    (hlo : rOutLo ≠ r) (hhi : rOutHi ≠ r)
+    (hgate : LeanCompCert.Verified.ArrayRegFrame.writes r
+      (lift gateStage) = false) :
+    (arun k s (body negate)).regs r = s.regs r := by
+  let p := arun k s
+    (oneStage (if negate then rInHi else rInLo) rOutLo negate)
+  let q := arun k p
+    (oneStage (if negate then rInLo else rInHi) rOutHi negate)
+  have hp : p.regs r = s.regs r :=
+    oneStage_frame_of k r s
+      (if negate then rInHi else rInLo) rOutLo negate
+      (hload _) hscale hlo
+  have hq : q.regs r = p.regs r :=
+    oneStage_frame_of k r p
+      (if negate then rInLo else rInHi) rOutHi negate
+      (hload _) hscale hhi
+  rw [body, arun_append, arun_append]
+  exact (LeanCompCert.Verified.ArrayRegFrame.arun_frame k r
+    (lift gateStage) hgate q).trans (hq.trans hp)
 
 /-- The two compiled checked multiplications compute both signed endpoints,
 then apply the event gate.  The hypotheses are compact receipts for the two
@@ -533,6 +608,7 @@ theorem program_wf (arrayLen loopCount : Nat) (negate : Bool) :
 
 #print axioms oneStage_clean_output
 #print axioms oneStage_clean_output_range
+#print axioms body_clean_viol
 #print axioms body_clean_outputs
 #print axioms body_clean_outputs_gate_one
 #print axioms body_clean_outputs_gate_zero
