@@ -111,7 +111,7 @@ private theorem signStage_div (k : Nat) (s : RegState) :
   simp only [signStage, List.mem_cons, List.not_mem_nil, or_false] at hi
   rcases hi with rfl | rfl | rfl <;> decide
 
-private theorem signStage_frame (k : Nat) (s : RegState) (j : Nat)
+theorem signStage_frame (k : Nat) (s : RegState) (j : Nat)
     (h1 : j ≠ rSign) (h2 : j ≠ rNeg) (h3 : j ≠ rInv) :
     srun k s signStage j = s j := by
   apply srun_untouched
@@ -166,7 +166,7 @@ theorem magnitudeStage_output (k : Nat) (s : RegState)
     simp [h, Nat.mod_eq_of_lt hm]
   · simp [h, Nat.mod_eq_of_lt hw]
 
-private theorem magnitudeStage_frame (k : Nat) (s : RegState) (j : Nat)
+theorem magnitudeStage_frame (k : Nat) (s : RegState) (j : Nat)
     (h1 : j ≠ rMag) (h2 : j ≠ rTmp) :
     srun k s magnitudeStage j = s j := by
   apply srun_untouched
@@ -297,14 +297,14 @@ private theorem ceilFormula (m d : Nat) (hd : 0 < d) :
       apply Nat.div_eq_of_lt_le <;> omega
     rw [hone]
 
-private theorem encodeZ_natCast (n : Nat)
+theorem encodeZ_natCast (n : Nat)
     (hn : n < LeanCompCert.Verified.MulWide.B64) :
     encodeZ (n : Int) = n := by
   unfold encodeZ
   simp only [LeanCompCert.Verified.MulWide.B64] at hn ⊢
   omega
 
-private theorem wordMagnitude_natAbs (w : Nat) (hw : w < M) :
+theorem wordMagnitude_natAbs (w : Nat) (hw : w < M) :
     (decodeZ w).natAbs = magnitude w := by
   unfold decodeZ magnitude
   by_cases h : H63 ≤ w
