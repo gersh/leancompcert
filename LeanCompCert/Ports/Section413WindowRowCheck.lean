@@ -57,7 +57,7 @@ def rCheckGate : Nat := 66
 def rSign : Nat := 67
 def rNonneg : Nat := 68
 def rToNat : Nat := 69
-def rShifted : Nat := 70
+def rLimit : Nat := 70
 def rTooHigh : Nat := 71
 def rGatedBad : Nat := 72
 def rRowViol : Nat := 73
@@ -217,8 +217,8 @@ def checkStage (lo offset : Nat) : List AInstr := lift
   , .binop rSign .ge (.reg rMaxHi) (.lit H63)
   , .binop rNonneg .sub (.lit 1) (.reg rSign)
   , .binop rToNat .mul (.reg rMaxHi) (.reg rNonneg)
-  , .binop rShifted .add (.reg rToNat) (.lit offset)
-  , .binop rTooHigh .gt (.reg rShifted) (.lit commonBound)
+  , .mov rLimit (.lit (commonBound - offset))
+  , .binop rTooHigh .gt (.reg rToNat) (.reg rLimit)
   , .binop rGatedBad .mul (.reg rTooHigh) (.reg rCheckGate)
   , .binop rRowViol .bor (.reg rRowViol) (.reg rGatedBad) ]
 
