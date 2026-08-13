@@ -227,12 +227,20 @@ def rootPackStore (c : R2Cfg) : List AInstr :=
   rootPackStoreGate ++ rootPackStoreTarget c ++ rootPackStoreValue ++
     rootPackStoreCommit
 
+def rootPackClearTargetS (c : R2Cfg) : List Instr :=
+  [ .binop 67 .mul (.reg 15) (.reg 11)
+  , .binop 68 .sub (.lit 1) (.reg 15)
+  , .binop 69 .mul (.reg 68) (.lit c.streamSink)
+  , .binop 70 .add (.reg 67) (.reg 69) ]
+
+def rootPackClearTarget (c : R2Cfg) : List AInstr :=
+  LeanCompCert.Verified.ArrayScalarBlock.lift (rootPackClearTargetS c)
+
+def rootPackClearCommit : List AInstr :=
+  [.store 70 0]
+
 def rootPackClear (c : R2Cfg) : List AInstr :=
-  [ .scalar (.binop 67 .mul (.reg 15) (.reg 11))
-  , .scalar (.binop 68 .sub (.lit 1) (.reg 15))
-  , .scalar (.binop 69 .mul (.reg 68) (.lit c.streamSink))
-  , .scalar (.binop 70 .add (.reg 67) (.reg 69))
-  , .store 70 0 ]
+  rootPackClearTarget c ++ rootPackClearCommit
 
 /-- One scan/log round.  `idx / S + 2` is the candidate and `idx % S` its
 fixed-log round.  Every candidate gets exactly `S` rounds; only an unmarked
