@@ -31,11 +31,14 @@ theorem rootMark_index_bounds {index : Nat}
   · exact Nat.lt_trans hi (by decide)
   constructor <;> omega
 
-theorem rootMarkBody_defined (c : R2Cfg) (index : Nat) (s : AState)
+theorem rootMarkBody_spec (c : R2Cfg) (index : Nat) (s : AState)
     (hArray : c.arrayLen < M)
     (hRoot : runtimeRoot < c.arrayLen)
     (hi : index < (r2RootMarkProgram c).loopCount) :
-    AllDefined c.arrayLen index s (rootMarkBody c) := by
+    AllDefined c.arrayLen index s (rootMarkBody c) ∧
+      ∀ x, (arun index s (rootMarkBody c)).arr x =
+        if x = (if rootMarkHit index = 1 then rootMarkN index
+          else rootMarkSink c) then rootMarkHit index else s.arr x := by
   have hb := rootMark_index_bounds (index := index) (by simpa [r2RootMarkProgram,
     rootMarkWidth, runtimeDivCap] using hi)
   have hiM : index % M = index := Nat.mod_eq_of_lt hb.1
@@ -129,23 +132,160 @@ theorem rootMarkBody_defined (c : R2Cfg) (index : Nat) (s : AState)
           Nat.add_mod, Nat.mul_mod]
     · simp [hsq, sw11, hnM, hsinkM, hOneM, hPredM,
         Nat.add_mod, Nat.mul_mod]
-  unfold rootMarkBody
-  rw [show rootMarkDecode ++ rootMarkWitness ++ rootMarkTarget c ++
-      [.store 22 18] =
-      rootMarkDecode ++ (rootMarkWitness ++ (rootMarkTarget c ++
-        [.store 22 18])) by
-      simp [List.append_assoc]]
-  rw [AllDefined_append]
-  refine ⟨hDecode, ?_⟩
-  rw [AllDefined_append]
-  refine ⟨hWitness, ?_⟩
-  rw [AllDefined_append]
-  refine ⟨hTarget, ?_⟩
-  simp only [AllDefined, ADefined]
-  rw [st22]
-  split
-  · exact ⟨hncell, trivial⟩
-  · exact ⟨hsink, trivial⟩
+  have hDefined : AllDefined c.arrayLen index s (rootMarkBody c) := by
+    unfold rootMarkBody
+    rw [show rootMarkDecode ++ rootMarkWitness ++ rootMarkTarget c ++
+        [.store 22 18] =
+        rootMarkDecode ++ (rootMarkWitness ++ (rootMarkTarget c ++
+          [.store 22 18])) by
+        simp [List.append_assoc]]
+    rw [AllDefined_append]
+    refine ⟨hDecode, ?_⟩
+    rw [AllDefined_append]
+    refine ⟨hWitness, ?_⟩
+    rw [AllDefined_append]
+    refine ⟨hTarget, ?_⟩
+    simp only [AllDefined, ADefined]
+    rw [st22]
+    split
+    · exact ⟨hncell, trivial⟩
+    · exact ⟨hsink, trivial⟩
+  refine ⟨hDefined, ?_⟩
+  have hsdArr : sd.arr = s.arr := by
+    simp [sd, rootMarkDecode, arun, astep, AState.writeReg]
+  have hswArr : sw.arr = s.arr := by
+    simp [sw, rootMarkWitness, arun, astep, AState.writeReg, hsdArr]
+  have hstArr : st.arr = s.arr := by
+    simp [st, rootMarkTarget, arun, astep, AState.writeReg, hswArr]
+  intro x
+  simp only [rootMarkBody, arun_append]
+  change (st.writeArr (st.regs 22) (st.regs 18)).arr x = _
+  simp [AState.writeArr, st22, st18, hstArr]
+
+theorem rootMarkBody_defined (c : R2Cfg) (index : Nat) (s : AState)
+    (hArray : c.arrayLen < M) (hRoot : runtimeRoot < c.arrayLen)
+    (hi : index < (r2RootMarkProgram c).loopCount) :
+    AllDefined c.arrayLen index s (rootMarkBody c) :=
+  (rootMarkBody_spec c index s hArray hRoot hi).1
+
+def rootMarkFoldPrefix (c : R2Cfg) (arr : Nat → Nat) (k : Nat) : AState :=
+  (List.range k).foldl (fun s index => arun index s (rootMarkBody c))
+    (initialAStateWithArray arr)
+
+def rootMarkSeen (k x : Nat) : Prop :=
+  ∃ index, index < k ∧ rootMarkN index = x ∧ rootMarkHit index = 1
+
+noncomputable instance rootMarkSeenDecidable (k x : Nat) :
+    Decidable (rootMarkSeen k x) := Classical.propDecidable _
+
+/-- Cellwise meaning of every finite prefix of the compiled mark loop.  This
+is an induction over syntax-level steps, not evaluation of the production
+trip count. -/
+theorem rootMarkFoldPrefix_cell (c : R2Cfg) (k x : Nat)
+    (hArray : c.arrayLen < M) (hRoot : runtimeRoot < c.arrayLen)
+    (hSink : runtimeRoot < rootMarkSink c)
+    (hk : k ≤ (r2RootMarkProgram c).loopCount) (hx : x ≤ runtimeRoot) :
+    (rootMarkFoldPrefix c (fun _ => 0) k).arr x =
+      if rootMarkSeen k x then 1 else 0 := by
+  classical
+  have hxsink : x ≠ rootMarkSink c := by omega
+  induction k with
+  | zero => simp [rootMarkFoldPrefix, rootMarkSeen, initialAStateWithArray]
+  | succ k ih =>
+      have hklt : k < (r2RootMarkProgram c).loopCount := by omega
+      have hkpre : k ≤ (r2RootMarkProgram c).loopCount := by omega
+      let prev := rootMarkFoldPrefix c (fun _ => 0) k
+      have hprev : prev.arr x = if rootMarkSeen k x then 1 else 0 :=
+        ih hkpre
+      have hstep := (rootMarkBody_spec c k prev hArray hRoot hklt).2 x
+      have hseen : rootMarkSeen (k + 1) x ↔
+          rootMarkSeen k x ∨ (rootMarkN k = x ∧ rootMarkHit k = 1) := by
+        constructor
+        · rintro ⟨i, hi, hnx, hhit⟩
+          by_cases hik : i < k
+          · exact Or.inl ⟨i, hik, hnx, hhit⟩
+          · right
+            have hieq : i = k := by omega
+            simpa [hieq] using And.intro hnx hhit
+        · rintro (h | ⟨hnx, hhit⟩)
+          · obtain ⟨i, hi, hnx, hhit⟩ := h
+            exact ⟨i, by omega, hnx, hhit⟩
+          · exact ⟨k, by omega, hnx, hhit⟩
+      have hfold : rootMarkFoldPrefix c (fun _ => 0) (k + 1) =
+          arun k prev (rootMarkBody c) := by
+        simp [rootMarkFoldPrefix, prev, List.range_succ, List.foldl_append]
+      rw [hfold, hstep]
+      by_cases hold : rootMarkSeen k x
+      · by_cases hhit : rootMarkHit k = 1
+        · by_cases hnx : rootMarkN k = x
+          · simp [hseen, hold, hhit, hnx]
+          · have hxne : x ≠ rootMarkN k := Ne.symm hnx
+            simp [hseen, hold, hhit, hnx, hxne, hprev]
+        · simp [hseen, hold, hhit, hprev, hxsink]
+      · by_cases hhit : rootMarkHit k = 1
+        · by_cases hnx : rootMarkN k = x
+          · simp [hseen, hold, hhit, hnx]
+          · have hxne : x ≠ rootMarkN k := Ne.symm hnx
+            simp [hseen, hold, hhit, hnx, hxne, hprev]
+        · simp [hseen, hold, hhit, hprev, hxsink]
+
+theorem rootMarkSeen_full_iff (x : Nat) (hx2 : 2 ≤ x)
+    (hxRoot : x ≤ runtimeRoot) :
+    rootMarkSeen (r2RootMarkProgram runtimeProductionCfg).loopCount x ↔
+      ∃ d, 2 ≤ d ∧ d ≤ runtimeDivCap ∧ d * d ≤ x ∧ x % d = 0 := by
+  constructor
+  · rintro ⟨index, hi, hnx, hhit⟩
+    have hb := rootMark_index_bounds (index := index) (by
+      simpa [r2RootMarkProgram, rootMarkWidth, runtimeDivCap] using hi)
+    have hwitness : rootMarkD index * rootMarkD index ≤ rootMarkN index ∧
+        rootMarkN index % rootMarkD index = 0 := by
+      by_cases h : rootMarkD index * rootMarkD index ≤ rootMarkN index ∧
+          rootMarkN index % rootMarkD index = 0
+      · exact h
+      · simp [rootMarkHit, h] at hhit
+    refine ⟨rootMarkD index, hb.2.2.1, hb.2.2.2, ?_, ?_⟩
+    · simpa [hnx] using hwitness.1
+    · simpa [hnx] using hwitness.2
+  · rintro ⟨d, hd2, hdCap, hsq, hdiv⟩
+    let q := x - 2
+    let r := d - 2
+    let index := q * rootMarkWidth + r
+    have hr : r < rootMarkWidth := by
+      simp [r, rootMarkWidth, runtimeDivCap] at hdCap ⊢
+      omega
+    have hq : q < runtimeRoot - 1 := by
+      simp [q, runtimeRoot] at hx2 hxRoot ⊢
+      omega
+    have hdecode : index / rootMarkWidth = q ∧
+        index % rootMarkWidth = r := by
+      have hw : 0 < rootMarkWidth := by decide
+      dsimp only [index]
+      constructor
+      · rw [Nat.mul_comm, Nat.mul_add_div hw, Nat.div_eq_of_lt hr,
+          Nat.add_zero]
+      · rw [Nat.mul_comm, Nat.mul_add_mod, Nat.mod_eq_of_lt hr]
+    have hn : rootMarkN index = x := by
+      simp [rootMarkN, hdecode.1, q]
+      omega
+    have hd : rootMarkD index = d := by
+      simp [rootMarkD, hdecode.2, r]
+      omega
+    have hi : index < (r2RootMarkProgram runtimeProductionCfg).loopCount := by
+      have hi0 : index < (q + 1) * rootMarkWidth := by
+        dsimp only [index]
+        rw [Nat.add_mul]
+        omega
+      have hi1 : (q + 1) * rootMarkWidth ≤
+          (runtimeRoot - 1) * rootMarkWidth :=
+        Nat.mul_le_mul_right rootMarkWidth (by omega)
+      have hi1' : (q + 1) * rootMarkWidth ≤
+          (r2RootMarkProgram runtimeProductionCfg).loopCount := by
+        change (q + 1) * rootMarkWidth ≤
+          (runtimeRoot - 1) * (runtimeDivCap - 1)
+        simpa [rootMarkWidth, runtimeDivCap] using hi1
+      exact Nat.lt_of_lt_of_le hi0 hi1'
+    refine ⟨index, hi, hn, ?_⟩
+    simp [rootMarkHit, hn, hd, hsq, hdiv]
 
 /-- The source-level result of the mark stage.  This is intentionally an
 opaque symbolic fold: Lean proves that each compiled step implements it but
@@ -154,6 +294,10 @@ def rootMarkFold (c : R2Cfg) (arr : Nat → Nat) : AState :=
   (List.range (r2RootMarkProgram c).loopCount).foldl
     (fun s index => arun index s (rootMarkBody c))
     (initialAStateWithArray arr)
+
+theorem rootMarkFold_eq_prefix (c : R2Cfg) (arr : Nat → Nat) :
+    rootMarkFold c arr =
+      rootMarkFoldPrefix c arr (r2RootMarkProgram c).loopCount := rfl
 
 def rootMarkedState (c : R2Cfg) (arr : Nat → Nat) : AState :=
   arun 0 (rootMarkFold c arr) (r2RootMarkProgram c).epilogue
@@ -184,6 +328,9 @@ theorem rootMarkProduction_runFromArray (arr : Nat → Nat) :
   · decide
 
 #print axioms rootMarkBody_defined
+#print axioms rootMarkBody_spec
+#print axioms rootMarkFoldPrefix_cell
+#print axioms rootMarkSeen_full_iff
 #print axioms rootMarkProgram_runFromArray
 #print axioms rootMarkProduction_runFromArray
 
