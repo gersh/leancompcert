@@ -52,6 +52,24 @@ def body (negate : Bool) : List AInstr :=
     oneStage (if negate then rInLo else rInHi) rOutHi negate ++
       lift gateStage
 
+theorem oneStage_defined (len k : Nat) (s : AState) (src dest : Nat)
+    (negate : Bool) : AllDefined len k s (oneStage src dest negate) := by
+  rw [oneStage, AllDefined_append]
+  refine ⟨?_, allDefined_lift_of_noDiv len k _ _ (by simp [NoDivI])⟩
+  rw [AllDefined_append]
+  exact ⟨allDefined_lift_of_noDiv len k _ s
+      (by cases negate <;> simp [loadWord,
+        LeanCompCert.Ports.Section413WindowCellDiv.loadWord, NoDivI]),
+    LeanCompCert.Ports.Section413SignedScale.body_defined len k _⟩
+
+theorem body_defined (len k : Nat) (s : AState) (negate : Bool) :
+    AllDefined len k s (body negate) := by
+  rw [body, AllDefined_append]
+  refine ⟨?_, allDefined_lift_of_noDiv len k _ _ (by decide)⟩
+  rw [AllDefined_append]
+  exact ⟨oneStage_defined len k s _ _ negate,
+    oneStage_defined len k _ _ _ negate⟩
+
 /-- One literal checked multiplier invocation saves the exact encoded signed
 product when its own compiled sticky flag is clear. -/
 theorem oneStage_clean_output (k : Nat) (s : AState) (src dest : Nat)
@@ -704,6 +722,7 @@ theorem program_wf (arrayLen loopCount : Nat) (negate : Bool) :
   | true => exact (by decide : ∀ i ∈ body true, i.WF 328) i hi
 
 #print axioms oneStage_clean_output
+#print axioms body_defined
 #print axioms oneStage_clean_output_range
 #print axioms oneStage_zero_receipt_and_input
 #print axioms body_clean_viol

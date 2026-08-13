@@ -24,6 +24,7 @@ open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.BlockDefined
 open LeanCompCert.Ports.Section413Cells
 
 def unitScale : Nat := 10000000000000
@@ -77,6 +78,14 @@ def signedMaxStage (dest a b : Nat) : List AInstr :=
   lift (signedChooseStage a b) ++ lift
     (LeanCompCert.Ports.Section413G1Denote.muxS
       dest rChoose a b rMuxTmp)
+
+theorem signedMaxStage_defined (len k : Nat) (s : AState)
+    (dest a b : Nat) : AllDefined len k s (signedMaxStage dest a b) := by
+  rw [signedMaxStage, AllDefined_append]
+  exact ⟨allDefined_lift_of_noDiv len k _ s
+      (by simp [signedChooseStage, NoDivI]),
+    allDefined_lift_of_noDiv len k _ _
+      (by simp [LeanCompCert.Ports.Section413G1Denote.muxS, NoDivI])⟩
 
 private theorem signedChooseLo_output (k : Nat) (s : RegState)
     (ha : s rDiv1Lo < M) (hb : s rDiv2Lo < M) :
@@ -196,6 +205,104 @@ def divideK2Stage : List AInstr :=
     [ .mov rDiv2Lo (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)
     , .mov rDiv2Hi (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutHi) ]
 
+theorem divideK2Stage_defined (len k : Nat) (s : AState)
+    (hn : 0 < s.regs LeanCompCert.Ports.Section413WindowSchedule.rN)
+    (hn1 : s.regs LeanCompCert.Ports.Section413WindowSchedule.rN + 1 < M) :
+    AllDefined len k s divideK2Stage := by
+  let p := arun k s (lift
+    [ .mov LeanCompCert.Ports.Section413WindowCellDiv.rInLo (.reg rK2Lo)
+    , .mov LeanCompCert.Ports.Section413WindowCellDiv.rInHi (.reg rK2Hi)
+    , .mov LeanCompCert.Ports.Section413WindowCellDiv.rGate (.lit 1)
+    , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen
+        (.reg LeanCompCert.Ports.Section413WindowSchedule.rN) ])
+  let q := arun k p (LeanCompCert.Ports.Section413WindowCellDiv.body false)
+  let r := arun k q (lift
+    [ .mov rDiv1Lo (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)
+    , .mov rDiv1Hi (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutHi)
+    , .binop rNPlusOne .add
+        (.reg LeanCompCert.Ports.Section413WindowSchedule.rN) (.lit 1)
+    , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rNPlusOne) ])
+  have hpDen : p.regs LeanCompCert.Ports.Section413WindowCellDiv.rDen =
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rN := by
+    simp [p, arun_lift, srun, sdest, sval, denoteOperand, RegState.set,
+      rK2Lo, rK2Hi, LeanCompCert.Ports.Section413WindowSchedule.rN,
+      LeanCompCert.Ports.Section413WindowCellDiv.rInLo,
+      LeanCompCert.Ports.Section413WindowCellDiv.rInHi,
+      LeanCompCert.Ports.Section413WindowCellDiv.rGate,
+      LeanCompCert.Ports.Section413WindowCellDiv.rDen]
+  have hqN : q.regs LeanCompCert.Ports.Section413WindowSchedule.rN =
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rN := by
+    rw [show q.regs LeanCompCert.Ports.Section413WindowSchedule.rN =
+      p.regs LeanCompCert.Ports.Section413WindowSchedule.rN by
+        exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _ (by decide) p]
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _ (by decide) s
+  have hrDen : r.regs LeanCompCert.Ports.Section413WindowCellDiv.rDen =
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rN + 1 := by
+    have hqN0 : q.regs 0 = s.regs 0 := by
+      simpa [LeanCompCert.Ports.Section413WindowSchedule.rN] using hqN
+    have hn10 : s.regs 0 + 1 < M := by
+      simpa [LeanCompCert.Ports.Section413WindowSchedule.rN] using hn1
+    change (srun k q.regs
+      [ .mov rDiv1Lo (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)
+      , .mov rDiv1Hi (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutHi)
+      , .binop rNPlusOne .add
+          (.reg LeanCompCert.Ports.Section413WindowSchedule.rN) (.lit 1)
+      , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen
+          (.reg rNPlusOne) ])
+        LeanCompCert.Ports.Section413WindowCellDiv.rDen = _
+    simp [srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+      hqN0, Nat.mod_eq_of_lt hn10, rDiv1Lo, rDiv1Hi, rNPlusOne,
+      LeanCompCert.Ports.Section413WindowSchedule.rN,
+      LeanCompCert.Ports.Section413WindowCellDiv.rOutLo,
+      LeanCompCert.Ports.Section413WindowCellDiv.rOutHi,
+      LeanCompCert.Ports.Section413WindowCellDiv.rDen]
+  rw [divideK2Stage, show
+    lift
+          [ .mov LeanCompCert.Ports.Section413WindowCellDiv.rInLo (.reg rK2Lo)
+          , .mov LeanCompCert.Ports.Section413WindowCellDiv.rInHi (.reg rK2Hi)
+          , .mov LeanCompCert.Ports.Section413WindowCellDiv.rGate (.lit 1)
+          , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen
+              (.reg LeanCompCert.Ports.Section413WindowSchedule.rN) ] ++
+        LeanCompCert.Ports.Section413WindowCellDiv.body false ++ lift
+          [ .mov rDiv1Lo (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)
+          , .mov rDiv1Hi (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutHi)
+          , .binop rNPlusOne .add
+              (.reg LeanCompCert.Ports.Section413WindowSchedule.rN) (.lit 1)
+          , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen
+              (.reg rNPlusOne) ] ++
+        LeanCompCert.Ports.Section413WindowCellDiv.body false ++ lift
+          [ .mov rDiv2Lo (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)
+          , .mov rDiv2Hi (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutHi) ] =
+      lift
+          [ .mov LeanCompCert.Ports.Section413WindowCellDiv.rInLo (.reg rK2Lo)
+          , .mov LeanCompCert.Ports.Section413WindowCellDiv.rInHi (.reg rK2Hi)
+          , .mov LeanCompCert.Ports.Section413WindowCellDiv.rGate (.lit 1)
+          , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen
+              (.reg LeanCompCert.Ports.Section413WindowSchedule.rN) ] ++
+        (LeanCompCert.Ports.Section413WindowCellDiv.body false ++
+          (lift
+            [ .mov rDiv1Lo (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)
+            , .mov rDiv1Hi (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutHi)
+            , .binop rNPlusOne .add
+                (.reg LeanCompCert.Ports.Section413WindowSchedule.rN) (.lit 1)
+            , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen
+                (.reg rNPlusOne) ] ++
+          (LeanCompCert.Ports.Section413WindowCellDiv.body false ++ lift
+            [ .mov rDiv2Lo (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutLo)
+            , .mov rDiv2Hi (.reg LeanCompCert.Ports.Section413WindowCellDiv.rOutHi) ]))) by
+        simp only [List.append_assoc],
+    AllDefined_append]
+  refine ⟨allDefined_lift_of_noDiv len k _ s (by decide), ?_⟩
+  rw [AllDefined_append]
+  refine ⟨LeanCompCert.Ports.Section413WindowCellDiv.body_defined len k p false
+      (by simpa [hpDen] using hn), ?_⟩
+  rw [AllDefined_append]
+  refine ⟨allDefined_lift_of_noDiv len k _ q (by decide), ?_⟩
+  rw [AllDefined_append]
+  refine ⟨LeanCompCert.Ports.Section413WindowCellDiv.body_defined len k r false
+      (by rw [hrDen]; omega),
+    allDefined_lift_of_noDiv len k _ _ (by decide)⟩
+
 def unitStage : List AInstr :=
   signedMaxStage rMaxLo rDiv1Lo rDiv2Lo ++
   signedMaxStage rMaxHi rDiv1Hi rDiv2Hi ++ lift
@@ -206,6 +313,41 @@ def unitStage : List AInstr :=
   LeanCompCert.Ports.Section413WindowCellAdd.oneStage rMaxHi rK1Hi ++ lift
     [ .mov rUnitAddBad
         (.reg LeanCompCert.Ports.Section413SignedAdd.rViol) ]
+
+theorem unitStage_defined (len k : Nat) (s : AState) :
+    AllDefined len k s unitStage := by
+  rw [unitStage, show
+    signedMaxStage rMaxLo rDiv1Lo rDiv2Lo ++
+        signedMaxStage rMaxHi rDiv1Hi rDiv2Hi ++ lift
+          [ .mov rSavedAddViol
+              (.reg LeanCompCert.Ports.Section413SignedAdd.rViol)
+          , .mov LeanCompCert.Ports.Section413SignedAdd.rViol (.lit 0) ] ++
+        LeanCompCert.Ports.Section413WindowCellAdd.oneStage rMaxLo rK1Lo ++
+        LeanCompCert.Ports.Section413WindowCellAdd.oneStage rMaxHi rK1Hi ++ lift
+          [ .mov rUnitAddBad
+              (.reg LeanCompCert.Ports.Section413SignedAdd.rViol) ] =
+      signedMaxStage rMaxLo rDiv1Lo rDiv2Lo ++
+        (signedMaxStage rMaxHi rDiv1Hi rDiv2Hi ++
+        (lift
+          [ .mov rSavedAddViol
+              (.reg LeanCompCert.Ports.Section413SignedAdd.rViol)
+          , .mov LeanCompCert.Ports.Section413SignedAdd.rViol (.lit 0) ] ++
+        (LeanCompCert.Ports.Section413WindowCellAdd.oneStage rMaxLo rK1Lo ++
+        (LeanCompCert.Ports.Section413WindowCellAdd.oneStage rMaxHi rK1Hi ++ lift
+          [ .mov rUnitAddBad
+              (.reg LeanCompCert.Ports.Section413SignedAdd.rViol) ])))) by
+        simp only [List.append_assoc],
+    AllDefined_append]
+  refine ⟨signedMaxStage_defined len k s _ _ _, ?_⟩
+  rw [AllDefined_append]
+  refine ⟨signedMaxStage_defined len k _ _ _ _, ?_⟩
+  rw [AllDefined_append]
+  refine ⟨allDefined_lift_of_noDiv len k _ _ (by decide), ?_⟩
+  rw [AllDefined_append]
+  refine ⟨LeanCompCert.Ports.Section413WindowCellAdd.oneStage_defined len k _ _ _, ?_⟩
+  rw [AllDefined_append]
+  exact ⟨LeanCompCert.Ports.Section413WindowCellAdd.oneStage_defined len k _ _ _,
+    allDefined_lift_of_noDiv len k _ _ (by decide)⟩
 
 def checkStage (lo offset : Nat) : List AInstr := lift
   [ .binop rFinalSlot .eq (.reg LeanCompCert.Ports.Section413WindowSchedule.rS) (.lit LeanCompCert.Ports.Section413WindowSchedule.slots)
@@ -222,8 +364,20 @@ def checkStage (lo offset : Nat) : List AInstr := lift
   , .binop rGatedBad .mul (.reg rTooHigh) (.reg rCheckGate)
   , .binop rRowViol .bor (.reg rRowViol) (.reg rGatedBad) ]
 
+theorem checkStage_defined (len k : Nat) (s : AState) (lo offset : Nat) :
+    AllDefined len k s (checkStage lo offset) := by
+  exact allDefined_lift_of_noDiv len k _ s (by simp [checkStage, NoDivI])
+
 def body (lo offset : Nat) : List AInstr :=
   divideK2Stage ++ unitStage ++ checkStage lo offset
+
+theorem body_defined (len k : Nat) (s : AState) (lo offset : Nat)
+    (hn : 0 < s.regs LeanCompCert.Ports.Section413WindowSchedule.rN)
+    (hn1 : s.regs LeanCompCert.Ports.Section413WindowSchedule.rN + 1 < M) :
+    AllDefined len k s (body lo offset) := by
+  rw [body, List.append_assoc, AllDefined_append, AllDefined_append]
+  exact ⟨divideK2Stage_defined len k s hn hn1,
+    ⟨unitStage_defined len k _, checkStage_defined len k _ lo offset⟩⟩
 
 def init : List AInstr := lift [.mov rRowViol (.lit 0)]
 
@@ -247,6 +401,7 @@ theorem g2Program_wf :
       (99999 * LeanCompCert.Ports.Section413WindowSchedule.slots) 16 0).WF := by decide
 
 #print axioms g1Program_wf
+#print axioms body_defined
 #print axioms g2Program_wf
 #print axioms signedMaxLo_output
 #print axioms signedMaxHi_output

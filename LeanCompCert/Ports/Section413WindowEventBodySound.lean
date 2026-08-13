@@ -59,6 +59,161 @@ def afterThird (k : Nat) (s : AState) (c : Cfg) : AState :=
 def afterFourth (k : Nat) (s : AState) (c : Cfg) : AState :=
   arun k (afterThird k s c) (fourthEvent c)
 
+/-- Fixed register-frame facts needed only to establish that every partial
+operation in the four-event block is defined.  These inspect the constant
+instruction destinations, never table contents or production iterations. -/
+structure EventDefinedFrames (c : Cfg) : Prop where
+  firstGateX : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rQ
+    (gateStage c.v LeanCompCert.Ports.Section413WindowSchedule.rActive
+      LeanCompCert.Ports.Section413WindowSchedule.rS) = false
+  firstPrefixDiv : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    (gateStage c.v LeanCompCert.Ports.Section413WindowSchedule.rActive
+        LeanCompCert.Ports.Section413WindowSchedule.rS ++
+      readStage c.cap LeanCompCert.Ports.Section413WindowSchedule.rQ ++
+      inputStage) = false
+  secondGateX : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    (gateStage c.v LeanCompCert.Ports.Section413WindowSchedule.rPair
+      LeanCompCert.Ports.Section413WindowSchedule.rQ) = false
+  secondPrefixDiv : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rQ
+    (gateStage c.v LeanCompCert.Ports.Section413WindowSchedule.rPair
+        LeanCompCert.Ports.Section413WindowSchedule.rQ ++
+      readStage c.cap LeanCompCert.Ports.Section413WindowSchedule.rS ++
+      inputStage) = false
+  thirdGateX : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+    (gateStage c.v LeanCompCert.Ports.Section413WindowSchedule.rHalfActive
+      LeanCompCert.Ports.Section413WindowSchedule.rS) = false
+  thirdPrefixDiv : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    (gateStage c.v LeanCompCert.Ports.Section413WindowSchedule.rHalfActive
+        LeanCompCert.Ports.Section413WindowSchedule.rS ++
+      readStage c.cap LeanCompCert.Ports.Section413WindowSchedule.rHalfQ ++
+      inputStage) = false
+  fourthGateX : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    (gateStage c.v LeanCompCert.Ports.Section413WindowSchedule.rHalfPair
+      LeanCompCert.Ports.Section413WindowSchedule.rHalfQ) = false
+  fourthPrefixDiv : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+    (gateStage c.v LeanCompCert.Ports.Section413WindowSchedule.rHalfPair
+        LeanCompCert.Ports.Section413WindowSchedule.rHalfQ ++
+      readStage c.cap LeanCompCert.Ports.Section413WindowSchedule.rS ++
+      inputStage) = false
+  firstQ : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rQ (firstEvent c) = false
+  firstS : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rS (firstEvent c) = false
+  firstSecondS : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+      (firstEvent c ++ secondEvent c) = false
+  firstSecondHalfQ : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+      (firstEvent c ++ secondEvent c) = false
+  firstSecondThirdS : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+      (firstEvent c ++ secondEvent c ++ thirdEvent c) = false
+  firstSecondThirdHalfQ : LeanCompCert.Verified.ArrayRegFrame.writes
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+      (firstEvent c ++ secondEvent c ++ thirdEvent c) = false
+
+set_option maxRecDepth 100000 in
+theorem g1EventDefinedFrames : EventDefinedFrames g1Cfg := by
+  constructor <;> decide
+
+set_option maxRecDepth 100000 in
+theorem g2EventDefinedFrames : EventDefinedFrames g2Cfg := by
+  constructor <;> decide
+
+theorem eventBody_defined_of_start (k : Nat) (s : AState) (c : Cfg)
+    (hf : EventDefinedFrames c)
+    (hcapPos : 1 ≤ c.cap)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap < M)
+    (hsCap : s.regs LeanCompCert.Ports.Section413WindowSchedule.rS ≤ c.cap)
+    (hqCap : s.regs LeanCompCert.Ports.Section413WindowSchedule.rQ ≤ c.cap)
+    (hhqCap : s.regs LeanCompCert.Ports.Section413WindowSchedule.rHalfQ ≤ c.cap)
+    (hsM : s.regs LeanCompCert.Ports.Section413WindowSchedule.rS < M)
+    (hqM : s.regs LeanCompCert.Ports.Section413WindowSchedule.rQ < M)
+    (hhqM : s.regs LeanCompCert.Ports.Section413WindowSchedule.rHalfQ < M)
+    (hsSafe : safeDen (s.regs LeanCompCert.Ports.Section413WindowSchedule.rS) <
+      LeanCompCert.Ports.Section413Cells.H63)
+    (hhqSafe : safeDen
+      (s.regs LeanCompCert.Ports.Section413WindowSchedule.rHalfQ) <
+        LeanCompCert.Ports.Section413Cells.H63) :
+    AllDefined (LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap)
+      k s (eventBody c) := by
+  let s1 := afterFirst k s c
+  let s2 := afterSecond k s c
+  let s3 := afterThird k s c
+  have hs1Q : s1.regs LeanCompCert.Ports.Section413WindowSchedule.rQ =
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rQ := by
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _ hf.firstQ s
+  have hs1S : s1.regs LeanCompCert.Ports.Section413WindowSchedule.rS =
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rS := by
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _ hf.firstS s
+  have hs2S : s2.regs LeanCompCert.Ports.Section413WindowSchedule.rS =
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rS := by
+    simpa only [s2, afterSecond, s1, afterFirst, arun_append] using
+      LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _ hf.firstSecondS s
+  have hs2HalfQ : s2.regs LeanCompCert.Ports.Section413WindowSchedule.rHalfQ =
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rHalfQ := by
+    simpa only [s2, afterSecond, s1, afterFirst, arun_append] using
+      LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _ hf.firstSecondHalfQ s
+  have hs3S : s3.regs LeanCompCert.Ports.Section413WindowSchedule.rS =
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rS := by
+    simpa only [s3, afterThird, s2, afterSecond, s1, afterFirst, arun_append] using
+      LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _
+        hf.firstSecondThirdS s
+  have hs3HalfQ : s3.regs LeanCompCert.Ports.Section413WindowSchedule.rHalfQ =
+      s.regs LeanCompCert.Ports.Section413WindowSchedule.rHalfQ := by
+    simpa only [s3, afterThird, s2, afterSecond, s1, afterFirst, arun_append] using
+      LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _
+        hf.firstSecondThirdHalfQ s
+  rw [eventBody_split, List.append_assoc, List.append_assoc,
+    AllDefined_append]
+  refine ⟨?_, ?_⟩
+  · simpa only [firstEvent] using event_defined_of_start k s c
+      LeanCompCert.Ports.Section413WindowSchedule.rActive
+      LeanCompCert.Ports.Section413WindowSchedule.rS
+      LeanCompCert.Ports.Section413WindowSchedule.rQ
+      LeanCompCert.Ports.Section413WindowSchedule.rQ false true false
+      hcapPos htable hqCap hsM (by decide) (by simp) hf.firstGateX
+      hf.firstPrefixDiv
+  rw [AllDefined_append]
+  refine ⟨?_, ?_⟩
+  · simpa only [secondEvent, s1, afterFirst] using event_defined_of_start k s1 c
+      LeanCompCert.Ports.Section413WindowSchedule.rPair
+      LeanCompCert.Ports.Section413WindowSchedule.rQ
+      LeanCompCert.Ports.Section413WindowSchedule.rS
+      LeanCompCert.Ports.Section413WindowSchedule.rS false true false
+      hcapPos htable (by rw [hs1S]; exact hsCap)
+      (by rw [hs1Q]; exact hqM) (by decide) (by simp) hf.secondGateX
+      hf.secondPrefixDiv
+  rw [AllDefined_append]
+  refine ⟨?_, ?_⟩
+  · simpa only [thirdEvent, s2, afterSecond, s1, afterFirst] using
+      event_defined_of_start k s2 c
+        LeanCompCert.Ports.Section413WindowSchedule.rHalfActive
+        LeanCompCert.Ports.Section413WindowSchedule.rS
+        LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+        LeanCompCert.Ports.Section413WindowSchedule.rHalfQ true false true
+        hcapPos htable (by rw [hs2HalfQ]; exact hhqCap)
+        (by rw [hs2S]; exact hsM) (by decide)
+        (by intro; rw [hs2S]; exact hsSafe) hf.thirdGateX hf.thirdPrefixDiv
+  simpa only [fourthEvent, s3, afterThird, s2, afterSecond, s1, afterFirst] using
+    event_defined_of_start k s3 c
+      LeanCompCert.Ports.Section413WindowSchedule.rHalfPair
+      LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+      LeanCompCert.Ports.Section413WindowSchedule.rS
+      LeanCompCert.Ports.Section413WindowSchedule.rS true false true
+      hcapPos htable (by rw [hs3S]; exact hsCap)
+      (by rw [hs3HalfQ]; exact hhqM) (by decide)
+      (by intro; rw [hs3HalfQ]; exact hhqSafe) hf.fourthGateX
+      hf.fourthPrefixDiv
+
 /-- Register-frame facts for the fixed G1/G2 event bodies.  They inspect only
 the constant-size destination list, never production rows or table data. -/
 structure EventBodyFrames (c : Cfg) : Prop where
@@ -284,5 +439,6 @@ theorem eventBody_flags_zero_receipts_and_input (k : Nat) (s : AState)
 #print axioms eventBody_flags_zero_receipts_and_input
 #print axioms g1EventBodyFrames
 #print axioms g2EventBodyFrames
+#print axioms eventBody_defined_of_start
 
 end LeanCompCert.Ports.Section413WindowEventScanner

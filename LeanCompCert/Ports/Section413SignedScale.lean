@@ -62,6 +62,19 @@ def finalStage : List Instr := guardStage ++ selectStage
 
 def body : List AInstr := signMagStage ++ wideStage ++ lift finalStage
 
+theorem wideStage_defined (len k : Nat) (s : AState) :
+    AllDefined len k s wideStage := by
+  simp [wideStage, LeanCompCert.Ports.CDEMAbelScan.mulWideBody,
+    AllDefined, ADefined, astep, AState.writeReg, denoteOp]
+
+theorem body_defined (len k : Nat) (s : AState) :
+    AllDefined len k s body := by
+  rw [body, AllDefined_append]
+  refine ⟨?_, allDefined_lift_of_noDiv len k _ _ (by decide)⟩
+  rw [AllDefined_append]
+  exact ⟨allDefined_lift_of_noDiv len k _ s (by decide),
+    wideStage_defined len k _⟩
+
 theorem signMagStage_outputs (k : Nat) (s : AState) (hw : s.regs rWord < M) :
     let out := arun k s signMagStage
     out.regs rSign = LeanCompCert.Ports.Section413SignedDiv.signBit
@@ -423,6 +436,7 @@ theorem program_wf (arrayLen loopCount : Nat) :
   exact (by decide : ∀ i ∈ body, i.WF 328) i hi
 
 #print axioms signMagStage_outputs
+#print axioms body_defined
 #print axioms wideStage_outputs
 #print axioms finalStage_violation
 #print axioms body_clean_output_encoded

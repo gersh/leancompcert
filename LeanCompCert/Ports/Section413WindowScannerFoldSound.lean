@@ -5,6 +5,8 @@ Authors: Gershon Bialer
 -/
 
 import LeanCompCert.Ports.Section413WindowScannerStepSound
+import LeanCompCert.Verified.ArrayPipeline
+import LeanCompCert.Verified.ArrayRolledPipeline
 
 /-!
 # Symbolic fold of the compiled Section 4.1.3 scanner
@@ -64,6 +66,107 @@ theorem scannerStateAt_word (c : Cfg) (entry : AState)
   | succ n ih =>
       rw [scannerStateAt_succ]
       exact arun_word n (body c) (scannerStateAt c entry n) ih.1 ih.2
+
+/-- Source execution of the scanner from a caller-provided producer table.
+The proof is a uniform fold induction through `runFromArray_eq_foldl_mem`;
+the concrete production range remains opaque to Lean. -/
+theorem program_runFromArray (c : Cfg) (arr : Nat → Nat)
+    (hrows : c.rows ≤
+      LeanCompCert.Ports.Section413WindowSchedule.productionRows)
+    (hrowsCap : LeanCompCert.Ports.Section413WindowSchedule.productionRows ≤
+      c.cap)
+    (hslotsCap : LeanCompCert.Ports.Section413WindowSchedule.slots ≤ c.cap)
+    (hcapH : c.cap < LeanCompCert.Ports.Section413Cells.H63)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap < M)
+    (hdefFrames : EventDefinedFrames c) (hbodyFrames : EventBodyFrames c) :
+    let entry := arun 0 (initialAStateWithArray arr) init
+    (program c).runFromArray arr = some
+      (arun 0 (scannerStateAt c entry
+        (c.rows * LeanCompCert.Ports.Section413WindowSchedule.slots))
+        epilogue) := by
+  dsimp only
+  let entry := arun 0 (initialAStateWithArray arr) init
+  apply AProgram.runFromArray_eq_foldl_mem
+    (p := program c) (P := fun _ => True)
+    (step := fun index s => arun index s (body c))
+    (fin := fun s => arun 0 s epilogue) (arr := arr) (s₀ := entry)
+  · apply denoteAInstrs_eq_arun
+    have hi : AllDefined
+        (LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap) 0
+        (initialAStateWithArray arr) init := by
+      rw [init, AllDefined_append]
+      exact ⟨allDefined_lift_of_noDiv _ 0 _ _
+          (by simp [eventInit, NoDivI]),
+        allDefined_lift_of_noDiv _ 0 _ _
+          (by simp [LeanCompCert.Ports.Section413WindowRowCheck.init,
+            NoDivI])⟩
+    simpa only [program] using hi
+  · trivial
+  · intro index s hindex _
+    apply denoteAInstrs_eq_arun
+    apply scannerBody_defined index s c
+    · have htotal : c.rows *
+          LeanCompCert.Ports.Section413WindowSchedule.slots ≤
+          LeanCompCert.Ports.Section413WindowSchedule.productionRows *
+            LeanCompCert.Ports.Section413WindowSchedule.slots :=
+        Nat.mul_le_mul_right _ hrows
+      exact Nat.lt_of_lt_of_le hindex htotal
+    · exact hrowsCap
+    · exact hslotsCap
+    · exact hcapH
+    · exact htable
+    · exact hdefFrames
+    · exact hbodyFrames
+  · intros
+    trivial
+  · intro s _
+    apply denoteAInstrs_eq_arun
+    exact allDefined_lift_of_noDiv _ 0
+      [ .binop rCombinedViol .bor
+          (.reg LeanCompCert.Ports.Section413SignedAdd.rViol)
+          (.reg LeanCompCert.Ports.Section413SignedScale.rViol)
+      , .binop rCombinedViol .bor (.reg rCombinedViol)
+          (.reg LeanCompCert.Ports.Section413WindowRowCheck.rRowViol) ] s
+      (by simp [NoDivI])
+
+/-- A compact word returned by the rolled CompCert scanner equals the output
+of the symbolic source fold.  Runtime does the large computation; Lean only
+uses compiler simulation and the uniform success theorem above. -/
+theorem program_rolled_output_eq (c : Cfg) (hWF : (program c).WF)
+    (arr : Nat → Nat) (base : Int) (mem : Verified.MemFragment.Mem)
+    (hBase : BaseOk (program c).arrayLen base)
+    (hCells : ∀ k, k < (program c).arrayLen →
+      mem (cellAddr base k) = some (((arr k : Nat) : Int)))
+    (hCellsLt : ∀ k, k < (program c).arrayLen → arr k < M)
+    (hrows : c.rows ≤
+      LeanCompCert.Ports.Section413WindowSchedule.productionRows)
+    (hrowsCap : LeanCompCert.Ports.Section413WindowSchedule.productionRows ≤
+      c.cap)
+    (hslotsCap : LeanCompCert.Ports.Section413WindowSchedule.slots ≤ c.cap)
+    (hcapH : c.cap < LeanCompCert.Ports.Section413Cells.H63)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap < M)
+    (hdefFrames : EventDefinedFrames c) (hbodyFrames : EventBodyFrames c)
+    (value : Nat)
+    (hReceipt : Option.bind
+      (Verified.MemFragment.evalMCCSequence
+        ((program c).counterAugment.initialMCCWithMem base mem)
+        (program c).rolledCompile)
+      (fun m : Verified.MemFragment.MCCState =>
+        m.env ⟨(program c).output + 1⟩) = some ((value : Nat) : Int)) :
+    let entry := arun 0 (initialAStateWithArray arr) init
+    (arun 0 (scannerStateAt c entry
+      (c.rows * LeanCompCert.Ports.Section413WindowSchedule.slots)) epilogue).regs
+        rCombinedViol = value := by
+  dsimp only
+  let entry := arun 0 (initialAStateWithArray arr) init
+  let out := arun 0 (scannerStateAt c entry
+    (c.rows * LeanCompCert.Ports.Section413WindowSchedule.slots)) epilogue
+  have hrun : (program c).runFromArray arr = some out := by
+    simpa only [entry, out] using program_runFromArray c arr hrows hrowsCap
+      hslotsCap hcapH htable hdefFrames hbodyFrames
+  have h := AProgram.output_eq_of_rolledCompile_fromArray (program c) hWF
+    base hBase arr mem hCells hCellsLt out hrun value hReceipt
+  simpa only [program, out] using h
 
 /-- A zero compiled epilogue result splits into the three sticky flags read
 by the program. -/
@@ -335,6 +438,8 @@ theorem program_denote_zero_implies_receipts_and_bounds (c : Cfg)
   exact hall.2.2.2
 
 #print axioms scannerStateAt_word
+#print axioms program_runFromArray
+#print axioms program_rolled_output_eq
 #print axioms epilogue_zero_implies_flags
 #print axioms scannerStateAt_zero_iff_bounds
 #print axioms scannerStateAt_flags_zero_implies_bounds

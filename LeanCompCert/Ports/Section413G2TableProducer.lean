@@ -5,7 +5,7 @@ Authors: Gershon Bialer
 -/
 
 import LeanCompCert.Ports.Section413G2TableSound
-import LeanCompCert.Verified.ArrayPipeline
+import LeanCompCert.Verified.ArrayRolledPipeline
 
 /-!
 # Compiled Section 4.1.3 G2 table producer
@@ -130,9 +130,28 @@ theorem producer_compiled_zero_sound (c : Cfg) (hc : TableAdmissible c)
     Option.some.inj hsource.symm
   exact_mod_cast hcast
 
+theorem producer_rolled_compiled_zero_sound (c : Cfg) (hc : TableAdmissible c)
+    (base : Int) (mem : Verified.MemFragment.Mem)
+    (hBase : BaseOk (producerProgram c).arrayLen base)
+    (hCells : ∀ k, k < (producerProgram c).arrayLen →
+      mem (cellAddr base k) = some (0 : Int))
+    (hzero : Option.bind
+      (Verified.MemFragment.evalMCCSequence
+        ((producerProgram c).counterAugment.initialMCCWithMem base mem)
+        (producerProgram c).rolledCompile)
+      (fun m : Verified.MemFragment.MCCState =>
+        m.env ⟨(producerProgram c).output + 1⟩) = some 0) :
+    (rawFinal c).regs rViol = 0 := by
+  have h := AProgram.output_eq_of_rolledCompile_fromArray
+    (producerProgram c) (producerProgram_wf c) base hBase
+    (fun _ => 0) mem hCells (fun _ _ => by decide)
+    (rawFinal c) (producer_runFromZero c hc) 0 hzero
+  simpa [producerProgram] using h
+
 #print axioms producerProgram_wf
 #print axioms producer_runFromZero
 #print axioms producedCell_eq_source
 #print axioms producer_compiled_zero_sound
+#print axioms producer_rolled_compiled_zero_sound
 
 end LeanCompCert.Ports.Section413G2TableProducer

@@ -34,6 +34,93 @@ theorem body_split (c : Cfg) : body c =
     LeanCompCert.Ports.Section413WindowSchedule.body ++ eventBody c ++
       LeanCompCert.Ports.Section413WindowRowCheck.body c.checkLo c.offset := rfl
 
+/-- Every production scanner step is defined from symbolic scheduler bounds.
+This is the key partial-semantics result used by the rolled CompCert bridge:
+it quantifies over `k` and does not evaluate the production fold in Lean. -/
+theorem scannerBody_defined (k : Nat) (s : AState) (c : Cfg)
+    (hk : k < LeanCompCert.Ports.Section413WindowSchedule.productionRows *
+      LeanCompCert.Ports.Section413WindowSchedule.slots)
+    (hrowsCap : LeanCompCert.Ports.Section413WindowSchedule.productionRows ≤
+      c.cap)
+    (hslotsCap : LeanCompCert.Ports.Section413WindowSchedule.slots ≤ c.cap)
+    (hcapH : c.cap < LeanCompCert.Ports.Section413Cells.H63)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap < M)
+    (hdefFrames : EventDefinedFrames c) (hbodyFrames : EventBodyFrames c) :
+    AllDefined (LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap)
+      k s (body c) := by
+  let p := scheduledState k s
+  let e := eventedState k s c
+  let slot := LeanCompCert.Ports.Section413WindowSchedule.slotAt k
+  have hsched := LeanCompCert.Ports.Section413WindowSchedule.body_outputs k s hk
+  have hpN : p.regs LeanCompCert.Ports.Section413WindowSchedule.rN = slot.n :=
+    hsched.1
+  have hpS : p.regs LeanCompCert.Ports.Section413WindowSchedule.rS = slot.s :=
+    hsched.2.1
+  have hpQ : p.regs LeanCompCert.Ports.Section413WindowSchedule.rQ = slot.q :=
+    hsched.2.2.1
+  have hpHalfQ : p.regs LeanCompCert.Ports.Section413WindowSchedule.rHalfQ =
+      slot.halfQ := hsched.2.2.2.2.2.1
+  have hnBound : slot.n ≤
+      LeanCompCert.Ports.Section413WindowSchedule.productionRows := by
+    simp only [slot, LeanCompCert.Ports.Section413WindowSchedule.slotAt,
+      LeanCompCert.Ports.Section413WindowSchedule.productionRows,
+      LeanCompCert.Ports.Section413WindowSchedule.slots] at hk ⊢
+    omega
+  have hsBound : slot.s ≤
+      LeanCompCert.Ports.Section413WindowSchedule.slots := by
+    have hm := Nat.mod_lt k (by decide :
+      0 < LeanCompCert.Ports.Section413WindowSchedule.slots)
+    simp only [slot, LeanCompCert.Ports.Section413WindowSchedule.slotAt] at ⊢
+    omega
+  have hqBound : slot.q ≤ slot.n := by
+    simp only [slot, LeanCompCert.Ports.Section413WindowSchedule.slotAt]
+    exact Nat.div_le_self _ _
+  have hhqBound : slot.halfQ ≤ slot.n := by
+    simp only [slot, LeanCompCert.Ports.Section413WindowSchedule.slotAt]
+    exact Nat.le_trans (Nat.div_le_self _ _) (Nat.div_le_self _ _)
+  have hM : M = 2 * LeanCompCert.Ports.Section413Cells.H63 := by decide
+  have capM : c.cap < M := by rw [hM]; omega
+  have safe_lt (x : Nat) (hx : x ≤ c.cap) :
+      safeDen x < LeanCompCert.Ports.Section413Cells.H63 := by
+    unfold safeDen
+    split
+    · decide
+    · exact Nat.lt_of_le_of_lt hx hcapH
+  have heN : e.regs LeanCompCert.Ports.Section413WindowSchedule.rN = slot.n := by
+    rw [show e.regs LeanCompCert.Ports.Section413WindowSchedule.rN =
+      p.regs LeanCompCert.Ports.Section413WindowSchedule.rN by
+        exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _
+          hbodyFrames.n p]
+    exact hpN
+  have hsCap : slot.s ≤ c.cap := Nat.le_trans hsBound hslotsCap
+  have hqCap : slot.q ≤ c.cap :=
+    Nat.le_trans hqBound (Nat.le_trans hnBound hrowsCap)
+  have hhqCap : slot.halfQ ≤ c.cap :=
+    Nat.le_trans hhqBound (Nat.le_trans hnBound hrowsCap)
+  rw [body_split, List.append_assoc, AllDefined_append]
+  refine ⟨LeanCompCert.Ports.Section413WindowSchedule.body_defined _ k s hk, ?_⟩
+  rw [AllDefined_append]
+  refine ⟨eventBody_defined_of_start k p c hdefFrames
+      (by have : 0 < LeanCompCert.Ports.Section413WindowSchedule.productionRows :=
+            by decide
+          omega) htable
+      (by rw [hpS]; exact hsCap)
+      (by rw [hpQ]; exact hqCap)
+      (by rw [hpHalfQ]; exact hhqCap)
+      (by rw [hpS]; exact Nat.lt_of_le_of_lt hsCap capM)
+      (by rw [hpQ]; exact Nat.lt_of_le_of_lt hqCap capM)
+      (by rw [hpHalfQ]; exact Nat.lt_of_le_of_lt hhqCap capM)
+      (by rw [hpS]; exact safe_lt _ hsCap)
+      (by rw [hpHalfQ]; exact safe_lt _ hhqCap), ?_⟩
+  apply LeanCompCert.Ports.Section413WindowRowCheck.body_defined _ k e
+  · rw [heN]
+    simp [slot, LeanCompCert.Ports.Section413WindowSchedule.slotAt]
+  · rw [heN]
+    have hprodM :
+        LeanCompCert.Ports.Section413WindowSchedule.productionRows + 1 < M := by
+      decide
+    omega
+
 private theorem arun_frame_of (k r : Nat) (l : List AInstr) (s : AState)
     (h : LeanCompCert.Verified.ArrayRegFrame.writes r l = false) :
     (arun k s l).regs r = s.regs r :=
@@ -554,6 +641,7 @@ theorem body_flags_zero_implies_paper_upper (k : Nat) (s : AState) (c : Cfg)
   exact hiff.mp hrowOut
 
 #print axioms evented_schedule
+#print axioms scannerBody_defined
 #print axioms body_zero_iff_paper_upper
 #print axioms body_nonfinal_row
 #print axioms body_unchecked_row

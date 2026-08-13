@@ -72,6 +72,56 @@ theorem loadWord_outputs (k : Nat) (s : RegState) (src : Nat)
       LeanCompCert.Ports.Section413SignedDiv.rWord, rDen,
       LeanCompCert.Ports.Section413G1Program.tsub, hsrcNe]
 
+theorem lowerStage_defined (len k : Nat) (s : AState) (negate : Bool)
+    (hden : 0 < s.regs rDen) :
+    AllDefined len k s (lowerStage negate) := by
+  let p := arun k s (lift (loadWord
+    (if negate then rInHi else rInLo) negate))
+  have hload := loadWord_outputs k s.regs
+    (if negate then rInHi else rInLo) negate
+    (by cases negate <;> decide)
+  have hpDen : p.regs LeanCompCert.Ports.Section413SignedDiv.rDiv =
+      s.regs rDen := by
+    simpa [p, arun_lift] using hload.1
+  rw [lowerStage, AllDefined_append]
+  refine ⟨?_, allDefined_lift_of_noDiv len k _ _ (by decide)⟩
+  rw [AllDefined_append]
+  exact ⟨allDefined_lift_of_noDiv len k _ s
+      (by cases negate <;> decide),
+    LeanCompCert.Ports.Section413SignedDiv.aBody_defined len k p
+      (by simpa [hpDen] using hden)⟩
+
+theorem upperStage_defined (len k : Nat) (s : AState) (negate : Bool)
+    (hden : 0 < s.regs rDen) :
+    AllDefined len k s (upperStage negate) := by
+  let p := arun k s (lift (loadWord
+    (if negate then rInLo else rInHi) negate))
+  have hload := loadWord_outputs k s.regs
+    (if negate then rInLo else rInHi) negate
+    (by cases negate <;> decide)
+  have hpDen : p.regs LeanCompCert.Ports.Section413SignedDiv.rDiv =
+      s.regs rDen := by
+    simpa [p, arun_lift] using hload.1
+  rw [upperStage, AllDefined_append]
+  refine ⟨?_, allDefined_lift_of_noDiv len k _ _ (by decide)⟩
+  rw [AllDefined_append]
+  exact ⟨allDefined_lift_of_noDiv len k _ s
+      (by cases negate <;> decide),
+    LeanCompCert.Ports.Section413SignedDiv.aBody_defined len k p
+      (by simpa [hpDen] using hden)⟩
+
+theorem body_defined (len k : Nat) (s : AState) (negate : Bool)
+    (hden : 0 < s.regs rDen) : AllDefined len k s (body negate) := by
+  let p := arun k s (lowerStage negate)
+  have hpDen : p.regs rDen = s.regs rDen := by
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame
+      k rDen (lowerStage negate) (by cases negate <;> decide) s
+  rw [body, AllDefined_append]
+  refine ⟨?_, allDefined_lift_of_noDiv len k _ _ (by decide)⟩
+  rw [AllDefined_append]
+  exact ⟨lowerStage_defined len k s negate hden,
+    upperStage_defined len k p negate (by simpa [hpDen] using hden)⟩
+
 theorem one_lower_outputs (k : Nat) (s : AState) (negate : Bool)
     (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
     (hden : 0 < s.regs rDen) :
@@ -358,6 +408,7 @@ theorem program_wf (arrayLen loopCount : Nat) (negate : Bool) :
   | true => exact (by decide : ∀ i ∈ body true, i.WF 328) i hi
 
 #print axioms loadWord_outputs
+#print axioms body_defined
 #print axioms one_lower_outputs
 #print axioms one_upper_outputs
 #print axioms body_outputs

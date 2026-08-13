@@ -1,5 +1,4 @@
-import LeanCompCert.Verified.ArrayPipeline
-import LeanCompCert.Verified.ArrayRolled
+import LeanCompCert.Verified.ArrayCounterAugmentSource
 
 /-!
 # Rolled array programs in caller-owned memory
@@ -51,6 +50,43 @@ theorem AProgram.evalCC_rolledCompile_fromArray
     simpa [AProgram.initialMCCWithMem] using hEval
   · simpa [AProgram.counterAugment] using hRel
 
+/-- Read a successful rolled execution back into the already-proved symbolic
+source state.  The expensive loop is executed by the compiled artifact; Lean
+uses determinism of the CCIR trace and the compiler simulation to identify
+the compact returned word. -/
+theorem AProgram.output_eq_of_rolledCompile_fromArray
+    (p : AProgram) (hWF : p.WF)
+    (base : Int) (hBase : BaseOk p.arrayLen base)
+    (arr : Nat → Nat) (mem : Mem)
+    (hCells : ∀ k, k < p.arrayLen →
+      mem (cellAddr base k) = some (((arr k : Nat) : Int)))
+    (hCellsLt : ∀ k, k < p.arrayLen → arr k < M)
+    (out : AState)
+    (hRun : p.runFromArray arr = some out)
+    (value : Nat)
+    (hReceipt : Option.bind
+      (evalMCCSequence
+        (p.counterAugment.initialMCCWithMem base mem)
+        p.rolledCompile)
+      (fun m : MCCState => m.env ⟨p.output + 1⟩) =
+        some ((value : Nat) : Int)) :
+    out.regs p.output = value := by
+  obtain ⟨out', hRun', hAgree⟩ :=
+    p.counterAugment_runFromArray_of_runFromArray hWF arr out hRun
+  obtain ⟨m, hEval, hRel⟩ := p.evalCC_rolledCompile_fromArray hWF base
+    hBase arr mem hCells hCellsLt out' hRun'
+  rw [hEval] at hReceipt
+  simp only [Option.bind_some] at hReceipt
+  have hOut : p.output < p.counterAugment.regCount := by
+    change p.output < p.regCount + 1
+    exact Nat.lt_succ_of_lt hWF.1
+  have hState := hRel.hregs.1 p.output hOut
+  rw [hReceipt] at hState
+  have hOut' : out'.regs p.output = value := by
+    exact_mod_cast Option.some.inj hState.symm
+  exact (hAgree.1 p.output hWF.1).trans hOut'
+
 #print axioms AProgram.evalCC_rolledCompile_fromArray
+#print axioms AProgram.output_eq_of_rolledCompile_fromArray
 
 end LeanCompCert.Verified.ArrayState

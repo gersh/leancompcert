@@ -79,6 +79,26 @@ def halfStage : List Instr :=
 
 def body : List AInstr := lift (indexStage ++ divisorStage ++ halfStage)
 
+theorem indexStage_defined (idx : Nat) (s : RegState) :
+    SAllDefined idx s indexStage := by
+  simp [indexStage, SAllDefined, SDefined, denoteOperand, denoteOp, slots,
+    RegState.set, sdest, sval, show 316 % M = 316 by decide]
+
+theorem divisorStage_defined (idx : Nat) (s : RegState)
+    (hs : 0 < s rS) : SAllDefined idx s divisorStage := by
+  simp only [rS] at hs
+  simp [divisorStage, SAllDefined, SDefined, denoteOperand, denoteOp,
+    RegState.set, sdest, sval, rN, rS, rQ, rRem, rSquare, rInRoot,
+    rDivides, rActive, rPair, Nat.ne_of_gt hs]
+
+theorem halfStage_defined (idx : Nat) (s : RegState)
+    (hs : 0 < s rS) : SAllDefined idx s halfStage := by
+  simp only [rS] at hs
+  simp [halfStage, SAllDefined, SDefined, denoteOperand, denoteOp,
+    RegState.set, sdest, sval, rN, rS, rSquare, rEvenRem, rEven, rHalf,
+    rHalfInRoot, rHalfQ, rHalfRem, rHalfDivides, rHalfActive, rHalfPair,
+    Nat.ne_of_gt hs, show 2 % M = 2 by decide]
+
 theorem indexStage_outputs (idx : Nat) (s : RegState)
     (hidx : idx < productionRows * slots) :
     let out := srun idx s indexStage
@@ -101,6 +121,34 @@ theorem indexStage_outputs (idx : Nat) (s : RegState)
   simp [show 316 % M = 316 by decide,
     Nat.mod_eq_of_lt hidxM, Nat.mod_eq_of_lt hq,
     Nat.mod_eq_of_lt hr]
+
+/-- The runtime scheduler is defined at every production iteration.  This is
+symbolic in `idx`; it only proves that the literal and derived divisors are
+nonzero. -/
+theorem body_defined (len idx : Nat) (s : AState)
+    (hidx : idx < productionRows * slots) :
+    AllDefined len idx s body := by
+  let a := srun idx s.regs indexStage
+  have ha := indexStage_outputs idx s.regs hidx
+  have haS : a rS = idx % slots + 1 := by
+    simpa only [a] using ha.2
+  have hframe : srun idx a divisorStage rS = a rS := by
+    apply srun_untouched
+    intro i hi
+    simp only [divisorStage, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+      simp [sdest, rS, rQ, rRem, rSquare, rInRoot, rDivides, rActive, rPair]
+  rw [body, lift_append, lift_append, AllDefined_append]
+  refine ⟨?_, ?_⟩
+  · rw [AllDefined_append]
+    exact ⟨(allDefined_lift _ _ _ _).mpr (indexStage_defined idx s.regs),
+      (allDefined_lift _ _ _ _).mpr
+        (divisorStage_defined idx a (by rw [haS]; omega))⟩
+  apply (allDefined_lift _ _ _ _).mpr
+  apply halfStage_defined
+  change 0 < srun idx a divisorStage rS
+  rw [hframe, haS]
+  omega
 
 theorem divisorStage_outputs (idx : Nat) (s : RegState)
     (hn : 0 < s rN) (hnM : s rN < M)
@@ -348,6 +396,7 @@ theorem scheduleProgram_wf (arrayLen rows : Nat) :
   exact (by decide : ∀ i ∈ body, i.WF 328) i hi
 
 #print axioms indexStage_outputs
+#print axioms body_defined
 #print axioms divisorStage_outputs
 #print axioms halfStage_outputs
 #print axioms body_outputs

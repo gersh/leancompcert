@@ -23,6 +23,7 @@ open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.BlockDefined
 
 structure Cfg where
   cap : Nat
@@ -56,6 +57,14 @@ def gateStage (v active divisor : Nat) : List AInstr := lift
     , .binop rOdd .eq (.reg rOddRem) (.lit 1)
     , .binop LeanCompCert.Ports.Section413WindowCellDiv.rGate .mul (.reg active) (.reg rOdd) ]
   else [.mov LeanCompCert.Ports.Section413WindowCellDiv.rGate (.reg active)])
+
+theorem gateStage_defined (len k : Nat) (s : AState)
+    (v active divisor : Nat) : AllDefined len k s (gateStage v active divisor) := by
+  rw [gateStage, allDefined_lift]
+  by_cases hv : v = 2
+  · simp [hv, SAllDefined, SDefined, denoteOperand, denoteOp,
+      RegState.set, sdest, sval, show 2 % M ≠ 0 by decide]
+  · simp [hv, sAllDefined_of_noDiv, NoDivI]
 
 def divisorGate (v active divisor : Nat) : Nat :=
   if v = 2 then active * (if divisor % 2 = 1 then 1 else 0) else active
@@ -91,6 +100,22 @@ theorem gateStage_output (k : Nat) (s : AState) (v active divisor : Nat)
 
 def readStage (cap x : Nat) : List AInstr :=
   lift [.mov LeanCompCert.Ports.Section413WindowTableRead.rX (.reg x)] ++ LeanCompCert.Ports.Section413WindowTableRead.body cap
+
+theorem readStage_defined (k cap x : Nat) (s : AState)
+    (hcapPos : 1 ≤ cap)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen cap < M)
+    (hx : s.regs x ≤ cap) :
+    AllDefined (LeanCompCert.Ports.Section413WindowTableRead.tableLen cap)
+      k s (readStage cap x) := by
+  let p := arun k s (lift
+    [.mov LeanCompCert.Ports.Section413WindowTableRead.rX (.reg x)])
+  have hpX : p.regs LeanCompCert.Ports.Section413WindowTableRead.rX =
+      s.regs x := by
+    simp [p, arun_lift, srun, sdest, sval, denoteOperand, RegState.set]
+  rw [readStage, AllDefined_append]
+  exact ⟨allDefined_lift_of_noDiv _ k _ s (by simp [NoDivI]),
+    LeanCompCert.Ports.Section413WindowTableRead.body_defined k cap p
+      hcapPos htable (by simpa [hpX] using hx)⟩
 
 def tableCell (cap : Nat) (a : Nat → Nat) (x : Nat) :
     LeanCompCert.Ports.Section413Sweep.Cell :=
@@ -139,6 +164,10 @@ def inputStage : List AInstr := lift
   [ .mov LeanCompCert.Ports.Section413WindowCellDiv.rInLo (.reg LeanCompCert.Ports.Section413WindowTableRead.rDiffLo)
   , .mov LeanCompCert.Ports.Section413WindowCellDiv.rInHi (.reg LeanCompCert.Ports.Section413WindowTableRead.rDiffHi) ]
 
+theorem inputStage_defined (len k : Nat) (s : AState) :
+    AllDefined len k s inputStage := by
+  exact allDefined_lift_of_noDiv len k _ s (by decide)
+
 theorem inputStage_outputs (k : Nat) (s : AState) :
     let out := arun k s inputStage
     out.regs LeanCompCert.Ports.Section413WindowCellDiv.rInLo =
@@ -160,8 +189,20 @@ theorem inputStage_outputs (k : Nat) (s : AState) :
 def addK1 : List AInstr :=
   LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo ++ LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi
 
+theorem addK1_defined (len k : Nat) (s : AState) :
+    AllDefined len k s addK1 := by
+  rw [addK1, AllDefined_append]
+  exact ⟨LeanCompCert.Ports.Section413WindowCellAdd.oneStage_defined len k s _ _,
+    LeanCompCert.Ports.Section413WindowCellAdd.oneStage_defined len k _ _ _⟩
+
 def addK2 : List AInstr :=
   LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo ++ LeanCompCert.Ports.Section413WindowCellAdd.oneStage rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi
+
+theorem addK2_defined (len k : Nat) (s : AState) :
+    AllDefined len k s addK2 := by
+  rw [addK2, AllDefined_append]
+  exact ⟨LeanCompCert.Ports.Section413WindowCellAdd.oneStage_defined len k s _ _,
+    LeanCompCert.Ports.Section413WindowCellAdd.oneStage_defined len k _ _ _⟩
 
 private theorem addK1_low_k1Hi_frame (k : Nat) (s : AState) :
     (arun k s (LeanCompCert.Ports.Section413WindowCellAdd.oneStage
@@ -900,13 +941,75 @@ def k1Stage (den : Nat) (negate : Bool) : List AInstr :=
     lift [.mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rSafeDen)] ++
       LeanCompCert.Ports.Section413WindowCellDiv.body negate ++ addK1
 
+theorem k1Stage_defined (len k : Nat) (s : AState) (den : Nat)
+    (negate : Bool) (hd : s.regs den < M) (hdenInv : den ≠ rDenInv) :
+    AllDefined len k s (k1Stage den negate) := by
+  let p := arun k s (safeDenStage den)
+  let q := arun k p (lift
+    [.mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rSafeDen)])
+  have hpSafe : p.regs rSafeDen = safeDen (s.regs den) := by
+    simpa [p] using safeDenStage_output k s den hd hdenInv
+  have hqDen : q.regs LeanCompCert.Ports.Section413WindowCellDiv.rDen =
+      safeDen (s.regs den) := by
+    change (srun k p.regs
+      [.mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rSafeDen)])
+        LeanCompCert.Ports.Section413WindowCellDiv.rDen = _
+    simp [srun, sdest, sval, denoteOperand, RegState.set, hpSafe]
+  rw [k1Stage, List.append_assoc, List.append_assoc, AllDefined_append]
+  refine ⟨allDefined_lift_of_noDiv len k _ s (by simp [safeDenStage, NoDivI]), ?_⟩
+  rw [AllDefined_append]
+  refine ⟨allDefined_lift_of_noDiv len k _ p (by simp [NoDivI]), ?_⟩
+  rw [AllDefined_append]
+  exact ⟨LeanCompCert.Ports.Section413WindowCellDiv.body_defined len k q
+      negate (by rw [hqDen]; exact safeDen_pos _), addK1_defined len k _⟩
+
 def k1TwiceStage (den : Nat) (negate : Bool) : List AInstr :=
   safeDenStage den ++ lift
     [ .binop rTwice .mul (.reg rSafeDen) (.lit 2)
     , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rTwice) ] ++ LeanCompCert.Ports.Section413WindowCellDiv.body negate ++ addK1
 
+theorem k1TwiceStage_defined (len k : Nat) (s : AState) (den : Nat)
+    (negate : Bool) (hd : s.regs den < M) (hdenInv : den ≠ rDenInv)
+    (hsafe : safeDen (s.regs den) <
+      LeanCompCert.Ports.Section413Cells.H63) :
+    AllDefined len k s (k1TwiceStage den negate) := by
+  let p := arun k s (safeDenStage den)
+  let q := arun k p (lift
+    [ .binop rTwice .mul (.reg rSafeDen) (.lit 2)
+    , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rTwice) ])
+  have hpSafe : p.regs rSafeDen = safeDen (s.regs den) := by
+    simpa [p] using safeDenStage_output k s den hd hdenInv
+  have hprod : safeDen (s.regs den) * 2 < M := by
+    have hM : M = 2 * LeanCompCert.Ports.Section413Cells.H63 := by decide
+    rw [hM]
+    omega
+  have hqDen : q.regs LeanCompCert.Ports.Section413WindowCellDiv.rDen =
+      safeDen (s.regs den) * 2 := by
+    change (srun k p.regs
+      [ .binop rTwice .mul (.reg rSafeDen) (.lit 2)
+      , .mov LeanCompCert.Ports.Section413WindowCellDiv.rDen (.reg rTwice) ])
+        LeanCompCert.Ports.Section413WindowCellDiv.rDen = _
+    simp [srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
+      hpSafe, Nat.mod_eq_of_lt hprod]
+  rw [k1TwiceStage, List.append_assoc, List.append_assoc, AllDefined_append]
+  refine ⟨allDefined_lift_of_noDiv len k _ s (by simp [safeDenStage, NoDivI]), ?_⟩
+  rw [AllDefined_append]
+  refine ⟨allDefined_lift_of_noDiv len k _ p (by simp [NoDivI]), ?_⟩
+  rw [AllDefined_append]
+  exact ⟨LeanCompCert.Ports.Section413WindowCellDiv.body_defined len k q
+      negate (by rw [hqDen]; exact Nat.mul_pos (safeDen_pos _) (by decide)),
+    addK1_defined len k _⟩
+
 def k2Stage (factor : Nat) (negate : Bool) : List AInstr :=
   lift [.mov LeanCompCert.Ports.Section413WindowCellScale.rFactor (.reg factor)] ++ LeanCompCert.Ports.Section413WindowCellScale.body negate ++ addK2
+
+theorem k2Stage_defined (len k : Nat) (s : AState) (factor : Nat)
+    (negate : Bool) : AllDefined len k s (k2Stage factor negate) := by
+  rw [k2Stage, List.append_assoc, AllDefined_append]
+  refine ⟨allDefined_lift_of_noDiv len k _ s (by simp [NoDivI]), ?_⟩
+  rw [AllDefined_append]
+  exact ⟨LeanCompCert.Ports.Section413WindowCellScale.body_defined len k _ negate,
+    addK2_defined len k _⟩
 
 /-- One possible divisor contribution.  `twiceDen` selects the K1 second
 term's denominator `2*d`; `negK1` and `negK2` encode the source signs. -/
@@ -916,6 +1019,83 @@ def event (c : Cfg) (active divisor x factor : Nat)
     (if twiceDen then k1TwiceStage divisor negK1
       else k1Stage divisor negK1) ++
     k2Stage factor negK2
+
+/-- Definedness of one fixed event from local scheduler facts.  The hypotheses
+refer to the three constant-size prefix states; production callers discharge
+them with register-frame facts and the symbolic scheduler bounds. -/
+theorem event_defined (k : Nat) (s : AState) (c : Cfg)
+    (active divisor x factor : Nat) (twiceDen negK1 negK2 : Bool)
+    (hcapPos : 1 ≤ c.cap)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap < M)
+    (hx : (arun k s (gateStage c.v active divisor)).regs x ≤ c.cap)
+    (hd : (arun k
+      (arun k (arun k s (gateStage c.v active divisor))
+        (readStage c.cap x)) inputStage).regs divisor < M)
+    (hdenInv : divisor ≠ rDenInv)
+    (htwice : twiceDen = true →
+      safeDen ((arun k
+        (arun k (arun k s (gateStage c.v active divisor))
+          (readStage c.cap x)) inputStage).regs divisor) <
+        LeanCompCert.Ports.Section413Cells.H63) :
+    AllDefined (LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap)
+      k s (event c active divisor x factor twiceDen negK1 negK2) := by
+  let p := arun k s (gateStage c.v active divisor)
+  let q := arun k p (readStage c.cap x)
+  let t := arun k q inputStage
+  simp only [event, List.append_assoc]
+  rw [AllDefined_append]
+  refine ⟨gateStage_defined _ k s c.v active divisor, ?_⟩
+  rw [AllDefined_append]
+  refine ⟨readStage_defined k c.cap x p hcapPos htable
+      (by simpa [p] using hx), ?_⟩
+  rw [AllDefined_append]
+  refine ⟨inputStage_defined _ k q, ?_⟩
+  rw [AllDefined_append]
+  refine ⟨?_, k2Stage_defined _ k _ factor negK2⟩
+  cases htw : twiceDen with
+  | false =>
+      exact k1Stage_defined _ k t divisor negK1
+        (by simpa [t, q, p] using hd) hdenInv
+  | true =>
+      exact k1TwiceStage_defined _ k t divisor negK1
+        (by simpa [t, q, p] using hd) hdenInv
+        (by simpa [t, q, p] using htwice htw)
+
+theorem event_defined_of_start (k : Nat) (s : AState) (c : Cfg)
+    (active divisor x factor : Nat) (twiceDen negK1 negK2 : Bool)
+    (hcapPos : 1 ≤ c.cap)
+    (htable : LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap < M)
+    (hx : s.regs x ≤ c.cap) (hd : s.regs divisor < M)
+    (hdenInv : divisor ≠ rDenInv)
+    (htwice : twiceDen = true →
+      safeDen (s.regs divisor) < LeanCompCert.Ports.Section413Cells.H63)
+    (hgateX : LeanCompCert.Verified.ArrayRegFrame.writes x
+      (gateStage c.v active divisor) = false)
+    (hprefixDiv : LeanCompCert.Verified.ArrayRegFrame.writes divisor
+      (gateStage c.v active divisor ++ readStage c.cap x ++ inputStage) =
+        false) :
+    AllDefined (LeanCompCert.Ports.Section413WindowTableRead.tableLen c.cap)
+      k s (event c active divisor x factor twiceDen negK1 negK2) := by
+  apply event_defined k s c active divisor x factor twiceDen negK1 negK2
+      hcapPos htable
+  · rw [LeanCompCert.Verified.ArrayRegFrame.arun_frame k x _ hgateX s]
+    exact hx
+  · rw [show (arun k
+        (arun k (arun k s (gateStage c.v active divisor))
+          (readStage c.cap x)) inputStage).regs divisor = s.regs divisor by
+      simpa only [arun_append] using
+        LeanCompCert.Verified.ArrayRegFrame.arun_frame k divisor _
+          hprefixDiv s]
+    exact hd
+  · exact hdenInv
+  · intro htw
+    rw [show (arun k
+        (arun k (arun k s (gateStage c.v active divisor))
+          (readStage c.cap x)) inputStage).regs divisor = s.regs divisor by
+      simpa only [arun_append] using
+        LeanCompCert.Verified.ArrayRegFrame.arun_frame k divisor _
+          hprefixDiv s]
+    exact htwice htw
 
 /-- The four source recurrence cases: divisor and paired divisor for `n`,
 then divisor and paired divisor for `n/2`. -/
@@ -965,6 +1145,7 @@ theorem g2Program_wf : (program g2Cfg).WF := by decide
 #print axioms addK1_clean_outputs
 #print axioms addK2_clean_outputs
 #print axioms safeDenStage_output
+#print axioms event_defined_of_start
 #print axioms divAddK1_clean_outputs
 #print axioms scaleAddK2_clean_outputs
 

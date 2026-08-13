@@ -41,6 +41,19 @@ def oneStage (acc term : Nat) : List AInstr :=
 def body : List AInstr :=
   oneStage rAccLo rTermLo ++ oneStage rAccHi rTermHi
 
+theorem oneStage_defined (len k : Nat) (s : AState) (acc term : Nat) :
+    AllDefined len k s (oneStage acc term) := by
+  rw [oneStage, AllDefined_append]
+  refine ⟨?_, allDefined_lift_of_noDiv len k _ _ (by simp [NoDivI])⟩
+  rw [AllDefined_append]
+  exact ⟨allDefined_lift_of_noDiv len k _ s (by simp [loadAdd, NoDivI]),
+    LeanCompCert.Ports.Section413SignedAdd.aBody_defined len k _⟩
+
+theorem body_defined (len k : Nat) (s : AState) :
+    AllDefined len k s body := by
+  rw [body, AllDefined_append]
+  exact ⟨oneStage_defined len k s _ _, oneStage_defined len k _ _ _⟩
+
 theorem loadAdd_outputs (k : Nat) (s : RegState) (acc term : Nat)
     (htermA : term ≠ LeanCompCert.Ports.Section413SignedAdd.rA) :
     let out := srun k s (loadAdd acc term)
@@ -291,6 +304,7 @@ theorem program_wf (arrayLen loopCount : Nat) :
   exact (by decide : ∀ i ∈ body, i.WF 328) i hi
 
 #print axioms loadAdd_outputs
+#print axioms body_defined
 #print axioms oneStage_clean_output
 #print axioms oneStage_zero_receipt_and_input
 #print axioms twoStages_zero_implies_input_zero
