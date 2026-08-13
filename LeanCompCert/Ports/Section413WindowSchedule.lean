@@ -43,6 +43,7 @@ def rHalfRem : Nat := 13
 def rHalfDivides : Nat := 14
 def rHalfActive : Nat := 15
 def rHalfPair : Nat := 16
+def rHalfInRoot : Nat := 49
 
 def indexStage : List Instr :=
   [ .mov rN .idx
@@ -66,10 +67,11 @@ def halfStage : List Instr :=
   [ .binop rEvenRem .urem (.reg rN) (.lit 2)
   , .binop rEven .eq (.reg rEvenRem) (.lit 0)
   , .binop rHalf .udiv (.reg rN) (.lit 2)
+  , .binop rHalfInRoot .le (.reg rSquare) (.reg rHalf)
   , .binop rHalfQ .udiv (.reg rHalf) (.reg rS)
   , .binop rHalfRem .urem (.reg rHalf) (.reg rS)
   , .binop rHalfDivides .eq (.reg rHalfRem) (.lit 0)
-  , .binop rHalfActive .mul (.reg rEven) (.reg rInRoot)
+  , .binop rHalfActive .mul (.reg rEven) (.reg rHalfInRoot)
   , .binop rHalfActive .mul (.reg rHalfActive) (.reg rHalfDivides)
   , .binop rHalfPair .ne (.reg rHalfQ) (.reg rS)
   , .binop rHalfPair .mul (.reg rHalfPair) (.reg rHalfActive) ]
@@ -130,25 +132,26 @@ theorem divisorStage_outputs (idx : Nat) (s : RegState)
 
 theorem halfStage_outputs (idx : Nat) (s : RegState)
     (hnM : s rN < M) (hs : 0 < s rS) (hsM : s rS < M)
-    (hinRoot : s rInRoot ≤ 1) :
+    (hsquare : s rSquare = s rS * s rS) :
     let out := srun idx s halfStage
     out rEven = (if s rN % 2 = 0 then 1 else 0) ∧
       out rHalf = s rN / 2 ∧
       out rHalfQ = (s rN / 2) / s rS ∧
       out rHalfActive =
-        (if s rN % 2 = 0 ∧ s rInRoot = 1 ∧
+        (if s rN % 2 = 0 ∧ s rS * s rS ≤ s rN / 2 ∧
           (s rN / 2) % s rS = 0 then 1 else 0) ∧
       out rHalfPair =
-        (if s rN % 2 = 0 ∧ s rInRoot = 1 ∧
+        (if s rN % 2 = 0 ∧ s rS * s rS ≤ s rN / 2 ∧
           (s rN / 2) % s rS = 0 ∧ (s rN / 2) / s rS ≠ s rS
         then 1 else 0) := by
   dsimp only
   simp only [rEvenRem, rEven, rHalf, rHalfQ, rHalfRem,
-    rHalfDivides, rHalfActive, rHalfPair, rN, rS, rInRoot]
-    at hnM hs hsM hinRoot ⊢
+    rHalfDivides, rHalfActive, rHalfPair, rHalfInRoot, rN, rS,
+    rSquare] at hnM hs hsM hsquare ⊢
   simp only [halfStage, srun, sdest, sval, denoteOperand, denoteOp,
     RegState.set, rEvenRem, rEven, rHalf, rHalfQ, rHalfRem,
-    rHalfDivides, rHalfActive, rHalfPair, rN, rS, rInRoot]
+    rHalfDivides, rHalfActive, rHalfPair, rHalfInRoot, rN, rS,
+    rSquare]
   simp only [Nat.reduceEqDiff, if_false, if_true]
   rw [if_neg (Nat.ne_of_gt hs), if_neg (Nat.ne_of_gt hs)]
   simp only [Option.getD_some]
@@ -161,7 +164,8 @@ theorem halfStage_outputs (idx : Nat) (s : RegState)
   simp only [show 2 % M = 2 by decide,
     Nat.mod_eq_of_lt hevenRem, Nat.mod_eq_of_lt hhalf,
     Nat.mod_eq_of_lt hq, Nat.mod_eq_of_lt hr]
-  rcases (by omega : s 5 = 0 ∨ s 5 = 1) with hroot | hroot <;>
+  rw [hsquare]
+  by_cases hroot : s 1 * s 1 ≤ s 0 / 2 <;>
     by_cases heven : s 0 % 2 = 0 <;>
     by_cases hdiv : s 0 / 2 % s 1 = 0 <;>
     by_cases hpair : s 0 / 2 / s 1 ≠ s 1 <;>
