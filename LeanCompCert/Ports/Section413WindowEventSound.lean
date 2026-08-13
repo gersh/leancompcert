@@ -1058,6 +1058,146 @@ theorem eventTwice_clean_outputs (k : Nat) (s : AState) (c : Cfg)
   rw [hout]
   exact ha
 
+/-! ## Sticky compiled arithmetic flags -/
+
+theorem addK1_zero_implies_input_zero (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s addK1).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  exact LeanCompCert.Ports.Section413WindowCellAdd.twoStages_zero_implies_input_zero
+    k s rK1Lo LeanCompCert.Ports.Section413WindowCellDiv.rOutLo
+      rK1Hi LeanCompCert.Ports.Section413WindowCellDiv.rOutHi
+      (by decide) (by decide) (by decide) (by decide) hword harray
+      (by simpa only [addK1] using hzero)
+
+theorem addK2_zero_implies_input_zero (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s addK2).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  exact LeanCompCert.Ports.Section413WindowCellAdd.twoStages_zero_implies_input_zero
+    k s rK2Lo LeanCompCert.Ports.Section413WindowCellScale.rOutLo
+      rK2Hi LeanCompCert.Ports.Section413WindowCellScale.rOutHi
+      (by decide) (by decide) (by decide) (by decide) hword harray
+      (by simpa only [addK2] using hzero)
+
+theorem k1Stage_zero_implies_input_zero (k : Nat) (s : AState)
+    (den : Nat) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s (k1Stage den negate)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let prep := k1PrepState k s den
+  let p := arun k prep
+    (LeanCompCert.Ports.Section413WindowCellDiv.body negate)
+  have hprepword : ∀ j, prep.regs j < M := arun_regs_word k _ _ hword harray
+  have hpreparray : ∀ j, prep.arr j < M := arun_arr_word k _ _ hword harray
+  have hpword : ∀ j, p.regs j < M :=
+    arun_regs_word k _ _ hprepword hpreparray
+  have hparray : ∀ j, p.arr j < M :=
+    arun_arr_word k _ _ hprepword hpreparray
+  have hpzero := addK1_zero_implies_input_zero k p hpword hparray (by
+    simpa only [k1Stage, k1PrepState, arun_append, prep, p] using hzero)
+  rw [show p.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      prep.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _
+      (by cases negate <;> decide) prep] at hpzero
+  rw [show prep.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+    exact k1Prep_frame_of k s den _ (by decide) (by decide) (by decide)]
+      at hpzero
+  exact hpzero
+
+theorem k1TwiceStage_zero_implies_input_zero (k : Nat) (s : AState)
+    (den : Nat) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s (k1TwiceStage den negate)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let prep := k1TwicePrepState k s den
+  let p := arun k prep
+    (LeanCompCert.Ports.Section413WindowCellDiv.body negate)
+  have hprepword : ∀ j, prep.regs j < M := arun_regs_word k _ _ hword harray
+  have hpreparray : ∀ j, prep.arr j < M := arun_arr_word k _ _ hword harray
+  have hpword : ∀ j, p.regs j < M :=
+    arun_regs_word k _ _ hprepword hpreparray
+  have hparray : ∀ j, p.arr j < M :=
+    arun_arr_word k _ _ hprepword hpreparray
+  have hpzero := addK1_zero_implies_input_zero k p hpword hparray (by
+    simpa only [k1TwiceStage, k1TwicePrepState, arun_append, prep, p]
+      using hzero)
+  rw [show p.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      prep.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _
+      (by cases negate <;> decide) prep] at hpzero
+  rw [show prep.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+    exact k1TwicePrep_frame_of k s den _ (by decide) (by decide)
+      (by decide) (by decide)] at hpzero
+  exact hpzero
+
+theorem k2Stage_zero_implies_input_zero (k : Nat) (s : AState)
+    (factor : Nat) (negate : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s (k2Stage factor negate)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let prep := k2PrepState k s factor
+  let p := arun k prep
+    (LeanCompCert.Ports.Section413WindowCellScale.body negate)
+  have hprepword : ∀ j, prep.regs j < M := arun_regs_word k _ _ hword harray
+  have hpreparray : ∀ j, prep.arr j < M := arun_arr_word k _ _ hword harray
+  have hpword : ∀ j, p.regs j < M :=
+    arun_regs_word k _ _ hprepword hpreparray
+  have hparray : ∀ j, p.arr j < M :=
+    arun_arr_word k _ _ hprepword hpreparray
+  have hpzero := addK2_zero_implies_input_zero k p hpword hparray (by
+    simpa only [k2Stage, k2PrepState, arun_append, prep, p] using hzero)
+  rw [show p.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      prep.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+    exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k _ _
+      (by cases negate <;> decide) prep] at hpzero
+  rw [show prep.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+    exact k2Prep_frame_of k s factor _ (by decide)] at hpzero
+  exact hpzero
+
+/-- A clean checked-add flag after one complete compiled event implies that
+the incoming flag was clean.  This is independent of arithmetic receipts. -/
+theorem event_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
+    (active divisor x factor : Nat) (twiceDen negK1 negK2 : Bool)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s
+      (event c active divisor x factor twiceDen negK1 negK2)).regs
+        LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let p := eventPrefixState k s c active divisor x
+  let middle := if twiceDen then k1TwiceStage divisor negK1
+    else k1Stage divisor negK1
+  let q := arun k p middle
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hqword : ∀ j, q.regs j < M := arun_regs_word k _ _ hpword hparray
+  have hqarray : ∀ j, q.arr j < M := arun_arr_word k _ _ hpword hparray
+  have hqzero := k2Stage_zero_implies_input_zero k q factor negK2
+    hqword hqarray (by
+      simpa only [event, eventPrefix, eventPrefixState, middle, arun_append,
+        p, q] using hzero)
+  have hpzero : p.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    cases twiceDen
+    · exact k1Stage_zero_implies_input_zero k p divisor negK1 hpword hparray
+        (by simpa only [middle, Bool.false_eq_true, if_false, q] using hqzero)
+    · exact k1TwiceStage_zero_implies_input_zero k p divisor negK1
+        hpword hparray (by simpa only [middle, if_true, q] using hqzero)
+  rw [show p.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+    exact eventPrefix_frame_of k s c active divisor x _
+      (gateStage_writes_of _ _ _ _ (by decide) (by decide) (by decide))
+      (readStage_writes_high _ _ _ (by decide))
+      (inputStage_writes_high _ (by decide))] at hpzero
+  exact hpzero
+
 #print axioms k1Prep_den
 #print axioms eventPrefix_outputs
 #print axioms k1Stage_clean_outputs
@@ -1069,5 +1209,6 @@ theorem eventTwice_clean_outputs (k : Nat) (s : AState) (c : Cfg)
 #print axioms eventTwiceArithmetic_clean_outputs
 #print axioms event_clean_outputs
 #print axioms eventTwice_clean_outputs
+#print axioms event_zero_implies_input_zero
 
 end LeanCompCert.Ports.Section413WindowEventScanner

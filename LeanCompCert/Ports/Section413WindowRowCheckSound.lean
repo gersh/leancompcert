@@ -503,6 +503,27 @@ theorem checkStage_add_zero_implies_unit_clean (k : Nat) (s : AState)
   rw [href] at hout
   exact LeanCompCert.Ports.Section413G1Sound.or_eq_zero hout
 
+theorem checkStage_add_zero_implies_saved_zero (k : Nat) (s : AState)
+    (lo offset : Nat) (hlo : lo < M)
+    (hlimit : commonBound - offset < M)
+    (hword : ∀ j, s.regs j < M)
+    (hout : (arun k s (checkStage lo offset)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs rSavedAddViol = 0 := by
+  have h := checkStage_outputs k s lo offset hlo hlimit (hword rMaxHi)
+  rw [h.1] at hout
+  have hbad : s.regs rUnitAddBad * checkGateRef s lo < M := by
+    unfold checkGateRef
+    split
+    · simpa using hword rUnitAddBad
+    · simp [M]
+  have hor : s.regs rSavedAddViol |||
+      (s.regs rUnitAddBad * checkGateRef s lo) < M :=
+    LeanCompCert.Ports.Section413G1Denote.lor_lt_M
+      (hword rSavedAddViol) hbad
+  rw [addViolationRef, Nat.mod_eq_of_lt hbad, Nat.mod_eq_of_lt hor] at hout
+  exact (LeanCompCert.Ports.Section413G1Sound.or_eq_zero hout).1
+
 theorem checkStage_nonfinal_row (k : Nat) (s : AState) (lo offset : Nat)
     (hlo : lo < M) (hlimit : commonBound - offset < M)
     (hmax : s.regs rMaxHi < M)
@@ -608,6 +629,32 @@ theorem body_add_zero_implies_receipts_and_input (k : Nat) (s : AState)
       s.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
         exact arun_frame_of k _ divideK2Stage s (by decide)] at hdZero
     exact hdZero
+
+theorem body_add_zero_implies_input_zero (k : Nat) (s : AState)
+    (lo offset : Nat)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hlo : lo < M) (hlimit : commonBound - offset < M)
+    (hout : (arun k s (body lo offset)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  let d := bodyDivState k s
+  let u := bodyUnitState k s
+  have hdword : ∀ j, d.regs j < M := arun_regs_word k _ _ hword harray
+  have hdarray : ∀ j, d.arr j < M := arun_arr_word k _ _ hword harray
+  have huword : ∀ j, u.regs j < M := arun_regs_word k _ _ hdword hdarray
+  have hcheck : (arun k u (checkStage lo offset)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    simpa only [body, arun_append, bodyDivState, bodyUnitState, d, u] using hout
+  have hsaved := checkStage_add_zero_implies_saved_zero k u lo offset
+    hlo hlimit huword hcheck
+  have hunit := unitStage_saved_add_flag k d
+  have hdZero : d.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+    rw [← hunit]
+    simpa only [u, bodyUnitState, d] using hsaved
+  rw [show d.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
+      s.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
+    exact arun_frame_of k _ divideK2Stage s (by decide)] at hdZero
+  exact hdZero
 
 /-- The actual compiled row-check body accepts exactly when its decoded,
 nonnegative upper endpoint is below the configured limit. -/
@@ -814,12 +861,14 @@ theorem init_output (k : Nat) (s : AState) :
 #print axioms checkStage_zero_iff_bound
 #print axioms checkStage_clean_add_flag
 #print axioms checkStage_add_zero_implies_unit_clean
+#print axioms checkStage_add_zero_implies_saved_zero
 #print axioms checkStage_nonfinal_row
 #print axioms checkStage_unchecked_row
 #print axioms checkStage_zero_implies_input_zero
 #print axioms nonnegativeWord_eq_toNat
 #print axioms body_zero_iff_bound
 #print axioms body_add_zero_implies_receipts_and_input
+#print axioms body_add_zero_implies_input_zero
 #print axioms bodyUnitState_upper
 #print axioms body_zero_iff_paper_upper
 #print axioms init_output

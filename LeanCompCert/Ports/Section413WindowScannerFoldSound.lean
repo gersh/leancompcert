@@ -141,7 +141,56 @@ theorem scannerStateAt_zero_iff_bounds (c : Cfg) (entry : AState)
             hsword.1 hsword.2 hnTotal hf hlo hlimit hskip]
           exact hprefix
 
+/-- Receipt-facing fold theorem.  A clean final row flag and checked-add flag
+from the compiled scan imply every enabled paper bound in the prefix.  The
+induction is symbolic in `n`; no concrete production range is reduced. -/
+theorem scannerStateAt_flags_zero_implies_bounds (c : Cfg) (entry : AState)
+    (hword : ∀ j, entry.regs j < M) (harray : ∀ j, entry.arr j < M)
+    (hf : EventBodyFrames c)
+    (hlo : c.checkLo < M)
+    (hlimit : LeanCompCert.Ports.Section413WindowRowCheck.commonBound -
+      c.offset < M) :
+    ∀ n,
+      n ≤ LeanCompCert.Ports.Section413WindowSchedule.productionRows *
+        LeanCompCert.Ports.Section413WindowSchedule.slots →
+      (scannerStateAt c entry n).regs
+          LeanCompCert.Ports.Section413WindowRowCheck.rRowViol = 0 →
+      (scannerStateAt c entry n).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0 →
+      entry.regs LeanCompCert.Ports.Section413WindowRowCheck.rRowViol = 0 ∧
+        entry.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 ∧
+          ∀ k, k < n → checkedSlot c k →
+            paperBoundAt c k (scannerStateAt c entry k) := by
+  intro n hn hrow hadd
+  induction n with
+  | zero => exact ⟨hrow, hadd, by simp⟩
+  | succ n ih =>
+      have hnTotal : n <
+          LeanCompCert.Ports.Section413WindowSchedule.productionRows *
+            LeanCompCert.Ports.Section413WindowSchedule.slots := by omega
+      have hsword := scannerStateAt_word c entry hword harray n
+      have hrowStep : (arun n (scannerStateAt c entry n) (body c)).regs
+          LeanCompCert.Ports.Section413WindowRowCheck.rRowViol = 0 := by
+        simpa only [scannerStateAt_succ] using hrow
+      have haddStep : (arun n (scannerStateAt c entry n) (body c)).regs
+          LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+        simpa only [scannerStateAt_succ] using hadd
+      have hrowPrev := body_zero_implies_input_zero n
+        (scannerStateAt c entry n) c hsword.1 hsword.2 hf hlo hlimit hrowStep
+      have haddPrev := body_add_zero_implies_input_zero n
+        (scannerStateAt c entry n) c hsword.1 hsword.2 hlo hlimit haddStep
+      have hprefix := ih (by omega) hrowPrev haddPrev
+      refine ⟨hprefix.1, hprefix.2.1, ?_⟩
+      intro k hk hchecked
+      by_cases hkn : k = n
+      · subst k
+        exact body_flags_zero_implies_paper_upper n
+          (scannerStateAt c entry n) c hsword.1 hsword.2 hnTotal hf hlo
+            hlimit hchecked.1 hchecked.2 hrowStep haddStep
+      · exact hprefix.2.2 k (by omega) hchecked
+
 #print axioms scannerStateAt_word
 #print axioms scannerStateAt_zero_iff_bounds
+#print axioms scannerStateAt_flags_zero_implies_bounds
 
 end LeanCompCert.Ports.Section413WindowEventScanner

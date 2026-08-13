@@ -151,9 +151,55 @@ theorem eventBody_accumulates (k : Nat) (s : AState) (c : Cfg)
   simpa only [eventBody_split, arun_append, afterFirst, afterSecond,
     afterThird, afterFourth] using h
 
+/-- The four-event compiled body preserves checked-add flag stickiness. -/
+theorem eventBody_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hzero : (arun k s (eventBody c)).regs
+      LeanCompCert.Ports.Section413SignedAdd.rViol = 0) :
+    s.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
+  have h1word : ∀ j, (afterFirst k s c).regs j < M :=
+    arun_regs_word k _ _ hword harray
+  have h1array : ∀ j, (afterFirst k s c).arr j < M :=
+    arun_arr_word k _ _ hword harray
+  have h2word : ∀ j, (afterSecond k s c).regs j < M :=
+    arun_regs_word k _ _ h1word h1array
+  have h2array : ∀ j, (afterSecond k s c).arr j < M :=
+    arun_arr_word k _ _ h1word h1array
+  have h3word : ∀ j, (afterThird k s c).regs j < M :=
+    arun_regs_word k _ _ h2word h2array
+  have h3array : ∀ j, (afterThird k s c).arr j < M :=
+    arun_arr_word k _ _ h2word h2array
+  have h3zero := event_zero_implies_input_zero k (afterThird k s c) c
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfPair
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rS true false true
+    h3word h3array (by
+      simpa only [eventBody_split, arun_append, afterFirst, afterSecond,
+        afterThird, fourthEvent] using hzero)
+  have h2zero := event_zero_implies_input_zero k (afterSecond k s c) c
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfActive
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ
+    LeanCompCert.Ports.Section413WindowSchedule.rHalfQ true false true
+    h2word h2array (by simpa only [afterThird, thirdEvent] using h3zero)
+  have h1zero := event_zero_implies_input_zero k (afterFirst k s c) c
+    LeanCompCert.Ports.Section413WindowSchedule.rPair
+    LeanCompCert.Ports.Section413WindowSchedule.rQ
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rS false true false
+    h1word h1array (by simpa only [afterSecond, secondEvent] using h2zero)
+  exact event_zero_implies_input_zero k s c
+    LeanCompCert.Ports.Section413WindowSchedule.rActive
+    LeanCompCert.Ports.Section413WindowSchedule.rS
+    LeanCompCert.Ports.Section413WindowSchedule.rQ
+    LeanCompCert.Ports.Section413WindowSchedule.rQ false true false
+    hword harray (by simpa only [afterFirst, firstEvent] using h1zero)
+
 #print axioms Accumulates.trans
 #print axioms Accumulates.of_outputs
 #print axioms eventBody_accumulates
+#print axioms eventBody_zero_implies_input_zero
 #print axioms g1EventBodyFrames
 #print axioms g2EventBodyFrames
 
