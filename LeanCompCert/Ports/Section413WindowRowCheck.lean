@@ -23,6 +23,7 @@ open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayScalarBlock
+open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Ports.Section413Cells
 
 def unitScale : Nat := 10000000000000
@@ -39,10 +40,15 @@ def rDiv2Lo : Nat := 54
 def rDiv2Hi : Nat := 55
 def rMaxLo : Nat := 56
 def rMaxHi : Nat := 57
-def rBiasA : Nat := 58
-def rBiasB : Nat := 59
-def rChoose : Nat := 60
-def rMuxTmp : Nat := 61
+def rSignA : Nat := 58
+def rSignB : Nat := 59
+def rDifferent : Nat := 60
+def rSame : Nat := 61
+def rUnsignedGe : Nat := 75
+def rPartDifferent : Nat := 76
+def rPartSame : Nat := 77
+def rChoose : Nat := 78
+def rMuxTmp : Nat := 79
 def rSavedAddViol : Nat := 62
 def rUnitAddBad : Nat := 63
 def rFinalSlot : Nat := 64
@@ -57,12 +63,123 @@ def rGatedBad : Nat := 72
 def rRowViol : Nat := 73
 def rNPlusOne : Nat := 74
 
-def signedMaxStage (dest a b : Nat) : List AInstr := lift
-  ([ .binop rBiasA .bxor (.reg a) (.lit H63)
-   , .binop rBiasB .bxor (.reg b) (.lit H63)
-   , .binop rChoose .ge (.reg rBiasA) (.reg rBiasB) ] ++
-   LeanCompCert.Ports.Section413G1Denote.muxS
+def signedChooseStage (a b : Nat) : List Instr :=
+  [ .binop rSignA .ge (.reg a) (.lit H63)
+   , .binop rSignB .ge (.reg b) (.lit H63)
+   , .binop rDifferent .bxor (.reg rSignA) (.reg rSignB)
+   , .binop rSame .eq (.reg rSignA) (.reg rSignB)
+   , .binop rUnsignedGe .ge (.reg a) (.reg b)
+   , .binop rPartDifferent .mul (.reg rDifferent) (.reg rSignB)
+   , .binop rPartSame .mul (.reg rSame) (.reg rUnsignedGe)
+   , .binop rChoose .add (.reg rPartDifferent) (.reg rPartSame) ]
+
+def signedMaxStage (dest a b : Nat) : List AInstr :=
+  lift (signedChooseStage a b) ++ lift
+    (LeanCompCert.Ports.Section413G1Denote.muxS
       dest rChoose a b rMuxTmp)
+
+private theorem signedChooseLo_output (k : Nat) (s : RegState)
+    (ha : s rDiv1Lo < M) (hb : s rDiv2Lo < M) :
+    srun k s (signedChooseStage rDiv1Lo rDiv2Lo) rChoose =
+      if decodeZ (s rDiv1Lo) ≥ decodeZ (s rDiv2Lo) then 1 else 0 := by
+  simp only [signedChooseStage, srun, sdest, sval, denoteOperand, denoteOp,
+    Option.getD_some, RegState.set, rSignA, rSignB, rDifferent, rSame,
+    rUnsignedGe, rPartDifferent, rPartSame, rChoose, rDiv1Lo, rDiv2Lo]
+  simp only [show H63 % M = H63 by decide, Nat.reduceEqDiff, if_false,
+    if_true]
+  by_cases hcmp : decodeZ (s rDiv1Lo) ≥ decodeZ (s rDiv2Lo)
+  all_goals
+    simp only [rDiv1Lo, rDiv2Lo] at ha hb hcmp ⊢
+    unfold decodeZ at hcmp ⊢
+    by_cases hsa : H63 ≤ s 52 <;> by_cases hsb : H63 ≤ s 54 <;>
+      by_cases hab : s 54 ≤ s 52 <;>
+      simp [hcmp, hsa, hsb, hab, Nat.mod_eq_of_lt ha,
+        Nat.mod_eq_of_lt hb] <;>
+      simp only [M, H63, LeanCompCert.Verified.MulWide.B64] at * <;> omega
+
+private theorem signedChooseHi_output (k : Nat) (s : RegState)
+    (ha : s rDiv1Hi < M) (hb : s rDiv2Hi < M) :
+    srun k s (signedChooseStage rDiv1Hi rDiv2Hi) rChoose =
+      if decodeZ (s rDiv1Hi) ≥ decodeZ (s rDiv2Hi) then 1 else 0 := by
+  simp only [signedChooseStage, srun, sdest, sval, denoteOperand, denoteOp,
+    Option.getD_some, RegState.set, rSignA, rSignB, rDifferent, rSame,
+    rUnsignedGe, rPartDifferent, rPartSame, rChoose, rDiv1Hi, rDiv2Hi]
+  simp only [show H63 % M = H63 by decide, Nat.reduceEqDiff, if_false,
+    if_true]
+  by_cases hcmp : decodeZ (s rDiv1Hi) ≥ decodeZ (s rDiv2Hi)
+  all_goals
+    simp only [rDiv1Hi, rDiv2Hi] at ha hb hcmp ⊢
+    unfold decodeZ at hcmp ⊢
+    by_cases hsa : H63 ≤ s 53 <;> by_cases hsb : H63 ≤ s 55 <;>
+      by_cases hab : s 55 ≤ s 53 <;>
+      simp [hcmp, hsa, hsb, hab, Nat.mod_eq_of_lt ha,
+        Nat.mod_eq_of_lt hb] <;>
+      simp only [M, H63, LeanCompCert.Verified.MulWide.B64] at * <;> omega
+
+private theorem signedChooseStage_frame (k : Nat) (s : RegState)
+    (a b j : Nat) (hj : j ≠ rChoose) (hjA : j ≠ rSignA)
+    (hjB : j ≠ rSignB) (hjD : j ≠ rDifferent)
+    (hjS : j ≠ rSame) (hjU : j ≠ rUnsignedGe)
+    (hjPD : j ≠ rPartDifferent) (hjPS : j ≠ rPartSame) :
+    srun k s (signedChooseStage a b) j = s j := by
+  apply srun_untouched
+  intro i hi
+  simp only [signedChooseStage, List.mem_cons, List.not_mem_nil,
+    or_false] at hi
+  rcases hi with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+    simp only [sdest] <;> omega
+
+theorem signedMaxLo_output (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M) :
+    (arun k s (signedMaxStage rMaxLo rDiv1Lo rDiv2Lo)).regs rMaxLo =
+      if decodeZ (s.regs rDiv1Lo) ≥ decodeZ (s.regs rDiv2Lo)
+      then s.regs rDiv1Lo else s.regs rDiv2Lo := by
+  rw [signedMaxStage, arun_append, arun_lift, arun_lift]
+  let t := srun k s.regs (signedChooseStage rDiv1Lo rDiv2Lo)
+  have htChoose := signedChooseLo_output k s.regs (hword _) (hword _)
+  change t rChoose = _ at htChoose
+  have htA : t rDiv1Lo = s.regs rDiv1Lo := by
+    apply signedChooseStage_frame <;> decide
+  have htB : t rDiv2Lo = s.regs rDiv2Lo := by
+    apply signedChooseStage_frame <;> decide
+  have htword : ∀ j, t j < M := srun_lt_of_lt k _ _ hword
+  change srun k t
+    (LeanCompCert.Ports.Section413G1Denote.muxS
+      rMaxLo rChoose rDiv1Lo rDiv2Lo rMuxTmp) rMaxLo = _
+  rw [LeanCompCert.Ports.Section413G1Denote.muxS_spec k t
+    rMaxLo rChoose rDiv1Lo rDiv2Lo rMuxTmp
+    (by decide) (by decide) (by decide) (by decide)]
+  · rw [htChoose, htA, htB]
+    split <;> simp_all
+  · rw [htChoose]
+    split <;> decide
+  · exact htword
+
+theorem signedMaxHi_output (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M) :
+    (arun k s (signedMaxStage rMaxHi rDiv1Hi rDiv2Hi)).regs rMaxHi =
+      if decodeZ (s.regs rDiv1Hi) ≥ decodeZ (s.regs rDiv2Hi)
+      then s.regs rDiv1Hi else s.regs rDiv2Hi := by
+  rw [signedMaxStage, arun_append, arun_lift, arun_lift]
+  let t := srun k s.regs (signedChooseStage rDiv1Hi rDiv2Hi)
+  have htChoose := signedChooseHi_output k s.regs (hword _) (hword _)
+  change t rChoose = _ at htChoose
+  have htA : t rDiv1Hi = s.regs rDiv1Hi := by
+    apply signedChooseStage_frame <;> decide
+  have htB : t rDiv2Hi = s.regs rDiv2Hi := by
+    apply signedChooseStage_frame <;> decide
+  have htword : ∀ j, t j < M := srun_lt_of_lt k _ _ hword
+  change srun k t
+    (LeanCompCert.Ports.Section413G1Denote.muxS
+      rMaxHi rChoose rDiv1Hi rDiv2Hi rMuxTmp) rMaxHi = _
+  rw [LeanCompCert.Ports.Section413G1Denote.muxS_spec k t
+    rMaxHi rChoose rDiv1Hi rDiv2Hi rMuxTmp
+    (by decide) (by decide) (by decide) (by decide)]
+  · rw [htChoose, htA, htB]
+    split <;> simp_all
+  · rw [htChoose]
+    split <;> decide
+  · exact htword
 
 def divideK2Stage : List AInstr :=
   lift
@@ -131,5 +248,7 @@ theorem g2Program_wf :
 
 #print axioms g1Program_wf
 #print axioms g2Program_wf
+#print axioms signedMaxLo_output
+#print axioms signedMaxHi_output
 
 end LeanCompCert.Ports.Section413WindowRowCheck

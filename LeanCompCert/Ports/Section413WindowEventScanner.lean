@@ -22,6 +22,7 @@ open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayScalarBlock
+open LeanCompCert.Verified.ArrayFoldBridge
 
 structure Cfg where
   cap : Nat
@@ -56,6 +57,38 @@ def gateStage (v active divisor : Nat) : List AInstr := lift
     , .binop LeanCompCert.Ports.Section413WindowCellDiv.rGate .mul (.reg active) (.reg rOdd) ]
   else [.mov LeanCompCert.Ports.Section413WindowCellDiv.rGate (.reg active)])
 
+def divisorGate (v active divisor : Nat) : Nat :=
+  if v = 2 then active * (if divisor % 2 = 1 then 1 else 0) else active
+
+theorem gateStage_output (k : Nat) (s : AState) (v active divisor : Nat)
+    (ha : s.regs active < M) (hd : s.regs divisor < M)
+    (haRem : active ≠ rOddRem) (haOdd : active ≠ rOdd)
+    (hdRem : divisor ≠ rOddRem) :
+    (arun k s (gateStage v active divisor)).regs
+        LeanCompCert.Ports.Section413WindowCellDiv.rGate =
+      divisorGate v (s.regs active) (s.regs divisor) := by
+  simp only [rOddRem] at haRem hdRem
+  simp only [rOdd] at haOdd
+  rw [gateStage, arun_lift]
+  by_cases hv : v = 2
+  · simp only [hv, if_true]
+    simp only [srun, sdest, sval, denoteOperand, denoteOp, Option.getD_some,
+      RegState.set, rOddRem, rOdd,
+      LeanCompCert.Ports.Section413WindowCellDiv.rGate]
+    simp only [Nat.reduceEqDiff, if_false, if_true,
+      show 2 % M = 2 by decide, show 1 % M = 1 by decide]
+    have hr : s.regs divisor % 2 < M :=
+      Nat.lt_trans (Nat.mod_lt _ (by decide)) (by decide)
+    rw [Nat.mod_eq_of_lt hr]
+    unfold divisorGate
+    simp only [hv, if_true]
+    by_cases hodd : s.regs divisor % 2 = 1
+    · simp [hodd, haRem, haOdd, hdRem, Nat.mod_eq_of_lt ha]
+    · simp [hodd]
+  · simp [hv, gateStage, arun_lift, srun, sdest, sval, denoteOperand,
+      RegState.set, LeanCompCert.Ports.Section413WindowCellDiv.rGate,
+      divisorGate]
+
 def readStage (cap x : Nat) : List AInstr :=
   lift [.mov LeanCompCert.Ports.Section413WindowTableRead.rX (.reg x)] ++ LeanCompCert.Ports.Section413WindowTableRead.body cap
 
@@ -72,6 +105,26 @@ def addK2 : List AInstr :=
 def safeDenStage (den : Nat) : List AInstr := lift
   [ .binop rDenInv .eq (.reg den) (.lit 0)
   , .binop rSafeDen .add (.reg den) (.reg rDenInv) ]
+
+def safeDen (d : Nat) : Nat := if d = 0 then 1 else d
+
+theorem safeDenStage_output (k : Nat) (s : AState) (den : Nat)
+    (hd : s.regs den < M) (hdenInv : den ≠ rDenInv) :
+    (arun k s (safeDenStage den)).regs rSafeDen = safeDen (s.regs den) := by
+  simp only [rDenInv] at hdenInv
+  rw [safeDenStage, arun_lift]
+  simp only [srun, sdest, sval, denoteOperand, denoteOp, Option.getD_some,
+    RegState.set, rDenInv, rSafeDen, Nat.reduceEqDiff, if_false, if_true,
+    show 0 % M = 0 by decide, show 1 % M = 1 by decide]
+  by_cases hz : s.regs den = 0
+  · simp [hz, safeDen, hdenInv]
+    decide
+  · simp [hz, safeDen, hdenInv, Nat.mod_eq_of_lt hd]
+
+theorem safeDen_pos (d : Nat) : 0 < safeDen d := by
+  by_cases hd : d = 0
+  · simp [safeDen, hd]
+  · simpa [safeDen, hd] using Nat.pos_of_ne_zero hd
 
 def k1Stage (den : Nat) (negate : Bool) : List AInstr :=
   safeDenStage den ++
@@ -137,5 +190,7 @@ theorem g2Program_wf : (program g2Cfg).WF := by decide
 
 #print axioms g1Program_wf
 #print axioms g2Program_wf
+#print axioms gateStage_output
+#print axioms safeDenStage_output
 
 end LeanCompCert.Ports.Section413WindowEventScanner
