@@ -277,4 +277,160 @@ theorem rolledTraceM_eq_foldTraceM (p : AProgram)
   rw [foldTraceM_literal_eq_seg p count]
   exact rolledTraceM_eq_literalSegM p hBody count 0 m hCounter
 
+/-! ## The complete rolled CCIR trace -/
+
+/-- Add the rolled loop counter as one genuine source register.  The source
+program's body is otherwise unchanged, and the counter increment is the last
+instruction of every iteration.  This is the array analogue of
+`Reflect.Program.counterAugment`. -/
+def AProgram.counterAugment (p : AProgram) : AProgram := {
+  regCount := p.augCount
+  arrayLen := p.arrayLen
+  loopCount := p.loopCount
+  init := p.init
+  body := p.body ++
+    [.scalar (.binop p.regCount .add (.reg p.regCount) (.lit 1))]
+  epilogue := p.epilogue
+  output := p.output
+}
+
+/-- The augmented source body compiles to one literal body followed by the
+same counter increment used by the rolled emitter. -/
+theorem counterAugment_body_compile (p : AProgram) (k : Nat) :
+    compileAInstrs p.augCount k p.counterAugment.body = p.literalBlockM k := by
+  simp only [AProgram.counterAugment, compileAInstrs, List.flatMap_append,
+    List.flatMap_singleton, AProgram.literalBlockM]
+  rfl
+
+/-- Widen one array instruction to a register file with one additional
+counter register. -/
+theorem AInstr.WF.widen {a b : Nat} (hab : a ≤ b) {i : AInstr}
+    (hi : i.WF a) : i.WF b := by
+  cases i with
+  | scalar instr =>
+      simp only [AInstr.WF] at hi ⊢
+      exact LeanCompCert.Verified.Reflect.instrWF_widen hab hi
+  | load dest idx =>
+      simp only [AInstr.WF] at hi ⊢
+      exact ⟨Nat.lt_of_lt_of_le hi.1 hab, Nat.lt_of_lt_of_le hi.2 hab⟩
+  | store idx src =>
+      simp only [AInstr.WF] at hi ⊢
+      exact ⟨Nat.lt_of_lt_of_le hi.1 hab, Nat.lt_of_lt_of_le hi.2 hab⟩
+
+/-- Counter augmentation preserves well-formedness. -/
+theorem counterAugment_WF (p : AProgram) (hWF : p.WF) :
+    p.counterAugment.WF := by
+  obtain ⟨hOut, hInit, hBody, hEpi⟩ := hWF
+  refine ⟨Nat.lt_succ_of_lt hOut, ?_, ?_, ?_⟩
+  · intro i hi
+    exact (hInit i hi).widen (Nat.le_succ _)
+  · intro i hi
+    rcases List.mem_append.mp hi with hi | hi
+    · exact (hBody i hi).widen (Nat.le_succ _)
+    · simp only [List.mem_singleton] at hi
+      subst i
+      change p.regCount < p.regCount + 1 ∧
+        p.regCount < p.regCount + 1 ∧ True
+      exact ⟨Nat.lt_succ_self _, Nat.lt_succ_self _, trivial⟩
+  · intro i hi
+    exact (hEpi i hi).widen (Nat.le_succ _)
+
+/-- The complete CCIR-with-memory trace represented by the constant-size
+rolled emitter.  The body occurs once in this term; `rolledTraceM` supplies
+its dynamic repetitions. -/
+def AProgram.rolledCompile (p : AProgram) : List MInstr :=
+  apreamble p.augCount ++
+    compileAInstrs p.augCount 0 p.init ++
+    p.rolledTraceM p.loopCount ++
+    compileAInstrs p.augCount 0 p.epilogue
+
+/-- The complete dynamic rolled trace and the counter-augmented program's
+ordinary compiler trace have identical semantics.  The proof is symbolic in
+the trip count: it never materialises or evaluates the unrolled loop. -/
+theorem evalMCCSequence_rolledCompile_eq_counterAugment
+    (p : AProgram) (hWF : p.WF) (base : Int) :
+    evalMCCSequence (p.counterAugment.initialMCC base) p.rolledCompile =
+      evalMCCSequence (p.counterAugment.initialMCC base)
+        p.counterAugment.compile := by
+  obtain ⟨_, hInit, hBody, _⟩ := hWF
+  obtain ⟨env0, hPre, hInv0, _⟩ :=
+    apreamble_correct p.counterAugment base
+  have hCounter0 : env0 ⟨p.regCount + 1⟩ = some ((0 % M : Nat) : Int) := by
+    have h := hInv0.1 p.regCount (by simp [AProgram.counterAugment,
+      AProgram.augCount])
+    simpa [initialState] using h
+  have hBodyCompile :
+      foldTraceM p.loopCount
+          (fun k => compileAInstrs p.augCount k p.counterAugment.body) =
+        foldTraceM p.loopCount (fun k => p.literalBlockM k) := by
+    apply congrArg (foldTraceM p.loopCount)
+    funext k
+    exact counterAugment_body_compile p k
+  let preTrace := apreamble p.augCount ++
+    compileAInstrs p.augCount 0 p.init
+  let literalLoop := foldTraceM p.loopCount
+    (fun k => compileAInstrs p.augCount k p.counterAugment.body)
+  let epi := compileAInstrs p.augCount 0 p.epilogue
+  have hRolledList : p.rolledCompile =
+      preTrace ++ (p.rolledTraceM p.loopCount ++ epi) := by
+    simp [AProgram.rolledCompile, preTrace, epi, List.append_assoc]
+  have hLiteralList : p.counterAugment.compile =
+      preTrace ++ (literalLoop ++ epi) := by
+    simp [AProgram.compile, AProgram.counterAugment, AProgram.augCount,
+      preTrace, literalLoop, epi, List.append_assoc]
+  rw [hRolledList, hLiteralList]
+  rw [evalMCCSequence_append (p.counterAugment.initialMCC base) preTrace
+      (p.rolledTraceM p.loopCount ++ epi),
+    evalMCCSequence_append (p.counterAugment.initialMCC base) preTrace
+      (literalLoop ++ epi)]
+  cases hPrefix : evalMCCSequence (p.counterAugment.initialMCC base) preTrace with
+  | none => rfl
+  | some afterInit =>
+      simp only [Option.bind_some]
+      let mem0 := (p.counterAugment.initialMCC base).mem
+      have hPre' : evalCCSequence (p.counterAugment.initialMCC base).env
+          (apreambleStraights p.augCount) = some env0 := by
+        simpa [AProgram.counterAugment, AProgram.augCount] using hPre
+      have hPreambleM : evalMCCSequence (p.counterAugment.initialMCC base)
+          (apreamble p.augCount) =
+          some ({ env := env0, mem := mem0 } : MCCState) := by
+        unfold apreamble
+        rw [evalMCCSequence_straight, hPre']
+        simp [mem0]
+      have hInitRun : evalMCCSequence
+          { env := env0, mem := mem0 }
+          (compileAInstrs p.augCount 0 p.init) = some afterInit := by
+        change evalMCCSequence (p.counterAugment.initialMCC base)
+          (apreamble p.augCount ++ compileAInstrs p.augCount 0 p.init) =
+            some afterInit at hPrefix
+        rw [evalMCCSequence_append, hPreambleM] at hPrefix
+        exact hPrefix
+      have hCounterInit : afterInit.env ⟨p.regCount + 1⟩ =
+          some ((0 % M : Nat) : Int) := by
+        rw [compileAInstrs_counter_frame p 0 p.init hInit
+          _ afterInit hInitRun]
+        exact hCounter0
+      rw [evalMCCSequence_append afterInit (p.rolledTraceM p.loopCount) epi,
+        evalMCCSequence_append afterInit literalLoop epi]
+      rw [rolledTraceM_eq_foldTraceM p hBody p.loopCount afterInit hCounterInit,
+        ← hBodyCompile]
+
+/-- The rolled CCIR result is the counter-augmented source denotation.  This
+is the constant-size array-loop counterpart of
+`Reflect.rolledResult_eq_denote`; it is the theorem large compiled
+certificates use instead of asking Lean to run their loop. -/
+theorem rolledCompile_result_eq_denote (p : AProgram) (hWF : p.WF)
+    (base : Int) (hBase : BaseOk p.arrayLen base) (n : Nat)
+    (hDenote : p.counterAugment.denote = some n) :
+    Option.bind
+        (evalMCCSequence (p.counterAugment.initialMCC base) p.rolledCompile)
+        (fun m => m.env ⟨p.output + 1⟩) = some ((n : Nat) : Int) := by
+  rw [evalMCCSequence_rolledCompile_eq_counterAugment p hWF base]
+  exact AProgram.evalCC_compile p.counterAugment (counterAugment_WF p hWF)
+    base hBase n hDenote
+
+#print axioms counterAugment_WF
+#print axioms evalMCCSequence_rolledCompile_eq_counterAugment
+#print axioms rolledCompile_result_eq_denote
+
 end LeanCompCert.Verified.ArrayState
