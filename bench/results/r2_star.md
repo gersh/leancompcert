@@ -1027,6 +1027,22 @@ limit event.  This is the intended architecture: the production sweep stays
 in CompCert-compiled code; Lean checks small symbolic instruction islands and
 their composition only.
 
+The following nonfinal carry island applies the same rule to the 23 fixed-log
+rounds preceding the final event.  A first proof attempt simplified ten
+instructions through a reducible intermediate state and climbed to about
+1.86 GiB RSS before the 1,900 MiB hard cap contained it.  The retained
+`R2SegLogNonfinalCarry` proof frames opaque prefixes and evaluates only the
+two- and five-instruction gated commits.  Its fresh source check took **1.00
+seconds / 574,064 KiB peak RSS**; the focused target took **1.34 seconds /
+621,564 KiB peak RSS**, with one worker and no swap.  Its public carry
+theorems contain no `sorryAx` and close with only `propext` and `Quot.sound`.
+
+One architectural debt remains explicit: the emitter currently obtains the
+small head seed `[1, lo-1]` from `headFold` in Lean before emitting the large
+compiled sweep.  That is finite numerical work and must be moved behind the
+same verified compiled-code/receipt boundary before this route discharges the
+literature atom.  It is not being counted as a Lean proof.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its
