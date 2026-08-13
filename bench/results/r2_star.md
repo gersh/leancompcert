@@ -1062,6 +1062,19 @@ is the explicit shared-memory pipeline composition with the production sweep;
 until that theorem is complete, this benchmark is not counted as discharging
 the literature atom.
 
+The table receipt is now compiled as well.  `R2RuntimeTableReceipt` scans all
+13,416 table-and-sentinel cells in a three-instruction LeanCompCert body,
+checks the additive checksum `9835025649024566695` and the pinned first, last,
+and sentinel words, and returns zero only on acceptance.  CompCert and GCC
+both report receipt zero; CompCert still takes **0.24 s / 2,536 KiB** for the
+combined mark/pack/check run.  Flipping bit zero of table cell 100 changes the
+checksum by one and makes the compiled receipt and process exit status both
+one.  The symbolic compiler-soundness converse
+`rootReceiptProduction_compiled_zero_sound` checks in **1.54 s / 628,260
+KiB** with closure `[propext, Quot.sound]`; it does not reduce the production
+fold in Lean.  The earlier FNV value remains useful as a legacy cross-check,
+but it is no longer computed by handwritten host code in the benchmark.
+
 The two-sided natural-log result uses the exact 64-bit `L2` literal, an
 ordinary-kernel 128-term near-one Taylor enclosure for `log 2`, the proved
 two-ulp `logFix_bracket`, and an explicit final-division remainder.  Its

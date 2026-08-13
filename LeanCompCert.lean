@@ -231,6 +231,7 @@ import LeanCompCert.Ports.R2SegLogPayload
 import LeanCompCert.Ports.R2SegLogFinalPrefix
 import LeanCompCert.Ports.R2SegLogFinalEvent
 import LeanCompCert.Ports.R2SegLogFinalCommit
+import LeanCompCert.Ports.R2RuntimeTableReceipt
 import LeanCompCert.Attest
 import LeanCompCert.Attest.LedgerReport
 

@@ -1,6 +1,6 @@
 {
   "artifact": "LeanCompCert/Ports/R2RuntimeTable.lean",
-  "purpose": "Build the 13,415-entry production R2 prime/log table in compiled code",
+  "purpose": "Build and verify the 13,415-entry production R2 prime/log table entirely in LeanCompCert-compiled code",
   "configuration": {
     "root": 144914,
     "trial_divisor_cap": 380,
@@ -9,7 +9,9 @@
     "mark_iterations": 54922027,
     "mark_body_instructions": 14,
     "pack_iterations": 3477912,
-    "pack_body_instructions": 70
+    "pack_body_instructions": 70,
+    "receipt_iterations": 13416,
+    "receipt_body_instructions": 3
   },
   "memory_policy": {
     "memory_high": "1300M",
@@ -18,18 +20,18 @@
     "lean_threads": 1
   },
   "compile": {
-    "ccomp_wall_s": 0.06,
-    "ccomp_peak_rss_kb": 18724,
+    "ccomp_wall_s": 0.07,
+    "ccomp_peak_rss_kb": 18616,
     "gcc_wall_s": 0.04,
-    "gcc_peak_rss_kb": 27204
+    "gcc_peak_rss_kb": 27708
   },
   "run": {
     "ccomp_wall_s": 0.24,
     "ccomp_user_s": 0.24,
-    "ccomp_peak_rss_kb": 2456,
-    "gcc_wall_s": 0.11,
-    "gcc_user_s": 0.11,
-    "gcc_peak_rss_kb": 2536
+    "ccomp_peak_rss_kb": 2536,
+    "gcc_wall_s": 0.13,
+    "gcc_user_s": 0.12,
+    "gcc_peak_rss_kb": 2392
   },
   "result": {
     "count": 13415,
@@ -38,8 +40,24 @@
     "last_packed": 16073911806745261571,
     "last_decoded": [144899, 199376948, 1],
     "sentinel": 1,
-    "fnv1a_table_and_sentinel": 16301884409418920426
+    "fnv1a_table_and_sentinel_legacy": 16301884409418920426,
+    "compiled_additive_checksum": 9835025649024566695,
+    "compiled_receipt": 0
   },
   "cross_compiler_agreement": true,
-  "status": "The two compiled construction stages are implemented and independently well-formed. Their shared-memory composition with the production sweep is the active proof task; this prototype is not yet a literature-atom discharge."
+  "generated_c_sha256": "8f9a9e7b8ece3d30184710367fe895790757a4fcdcc63a07852ccc230ee1df75",
+  "rejecting_control": {
+    "mutation": "flip bit 0 in table cell 100 after packing",
+    "checksum": 9835025649024566694,
+    "compiled_receipt": 1,
+    "exit_status": 1
+  },
+  "proof": {
+    "source": "LeanCompCert/Ports/R2RuntimeTableReceipt.lean",
+    "soundness_theorem": "LeanCompCert.Ports.R2SegSieve.rootReceiptProduction_compiled_zero_sound",
+    "axioms": ["propext", "Quot.sound"],
+    "source_check_wall_s": 1.54,
+    "source_check_peak_rss_kb": 628260
+  },
+  "status": "The mark, pack, checksum, and accepting receipt are all LeanCompCert programs. Symbolic Lean proofs connect receipt zero to the compact table property without evaluating any production fold. Shared-memory setup composition is proved; the main R2 sweep refinement remains active."
 }
