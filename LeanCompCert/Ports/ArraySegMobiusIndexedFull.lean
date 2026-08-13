@@ -613,6 +613,341 @@ theorem indexedPaddedProductionCore_complete
   rw [hcompose]
   exact hmain
 
+/-- Schedule whose nonfinal root windows and final root window are all
+covered by the fixed bootstrap table.  This is the genuine historical shape
+of the tiny rows ending at `rootCap = bootBound`. -/
+structure BootstrapFinalCoreSchedule (c : Cfg)
+    (bootBound prefixFuel mainFuel delta : Nat) : Prop where
+  bootPrime : PrimeTableInv c.bootPrimes bootBound
+  bootShape : ∃ tail, c.bootPrimes = c.firstPrime :: tail
+  bootLe : c.bootCount ≤ c.tableLen
+  tableLen : c.bootPrimes.length = c.tableLen
+  tableLenPos : 0 < c.tableLen
+  tableLenM : c.tableLen < M
+  markPos : 0 < c.markSteps
+  markM : c.markSteps < M
+  periodM : c.period < M
+  spanM : c.rootSpan < M
+  spanPos : 0 < c.rootSpan
+  firstPrimePos : 0 < c.firstPrime
+  firstPrimeLeLen : c.firstPrime ≤ c.segLen
+  firstPrimeLeBoot : c.firstPrime ≤ bootBound
+  bootBoundM : bootBound < M
+  bootBoundSqM : bootBound * bootBound < M
+  segBootM : c.segLen + bootBound < M
+  arrayM : c.arrayLen < M
+  markBudget :
+    (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps
+  bootTwo : 2 ≤ bootBound
+  rootCapM : c.rootCap < M
+  deltaEq : c.wDelta = delta
+  deltaM : delta < M
+  prefixRange : prefixFuel * c.period ≤ c.rootSpan - 1
+  prefixBaseM : 1 + prefixFuel * c.segLen < M
+  prefixLastTwo : ∀ n, n < prefixFuel →
+    2 ≤ 1 + (n + 1) * c.segLen - 1
+  prefixStartWithin : ∀ n, n < prefixFuel →
+    1 + n * c.segLen - 1 ≤ bootBound
+  prefixWithin : ∀ n, n < prefixFuel →
+    1 + (n + 1) * c.segLen - 1 ≤ bootBound
+  prefixCap : ∀ n, n < prefixFuel →
+    1 + (n + 1) * c.segLen - 1 ≤ c.rootCap
+  prefixCover : ∀ n, n < prefixFuel →
+    1 + n * c.segLen + c.segLen <
+      (bootBound + 1) * (bootBound + 1)
+  prefixFit : ∀ n, n < prefixFuel → ∀ k, k < c.segLen →
+    let ps := rootScanMixed c.bootPrimes bootBound
+      (1 + n * c.segLen) k
+    ps.length ≤ c.tableLen ∧
+      (unmarkedBool ps (1 + n * c.segLen + k) = true →
+        ps.length < c.tableLen)
+  finalIndex : (prefixFuel + 1) * c.period = c.rootSpan
+  finalBaseM : 1 + prefixFuel * c.segLen + c.segLen < M
+  finalLastTwo : 2 ≤ 1 + prefixFuel * c.segLen + c.segLen - 1
+  finalWithin : 1 + prefixFuel * c.segLen + c.segLen - 1 ≤ bootBound
+  finalCap : 1 + prefixFuel * c.segLen + c.segLen - 1 ≤ c.rootCap
+  finalCover : 1 + prefixFuel * c.segLen + c.segLen <
+    (bootBound + 1) * (bootBound + 1)
+  finalFit : ∀ k, k < c.segLen →
+    let ps := rootScanMixed c.bootPrimes bootBound
+      (1 + prefixFuel * c.segLen) k
+    ps.length ≤ c.tableLen ∧
+      (unmarkedBool ps (1 + prefixFuel * c.segLen + k) = true →
+        ps.length < c.tableLen)
+  transitionW :
+    (1 + prefixFuel * c.segLen + ((c.segLen + delta) % M)) % M = c.lo
+  mainIndexM : c.rootSpan + mainFuel * c.period < M
+  mainBaseM : c.lo + mainFuel * c.segLen < M
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 1000000 in
+/-- Complete core execution for a bootstrap-only historical root phase. -/
+theorem indexedBootstrapFinalCore_complete
+    (c : Cfg) (bootBound prefixFuel mainFuel delta : Nat)
+    (h : BootstrapFinalCoreSchedule c bootBound prefixFuel mainFuel delta) :
+    let rootFuel := prefixFuel + 1
+    let out := indexedWindowRun 0 c (rootFuel + mainFuel) (coreEntry c)
+    (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      MachineTableRep c out c.bootPrimes ∧ out.regs rR = 0 ∧
+      out.regs rW = c.lo + mainFuel * c.segLen ∧
+      out.regs rZero = 0 := by
+  let entry := coreEntry c
+  have hbootM : ∀ p, p ∈ c.bootPrimes → p < M := by
+    intro p hp
+    exact Nat.lt_of_le_of_lt (h.bootPrime.upper p hp) h.bootBoundM
+  have hentry := coreEntry_complete c bootBound h.bootPrime h.bootLe
+    hbootM h.arrayM
+  have hbootPos : 0 < c.bootCount := by
+    obtain ⟨tail, hshape⟩ := h.bootShape
+    simp [Cfg.bootCount, hshape]
+  have hprefix := indexedWindowRun_bootstrap_complete c 0 entry
+    c.bootPrimes bootBound 1 prefixFuel hentry.table hentry.view
+    hentry.position hentry.base hentry.zero hentry.cleared h.bootShape rfl
+    (by simpa using h.prefixRange) hbootPos h.bootLe h.tableLenM h.markPos
+    h.markM h.periodM h.spanM h.firstPrimePos h.firstPrimeLeLen
+    h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
+    h.prefixBaseM h.arrayM h.markBudget (by omega) h.bootTwo
+    h.prefixLastTwo h.prefixStartWithin h.prefixWithin h.prefixCap
+    h.prefixCover (Nat.le_of_eq h.tableLen) h.prefixFit h.rootCapM
+  obtain ⟨tail, hshape⟩ := h.bootShape
+  let beforeFinal := indexedWindowRun 0 c prefixFuel entry
+  let finalW := 1 + prefixFuel * c.segLen
+  have hfinal := indexedRootWindow_bootstrap_complete_transition c
+    (prefixFuel * c.period) beforeFinal tail bootBound finalW delta
+    (by simpa [beforeFinal, hshape] using hprefix.table)
+    (by simpa [beforeFinal, hshape] using hprefix.view)
+    (by simpa [beforeFinal] using hprefix.position)
+    (by simpa [beforeFinal, finalW] using hprefix.base)
+    (by simpa [beforeFinal] using hprefix.zero)
+    (by simpa [beforeFinal] using hprefix.cleared)
+    (by simpa [hshape] using (show c.bootPrimes.length = c.bootCount from rfl))
+    (by simpa [Nat.add_mul] using h.finalIndex) hbootPos h.bootLe
+    h.tableLenM h.markPos h.markM h.periodM
+    h.spanM h.firstPrimePos h.firstPrimeLeLen h.firstPrimeLeBoot
+    h.bootBoundM h.bootBoundSqM h.segBootM
+    (by simpa [finalW, Nat.add_assoc] using h.finalBaseM)
+    (by
+      have hoff : firstOffset finalW c.firstPrime < c.firstPrime :=
+        Nat.mod_lt _ h.firstPrimePos
+      have hle : finalW + c.firstPrime ≤ finalW + c.segLen :=
+        Nat.add_le_add_left h.firstPrimeLeLen finalW
+      exact Nat.lt_of_lt_of_le (Nat.add_lt_add_left hoff finalW)
+        (Nat.le_trans hle (Nat.le_of_lt (by
+          simpa [finalW, Nat.add_assoc] using h.finalBaseM))))
+    h.arrayM (by simpa [← hshape] using h.markBudget)
+    (by dsimp [finalW]; omega) h.bootTwo
+    (by have hh := h.finalWithin; dsimp only [finalW]; omega)
+    (by simpa [finalW] using h.finalLastTwo)
+    (by simpa [finalW] using h.finalWithin)
+    (by simpa [finalW] using h.finalCap)
+    (by simpa [finalW, Nat.add_assoc] using h.finalCover)
+    (by simpa [← hshape] using (Nat.le_of_eq h.tableLen))
+    (by simpa [← hshape, finalW] using h.finalFit) h.rootCapM
+    h.deltaEq h.deltaM
+  let rootOut := indexedWindowRun 0 c (prefixFuel + 1) entry
+  have hroot :
+      (∀ j, j < c.segLen → machineCell c rootOut j = ⟨0, 0⟩) ∧
+      MachineTableRep c rootOut c.bootPrimes ∧ rootOut.regs rR = 0 ∧
+      rootOut.regs rW = c.lo ∧ rootOut.regs rZero = 0 := by
+    have hrootEq : rootOut =
+        ArraySegMobiusIndexedRun.indexedBodyRun (prefixFuel * c.period) c
+          c.period beforeFinal := by
+      dsimp only [rootOut, beforeFinal]
+      rw [indexedWindowRun_succ]
+      simp only [Nat.zero_add]
+    rw [hrootEq]
+    have hf := hfinal
+    rw [← hshape, h.transitionW] at hf
+    exact ⟨hf.2.1, hf.1.toMachineTableRep, hf.2.2.1,
+      hf.2.2.2.1, hf.2.2.2.2⟩
+  have hmain := indexedWindowRun_main_complete c c.rootSpan rootOut
+    c.bootPrimes bootBound c.lo mainFuel hroot.2.1 h.bootPrime h.tableLen
+    hroot.2.2.1 hroot.2.2.2.1 hroot.2.2.2.2 hroot.1
+    (Nat.le_refl _) h.tableLenPos h.tableLenM h.markPos h.markM h.periodM
+    h.mainIndexM h.spanM h.spanPos h.firstPrimePos h.firstPrimeLeLen
+    h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM h.mainBaseM
+    h.arrayM
+  have hcompose : indexedWindowRun 0 c (prefixFuel + 1 + mainFuel) entry =
+      indexedWindowRun c.rootSpan c mainFuel rootOut := by
+    rw [indexedWindowRun_add]
+    simpa only [rootOut, h.finalIndex, Nat.zero_add]
+  dsimp only
+  rw [hcompose]
+  exact hmain
+
+/-- Schedule with a bootstrap-only prefix and a final mixed window.  It
+captures the historical `rootCap = 3`, `segLen = 1` rows where the first new
+prime is discovered exactly at the root-to-main transition. -/
+structure MixedFinalCoreSchedule (c : Cfg)
+    (bootBound prefixFuel mainFuel delta : Nat) : Prop where
+  bootPrime : PrimeTableInv c.bootPrimes bootBound
+  bootShape : ∃ tail, c.bootPrimes = c.firstPrime :: tail
+  bootLe : c.bootCount ≤ c.tableLen
+  bootFit : c.bootPrimes.length < c.tableLen
+  tableLenPos : 0 < c.tableLen
+  tableLenM : c.tableLen < M
+  markPos : 0 < c.markSteps
+  markM : c.markSteps < M
+  periodM : c.period < M
+  spanM : c.rootSpan < M
+  spanPos : 0 < c.rootSpan
+  firstPrimePos : 0 < c.firstPrime
+  firstPrimeLeLen : c.firstPrime ≤ c.segLen
+  firstPrimeLeBoot : c.firstPrime ≤ bootBound
+  bootBoundM : bootBound < M
+  bootBoundSqM : bootBound * bootBound < M
+  segBootM : c.segLen + bootBound < M
+  arrayM : c.arrayLen < M
+  markBudget :
+    (c.bootPrimes.map fun p => c.segLen / p + 2).sum ≤ c.markSteps
+  bootTwo : 2 ≤ bootBound
+  rootCapM : c.rootCap < M
+  deltaEq : c.wDelta = delta
+  deltaM : delta < M
+  prefixRange : prefixFuel * c.period ≤ c.rootSpan - 1
+  prefixBaseM : 1 + prefixFuel * c.segLen < M
+  prefixLastTwo : ∀ n, n < prefixFuel →
+    2 ≤ 1 + (n + 1) * c.segLen - 1
+  prefixStartWithin : ∀ n, n < prefixFuel →
+    1 + n * c.segLen - 1 ≤ bootBound
+  prefixWithin : ∀ n, n < prefixFuel →
+    1 + (n + 1) * c.segLen - 1 ≤ bootBound
+  prefixCap : ∀ n, n < prefixFuel →
+    1 + (n + 1) * c.segLen - 1 ≤ c.rootCap
+  prefixCover : ∀ n, n < prefixFuel →
+    1 + n * c.segLen + c.segLen <
+      (bootBound + 1) * (bootBound + 1)
+  prefixFit : ∀ n, n < prefixFuel → ∀ k, k < c.segLen →
+    let ps := rootScanMixed c.bootPrimes bootBound
+      (1 + n * c.segLen) k
+    ps.length ≤ c.tableLen ∧
+      (unmarkedBool ps (1 + n * c.segLen + k) = true →
+        ps.length < c.tableLen)
+  finalIndex : (prefixFuel + 1) * c.period = c.rootSpan
+  finalBaseM : 1 + prefixFuel * c.segLen + c.segLen < M
+  finalStartWithin : 1 + prefixFuel * c.segLen - 1 ≤ bootBound
+  finalBeyond : bootBound < 1 + prefixFuel * c.segLen + c.segLen - 1
+  finalCap : 1 + prefixFuel * c.segLen + c.segLen - 1 ≤ c.rootCap
+  finalCover : 1 + prefixFuel * c.segLen + c.segLen <
+    (bootBound + 1) * (bootBound + 1)
+  finalRoom : ∀ k, k < c.segLen →
+    let ps := rootScanMixed c.bootPrimes bootBound
+      (1 + prefixFuel * c.segLen) k
+    ps.length ≤ c.tableLen ∧
+      (unmarkedBool ps (1 + prefixFuel * c.segLen + k) = true →
+        ps.length < c.tableLen)
+  finalPrime : PrimeTableInv
+    (rootScanMixed c.bootPrimes bootBound
+      (1 + prefixFuel * c.segLen) c.segLen) c.rootCap
+  finalLen :
+    (rootScanMixed c.bootPrimes bootBound
+      (1 + prefixFuel * c.segLen) c.segLen).length = c.tableLen
+  firstPrimeLeCap : c.firstPrime ≤ c.rootCap
+  finalBoundSqM : c.rootCap * c.rootCap < M
+  segFinalM : c.segLen + c.rootCap < M
+  transitionW :
+    (1 + prefixFuel * c.segLen + ((c.segLen + delta) % M)) % M = c.lo
+  mainIndexM : c.rootSpan + mainFuel * c.period < M
+  mainBaseM : c.lo + mainFuel * c.segLen < M
+
+set_option maxRecDepth 10000 in
+set_option maxHeartbeats 1000000 in
+/-- Complete core execution for a bootstrap prefix followed by one final
+mixed root window. -/
+theorem indexedMixedFinalCore_complete
+    (c : Cfg) (bootBound prefixFuel mainFuel delta : Nat)
+    (h : MixedFinalCoreSchedule c bootBound prefixFuel mainFuel delta) :
+    let rootFuel := prefixFuel + 1
+    let out := indexedWindowRun 0 c (rootFuel + mainFuel) (coreEntry c)
+    let ps := rootScanMixed c.bootPrimes bootBound
+      (1 + prefixFuel * c.segLen) c.segLen
+    (∀ j, j < c.segLen → machineCell c out j = ⟨0, 0⟩) ∧
+      MachineTableRep c out ps ∧ out.regs rR = 0 ∧
+      out.regs rW = c.lo + mainFuel * c.segLen ∧
+      out.regs rZero = 0 := by
+  let entry := coreEntry c
+  have hbootM : ∀ p, p ∈ c.bootPrimes → p < M := by
+    intro p hp
+    exact Nat.lt_of_le_of_lt (h.bootPrime.upper p hp) h.bootBoundM
+  have hentry := coreEntry_complete c bootBound h.bootPrime h.bootLe
+    hbootM h.arrayM
+  have hbootPos : 0 < c.bootCount := by
+    obtain ⟨tail, hshape⟩ := h.bootShape
+    simp [Cfg.bootCount, hshape]
+  have hprefix := indexedWindowRun_bootstrap_complete c 0 entry
+    c.bootPrimes bootBound 1 prefixFuel hentry.table hentry.view
+    hentry.position hentry.base hentry.zero hentry.cleared h.bootShape rfl
+    (by simpa using h.prefixRange) hbootPos h.bootLe h.tableLenM h.markPos
+    h.markM h.periodM h.spanM h.firstPrimePos h.firstPrimeLeLen
+    h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM h.segBootM
+    h.prefixBaseM h.arrayM h.markBudget (by omega) h.bootTwo
+    h.prefixLastTwo h.prefixStartWithin h.prefixWithin h.prefixCap
+    h.prefixCover (Nat.le_of_lt h.bootFit) h.prefixFit h.rootCapM
+  obtain ⟨tail, hshape⟩ := h.bootShape
+  let beforeFinal := indexedWindowRun 0 c prefixFuel entry
+  let finalW := 1 + prefixFuel * c.segLen
+  have hfinal := indexedRootWindow_mixed_complete_transition c
+    (prefixFuel * c.period) beforeFinal tail bootBound finalW delta
+    (by simpa [beforeFinal, hshape] using hprefix.table)
+    (by simpa [beforeFinal, hshape] using hprefix.view)
+    (by simpa [beforeFinal] using hprefix.position)
+    (by simpa [beforeFinal, finalW] using hprefix.base)
+    (by simpa [beforeFinal] using hprefix.zero)
+    (by simpa [beforeFinal] using hprefix.cleared)
+    (by simpa [hshape] using (show c.bootPrimes.length = c.bootCount from rfl))
+    (by simpa [Nat.add_mul] using h.finalIndex) hbootPos h.bootLe
+    h.tableLenM h.markPos h.markM h.periodM h.spanM h.firstPrimePos
+    h.firstPrimeLeLen h.firstPrimeLeBoot h.bootBoundM h.bootBoundSqM
+    h.segBootM (by simpa [finalW, Nat.add_assoc] using h.finalBaseM)
+    (by
+      have hoff : firstOffset finalW c.firstPrime < c.firstPrime :=
+        Nat.mod_lt _ h.firstPrimePos
+      exact Nat.lt_of_lt_of_le (Nat.add_lt_add_left hoff finalW)
+        (Nat.le_trans (Nat.add_le_add_left h.firstPrimeLeLen finalW)
+          (Nat.le_of_lt (by
+            simpa [finalW, Nat.add_assoc] using h.finalBaseM))))
+    h.arrayM (by simpa [← hshape] using h.markBudget)
+    (by dsimp [finalW]; omega) h.bootTwo
+    (by simpa [finalW] using h.finalStartWithin)
+    (by simpa [finalW] using h.finalBeyond)
+    (by simpa [finalW] using h.finalCap)
+    (by simpa [finalW, Nat.add_assoc] using h.finalCover)
+    (by simpa [← hshape] using h.bootFit)
+    (by simpa [← hshape, finalW] using h.finalRoom) h.rootCapM
+    h.deltaEq h.deltaM
+  let ps := rootScanMixed c.bootPrimes bootBound finalW c.segLen
+  let rootOut := indexedWindowRun 0 c (prefixFuel + 1) entry
+  have hroot :
+      (∀ j, j < c.segLen → machineCell c rootOut j = ⟨0, 0⟩) ∧
+      MachineTableRep c rootOut ps ∧ rootOut.regs rR = 0 ∧
+      rootOut.regs rW = c.lo ∧ rootOut.regs rZero = 0 := by
+    have hrootEq : rootOut =
+        ArraySegMobiusIndexedRun.indexedBodyRun (prefixFuel * c.period) c
+          c.period beforeFinal := by
+      dsimp only [rootOut, beforeFinal]
+      rw [indexedWindowRun_succ]
+      simp only [Nat.zero_add]
+    rw [hrootEq]
+    have hf := hfinal
+    rw [← hshape, h.transitionW] at hf
+    exact ⟨hf.2.1, hf.1.toMachineTableRep, hf.2.2.1,
+      hf.2.2.2.1, hf.2.2.2.2⟩
+  have hmain := indexedWindowRun_main_complete c c.rootSpan rootOut ps
+    c.rootCap c.lo mainFuel hroot.2.1 (by simpa [ps, finalW] using h.finalPrime)
+    (by simpa [ps, finalW] using h.finalLen) hroot.2.2.1
+    hroot.2.2.2.1 hroot.2.2.2.2 hroot.1 (Nat.le_refl _)
+    h.tableLenPos h.tableLenM h.markPos h.markM h.periodM h.mainIndexM
+    h.spanM h.spanPos h.firstPrimePos h.firstPrimeLeLen
+    h.firstPrimeLeCap h.rootCapM h.finalBoundSqM h.segFinalM h.mainBaseM
+    h.arrayM
+  have hcompose : indexedWindowRun 0 c (prefixFuel + 1 + mainFuel) entry =
+      indexedWindowRun c.rootSpan c mainFuel rootOut := by
+    rw [indexedWindowRun_add]
+    simpa only [rootOut, h.finalIndex, Nat.zero_add]
+  dsimp only
+  rw [hcompose]
+  exact hmain
+
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 1000000 in
 /-- Complete execution of the production sieve core, from its compiled
