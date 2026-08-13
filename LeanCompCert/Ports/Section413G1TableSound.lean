@@ -440,6 +440,103 @@ theorem rawPrefix_wordInv (c : Cfg) (hc : TableAdmissible c) (k : Nat)
     (hk : k ≤ c.loopCount) : WordInv (rawPrefix c k) := by
   exact (parallel_prefix c hc k hk).2.2
 
+theorem tsel_X_pos_of_isF_one (c : Cfg) (hc : TableAdmissible c)
+    (idx : Nat) (hidx : idx < c.loopCount)
+    (hF : (c.tsel idx).isF = 1) : 0 < (c.tsel idx).X := by
+  have hphase : c.phase1 ≤ idx := by
+    by_cases hp : idx < c.phase1
+    · simp [Cfg.tsel, hp, bnat] at hF
+    · omega
+  have hidxM : idx < M := Nat.lt_trans hidx hc.base.loopLt
+  have hphaseM : c.phase1 < M :=
+    Nat.lt_of_le_of_lt (by simp [Cfg.loopCount]) hc.base.loopLt
+  have hsubM : idx - c.phase1 < M := by omega
+  have hsub : tsub idx c.phase1 = idx - c.phase1 := by
+    rw [tsub]
+    have heq : idx + (M - c.phase1) = (idx - c.phase1) + M := by omega
+    rw [heq, Nat.add_mod_right, Nat.mod_eq_of_lt hsubM]
+  have hpPos : 0 < c.p :=
+    LeanCompCert.Ports.Section413G1Denote.p_pos c
+  have htail : idx - c.phase1 < c.cap * c.p := by
+    simp only [Cfg.loopCount] at hidx
+    omega
+  have hx0 : (idx - c.phase1) / c.p < c.cap :=
+    (Nat.div_lt_iff_lt_mul hpPos).2 htail
+  have hcapM : c.cap < M := by
+    have := hc.base.arrayLt
+    simp [Cfg.arrayLen] at this
+    omega
+  have hxM : (idx - c.phase1) / c.p + 1 < M := by omega
+  change 0 < ((tsub idx c.phase1 / c.p + 1) % M)
+  simpa only [hsub, Nat.mod_eq_of_lt hxM] using
+    (Nat.succ_pos ((idx - c.phase1) / c.p))
+
+/-- The two producer table sentinels remain zero.  This is a symbolic loop
+invariant; it does not evaluate the production sweep. -/
+theorem rawPrefix_zero_cells (c : Cfg) (hc : TableAdmissible c) :
+    ∀ k, k ≤ c.loopCount →
+      (rawPrefix c k).arr (tableLo c) = 0 ∧
+      (rawPrefix c k).arr (tableHi c) = 0 := by
+  intro k
+  induction k with
+  | zero =>
+      intro _
+      have hlo1 : tableLo c ≠ 1 := by simp [tableLo]; omega
+      have hhi1 : tableHi c ≠ 1 := by simp [tableHi]; omega
+      simp [rawPrefix, rawEntry, Cfg.init,
+        LeanCompCert.Ports.CDEMAbelScan.storeLit, arun, astep,
+        initialAState, AState.writeReg, AState.writeArr, initialState,
+        LeanCompCert.Verified.InstrBlock.sdest,
+        LeanCompCert.Verified.InstrBlock.sval, denoteOperand,
+        hlo1, hhi1,
+        show 1 % M = 1 by decide]
+  | succ k ih =>
+      intro hk
+      have hidx : k < c.loopCount := by omega
+      have hword := rawPrefix_wordInv c hc k (Nat.le_of_lt hidx)
+      have hlo := rawStep_arr_high c hc k hidx (rawPrefix c k) hword
+        (tableLo c) (by simp [Cfg.arrayLen, tableLo])
+      have hhi := rawStep_arr_high c hc k hidx (rawPrefix c k) hword
+        (tableHi c) (by simp [Cfg.arrayLen, tableHi]; omega)
+      rw [← rawPrefix_succ] at hlo hhi
+      have hprod := tsel_store_product_le c hc.base k hidx
+      have hlohi : tableLo c ≠
+          tableHi c + (c.tsel k).isF * (c.tsel k).X := by
+        simp [tableLo, tableHi]
+        omega
+      have hhilo : tableHi c ≠
+          tableLo c + (c.tsel k).isF * (c.tsel k).X := by
+        simp [tableLo, tableHi]
+        omega
+      have hprev := ih (Nat.le_of_lt hidx)
+      by_cases hz : (c.tsel k).isF * (c.tsel k).X = 0
+      · have hF0 : (c.tsel k).isF = 0 := by
+          have hFle :=
+            LeanCompCert.Ports.Section413G1Denote.tsel_isF_le_one c k
+          rcases (by omega : (c.tsel k).isF = 0 ∨
+              (c.tsel k).isF = 1) with h | h
+          · exact h
+          · have hX := tsel_X_pos_of_isF_one c hc k hidx h
+            rw [h] at hz
+            omega
+        have hplanes : tableLo c ≠ tableHi c := by
+          simp [tableLo, tableHi]
+          omega
+        simp only [hF0, Nat.zero_mul, Nat.zero_mod, Nat.add_zero] at hlo hhi
+        exact ⟨by simpa [hplanes] using hlo, by simpa [hplanes] using hhi⟩
+      · have hloeq : tableLo c ≠
+            tableLo c + (c.tsel k).isF * (c.tsel k).X := by omega
+        have hhieq : tableHi c ≠
+            tableHi c + (c.tsel k).isF * (c.tsel k).X := by omega
+        simp only [hlohi, hhilo, hloeq, hhieq, if_false] at hlo hhi
+        exact ⟨hlo.trans hprev.1, hhi.trans hprev.2⟩
+
+theorem rawFinal_zero_cells (c : Cfg) (hc : TableAdmissible c) :
+    (rawFinal c).arr (tableLo c) = 0 ∧
+      (rawFinal c).arr (tableHi c) = 0 := by
+  rw [rawFinal_eq_prefix]
+  exact rawPrefix_zero_cells c hc c.loopCount (Nat.le_refl _)
+
 theorem final_index_succ (c : Cfg) (X : Nat) (hX : 1 ≤ X) :
     c.phase1 + (X - 1) * c.p + (2 * c.s + 1) + 1 =
       c.phase1 + X * c.p := by
