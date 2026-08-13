@@ -29,8 +29,10 @@ the lower accumulator or the upper one, and a two-sided claim needs both.
 `expectedSL` and `expectedSU` are the values an independent exact-integer
 computation produces for this window; the emitted `main` compares the
 program's output against them and exits `0` only on agreement.  They are
-**corroborated, not proved** — the step from `denote = some n` to a statement
-about `loopE` is `Ports.RS62Ladder.LadderEncoding`, which is not discharged.
+**corroborated, not yet registered as a production receipt**.  The generic
+step from `denote = some n` to `loopE` is now discharged by
+`Ports.RS62LadderEncoding.ladderEncoding_scanPrime`; this historical test
+module does not supply the remaining concrete word-room receipt.
 -/
 
 namespace LeanCompCert.Testing.RS62LadderCertificate

@@ -46,10 +46,10 @@ Proved here: the program is well formed (`ladderProgram_wf`), so
 `AProgram.evalCC_compile` applies and the emitted C computes exactly
 `AProgram.denote`.
 
-**Not proved here**: that `AProgram.denote` *is* the ladder — i.e. that the
-fold this program performs equals `RS62.loopE`.  That is the encoding
-obligation, it is stated below as `LadderEncoding`, and it is the step neither
-the artifact nor `evidenced_decide` touches.  What is available towards it:
+This low-level module states the denotation obligation as `LadderEncoding`.
+The downstream `Ports/RS62LadderEncoding.lean` module now proves it for the
+fixed-shape `scanPrime` predicate under explicit coverage and word-room
+premises.  The reusable ingredients exposed here are:
 
 * `FoldBridge.Program.denote_eq_foldl` turns the program into a `List.foldl`
   over `List.range (f · B)` — size-independent, proved once;
@@ -58,10 +58,8 @@ the artifact nor `evidenced_decide` touches.  What is available towards it:
 * `Sieve.spfFixed_eq_leastFactor` identifies the flattened scan's verdict with
   the smallest factor.
 
-What is missing is the re-blocking between the two index spaces (`f · B` flat
-rounds against `f` candidates) together with the word-modulus side conditions
-on the `sub` and `udiv` instructions.  Both are ordinary Lean; neither is
-supplied here.
+The downstream proof supplies the re-blocking between the two index spaces
+and all word-modulus side conditions without evaluating either fold.
 
 ## Scale
 
@@ -244,12 +242,11 @@ theorem ladderProgram_denote (n0 f B SL0 SU0 out : Nat) :
       (ladderScalarProgram n0 f B SL0 SU0 out).denote :=
   AProgram.ofProgram_denote _
 
-/-! ## The encoding obligation, stated
+/-! ## The encoding obligation
 
 Everything above is about the *program*.  The statement a certificate wants is
-about the *ladder*.  This is the gap, written down rather than assumed away:
-an artifact run establishes the left-hand side of `LadderEncoding` and says
-nothing whatever about the right.
+about the *ladder*.  It is defined here to avoid a dependency cycle and proved
+for `scanPrime` in `Ports/RS62LadderEncoding.lean`.
 -/
 
 /--

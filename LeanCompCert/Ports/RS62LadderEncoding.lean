@@ -4,7 +4,7 @@ import LeanCompCert.Verified.Frontend
 import LeanCompCert.Verified.BlockDefined
 
 /-!
-# Towards what `RS62LadderProgram` denotes
+# What `RS62LadderProgram` denotes
 
 `Ports/RS62LadderProgram.lean` proves that the emitted C computes
 `AProgram.denote`, and then says, plainly, what it does **not** prove:
@@ -13,9 +13,9 @@ import LeanCompCert.Verified.BlockDefined
 > encoding obligation, it is stated below as `LadderEncoding`, and it is the
 > step neither the artifact nor `evidenced_decide` touches.
 
-**This file does not yet discharge that obligation completely.**  It supplies
-the machine-level block proofs and the restricted fold bridge, then says
-exactly where the remaining scan/reblocking arithmetic stops.
+This file discharges that obligation for `scanPrime`.  The proof is symbolic:
+it composes block semantics, reblocks the flat rounds, and checks a compact
+word-room premise.  It never evaluates a production candidate range.
 
 ## 1. The index-restricted fold bridge — proved
 
@@ -46,20 +46,20 @@ and upper circuits are proved equal to `incLWord` and `incUWord`, and
 `commitBlock_denote_vals` proves the exact prime gate, accumulator additions,
 and reset.  Every proof is block-sized; none evaluates a candidate range.
 
-## 3. The remaining obligation, split and named
+## 3. Complete encoding
 
-`MachineHalf` and `ArithmeticHalf` below state the two halves that
-`LadderEncoding` factors into, in terms that mention no register and no trace,
-together with the lever each one needs.  Neither is proved.
-
-`Ports/BlockedFold.lean` supplies the re-blocking that the arithmetic half
-needs, and which `RS62LadderProgram`'s docstring named as the missing piece.
+`ladderBody_denote_flatRound` composes all three instruction blocks.
+`flatObs_fold_eq_loopE` reblocks every flat round into candidate steps.
+`ladderFold_denote` lifts those equations through the partial machine
+semantics, and `ladderEncoding_scanPrime` closes the public encoding
+obligation.  `FlatRoom` remains an explicit, compiled-checkable premise so
+machine-word transparency is never obtained from wraparound.
 
 ## Trust, stated exactly
 
-Nothing here is a certificate and nothing here removes an axiom.  What is
-proved is proved from `propext`, `Classical.choice` and `Quot.sound` only, and
-what is not proved is marked as such rather than assumed.
+Nothing here is itself a production run certificate.  The encoding theorem is
+proved from ordinary Lean foundations; a run admission still needs a compiled
+campaign, its word-room receipt, and the source-predicate bridge.
 -/
 
 namespace LeanCompCert.Ports.RS62LadderEncoding
@@ -188,20 +188,196 @@ theorem decodeBlock_denote (n0 B i : Nat) (s : RegState) (hB : B % M ≠ 0) :
   simp [decodeBlock, denoteInstrs, denoteInstr, denoteOperand, denoteOp,
     dstep, hB, RegState.set, rR, rN, rD]
 
+/-- Decode values and the three carried registers, with every machine modulus
+made transparent by scalar range premises. -/
+theorem dstep_vals (n0 B i : Nat) (s : RegState)
+    (hiM : i < M) (hBM : B < M) (hB0 : 0 < B)
+    (hnM : n0 + i / B < M) (hdM : i % B + 2 < M) :
+    dstep n0 B i s rR = i % B ∧
+    dstep n0 B i s rN = n0 + i / B ∧
+    dstep n0 B i s rD = i % B + 2 ∧
+    dstep n0 B i s rSL = s rSL ∧
+    dstep n0 B i s rSU = s rSU ∧
+    dstep n0 B i s rAcc = s rAcc := by
+  have hremB : i % B < B := Nat.mod_lt _ hB0
+  have hremM : i % B < M := Nat.lt_trans hremB hBM
+  have hdivM : i / B < M :=
+    Nat.lt_of_le_of_lt (Nat.div_le_self i B) hiM
+  simp [dstep, RegState.set, rR, rN, rD, rSL, rSU, rAcc,
+    Nat.mod_eq_of_lt hiM, Nat.mod_eq_of_lt hBM,
+    Nat.mod_eq_of_lt hremM, Nat.mod_eq_of_lt hdivM,
+    Nat.mod_eq_of_lt hnM, Nat.mod_eq_of_lt hdM, Nat.add_comm]
+
+/-- One named instruction step, keeping the preceding state opaque. -/
+private theorem step_write {k d : Nat} {s : RegState} {p q : List Instr}
+    {op : Op} {l r : Operand} (hq : q = p ++ [Instr.binop d op l r])
+    {a b v : Nat} (hl : denoteOperand k (srun k s p) l = a)
+    (hr : denoteOperand k (srun k s p) r = b)
+    (hop : denoteOp op a b = some v) : srun k s q d = v := by
+  rw [hq, srun_read_last k d p _ rfl]
+  exact sval_binop_val hl hr hop
+
+/-- Compose three successful blocks without unfolding any of their
+instructions. -/
+private theorem denoteInstrs_three_some (k : Nat) (s0 s1 s2 s3 : RegState)
+    (xs ys zs : List Instr)
+    (h1 : denoteInstrs k s0 xs = some s1)
+    (h2 : denoteInstrs k s1 ys = some s2)
+    (h3 : denoteInstrs k s2 zs = some s3) :
+    denoteInstrs k s0 ((xs ++ ys) ++ zs) = some s3 := by
+  rw [Frontend.denoteInstrs_append, Frontend.denoteInstrs_append, h1]
+  simp only [Option.bind_some, h2, h3]
+
 /-- `scanBlock` transcribed: one `spfStep` round on the found-mask. -/
 def sstep (i : Nat) (s : RegState) : RegState :=
   (denoteInstrs i s scanBlock).getD s
 
+private def sc0 : Instr := .binop rG .eq (.reg rAcc) (.lit 0)
+private def sc1 : Instr := .binop rT1 .mul (.reg rD) (.reg rD)
+private def sc2 : Instr := .binop rT1 .le (.reg rT1) (.reg rN)
+private def sc3 : Instr := .binop rG .mul (.reg rG) (.reg rT1)
+private def sc4 : Instr := .binop rT2 .urem (.reg rN) (.reg rD)
+private def sc5 : Instr := .binop rT2 .eq (.reg rT2) (.lit 0)
+private def sc6 : Instr := .binop rG .mul (.reg rG) (.reg rT2)
+private def sc7 : Instr := .binop rT1 .sub (.lit 1) (.reg rG)
+private def sc8 : Instr := .binop rT1 .mul (.reg rT1) (.reg rAcc)
+private def sc9 : Instr := .binop rT2 .mul (.reg rG) (.reg rD)
+private def sc10 : Instr := .binop rAcc .add (.reg rT1) (.reg rT2)
+
+private def sp1 : List Instr := [sc0]
+private def sp2 : List Instr := sp1 ++ [sc1]
+private def sp3 : List Instr := sp2 ++ [sc2]
+private def sp4 : List Instr := sp3 ++ [sc3]
+private def sp5 : List Instr := sp4 ++ [sc4]
+private def sp6 : List Instr := sp5 ++ [sc5]
+private def sp7 : List Instr := sp6 ++ [sc6]
+private def sp8 : List Instr := sp7 ++ [sc7]
+private def sp9 : List Instr := sp8 ++ [sc8]
+private def sp10 : List Instr := sp9 ++ [sc9]
+private def sp11 : List Instr := sp10 ++ [sc10]
+
+private theorem scanBlock_eq_sp11 : scanBlock = sp11 := rfl
+
+/-- The scan's sole partial operation is the remainder by the decoded divisor.
+The proof retires the four-instruction prefix and six-instruction suffix as
+opaque division-free stages. -/
+theorem scanBlock_defined (i : Nat) (s : RegState) (hD : s rD ≠ 0) :
+    SAllDefined i s scanBlock := by
+  rw [scanBlock_eq_sp11]
+  show SAllDefined i s (sp4 ++ sc4 :: [sc5, sc6, sc7, sc8, sc9, sc10])
+  refine sAllDefined_stage (by rfl) (sDefined_urem ?_)
+    (sAllDefined_of_noDiv i _ _ (by rfl))
+  rw [denoteOperand_reg, srun_frame i rD sp4 (by rfl)]
+  exact hD
+
 theorem scanBlock_denote (i : Nat) (s : RegState) (hD : s rD ≠ 0) :
     denoteInstrs i s scanBlock = some (sstep i s) := by
-  have hD5 : s 5 ≠ 0 := hD
+  have hrun := denoteInstrs_eq_srun i scanBlock s (scanBlock_defined i s hD)
   unfold sstep
-  cases h : denoteInstrs i s scanBlock with
-  | none =>
-      exfalso
-      simp [scanBlock, denoteInstrs, denoteInstr, denoteOperand, denoteOp,
-        hD5, RegState.set, rAcc, rD, rN, rG, rT1, rT2] at h
-  | some s' => rfl
+  rw [hrun]
+  rfl
+
+/-- Exact accumulator observation for one fixed-shape factor-scan round.
+This is an eleven-instruction symbolic walk, not an evaluation of `spfScan`. -/
+theorem scanBlock_srun_rAcc (i : Nat) (s : RegState) (a n d : Nat)
+    (ha : s rAcc = a) (hn : s rN = n) (hd : s rD = d)
+    (haM : a < M) (hnM : n < M) (hdM : d < M)
+    (hddM : d * d < M) (hd0 : d ≠ 0) :
+    srun i s scanBlock rAcc =
+      if a = 0 ∧ d * d ≤ n ∧ n % d = 0 then d else a := by
+  have e0 : srun i s sp1 rG = if a = 0 then 1 else 0 := by
+    apply step_write (q := sp1) (p := []) (op := .eq)
+      (l := .reg rAcc) (r := .lit 0) (a := a) (b := 0)
+      (v := if a = 0 then 1 else 0) (by rfl)
+    · rw [denoteOperand_reg]
+      exact ha
+    · exact denoteOperand_lit_of_lt i _ (by decide)
+    · exact denoteOp_eq_val _ _
+  have e1 : srun i s sp2 rT1 = d * d := by
+    apply step_write (q := sp2) (p := sp1) (by rfl)
+    · rw [denoteOperand_reg, srun_frame i rD sp1 (by rfl), hd]
+    · rw [denoteOperand_reg, srun_frame i rD sp1 (by rfl), hd]
+    · exact denoteOp_mul_of_lt hddM
+  have e2 : srun i s sp3 rT1 = if d * d ≤ n then 1 else 0 := by
+    apply step_write (q := sp3) (p := sp2) (by rfl)
+    · rw [denoteOperand_reg, e1]
+    · rw [denoteOperand_reg, srun_frame i rN sp2 (by rfl), hn]
+    · exact denoteOp_le_val _ _
+  have e3 : srun i s sp4 rG =
+      if a = 0 ∧ d * d ≤ n then 1 else 0 := by
+    apply step_write (q := sp4) (p := sp3) (by rfl)
+    · rw [denoteOperand_reg,
+        show sp3 = sp1 ++ [sc1, sc2] from rfl,
+        srun_frame_append i rG sp1 [sc1, sc2] (by rfl), e0]
+    · rw [denoteOperand_reg, e2]
+    · by_cases h0 : a = 0 <;> by_cases hle : d * d ≤ n <;>
+        simp [h0, hle, denoteOp, Nat.mod_eq_of_lt (by decide : 1 < M)]
+  have e4 : srun i s sp5 rT2 = n % d := by
+    apply step_write (q := sp5) (p := sp4) (by rfl)
+    · rw [denoteOperand_reg, srun_frame i rN sp4 (by rfl), hn]
+    · rw [denoteOperand_reg, srun_frame i rD sp4 (by rfl), hd]
+    · exact denoteOp_urem_of_ne hd0 hnM
+  have e5 : srun i s sp6 rT2 = if n % d = 0 then 1 else 0 := by
+    apply step_write (q := sp6) (p := sp5) (by rfl)
+    · rw [denoteOperand_reg, e4]
+    · exact denoteOperand_lit_of_lt i _ (by decide)
+    · exact denoteOp_eq_val _ _
+  have e6 : srun i s sp7 rG =
+      if a = 0 ∧ d * d ≤ n ∧ n % d = 0 then 1 else 0 := by
+    apply step_write (q := sp7) (p := sp6) (by rfl)
+    · rw [denoteOperand_reg,
+        show sp6 = sp4 ++ [sc4, sc5] from rfl,
+        srun_frame_append i rG sp4 [sc4, sc5] (by rfl), e3]
+    · rw [denoteOperand_reg, e5]
+    · by_cases h0 : a = 0 <;> by_cases hle : d * d ≤ n <;>
+        by_cases hmod : n % d = 0 <;>
+        simp [h0, hle, hmod, denoteOp, Nat.mod_eq_of_lt (by decide : 1 < M)]
+  have e7 : srun i s sp8 rT1 =
+      if a = 0 ∧ d * d ≤ n ∧ n % d = 0 then 0 else 1 := by
+    apply step_write (q := sp8) (p := sp7) (by rfl)
+    · exact denoteOperand_lit_of_lt i _ (by decide)
+    · rw [denoteOperand_reg, e6]
+    · by_cases hh : a = 0 ∧ d * d ≤ n ∧ n % d = 0
+      · simpa [hh] using
+          (denoteOp_sub_of_le (a := 1) (b := 1) (by decide) (by decide))
+      · simpa [hh] using
+          (denoteOp_sub_of_le (a := 1) (b := 0) (by decide) (by decide))
+  have e8 : srun i s sp9 rT1 =
+      if a = 0 ∧ d * d ≤ n ∧ n % d = 0 then 0 else a := by
+    apply step_write (q := sp9) (p := sp8) (by rfl)
+    · rw [denoteOperand_reg, e7]
+    · rw [denoteOperand_reg, srun_frame i rAcc sp8 (by rfl), ha]
+    · by_cases hh : a = 0 ∧ d * d ≤ n ∧ n % d = 0 <;>
+        simp [hh, denoteOp, Nat.mod_eq_of_lt haM]
+  have e9 : srun i s sp10 rT2 =
+      if a = 0 ∧ d * d ≤ n ∧ n % d = 0 then d else 0 := by
+    apply step_write (q := sp10) (p := sp9) (by rfl)
+    · rw [denoteOperand_reg,
+        show sp9 = sp7 ++ [sc7, sc8] from rfl,
+        srun_frame_append i rG sp7 [sc7, sc8] (by rfl), e6]
+    · rw [denoteOperand_reg, srun_frame i rD sp9 (by rfl), hd]
+    · by_cases hh : a = 0 ∧ d * d ≤ n ∧ n % d = 0 <;>
+        simp [hh, denoteOp, Nat.mod_eq_of_lt hdM]
+  rw [scanBlock_eq_sp11]
+  apply step_write (q := sp11) (p := sp10) (by rfl)
+  · rw [denoteOperand_reg,
+      show sp10 = sp9 ++ [sc9] from rfl,
+      srun_frame_append i rT1 sp9 [sc9] (by rfl), e8]
+  · rw [denoteOperand_reg, e9]
+  · by_cases hh : a = 0 ∧ d * d ≤ n ∧ n % d = 0
+    · simpa [hh] using (denoteOp_add_of_lt (show 0 + d < M by simpa using hdM))
+    · simpa [hh] using (denoteOp_add_of_lt (show a + 0 < M by simpa using haM))
+
+/-- The same observation on the partial denotation used by body composition. -/
+theorem scanBlock_denote_vals (i : Nat) (s : RegState) (a n d : Nat)
+    (ha : s rAcc = a) (hn : s rN = n) (hd : s rD = d)
+    (haM : a < M) (hnM : n < M) (hdM : d < M)
+    (hddM : d * d < M) (hd0 : d ≠ 0) :
+    ∃ s', denoteInstrs i s scanBlock = some s' ∧
+      s' rAcc = if a = 0 ∧ d * d ≤ n ∧ n % d = 0 then d else a := by
+  refine ⟨srun i s scanBlock,
+    denoteInstrs_eq_srun i scanBlock s (scanBlock_defined i s (by rw [hd]; exact hd0)),
+    scanBlock_srun_rAcc i s a n d ha hn hd haM hnM hdM hddM hd0⟩
 
 /-! ## The commit block is defined
 
@@ -450,14 +626,6 @@ The following walks name one instruction at a time.  This is intentionally
 more explicit than a broad `simp [srun]`: the latter expands a tower of
 register updates and was the source of the old high-memory proof path.
 -/
-
-private theorem step_write {k d : Nat} {s : RegState} {p q : List Instr}
-    {op : Op} {l r : Operand} (hq : q = p ++ [Instr.binop d op l r])
-    {a b v : Nat} (hl : denoteOperand k (srun k s p) l = a)
-    (hr : denoteOperand k (srun k s p) r = b)
-    (hop : denoteOp op a b = some v) : srun k s q d = v := by
-  rw [hq, srun_read_last k d p _ rfl]
-  exact sval_binop_val hl hr hop
 
 private def l0 : Instr := .binop rT1 .mul (.reg rM) (.lit 2)
 private def l1 : Instr := .binop rT1 .add (.reg rT1) (.lit (3 * fpD))
@@ -1013,61 +1181,410 @@ theorem commitBlock_denote_vals (B k : Nat) (u : RegState) (n : Nat)
     commitBlock_denote B k u n hn hn3 hn40, ?_⟩
   exact commitBlock_vals B k u n hn hn3 hn40 hBM hSLM hSUM hAccM hSLadd hSUadd
 
-/-! ## What remains, stated
+/-! ## One complete flat round -/
 
-The two halves the encoding obligation splits into are named here so that the
-next person does not have to re-derive the split.  Neither is proved in this
-file; both are ordinary Lean, and the levers each needs are listed.
--/
+/-- Mathematical accumulator transition of one trial-divisor round. -/
+def scanNext (a n d : Nat) : Nat :=
+  if a = 0 ∧ d * d ≤ n ∧ n % d = 0 then d else a
 
-/--
-**Half one — the machine half.**  The body, at every index the loop visits,
-maps the carried triple `(SL, SU, acc)` by a transparent function of that
-triple and the index alone.
+theorem scanNext_lt (a n d : Nat) (ha : a < M) (hd : d < M) :
+    scanNext a n d < M := by
+  unfold scanNext
+  split
+  · exact hd
+  · exact ha
 
-Every register other than `rSL`, `rSU` and `rAcc` is written from the index
-before it is read, which is why the observation is a triple and not a register
-file.  `decodeBlock_denote`, `scanBlock_denote`, and
-`commitBlock_denote_vals` are the three block lemmas.  The commit block's
-seven `udiv` guards are discharged from `3 ≤ n`; what remains is to
-interpret the scan state under the decoded range bounds and compose the three
-blocks into this observation.
+/-- Observable transition of one flattened `(candidate, divisor)` round. -/
+def flatRound (n0 B i SL SU acc : Nat) : Nat × Nat × Nat :=
+  let r := i % B
+  let n := n0 + i / B
+  let a' := scanNext acc n (r + 2)
+  (SL + (if r = B - 1 ∧ a' = 0 then incLWord (n - 1) else 0),
+   SU + (if r = B - 1 ∧ a' = 0 then incUWord (n - 1) else 0),
+   if r = B - 1 then 0 else a')
 
-With this and `Program.denote_eq_foldl_mem` (proved above), the program
-denotes `(List.range (f · B)).foldl g (SL₀, SU₀, 0)`.
--/
-def MachineHalf (n0 B f : Nat) (g : Nat → Nat × Nat × Nat → Nat × Nat × Nat) :
-    Prop :=
-  ∀ (i : Nat) (s : RegState), i < f * B →
-    ∃ s' : RegState,
-      denoteInstrs i s (ladderBody n0 B) = some s' ∧
-      (s' rSL, s' rSU, s' rAcc) = g i (s rSL, s rSU, s rAcc)
+theorem scanNext_eq_spfStep (a n r : Nat) :
+    scanNext a n (r + 2) = Sieve.spfStep n a r := by
+  rfl
 
-/--
-**Half two — the arithmetic half.**  One block of `B` rounds of that
-transparent step performs one `RS62.loopE` step at candidate `n₀ + q`.
+/-- Decode, scan, and commit compose to `flatRound`.  All premises are scalar
+range facts; the theorem's cost is independent of the loop count. -/
+theorem ladderBody_denote_flatRound (n0 B i : Nat) (s : RegState)
+    (hiM : i < M) (hBM : B < M) (hB0 : 0 < B)
+    (hnM : n0 + i / B < M) (hdM : i % B + 2 < M)
+    (hddM : (i % B + 2) * (i % B + 2) < M)
+    (hn3 : 3 ≤ n0 + i / B) (hn40 : n0 + i / B ≤ 2 ^ 40)
+    (hSLM : s rSL < M) (hSUM : s rSU < M) (hAccM : s rAcc < M)
+    (hSLadd : s rSL + incLWord (n0 + i / B - 1) < M)
+    (hSUadd : s rSU + incUWord (n0 + i / B - 1) < M) :
+    ∃ s', denoteInstrs i s (ladderBody n0 B) = some s' ∧
+      (s' rSL, s' rSU, s' rAcc) =
+        flatRound n0 B i (s rSL) (s rSU) (s rAcc) := by
+  let r := i % B
+  let n := n0 + i / B
+  let d := r + 2
+  let a' := scanNext (s rAcc) n d
+  let v := dstep n0 B i s
+  have hBmod : B % M ≠ 0 := by
+    rw [Nat.mod_eq_of_lt hBM]
+    omega
+  have hdecode : denoteInstrs i s (decodeBlock n0 B) = some v := by
+    dsimp [v]
+    exact decodeBlock_denote n0 B i s hBmod
+  have hvals := dstep_vals n0 B i s hiM hBM hB0 hnM hdM
+  change v rR = r ∧ v rN = n ∧ v rD = d ∧
+    v rSL = s rSL ∧ v rSU = s rSU ∧ v rAcc = s rAcc at hvals
+  obtain ⟨hvr, hvn, hvd, hvSL, hvSU, hvAcc⟩ := hvals
+  let w := srun i v scanBlock
+  have hscan : denoteInstrs i v scanBlock = some w := by
+    dsimp [w]
+    exact denoteInstrs_eq_srun i scanBlock v
+      (scanBlock_defined i v (by rw [hvd]; dsimp [d, r]; omega))
+  have hwa : w rAcc = a' := by
+    dsimp [w, a']
+    exact scanBlock_srun_rAcc i v (s rAcc) n d hvAcc hvn hvd
+      hAccM hnM hdM hddM (by dsimp [d, r]; omega)
+  have hwr : w rR = r := by
+    dsimp [w]
+    rw [srun_frame i rR scanBlock (by rfl), hvr]
+  have hwn : w rN = n := by
+    dsimp [w]
+    rw [srun_frame i rN scanBlock (by rfl), hvn]
+  have hwSL : w rSL = s rSL := by
+    dsimp [w]
+    rw [srun_frame i rSL scanBlock (by rfl), hvSL]
+  have hwSU : w rSU = s rSU := by
+    dsimp [w]
+    rw [srun_frame i rSU scanBlock (by rfl), hvSU]
+  have ha'M : a' < M := scanNext_lt (s rAcc) n d hAccM hdM
+  have hwSLadd : w rSL + incLWord (n - 1) < M := by
+    rw [hwSL]
+    exact hSLadd
+  have hwSUadd : w rSU + incUWord (n - 1) < M := by
+    rw [hwSU]
+    exact hSUadd
+  obtain ⟨z, hz, hzvals⟩ := commitBlock_denote_vals B i w n hwn
+    (by dsimp [n]; exact hn3) (by dsimp [n]; exact hn40)
+    (Nat.lt_of_le_of_lt (Nat.sub_le B 1) hBM)
+    (by rw [hwSL]; exact hSLM) (by rw [hwSU]; exact hSUM)
+    (by rw [hwa]; exact ha'M)
+    hwSLadd hwSUadd
+  refine ⟨z, ?_, ?_⟩
+  · change denoteInstrs i s
+      (((decodeBlock n0 B ++ scanBlock) ++ commitBlock B)) = some z
+    exact denoteInstrs_three_some i s v w z
+      (decodeBlock n0 B) scanBlock (commitBlock B) hdecode hscan hz
+  · change (z rSL, z rSU, z rAcc) =
+      (s rSL + (if r = B - 1 ∧ a' = 0 then incLWord (n - 1) else 0),
+       s rSU + (if r = B - 1 ∧ a' = 0 then incUWord (n - 1) else 0),
+       if r = B - 1 then 0 else a')
+    apply Prod.ext
+    · simpa only [hwr, hwa, hwSL] using hzvals.1
+    · apply Prod.ext
+      · simpa only [hwr, hwa, hwSU] using hzvals.2.1
+      · simpa only [hwr, hwa] using hzvals.2.2
 
-`Ports/BlockedFold.lean`'s `foldl_range_mul` re-associates the flat fold into
-blocks; `block_eq_shift` re-indexes a block by its round `r ∈ [0, B)`;
-`Verified/Sieve.lean`'s `spfFixed_eq_leastFactor` identifies the accumulated
-scan verdict with the true smallest factor, given `n < (B + 2)²`; and
-`Ports/RS62LoopE.lean`'s `loopE_eq_word` supplies the word-safe increments.
+/-! ## Reblocking one candidate -/
 
-The guard is *derived*, not assumed: the block commits exactly when the scan
-accumulator is still zero after `B` rounds.
--/
-def ArithmeticHalf (B : Nat) (p : Nat → Bool)
-    (g : Nat → Nat × Nat × Nat → Nat × Nat × Nat) : Prop :=
-  ∀ (n0 q SL SU : Nat),
-    BlockedFold.block B (fun a i => g i a) (SL, SU, 0) q =
-      ((loopE p 1 (n0 + q) SL SU).1, (loopE p 1 (n0 + q) SL SU).2, 0)
+/-- `flatRound` as a fold step on the observable triple. -/
+def flatObs (n0 B : Nat) (z : Nat × Nat × Nat) (i : Nat) :
+    Nat × Nat × Nat :=
+  flatRound n0 B i z.1 z.2.1 z.2.2
 
-/--
-Together the two halves are `LadderEncoding` — the obligation
-`Ports/RS62LadderProgram.lean` states and does not discharge.  Recorded as a
-comment on the shape of the composition rather than proved, because half two
-is not proved here.
--/
-example : True := trivial
+/-- The same round after its candidate and local divisor index are decoded. -/
+def localRound (B n : Nat) (z : Nat × Nat × Nat) (r : Nat) :
+    Nat × Nat × Nat :=
+  let a' := scanNext z.2.2 n (r + 2)
+  (z.1 + (if r = B - 1 ∧ a' = 0 then incLWord (n - 1) else 0),
+   z.2.1 + (if r = B - 1 ∧ a' = 0 then incUWord (n - 1) else 0),
+   if r = B - 1 then 0 else a')
+
+theorem flatObs_shift (n0 B q r : Nat) (z : Nat × Nat × Nat)
+    (hB : 0 < B) (hr : r < B) :
+    flatObs n0 B z (q * B + r) = localRound B (n0 + q) z r := by
+  have hmod : (q * B + r) % B = r := by
+    rw [Nat.mul_comm q B, Nat.mul_add_mod, Nat.mod_eq_of_lt hr]
+  have hdiv : (q * B + r) / B = q := by
+    rw [Nat.mul_comm q B, Nat.mul_add_div hB, Nat.div_eq_of_lt hr, Nat.add_zero]
+  simp only [flatObs, flatRound, hmod, hdiv, localRound]
+
+private theorem foldl_congr_mem {A : Type _} (l : List Nat)
+    (f g : A → Nat → A)
+    (h : ∀ a i, i ∈ l → f a i = g a i) :
+    ∀ a, l.foldl f a = l.foldl g a := by
+  induction l with
+  | nil => intro a; rfl
+  | cons i rest ih =>
+      intro a
+      rw [List.foldl_cons, List.foldl_cons, h a i (by simp)]
+      apply ih
+      intro a' j hj
+      exact h a' j (by simp [hj])
+
+/-- A prefix that has not reached the final round only advances `spfScan`;
+the ladder accumulators are untouched. -/
+theorem localRound_prefix (B n t SL SU : Nat) (ht : t < B) :
+    (List.range t).foldl (localRound B n) (SL, SU, 0) =
+      (SL, SU, Sieve.spfScan t n) := by
+  induction t with
+  | zero => rfl
+  | succ t ih =>
+      have ht' : t < B := by omega
+      have hlast : t ≠ B - 1 := by omega
+      rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
+        ih ht']
+      simp only [localRound, hlast, false_and, if_false]
+      rw [scanNext_eq_spfStep, ← Sieve.spfScan_succ]
+      simp only [Nat.add_zero]
+
+/-- Exactly `B` local rounds perform one candidate step, committing iff the
+complete fixed-shape factor scan found no divisor. -/
+theorem localRound_block (B n SL SU : Nat) (hB : 0 < B) :
+    (List.range B).foldl (localRound B n) (SL, SU, 0) =
+      (SL + (if Sieve.spfScan B n = 0 then incLWord (n - 1) else 0),
+       SU + (if Sieve.spfScan B n = 0 then incUWord (n - 1) else 0), 0) := by
+  obtain ⟨t, rfl⟩ := Nat.exists_eq_succ_of_ne_zero (by omega : B ≠ 0)
+  rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
+    localRound_prefix (t + 1) n t SL SU (by omega)]
+  simp only [localRound, Nat.add_one_sub_one]
+  rw [scanNext_eq_spfStep, ← Sieve.spfScan_succ]
+  by_cases h : Sieve.spfScan (t + 1) n = 0 <;> simp [h]
+
+/-- The generic `BlockedFold.block` at candidate `q` is the local candidate
+step above.  This is the flat-to-candidate reblocking needed by the program
+denotation, and it performs no fold evaluation. -/
+theorem flatObs_block (n0 B q SL SU : Nat) (hB : 0 < B) :
+    BlockedFold.block B (flatObs n0 B) (SL, SU, 0) q =
+      (SL + (if Sieve.spfScan B (n0 + q) = 0 then
+          incLWord (n0 + q - 1) else 0),
+       SU + (if Sieve.spfScan B (n0 + q) = 0 then
+          incUWord (n0 + q - 1) else 0), 0) := by
+  rw [BlockedFold.block_eq_shift]
+  rw [foldl_congr_mem (List.range B)
+    (fun z r => flatObs n0 B z (q * B + r))
+    (localRound B (n0 + q))
+    (fun z r hr => flatObs_shift n0 B q r z hB (List.mem_range.mp hr))]
+  exact localRound_block B (n0 + q) SL SU hB
+
+/-- Proof-oriented primality predicate used by the guarded compiled route. -/
+def scanPrime (n : Nat) : Bool :=
+  decide (2 ≤ n ∧ Sieve.leastFactor n = n)
+
+/-- Under square-root coverage, one reblocked machine candidate is exactly one
+word-safe source ladder step. -/
+theorem flatObs_block_eq_loopE (n0 B q SL SU : Nat) (hB : 0 < B)
+    (hn3 : 3 ≤ n0 + q)
+    (hcover : n0 + q < (B + 2) * (B + 2)) :
+    BlockedFold.block B (flatObs n0 B) (SL, SU, 0) q =
+      ((loopE scanPrime 1 (n0 + q) SL SU).1,
+       (loopE scanPrime 1 (n0 + q) SL SU).2, 0) := by
+  have hn2 : 2 ≤ n0 + q := by omega
+  have hiff := Sieve.spfScan_eq_zero_iff B (n0 + q) hn2 hcover
+  rw [flatObs_block n0 B q SL SU hB]
+  by_cases hs : Sieve.spfScan B (n0 + q) = 0
+  · have hleast : Sieve.leastFactor (n0 + q) = n0 + q := hiff.mp hs
+    have hp : scanPrime (n0 + q) = true := by
+      simp [scanPrime, hn2, hleast]
+    simp only [hs, if_pos]
+    simp only [loopE, hp, if_pos]
+    rw [incL_eq_wordSafe (n0 + q - 1) (by omega),
+      incU_eq_wordSafe (n0 + q - 1) (by omega)]
+  · have hleast : Sieve.leastFactor (n0 + q) ≠ n0 + q := by
+      intro h
+      exact hs (hiff.mpr h)
+    have hp : scanPrime (n0 + q) = false := by
+      simp [scanPrime, hn2, hleast]
+    simp only [hs, if_false, Nat.add_zero]
+    simp only [loopE, hp, Bool.false_eq_true, if_false]
+
+/-- Folding candidate blocks is the guarded ladder fold.  This proof only
+re-associates symbolic folds; it never evaluates the candidate range. -/
+private theorem blocks_fold_eq_guarded (n0 B : Nat) (hB : 0 < B)
+    (l : List Nat) (hlower : 3 ≤ n0)
+    (hcover : ∀ q ∈ l, n0 + q < (B + 2) * (B + 2))
+    (SL SU : Nat) :
+    l.foldl (BlockedFold.block B (flatObs n0 B)) (SL, SU, 0) =
+      let a := l.foldl
+        (fun a q => stepGuarded scanPrime a (n0 + q)) (SL, SU)
+      (a.1, a.2, 0) := by
+  induction l generalizing SL SU with
+  | nil => rfl
+  | cons q rest ih =>
+      have hq3 : 3 ≤ n0 + q := by omega
+      have hqcover : n0 + q < (B + 2) * (B + 2) :=
+        hcover q (by simp)
+      have hblock := flatObs_block_eq_loopE n0 B q SL SU hB hq3 hqcover
+      have hstep :
+          BlockedFold.block B (flatObs n0 B) (SL, SU, 0) q =
+            let a := stepGuarded scanPrime (SL, SU) (n0 + q)
+            (a.1, a.2, 0) := by
+        simpa only [loopE, stepGuarded, stepRef] using hblock
+      rw [List.foldl_cons, List.foldl_cons, hstep]
+      exact ih (fun r hr => hcover r (by simp [hr])) _ _
+
+/-- The complete flat observable fold is exactly `loopE scanPrime`.  The
+coverage hypothesis is a single endpoint bound and the proof cost is
+independent of both `f` and `B`. -/
+theorem flatObs_fold_eq_loopE (n0 f B SL SU : Nat) (hB : 0 < B)
+    (hn0 : 3 ≤ n0) (hcover : n0 + f ≤ (B + 2) * (B + 2)) :
+    (List.range (f * B)).foldl (flatObs n0 B) (SL, SU, 0) =
+      ((loopE scanPrime f n0 SL SU).1,
+       (loopE scanPrime f n0 SL SU).2, 0) := by
+  rw [BlockedFold.foldl_range_mul]
+  rw [loopE_eq_foldl,
+    BlockedFold.foldl_range'_shift (stepGuarded scanPrime) f n0 (SL, SU)]
+  exact blocks_fold_eq_guarded n0 B hB (List.range f) hn0
+    (fun q hq => by
+      have hqf := List.mem_range.mp hq
+      omega) SL SU
+
+/-! ## Complete scalar-program denotation -/
+
+/-- Entry state after the two literal accumulator moves. -/
+def ladderEntry (SL SU : Nat) : RegState :=
+  (initialState.set rSL (SL % M)).set rSU (SU % M)
+
+theorem ladderInit_denote (SL SU : Nat) :
+    denoteInstrs 0 initialState
+      [Instr.mov rSL (.lit SL), Instr.mov rSU (.lit SU)] =
+      some (ladderEntry SL SU) := by
+  rfl
+
+/-- Machine-word room needed while the flat program executes.  It is stated
+over symbolic prefixes so a compiled checkpoint campaign can establish it
+without asking Lean to reduce the fold. -/
+def FlatRoom (n0 f B SL SU : Nat) : Prop :=
+  ∀ i, i < f * B →
+    let z := (List.range i).foldl (flatObs n0 B) (SL, SU, 0)
+    z.1 + incLWord (n0 + i / B - 1) < M ∧
+      z.2.1 + incUWord (n0 + i / B - 1) < M
+
+/-- Every symbolic flat prefix has a matching successful machine execution.
+The proof is indexed by the prefix length and therefore carries exactly the
+state produced at that index; no production fold is elaborated. -/
+theorem ladderFold_denote (n0 f B SL SU j : Nat)
+    (hB : 0 < B) (hflatM : f * B < M)
+    (hBM : B + 1 < M) (hddM : (B + 1) * (B + 1) < M)
+    (hn0 : 3 ≤ n0) (hn40 : n0 + f ≤ 2 ^ 40)
+    (hSL : SL < M) (hSU : SU < M)
+    (hroom : FlatRoom n0 f B SL SU) (hj : j ≤ f * B) :
+    ∃ s,
+      (List.range j).foldlM
+          (fun s index => denoteInstrs index s (ladderBody n0 B))
+          (ladderEntry SL SU) = some s ∧
+      (s rSL, s rSU, s rAcc) =
+        (List.range j).foldl (flatObs n0 B) (SL, SU, 0) ∧
+      s rAcc < M := by
+  induction j with
+  | zero =>
+      refine ⟨ladderEntry SL SU, rfl, ?_, by simp [ladderEntry, RegState.set,
+        initialState, rSL, rSU, rAcc, M]⟩
+      simp [ladderEntry, RegState.set, initialState, rSL, rSU, rAcc,
+        Nat.mod_eq_of_lt hSL, Nat.mod_eq_of_lt hSU]
+  | succ j ih =>
+      have hjlt : j < f * B := by omega
+      obtain ⟨s, hs, hobs, hacc⟩ := ih (by omega)
+      let z := (List.range j).foldl (flatObs n0 B) (SL, SU, 0)
+      have hroomj := hroom j hjlt
+      change z.1 + incLWord (n0 + j / B - 1) < M ∧
+        z.2.1 + incUWord (n0 + j / B - 1) < M at hroomj
+      have hjM : j < M := Nat.lt_trans hjlt hflatM
+      have hjdiv : j / B < f := by
+        exact (Nat.div_lt_iff_lt_mul hB).mpr (by simpa [Nat.mul_comm] using hjlt)
+      have hnM : n0 + j / B < M := by
+        have hpow : 2 ^ 40 < M := by decide
+        omega
+      have hn3 : 3 ≤ n0 + j / B :=
+        Nat.le_trans hn0 (Nat.le_add_right n0 (j / B))
+      have hnle40 : n0 + j / B ≤ 2 ^ 40 := by omega
+      have hrlt : j % B < B := Nat.mod_lt _ hB
+      have hdlt : j % B + 2 < M := by omega
+      have hdds : (j % B + 2) * (j % B + 2) < M := by
+        have hle : j % B + 2 ≤ B + 1 := by omega
+        exact Nat.lt_of_le_of_lt (Nat.mul_le_mul hle hle) hddM
+      have hsSL : s rSL = z.1 := congrArg Prod.fst hobs
+      have hsSU : s rSU = z.2.1 := congrArg (fun x => x.2.1) hobs
+      have hsAcc : s rAcc = z.2.2 := congrArg (fun x => x.2.2) hobs
+      have hsSLM : s rSL < M := by rw [hsSL]; omega
+      have hsSUM : s rSU < M := by rw [hsSU]; omega
+      obtain ⟨s', hden, hvals⟩ := ladderBody_denote_flatRound n0 B j s
+        hjM (by omega) hB hnM hdlt hdds hn3 hnle40 hsSLM hsSUM hacc
+        (by simpa [hsSL] using hroomj.1)
+        (by simpa [hsSU] using hroomj.2)
+      refine ⟨s', ?_, ?_, ?_⟩
+      · rw [List.range_succ, List.foldlM_append, hs]
+        change (denoteInstrs j s (ladderBody n0 B)).bind some = some s'
+        rw [hden]
+        rfl
+      · rw [List.range_succ, List.foldl_append, List.foldl_cons,
+          List.foldl_nil]
+        change (s' rSL, s' rSU, s' rAcc) = flatObs n0 B z j
+        rw [flatObs, ← hsSL, ← hsSU, ← hsAcc]
+        exact hvals
+      · have hnext : scanNext (s rAcc) (n0 + j / B) (j % B + 2) < M :=
+          scanNext_lt _ _ _ hacc hdlt
+        have hs'Acc : s' rAcc =
+            (flatRound n0 B j (s rSL) (s rSU) (s rAcc)).2.2 :=
+          congrArg (fun x => x.2.2) hvals
+        rw [hs'Acc]
+        simp only [flatRound]
+        split <;> omega
+
+/-- The scalar machine computes the complete guarded ladder, provided its
+symbolic prefixes fit in one word. -/
+theorem ladderScalarProgram_denote (n0 f B SL SU out : Nat)
+    (hOut : out = rSL ∨ out = rSU) (hB : 0 < B)
+    (hflatM : f * B < M) (hBM : B + 1 < M)
+    (hddM : (B + 1) * (B + 1) < M)
+    (hn0 : 3 ≤ n0) (hn40 : n0 + f ≤ 2 ^ 40)
+    (hcover : n0 + f ≤ (B + 2) * (B + 2))
+    (hSL : SL < M) (hSU : SU < M)
+    (hroom : FlatRoom n0 f B SL SU) :
+    (ladderScalarProgram n0 f B SL SU out).denote =
+      some (if out = rSL then (loopE scanPrime f n0 SL SU).1
+        else (loopE scanPrime f n0 SL SU).2) := by
+  obtain ⟨s, hfold, hobs, _⟩ := ladderFold_denote n0 f B SL SU (f * B)
+    hB hflatM hBM hddM hn0 hn40 hSL hSU hroom (by omega)
+  have hmath := flatObs_fold_eq_loopE n0 f B SL SU hB hn0 hcover
+  have hall := hobs.trans hmath
+  have hsL : s rSL = (loopE scanPrime f n0 SL SU).1 := by
+    exact congrArg Prod.fst hall
+  have hsU : s rSU = (loopE scanPrime f n0 SL SU).2 := by
+    exact congrArg (fun x => x.2.1) hall
+  simp only [ladderScalarProgram, Program.denote]
+  rw [ladderInit_denote]
+  change ((List.range (f * B)).foldlM
+      (fun s index => denoteInstrs index s (ladderBody n0 B))
+      (ladderEntry SL SU)).bind (fun s => some (s out)) = _
+  rw [hfold]
+  simp only [Option.bind_some]
+  rcases hOut with rfl | rfl
+  · simp [hsL]
+  · simp only [rSL, rSU, Nat.reduceEqDiff, ↓reduceIte, Option.some.injEq]
+    simpa only [rSU] using hsU
+
+/-- The previously stated `LadderEncoding` obligation is discharged for the
+proved scan predicate. -/
+theorem ladderEncoding_scanPrime (n0 f B SL SU : Nat)
+    (hB : 0 < B) (hflatM : f * B < M) (hBM : B + 1 < M)
+    (hddM : (B + 1) * (B + 1) < M)
+    (hn0 : 3 ≤ n0) (hn40 : n0 + f ≤ 2 ^ 40)
+    (hcover : n0 + f ≤ (B + 2) * (B + 2))
+    (hSL : SL < M) (hSU : SU < M)
+    (hroom : FlatRoom n0 f B SL SU) :
+    LadderEncoding scanPrime n0 f B SL SU := by
+  constructor
+  · rw [ladderProgram_denote]
+    simpa using ladderScalarProgram_denote n0 f B SL SU rSL (Or.inl rfl)
+      hB hflatM hBM hddM hn0 hn40 hcover hSL hSU hroom
+  · rw [ladderProgram_denote]
+    simpa [rSL, rSU] using
+      ladderScalarProgram_denote n0 f B SL SU rSU (Or.inr rfl)
+        hB hflatM hBM hddM hn0 hn40 hcover hSL hSU hroom
+
+/-! The guarded flat route is now semantically complete.  Its production-cost
+limitation is separate: scanning every divisor round is suitable for controls
+and modest shards, while the full RS62 bundle still needs the verified
+segmented prime-list/checkpoint program described in the campaign ledger. -/
 
 end LeanCompCert.Ports.RS62LadderEncoding

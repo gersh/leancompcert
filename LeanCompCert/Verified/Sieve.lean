@@ -219,6 +219,34 @@ theorem spfFixed_eq_leastFactor (bound n : Nat)
     | inl h' => exact absurd hhit ((h'.2) _)
     | inr h' => exact Nat.le_antisymm (hmin _ h'.1) (h'.2 _ hhit)
 
+/-- Below a covering bound, an empty fixed-shape scan is exactly the statement
+that the reference least factor is the number itself. -/
+theorem spfScan_eq_zero_iff (bound n : Nat) (hn : 2 ≤ n)
+    (hcover : n < (bound + 2) * (bound + 2)) :
+    spfScan bound n = 0 ↔ leastFactor n = n := by
+  have hfix : spfFixed bound n = leastFactor n :=
+    spfFixed_eq_leastFactor bound n hcover
+  constructor
+  · intro h
+    rw [← hfix]
+    unfold spfFixed
+    rw [if_pos h]
+  · intro h
+    rcases spfScan_spec bound n with ⟨h0, -⟩ | ⟨hhit, -, -⟩
+    · exact h0
+    · exfalso
+      have hne : spfScan bound n ≠ 0 := by
+        have h2 := hhit.1
+        omega
+      have hfx : spfFixed bound n = spfScan bound n := by
+        unfold spfFixed
+        rw [if_neg hne]
+      rw [hfx, h] at hfix
+      rw [hfix] at hhit
+      have hsq := hhit.2.1
+      have h2n : 2 * n ≤ n * n := Nat.mul_le_mul_right n hn
+      omega
+
 -- Sanity checks: composite, prime, and degenerate inputs, both forms.
 example : leastFactor 35 = 5 := rfl
 example : leastFactor 13 = 13 := rfl
