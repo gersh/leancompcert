@@ -101,6 +101,49 @@ theorem oneStage_clean_output (k : Nat) (s : AState) (src dest : Nat)
   · simpa [q, p, arun_lift] using
       (show q.arr = s.arr from rfl)
 
+/-- The same one-stage adapter exposes the signed-range certificate supplied
+by the checked multiplier. -/
+theorem oneStage_clean_output_range (k : Nat) (s : AState) (src dest : Nat)
+    (negate : Bool)
+    (hsrcNe : src ≠ LeanCompCert.Ports.Section413SignedDiv.rDiv)
+    (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)
+    (hclean :
+      (arun k
+        (arun k s (lift (loadWord src negate)))
+        LeanCompCert.Ports.Section413SignedScale.body).regs
+          LeanCompCert.Ports.Section413SignedScale.rViol = 0) :
+    let z := (s.regs rFactor : Int) *
+      decodeZ (if negate then
+        LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs src)
+      else s.regs src)
+    let out := arun k s (oneStage src dest negate)
+    out.regs dest = encodeZ z ∧
+      (- (H63 : Int)) ≤ z ∧ z < (H63 : Int) ∧ out.arr = s.arr := by
+  dsimp only
+  let p := arun k s (lift (loadWord src negate))
+  have hload := LeanCompCert.Ports.Section413WindowCellDiv.loadWord_outputs
+    k s.regs src negate hsrcNe
+  have hpWord : p.regs LeanCompCert.Ports.Section413SignedScale.rWord =
+      if negate then LeanCompCert.Ports.Section413G1Program.tsub 0
+        (s.regs src) else s.regs src := by
+    by_cases hneg : negate = true <;>
+      simp [hneg, p, arun_lift, loadWord] at hload ⊢
+    · exact hload.2
+    · exact hload.2
+  have hpFactor : p.regs LeanCompCert.Ports.Section413SignedScale.rFactor =
+      s.regs rFactor := by
+    simpa [p, arun_lift, loadWord, rFactor,
+      LeanCompCert.Ports.Section413SignedScale.rFactor] using hload.1
+  have hpword : ∀ j, p.regs j < M := arun_regs_word k _ _ hword harray
+  have hparray : ∀ j, p.arr j < M := arun_arr_word k _ _ hword harray
+  have hout := oneStage_clean_output k s src dest negate hsrcNe hword harray
+    hclean
+  have hrange := LeanCompCert.Ports.Section413SignedScale.body_clean_product_range
+    k p hpword hparray (by simpa [p] using hclean)
+  refine ⟨hout.1, ?_, ?_, hout.2⟩
+  · simpa [hpFactor, hpWord] using hrange.1
+  · simpa [hpFactor, hpWord] using hrange.2
+
 def program (arrayLen loopCount : Nat) (negate : Bool) : AProgram :=
   { regCount := 328
     arrayLen := arrayLen
@@ -120,6 +163,7 @@ theorem program_wf (arrayLen loopCount : Nat) (negate : Bool) :
   | true => exact (by decide : ∀ i ∈ body true, i.WF 328) i hi
 
 #print axioms oneStage_clean_output
+#print axioms oneStage_clean_output_range
 #print axioms program_wf
 
 end LeanCompCert.Ports.Section413WindowCellScale

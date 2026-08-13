@@ -327,6 +327,60 @@ theorem body_clean_output_encoded (k : Nat) (s : AState)
     split <;> omega
   · exact hbword
 
+/-- A clean checked multiplication also certifies that its mathematical
+signed product lies in the representable interval. -/
+theorem body_clean_product_range (k : Nat) (s : AState)
+    (hword : ∀ j, s.regs j < M)
+    (harray : ∀ j, s.arr j < M)
+    (hclean : (arun k s body).regs rViol = 0) :
+    let z := (s.regs rFactor : Int) * decodeZ (s.regs rWord)
+    (- (H63 : Int)) ≤ z ∧ z < (H63 : Int) := by
+  dsimp only
+  let a := arun k s signMagStage
+  let b := arun k a wideStage
+  have hsword : s.regs rWord < M := hword rWord
+  have haOut := signMagStage_outputs k s hsword
+  have haword : ∀ j, a.regs j < M := arun_regs_word k _ _ hword harray
+  have haarray : ∀ j, a.arr j < M := arun_arr_word k _ _ hword harray
+  have hbword : ∀ j, b.regs j < M := arun_regs_word k _ _ haword haarray
+  have hbOut := wideStage_outputs k a haword
+  have hclean' : srun k b.regs finalStage rViol = 0 := by
+    simpa only [body, arun_append, arun_lift, a, b] using hclean
+  have hviol := finalStage_violation k b.regs
+    (hbword rLo) (hbword rHi) (hbword rViol)
+  have hor : b.regs rViol ||| finalBad (b.regs rLo) (b.regs rHi) = 0 :=
+    hviol.symm.trans hclean'
+  have hbad : finalBad (b.regs rLo) (b.regs rHi) = 0 :=
+    (LeanCompCert.Ports.Section413G1Sound.or_eq_zero hor).2
+  obtain ⟨hhi, hlo⟩ := (finalBad_eq_zero_iff _ _).mp hbad
+  have hproduct : b.regs rLo =
+      LeanCompCert.Ports.Section413SignedDiv.magnitude (s.regs rWord) *
+        s.regs rFactor := by
+    have hwide := hbOut.1
+    rw [hhi, Nat.mul_zero, Nat.add_zero, haOut.2.1, haOut.2.2.1] at hwide
+    exact hwide
+  let z := (s.regs rFactor : Int) * decodeZ (s.regs rWord)
+  have hzabs : z.natAbs = b.regs rLo := by
+    change (((s.regs rFactor : Int) * decodeZ (s.regs rWord)).natAbs = _)
+    rw [Int.natAbs_mul]
+    change s.regs rFactor * (decodeZ (s.regs rWord)).natAbs = _
+    rw [LeanCompCert.Ports.Section413SignedDiv.wordMagnitude_natAbs _ hsword,
+      hproduct, Nat.mul_comm]
+  have hzabslt : z.natAbs < H63 := hzabs ▸ hlo
+  have abs_lt_bounds (x : Int) (hx : x.natAbs < H63) :
+      (- (H63 : Int)) ≤ x ∧ x < (H63 : Int) := by
+    cases x with
+    | ofNat n =>
+        simp only [Int.natAbs] at hx
+        change (- (H63 : Int)) ≤ (n : Int) ∧ (n : Int) < (H63 : Int)
+        constructor <;> omega
+    | negSucc n =>
+        simp only [Int.natAbs] at hx
+        change (- (H63 : Int)) ≤ -((n + 1 : Nat) : Int) ∧
+          -((n + 1 : Nat) : Int) < (H63 : Int)
+        constructor <;> omega
+  exact abs_lt_bounds z hzabslt
+
 def program (arrayLen loopCount : Nat) : AProgram :=
   { regCount := 328
     arrayLen := arrayLen
@@ -346,6 +400,7 @@ theorem program_wf (arrayLen loopCount : Nat) :
 #print axioms wideStage_outputs
 #print axioms finalStage_violation
 #print axioms body_clean_output_encoded
+#print axioms body_clean_product_range
 #print axioms program_wf
 
 end LeanCompCert.Ports.Section413SignedScale
