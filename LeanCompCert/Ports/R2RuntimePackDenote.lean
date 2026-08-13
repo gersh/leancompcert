@@ -2159,6 +2159,44 @@ theorem rootPackProduction_compiled_execution (arr : Nat → Nat)
   rootPackProgram_compiled_execution runtimeProductionCfg arr base mem
     runtimeProductionCfg_rootPackSafe hBase hCells hCellsLt
 
+/-- The complete production table setup—composite marking followed by
+fixed-log packing—executes as two verified CompCert functions over one shared
+array.  Neither production loop is evaluated by Lean. -/
+theorem rootSetupProduction_compiled (base : Int)
+    (hBase : BaseOk runtimeProductionCfg.arrayLen base) :
+    ∃ marked packed mMark mPack,
+      (r2RootMarkProgram runtimeProductionCfg).runFromArray (fun _ => 0) =
+        some marked ∧
+      (r2RootPackProgram runtimeProductionCfg).runFromArray marked.arr =
+        some packed ∧
+      Verified.MemFragment.evalMCCSequence
+          ((r2RootMarkProgram runtimeProductionCfg).initialMCCWithMem base
+            (initialMem runtimeProductionCfg.arrayLen base))
+          (r2RootMarkProgram runtimeProductionCfg).compile = some mMark ∧
+      Verified.MemFragment.evalMCCSequence
+          ((r2RootPackProgram runtimeProductionCfg).initialMCCWithMem base
+            mMark.mem)
+          (r2RootPackProgram runtimeProductionCfg).compile = some mPack ∧
+      ARel (r2RootPackProgram runtimeProductionCfg).regCount
+        (r2RootPackProgram runtimeProductionCfg).arrayLen base packed mPack := by
+  let marked := rootMarkedState runtimeProductionCfg (fun _ => 0)
+  have hMark :
+      (r2RootMarkProgram runtimeProductionCfg).runFromArray (fun _ => 0) =
+        some marked := rootMarkProduction_runFromArray (fun _ => 0)
+  obtain ⟨packed, hPack⟩ :=
+    rootPackProduction_runFromArray marked.arr
+  obtain ⟨mMark, mPack, hMarkEval, hPackEval, hPackRel⟩ :=
+    AProgram.evalCC_compile_fromArray_two
+      (r2RootMarkProgram runtimeProductionCfg)
+      (r2RootPackProgram runtimeProductionCfg)
+      (r2RootMarkProgram_wf runtimeProductionCfg)
+      (r2RootPackProgram_wf runtimeProductionCfg) rfl base hBase
+      (fun _ => 0) (initialMem runtimeProductionCfg.arrayLen base)
+      (fun k hk => initialMem_cell runtimeProductionCfg.arrayLen base hk)
+      (fun _ _ => M_pos) marked packed hMark hPack
+  exact ⟨marked, packed, mMark, mPack, hMark, hPack,
+    hMarkEval, hPackEval, hPackRel⟩
+
 #print axioms rootPackDecode_defined
 #print axioms rootPackRoundInit_defined
 #print axioms rootPackLogRound_defined
