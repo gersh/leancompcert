@@ -19,10 +19,12 @@ open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Verified.ArrayScalarBlock
 open LeanCompCert.Ports.Section413Cells
+open LeanCompCert.Ports.Section413Sweep
 open LeanCompCert.Ports.Section413WindowEventScanner
 open LeanCompCert.Ports.Section413WindowPipelineSound
 open LeanCompCert.Ports.Section413WindowTableReferenceBridge
 open LeanCompCert.Ports.Section413WindowSchedule
+open LeanCompCert.Ports.Section413WindowScannerReferenceFold
 
 /-- The constant-size scanner initializer sets the four reference
 accumulators to zero and leaves the caller-owned producer table unchanged. -/
@@ -68,7 +70,7 @@ private theorem g2_array_word : ∀ j,
       (Nat.le_refl _)).2
 
 set_option maxRecDepth 100000 in
-theorem g1_full_scanner_prefix (out : AState)
+theorem g1_scanner_row_prefixes (out : AState)
     (hflagRaw : (LeanCompCert.Ports.Section413G1TableProgram.rawFinal
       g1TableCfg).regs LeanCompCert.Ports.Section413G1Program.rViol = 0)
     (hrun : g1Scanner.runFromArray
@@ -81,10 +83,11 @@ theorem g1_full_scanner_prefix (out : AState)
           (arun 0 (initialAStateWithArray
             (LeanCompCert.Ports.Section413G1TableProgram.rawFinal
               g1TableCfg).arr) init) k)) g1Cfg) :
-    LeanCompCert.Ports.Section413WindowScannerReferenceFold.G1Matches
-      (arun 0 (initialAStateWithArray
-        (LeanCompCert.Ports.Section413G1TableProgram.rawFinal
-          g1TableCfg).arr) init) (g1Cfg.rows * slots) := by
+    ∀ n, n ≤ g1Cfg.rows →
+      LeanCompCert.Ports.Section413WindowScannerReferenceFold.G1Matches
+        (arun 0 (initialAStateWithArray
+          (LeanCompCert.Ports.Section413G1TableProgram.rawFinal
+            g1TableCfg).arr) init) (n * slots) := by
   let arr :=
     (LeanCompCert.Ports.Section413G1TableProgram.rawFinal g1TableCfg).arr
   let entry := arun 0 (initialAStateWithArray arr) init
@@ -99,16 +102,20 @@ theorem g1_full_scanner_prefix (out : AState)
       (by decide) out
     · simpa only [g1Scanner, arr] using hrun
     · simpa only [g1Scanner] using hzero
+  intro n hn
   apply
     LeanCompCert.Ports.Section413WindowScannerReferenceFold.g1_scanner_prefix_matches
       entry hw.1 hw.2 ⟨hi.1, hi.2.1, hi.2.2.1, hi.2.2.2.1⟩
-      hi.2.2.2.2 (g1_flag_zero hflagRaw) (g1Cfg.rows * slots)
-      (by decide) hclean
+      hi.2.2.2.2 (g1_flag_zero hflagRaw) (n * slots)
+      (by exact Nat.le_trans (Nat.mul_le_mul_right slots hn) (by decide))
+      (fun k hk => hclean k
+        (Nat.le_trans hk (Nat.mul_le_mul_right slots hn)))
   intro k hk
-  simpa only [entry, arr] using hreceipts k hk
+  simpa only [entry, arr] using hreceipts k
+    (Nat.lt_of_lt_of_le hk (Nat.mul_le_mul_right slots hn))
 
 set_option maxRecDepth 100000 in
-theorem g2_full_scanner_prefix (out : AState)
+theorem g2_scanner_row_prefixes (out : AState)
     (hflagRaw : (LeanCompCert.Ports.Section413G2TableProgram.rawFinal
       g2TableCfg).regs LeanCompCert.Ports.Section413G2Program.rViol = 0)
     (hrun : g2Scanner.runFromArray
@@ -121,10 +128,11 @@ theorem g2_full_scanner_prefix (out : AState)
           (arun 0 (initialAStateWithArray
             (LeanCompCert.Ports.Section413G2TableProgram.rawFinal
               g2TableCfg).arr) init) k)) g2Cfg) :
-    LeanCompCert.Ports.Section413WindowScannerReferenceFoldG2.G2Matches
-      (arun 0 (initialAStateWithArray
-        (LeanCompCert.Ports.Section413G2TableProgram.rawFinal
-          g2TableCfg).arr) init) (g2Cfg.rows * slots) := by
+    ∀ n, n ≤ g2Cfg.rows →
+      LeanCompCert.Ports.Section413WindowScannerReferenceFoldG2.G2Matches
+        (arun 0 (initialAStateWithArray
+          (LeanCompCert.Ports.Section413G2TableProgram.rawFinal
+            g2TableCfg).arr) init) (n * slots) := by
   let arr :=
     (LeanCompCert.Ports.Section413G2TableProgram.rawFinal g2TableCfg).arr
   let entry := arun 0 (initialAStateWithArray arr) init
@@ -139,13 +147,17 @@ theorem g2_full_scanner_prefix (out : AState)
       (by decide) out
     · simpa only [g2Scanner, arr] using hrun
     · simpa only [g2Scanner] using hzero
+  intro n hn
   apply
     LeanCompCert.Ports.Section413WindowScannerReferenceFoldG2.g2_scanner_prefix_matches
       entry hw.1 hw.2 ⟨hi.1, hi.2.1, hi.2.2.1, hi.2.2.2.1⟩
-      hi.2.2.2.2 (g2_flag_zero hflagRaw) (g2Cfg.rows * slots)
-      (by decide) hclean
+      hi.2.2.2.2 (g2_flag_zero hflagRaw) (n * slots)
+      (by exact Nat.le_trans (Nat.mul_le_mul_right slots hn) (by decide))
+      (fun k hk => hclean k
+        (Nat.le_trans hk (Nat.mul_le_mul_right slots hn)))
   intro k hk
-  simpa only [entry, arr] using hreceipts k hk
+  simpa only [entry, arr] using hreceipts k
+    (Nat.lt_of_lt_of_le hk (Nat.mul_le_mul_right slots hn))
 
 set_option maxRecDepth 100000 in
 /-- The compact physical receipt proves the complete G1 and G2 reference
@@ -169,16 +181,132 @@ theorem full_scanner_prefixes
   obtain ⟨hreceipts1, hreceipts2⟩ :=
     LeanCompCert.Ports.Section413Window99999PipelineReceipt.event_receipts_and_bounds h
   constructor
-  · apply g1_full_scanner_prefix out1 hflag1raw hrun1 hzero1
-    intro k hk
-    exact (hreceipts1 k hk).1
-  · apply g2_full_scanner_prefix out2 hflag2raw hrun2 hzero2
-    intro k hk
-    exact (hreceipts2 k hk).1
+  · apply (g1_scanner_row_prefixes out1 hflag1raw hrun1 hzero1
+      (fun k hk => (hreceipts1 k hk).1)) g1Cfg.rows (Nat.le_refl _)
+  · apply (g2_scanner_row_prefixes out2 hflag2raw hrun2 hzero2
+      (fun k hk => (hreceipts2 k hk).1)) g2Cfg.rows (Nat.le_refl _)
+
+set_option maxRecDepth 100000 in
+theorem g1_kRun_ok
+    (h : LeanCompCert.Ports.Section413Window99999PipelineReceipt.Receipt) :
+    (kRun g1G 1 40 36393 100000 99999).ok = true := by
+  obtain ⟨⟨hflag, out, hrun, hzero⟩, _⟩ :=
+    LeanCompCert.Ports.Section413Window99999PipelineReceipt.source_runs h
+  obtain ⟨hreceipts, _⟩ :=
+    LeanCompCert.Ports.Section413Window99999PipelineReceipt.event_receipts_and_bounds h
+  let entry := arun 0 (initialAStateWithArray
+    (LeanCompCert.Ports.Section413G1TableProgram.rawFinal g1TableCfg).arr) init
+  have hpref := g1_scanner_row_prefixes out hflag hrun hzero
+    (fun k hk => (hreceipts k hk).1)
+  apply kRun_ok_of_row_bounds g1G 1 40 36393 99999 (by decide)
+  intro i hi
+  by_cases hlo : i + 1 < 40
+  · exact Or.inr hlo
+  · left
+    let k := (i + 1) * slots - 1
+    have hslot := finalSlot i
+    have hiprod : i + 1 ≤ g1Cfg.rows := by
+      simp only [g1Cfg] at hi ⊢
+      omega
+    have hm := hpref (i + 1) hiprod
+    have hk1 : decodeZ ((scannerStateAt g1Cfg entry (k + 1)).regs rK1Hi) =
+        (rowK1Prefix g1G 1 (i + 1)).hi := by
+      rw [hslot.1]
+      rw [hm.k1hi, flatK1Prefix_rows g1G 1 (i + 1) (by
+        simpa only [productionRows, g1Cfg] using hiprod)]
+    have hk2 : decodeZ ((scannerStateAt g1Cfg entry (k + 1)).regs rK2Hi) =
+        (rowK2Prefix g1G 1 (i + 1)).hi := by
+      rw [hslot.1]
+      rw [hm.k2hi, flatK2Prefix_rows g1G 1 (i + 1) (by
+        simpa only [productionRows, g1Cfg] using hiprod)]
+    have hup := paperUpperAt_eq_unit g1Cfg entry k
+      (rowK1Prefix g1G 1 (i + 1)) (rowK2Prefix g1G 1 (i + 1))
+      (by decide) (by decide) hk1 hk2
+    have hchecked : checkedSlot g1Cfg k := by
+      exact ⟨hslot.2.2, by
+        rw [hslot.2.1]
+        simpa only [g1Cfg] using Nat.le_of_not_gt hlo⟩
+    have hpaper := (hreceipts k (by
+      have hklt : k < (i + 1) * slots := by
+        dsimp only [k]
+        have hp : 0 < (i + 1) * slots :=
+          Nat.mul_pos (by omega) (by decide)
+        omega
+      exact Nat.lt_of_lt_of_le hklt
+        (Nat.mul_le_mul_right slots hiprod))).2 hchecked
+    unfold paperBoundAt at hpaper
+    rw [hup] at hpaper
+    change (unitCell (rowK1Prefix g1G 1 (i + 1))
+      (rowK2Prefix g1G 1 (i + 1)) (slotAt k).n).hi.toNat ≤ _ at hpaper
+    rw [hslot.2.1] at hpaper
+    simpa [LeanCompCert.Ports.Section413WindowRowCheck.commonBound,
+      LeanCompCert.Ports.Section413WindowRowCheck.unitScale, g1Cfg] using hpaper
+
+set_option maxRecDepth 100000 in
+theorem g2_kRun_ok
+    (h : LeanCompCert.Ports.Section413Window99999PipelineReceipt.Receipt) :
+    (kRun g2G 2 16 37273 100000 99999).ok = true := by
+  obtain ⟨_, ⟨hflag, out, hrun, hzero⟩⟩ :=
+    LeanCompCert.Ports.Section413Window99999PipelineReceipt.source_runs h
+  obtain ⟨_, hreceipts⟩ :=
+    LeanCompCert.Ports.Section413Window99999PipelineReceipt.event_receipts_and_bounds h
+  let entry := arun 0 (initialAStateWithArray
+    (LeanCompCert.Ports.Section413G2TableProgram.rawFinal g2TableCfg).arr) init
+  have hpref := g2_scanner_row_prefixes out hflag hrun hzero
+    (fun k hk => (hreceipts k hk).1)
+  apply kRun_ok_of_row_bounds g2G 2 16 37273 99999 (by decide)
+  intro i hi
+  by_cases hlo : i + 1 < 16
+  · exact Or.inr hlo
+  · left
+    let k := (i + 1) * slots - 1
+    have hslot := finalSlot i
+    have hiprod : i + 1 ≤ g2Cfg.rows := by
+      simp only [g2Cfg] at hi ⊢
+      omega
+    have hm := hpref (i + 1) hiprod
+    have hk1 : decodeZ ((scannerStateAt g2Cfg entry (k + 1)).regs rK1Hi) =
+        (rowK1Prefix g2G 2 (i + 1)).hi := by
+      rw [hslot.1]
+      rw [hm.k1hi,
+        LeanCompCert.Ports.Section413WindowScannerReferenceFoldG2.flatK1Prefix_rows
+          g2G 2 (i + 1) (by
+            simpa only [productionRows, g2Cfg] using hiprod)]
+    have hk2 : decodeZ ((scannerStateAt g2Cfg entry (k + 1)).regs rK2Hi) =
+        (rowK2Prefix g2G 2 (i + 1)).hi := by
+      rw [hslot.1]
+      rw [hm.k2hi,
+        LeanCompCert.Ports.Section413WindowScannerReferenceFoldG2.flatK2Prefix_rows
+          g2G 2 (i + 1) (by
+            simpa only [productionRows, g2Cfg] using hiprod)]
+    have hup := paperUpperAt_eq_unit g2Cfg entry k
+      (rowK1Prefix g2G 2 (i + 1)) (rowK2Prefix g2G 2 (i + 1))
+      (by decide) (by decide) hk1 hk2
+    have hchecked : checkedSlot g2Cfg k := by
+      exact ⟨hslot.2.2, by
+        rw [hslot.2.1]
+        simpa only [g2Cfg] using Nat.le_of_not_gt hlo⟩
+    have hpaper := (hreceipts k (by
+      have hklt : k < (i + 1) * slots := by
+        dsimp only [k]
+        have hp : 0 < (i + 1) * slots :=
+          Nat.mul_pos (by omega) (by decide)
+        omega
+      exact Nat.lt_of_lt_of_le hklt
+        (Nat.mul_le_mul_right slots hiprod))).2 hchecked
+    unfold paperBoundAt at hpaper
+    rw [hup] at hpaper
+    change (unitCell (rowK1Prefix g2G 2 (i + 1))
+      (rowK2Prefix g2G 2 (i + 1)) (slotAt k).n).hi.toNat ≤ _ at hpaper
+    rw [hslot.2.1] at hpaper
+    simpa [LeanCompCert.Ports.Section413WindowRowCheck.commonBound,
+      LeanCompCert.Ports.Section413WindowRowCheck.unitScale, g2Cfg] using hpaper
 
 #print axioms initial_reference_state
-#print axioms g1_full_scanner_prefix
-#print axioms g2_full_scanner_prefix
+#print axioms g1_scanner_row_prefixes
+#print axioms g2_scanner_row_prefixes
 #print axioms full_scanner_prefixes
+#print axioms g1_kRun_ok
+#print axioms g2_kRun_ok
 
 end LeanCompCert.Ports.Section413Window99999ReferenceFold

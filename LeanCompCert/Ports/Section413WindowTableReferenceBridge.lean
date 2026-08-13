@@ -49,12 +49,16 @@ private theorem csub_signed_range {a b : Cell}
   omega
 
 def g1G (X : Nat) : Cell :=
-  (LeanCompCert.Ports.Section413G1Sound.g1Prefix
-    g1TableCfg.rounds g1TableCfg.checkLo g1TableCfg.cap X).g
+  if X ≤ g1TableCfg.cap then
+    (LeanCompCert.Ports.Section413G1Sound.g1Prefix
+      g1TableCfg.rounds g1TableCfg.checkLo g1TableCfg.cap X).g
+  else czero
 
 def g2G (X : Nat) : Cell :=
-  (LeanCompCert.Ports.Section413G2Sound.g2Prefix
-    g2TableCfg.rounds g2TableCfg.checkLo g2TableCfg.cap X).g
+  if X ≤ g2TableCfg.cap then
+    (LeanCompCert.Ports.Section413G2Sound.g2Prefix
+      g2TableCfg.rounds g2TableCfg.checkLo g2TableCfg.cap X).g
+  else czero
 
 theorem g1_flag_zero
     (hzero : (LeanCompCert.Ports.Section413G1TableProgram.rawFinal
@@ -101,7 +105,9 @@ theorem g1_tableCell_eq (hflag : g1TableCfg.tFlag = 0)
               LeanCompCert.Ports.Section413G1TableProgram.tableHi
                 g1TableCfg by rfl,
             hz.2, LeanCompCert.Ports.Section413Cells.decodeZ_zero] using rfl
-      _ = g1G 0 := by rfl
+      _ = g1G 0 := by
+        simp [g1G, LeanCompCert.Ports.Section413G1Sound.g1Prefix_zero,
+          czero]
   · have hraw := LeanCompCert.Ports.Section413G1TableSound.rawFinal_cell
       g1TableCfg g1TableCfg_admissible g1TableCfg_sound X hpos hX
     have hrel := LeanCompCert.Ports.Section413G1Sound.sweep_prefix
@@ -118,7 +124,7 @@ theorem g1_tableCell_eq (hflag : g1TableCfg.tFlag = 0)
             g1TableCfg.cap =
           LeanCompCert.Ports.Section413G1TableProgram.tableLo g1TableCfg by rfl,
         hraw.1]
-      exact hg
+      simpa [g1G, hX] using hg
     · have hg := congrArg Cell.hi hrel.g_eq
       change LeanCompCert.Ports.Section413Cells.decodeZ
           ((LeanCompCert.Ports.Section413G1TableProgram.rawFinal
@@ -129,7 +135,7 @@ theorem g1_tableCell_eq (hflag : g1TableCfg.tFlag = 0)
             g1TableCfg.cap =
           LeanCompCert.Ports.Section413G1TableProgram.tableHi g1TableCfg by rfl,
         hraw.2]
-      exact hg
+      simpa [g1G, hX] using hg
 
 set_option maxRecDepth 10000 in
 theorem g2_tableCell_eq (hflag : g2TableCfg.tFlag = 0)
@@ -158,7 +164,9 @@ theorem g2_tableCell_eq (hflag : g2TableCfg.tFlag = 0)
               LeanCompCert.Ports.Section413G2TableProgram.tableHi
                 g2TableCfg by rfl,
             hz.2, LeanCompCert.Ports.Section413Cells.decodeZ_zero] using rfl
-      _ = g2G 0 := by rfl
+      _ = g2G 0 := by
+        simp [g2G, LeanCompCert.Ports.Section413G2Sound.g2Prefix_zero,
+          czero]
   · have hraw := LeanCompCert.Ports.Section413G2TableSound.rawFinal_cell
       g2TableCfg g2TableCfg_admissible g2TableCfg_sound X hpos hX
     have hrel := LeanCompCert.Ports.Section413G2Sound.sweep_prefix
@@ -175,7 +183,7 @@ theorem g2_tableCell_eq (hflag : g2TableCfg.tFlag = 0)
             g2TableCfg.cap =
           LeanCompCert.Ports.Section413G2TableProgram.tableLo g2TableCfg by rfl,
         hraw.1]
-      exact hg
+      simpa [g2G, hX] using hg
     · have hg := congrArg Cell.hi hrel.g_eq
       change LeanCompCert.Ports.Section413Cells.decodeZ
           ((LeanCompCert.Ports.Section413G2TableProgram.rawFinal
@@ -186,7 +194,7 @@ theorem g2_tableCell_eq (hflag : g2TableCfg.tFlag = 0)
             g2TableCfg.cap =
           LeanCompCert.Ports.Section413G2TableProgram.tableHi g2TableCfg by rfl,
         hraw.2]
-      exact hg
+      simpa [g2G, hX] using hg
 
 theorem g1_tableCell_withinCap (hflag : g1TableCfg.tFlag = 0)
     (X : Nat) (hX : X ≤ g1TableCfg.cap) :
@@ -203,8 +211,7 @@ theorem g1_tableCell_withinCap (hflag : g1TableCfg.tFlag = 0)
     have hhi := LeanCompCert.Ports.Section413G1Sound.capped_range
       hrel.gHi_u64 hrel.gHi_cap
     rw [g1_tableCell_eq hflag X hX]
-    unfold g1G
-    rw [← hrel.g_eq]
+    rw [g1G, if_pos hX, ← hrel.g_eq]
     exact ⟨hlo.1, hlo.2, hhi.1, hhi.2⟩
 
 theorem g2_tableCell_withinCap (hflag : g2TableCfg.tFlag = 0)
@@ -222,8 +229,7 @@ theorem g2_tableCell_withinCap (hflag : g2TableCfg.tFlag = 0)
     have hhi := LeanCompCert.Ports.Section413G2Sound.capped_range
       hrel.gHi_u64 hrel.gHi_cap
     rw [g2_tableCell_eq hflag X hX]
-    unfold g2G
-    rw [← hrel.g_eq]
+    rw [g2G, if_pos hX, ← hrel.g_eq]
     exact ⟨hlo.1, hlo.2, hhi.1, hhi.2⟩
 
 private theorem safeX_le {cap x : Nat} (hcap : 1 ≤ cap) (hx : x ≤ cap) :

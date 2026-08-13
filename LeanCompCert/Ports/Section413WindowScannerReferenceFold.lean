@@ -193,10 +193,157 @@ theorem kRun_components (G : Nat → Cell) (v lo : Nat)
           (k2Delta G v (n + 1)) = rowK2Prefix G v (n + 1)
         rw [ih.2, rowK2Prefix_succ]
 
+private theorem int_le_of_toNat_le {z : Int} {K : Nat}
+    (h : z.toNat ≤ K) : z ≤ (K : Int) := by
+  by_cases hz : 0 ≤ z
+  · have heq : (z.toNat : Int) = z := Int.toNat_of_nonneg hz
+    omega
+  · omega
+
+theorem kRun_ok_of_row_bounds (G : Nat → Cell) (v lo : Nat)
+    (boundNum : Int) (n : Nat) (hnum : 0 ≤ boundNum)
+    (hall : ∀ i, i < n →
+      (unitCell (rowK1Prefix G v (i + 1))
+        (rowK2Prefix G v (i + 1)) (i + 1)).hi.toNat ≤
+          boundNum.toNat *
+            LeanCompCert.Ports.Section413WindowRowCheck.unitScale ∨
+        i + 1 < lo) :
+    (kRun G v lo boundNum 100000 n).ok = true := by
+  unfold kRun
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      rw [List.range_succ, List.foldl_append]
+      simp only [List.foldl_cons, List.foldl_nil]
+      let p := (List.range n).foldl
+        (fun p i => kStep G v lo boundNum 100000 i p)
+        ⟨czero, czero, true⟩
+      change (kStep G v lo boundNum 100000 n p).ok = true
+      have hpok : p.ok = true := ih (fun i hi => hall i (by omega))
+      have hcomp := kRun_components G v lo boundNum 100000 n
+      change p.k1 = rowK1Prefix G v n ∧
+          p.k2 = rowK2Prefix G v n at hcomp
+      unfold kStep
+      dsimp only
+      rw [hpok, Bool.true_and, decide_eq_true_eq]
+      rcases hall n (by omega) with hbound | hlo
+      · right
+        have hnumNat : (boundNum.toNat : Int) = boundNum :=
+          Int.toNat_of_nonneg hnum
+        have hi :
+            (unitCell (rowK1Prefix G v (n + 1))
+              (rowK2Prefix G v (n + 1)) (n + 1)).hi ≤
+                boundNum *
+                  LeanCompCert.Ports.Section413WindowRowCheck.unitScale := by
+          rw [← hnumNat]
+          exact int_le_of_toNat_le hbound
+        have heq : unitCell (cadd p.k1 (k1Delta G v (n + 1)))
+              (cadd p.k2 (k2Delta G v (n + 1))) (n + 1) =
+            unitCell (rowK1Prefix G v (n + 1))
+              (rowK2Prefix G v (n + 1)) (n + 1) := by
+          rw [hcomp.1, hcomp.2, rowK1Prefix_succ, rowK2Prefix_succ]
+        rw [heq]
+        have hscale :
+            (LeanCompCert.Ports.Section413WindowRowCheck.unitScale : Int) *
+              100000 = (SCALE : Int) := by decide
+        rw [← hscale, ← Int.mul_assoc]
+        exact Int.mul_le_mul_of_nonneg_right hi (by decide)
+      · exact Or.inl hlo
+
 theorem body_eq_checked (k : Nat) (s : AState) (c : Cfg) :
     arun k s (body c) = checkedState k s c := by
   rw [body_split, arun_append, arun_append]
   rfl
+
+private theorem checkedState_k1Hi (c : Cfg) (k : Nat) (s : AState)
+    (hf : LeanCompCert.Verified.ArrayRegFrame.writes rK1Hi
+      (LeanCompCert.Ports.Section413WindowRowCheck.body c.checkLo c.offset) =
+        false) :
+    (checkedState k s c).regs rK1Hi = (eventedState k s c).regs rK1Hi := by
+  unfold checkedState
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK1Hi _ hf _
+
+private theorem checkedState_k2Hi (c : Cfg) (k : Nat) (s : AState)
+    (hf : LeanCompCert.Verified.ArrayRegFrame.writes rK2Hi
+      (LeanCompCert.Ports.Section413WindowRowCheck.body c.checkLo c.offset) =
+        false) :
+    (checkedState k s c).regs rK2Hi = (eventedState k s c).regs rK2Hi := by
+  unfold checkedState
+  exact LeanCompCert.Verified.ArrayRegFrame.arun_frame k rK2Hi _ hf _
+
+theorem paperUpperAt_eq_unit (c : Cfg) (entry : AState) (k : Nat)
+    (K1 K2 : Cell)
+    (hf1 : LeanCompCert.Verified.ArrayRegFrame.writes rK1Hi
+      (LeanCompCert.Ports.Section413WindowRowCheck.body c.checkLo c.offset) =
+        false)
+    (hf2 : LeanCompCert.Verified.ArrayRegFrame.writes rK2Hi
+      (LeanCompCert.Ports.Section413WindowRowCheck.body c.checkLo c.offset) =
+        false)
+    (hk1 : decodeZ ((scannerStateAt c entry (k + 1)).regs rK1Hi) = K1.hi)
+    (hk2 : decodeZ ((scannerStateAt c entry (k + 1)).regs rK2Hi) = K2.hi) :
+    paperUpperAt c k (scannerStateAt c entry k) =
+      (unitCell K1 K2 (slotAt k).n).hi.toNat := by
+  have hnext : scannerStateAt c entry (k + 1) =
+      checkedState k (scannerStateAt c entry k) c := by
+    rw [scannerStateAt_succ]
+    exact body_eq_checked k _ c
+  have hk1' : decodeZ ((eventedState k (scannerStateAt c entry k) c).regs
+      rK1Hi) = K1.hi := by
+    calc
+      decodeZ ((eventedState k (scannerStateAt c entry k) c).regs rK1Hi) =
+          decodeZ ((checkedState k (scannerStateAt c entry k) c).regs
+            rK1Hi) := congrArg decodeZ (checkedState_k1Hi c k _ hf1).symm
+      _ = decodeZ ((scannerStateAt c entry (k + 1)).regs rK1Hi) :=
+        congrArg (fun s : AState => decodeZ (s.regs rK1Hi)) hnext.symm
+      _ = K1.hi := hk1
+  have hk2' : decodeZ ((eventedState k (scannerStateAt c entry k) c).regs
+      rK2Hi) = K2.hi := by
+    calc
+      decodeZ ((eventedState k (scannerStateAt c entry k) c).regs rK2Hi) =
+          decodeZ ((checkedState k (scannerStateAt c entry k) c).regs
+            rK2Hi) := congrArg decodeZ (checkedState_k2Hi c k _ hf2).symm
+      _ = decodeZ ((scannerStateAt c entry (k + 1)).regs rK2Hi) :=
+        congrArg (fun s : AState => decodeZ (s.regs rK2Hi)) hnext.symm
+      _ = K2.hi := hk2
+  dsimp only [paperUpperAt]
+  change ((if
+      -((-decodeZ ((eventedState k (scannerStateAt c entry k) c).regs
+        rK2Hi)) / ((slotAt k).n : Int)) ≥
+      -((-decodeZ ((eventedState k (scannerStateAt c entry k) c).regs
+        rK2Hi)) / (((slotAt k).n + 1 : Nat) : Int))
+    then -((-decodeZ ((eventedState k (scannerStateAt c entry k) c).regs
+        rK2Hi)) / ((slotAt k).n : Int))
+    else -((-decodeZ ((eventedState k (scannerStateAt c entry k) c).regs
+        rK2Hi)) / (((slotAt k).n + 1 : Nat) : Int))) +
+      decodeZ ((eventedState k (scannerStateAt c entry k) c).regs
+        rK1Hi)).toNat = (unitCell K1 K2 (slotAt k).n).hi.toNat
+  rw [hk1', hk2']
+  let A := -((-K2.hi) / ((slotAt k).n : Int))
+  let B := -((-K2.hi) / (((slotAt k).n + 1 : Nat) : Int))
+  change ((if A ≥ B then A else B) + K1.hi).toNat =
+    (K1.hi + max A B).toNat
+  rw [Int.max_def]
+  by_cases hab : A ≤ B <;> by_cases hba : A ≥ B <;>
+    simp [hab, hba, Int.add_comm] <;> omega
+
+theorem finalSlot (i : Nat) :
+    let k := (i + 1) * slots - 1
+    k + 1 = (i + 1) * slots ∧
+      (slotAt k).n = i + 1 ∧ (slotAt k).s = slots := by
+  dsimp only
+  have hs : 0 < slots := by decide
+  have hpos : 0 < (i + 1) * slots := Nat.mul_pos (by omega) hs
+  constructor
+  · omega
+  constructor
+  · have heq : (i + 1) * slots - 1 = i * slots + (slots - 1) := by
+      simp [slots, Nat.add_mul]
+    rw [heq]
+    simp [slotAt, slots, Nat.add_div]
+  · have heq : (i + 1) * slots - 1 = i * slots + (slots - 1) := by
+      simp [slots, Nat.add_mul]
+    rw [heq]
+    simp [slotAt, slots, Nat.add_mod]
 
 structure G1Matches (entry : AState) (n : Nat) : Prop where
   k1lo : decodeZ ((scannerStateAt g1Cfg entry n).regs rK1Lo) =
@@ -271,6 +418,9 @@ theorem g1_scanner_prefix_matches (entry : AState)
 #print axioms flatK1Prefix_rows
 #print axioms flatK2Prefix_rows
 #print axioms kRun_components
+#print axioms kRun_ok_of_row_bounds
+#print axioms paperUpperAt_eq_unit
+#print axioms finalSlot
 #print axioms body_eq_checked
 #print axioms g1_scanner_prefix_matches
 
