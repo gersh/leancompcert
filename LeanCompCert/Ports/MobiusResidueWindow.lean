@@ -52,10 +52,11 @@ to pass.
 final arithmetic assembly from those passing comparisons to the exact
 cross-multiplied source family.
 
-**Still not proved here** (and not assumed anywhere): that the segmented sieve
-core emits `muSig mu n` at each gated iteration, and the corresponding
-whole-program denotation trace.  This is now the remaining mathematical arrow
-from the accepting compiled program to the source family.
+This leaf does not itself identify the segmented sieve signal with a library
+Möbius function.  The consuming project proves that identification and the
+complete production schedule in
+`TGNativeCertificates.ArraySegMobiusMoebius`; live Hurst/CDEM residues reuse
+that schedule through `ArraySegMertensLiveFold`.
 -/
 
 namespace LeanCompCert.Ports.MobiusResidueRealisation

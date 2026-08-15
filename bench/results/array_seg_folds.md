@@ -49,11 +49,27 @@ instead of feeding the residue, exactly when `n`'s cell was never marked and
 every bootstrap prime.  What the init block still spells out is `π(⌊√L⌋)`
 primes, a function of the window size and not of the range.
 
-Every real-valued majorant is compared **once per artifact**, in the epilogue,
-against an exact integer threshold computed in Lean: `Nat.sqrt` of a rational
-cross-multiplication for the `√`, and a Machin computation of `π` in integer
-arithmetic for `⌊(6/π²)·2³⁶⌋ = 41 776 432 333` (exact — the true value is
-`41 776 432 333.0417`).  Neither a `√` nor a `π` ever appears in the artifact.
+Every real-valued majorant is represented by integer comparisons in the
+artifact.  The CDEM coefficient is the pinned literal
+`⌊(6/π²)·2³⁶⌋ = 41 776 432 333`; its lower and one-ulp upper real enclosures
+are proved in the consumer bridge from Mathlib's certified π bounds.  The
+emitter no longer evaluates the old Machin-series definition.  Neither a `√`
+nor a `π` appears in the artifact.
+
+The actual six-instruction CDEM comparison is factored without changing the
+emitted instruction sequence.  Its exact source semantics, zero-flag interval,
+and real paper-clause refinement compile in 0.25 s / 0.56 GiB and 5.7 s /
+6.42 GiB respectively under a 16 GiB hard cap.  A broad simplification of the
+symbolic multiplier initially approached the 14 GiB throttle; replacing it
+with a one-instruction semantic lemma removed that elaboration-time
+computation.  No production sweep was run for this proof update.
+
+The preceding five live `Q,G` accumulator instructions are also identified by
+an exact slice theorem and proved symbolically.  Their exact modular and
+ordinary main-phase recurrence checks in 0.34 s / 0.57 GiB.  Specializing the
+instruction theorem to a closed modulus literal originally repeated the same
+large reduction; keeping the lemma symbolic in that literal restored the
+small proof build.  This update likewise ran no range computation.
 
 ## Measured
 
@@ -2059,3 +2075,75 @@ The commits implementing this retained route are `e916d63`, `87602ac`, and
 `0fbed90`. No full aggregate rebuild was run during this stage; the high-cost
 finite computations are being completed and attached to their live consumers
 before the next repository-wide build.
+### Proposition 12.2.4 active-cell telescope (2026-08-14)
+
+`Prop1224CellAccTelescope.lean` composes the exact literal accumulation-body
+semantics over an arbitrary symbolic cell list, then frames that update
+through the surrounding marking, fixed-point, and tail blocks of the complete
+emitted loop body.  The Mathlib-facing bridge proves that a source-correct,
+gap-free schedule gives the exact `compiledGPrefix` and therefore an upper
+enclosure of the paper's real `G_q(N)`.
+
+No production rows or cells were evaluated.  The focused source proof took
+0.47 s wall and 567,224 KiB peak RSS; its LeanCompCert target rebuild took
+0.53 s wall and 570,680 KiB peak RSS after dependencies were warm.  The live
+`Prop1224SourceMargin` consumer build took 12.38 s wall and 6,575,972 KiB peak
+RSS.  The new capstones use only `propext`, `Classical.choice`, and
+`Quot.sound`.
+
+### CDEM complete-residue telescope (2026-08-14)
+
+`ArraySegSquarefreeTelescope.lean` proves that the literal five-instruction
+`Q,G` slice is the middle of the complete emitted live residue, frames the
+surrounding instructions, and telescopes arbitrary schedules while preserving
+`G = 2^62 + Q*2^36 - c*n`.  Its source check took 0.55 s wall and 587,312 KiB
+peak RSS; the focused target build took 0.63 s wall and 594,488 KiB peak RSS.
+The Mathlib signed-discrepancy consumer built in 11.60 s wall and 6,765,900
+KiB peak RSS.  No production sieve or certificate campaign was run.
+
+### Hurst complete-residue telescope (2026-08-14)
+
+`ArraySegMertensTelescope.lean` proves exact no-wrap/no-underflow semantics for
+the two literal biased-Mertens update instructions, frames the suffix of the
+complete emitted live residue, and telescopes arbitrary schedules as an exact
+signed prefix invariant.  Its source check took 0.35 s wall and 554,600 KiB
+peak RSS; the focused target build took 0.44 s wall and 570,520 KiB peak RSS.
+The Mathlib bridge to the paper-facing Mertens identity checked from source in
+4.07 s at 6,692,360 KiB and its focused live target built in 10.23 s at
+6,737,048 KiB.  No production sieve or certificate campaign was run.
+
+### Psi complete-body counter telescopes (2026-08-14)
+
+`PsiSegClauseTelescope.lean` composes arbitrary schedules of the complete
+emitted `PsiCfg.body` and proves exact sum formulas for both live failure
+counters.  It also proves that zero initial and terminal counters force every
+scheduled local comparison bit to be zero.  The source proof took 0.36 s wall
+and 565,704 KiB peak RSS.  Its Mathlib pointwise/source bridge checked in 4.28
+s at 6,762,740 KiB and the focused live target built in 9.88 s at 6,792,516
+KiB.  No production window or certificate campaign was run.
+
+### Shared Hurst/CDEM failure-counter telescope (2026-08-14)
+
+`ArraySegMertensFailureTelescope.lean` extracts the last eight instructions of
+the complete live residue, proves exact ordinary-arithmetic updates for all
+four retained clause counters, telescopes arbitrary schedules, and proves that
+zero initial and terminal counters force every scheduled local failure to
+vanish.  Its focused target built in 0.63 s wall at 579,328 KiB peak RSS.  The
+Hurst and CDEM live consumers built in 9.61 s at 6,734,740 KiB and 11.31 s at
+6,780,796 KiB respectively.  No production sieve was run.
+
+### Actual interleaved Hurst/CDEM production fold (2026-08-14)
+
+`ArraySegMertensLiveFold.lean` extends the residue-private core projection to
+the live Hurst/CDEM registers, transports the existing complete production
+Möbius signal schedule to the actual core-plus-live-residue body, and proves a
+whole-trace biased-Mertens invariant over the interleaved execution.  The
+Mathlib consumer then identifies that word with the exact `mertensInt`
+endpoint prefix.  No production trace was materialized.
+
+The leaf source check took 0.47 s wall at 641,320 KiB peak RSS.  Its focused
+target build, including invalidation from the corrected private-register
+projection, took 3.74 s at 722,344 KiB.  The focused Mathlib consumer build
+took 31.39 s at 6,840,712 KiB while rebuilding the affected schedule chain;
+its final capstone depends only on `propext`, `Classical.choice`, and
+`Quot.sound`.

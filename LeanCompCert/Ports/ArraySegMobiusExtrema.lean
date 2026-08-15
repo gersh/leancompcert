@@ -56,7 +56,8 @@ theorem arun_arr (idx : Nat) (s : AState) :
 
 private theorem residue_avoids_core (j : Nat) (hj : CoreReg j = true) :
     mobiusOverNResidue.all (avoidsReg j) = true := by
-  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨ (150 ≤ j ∧ j ≤ 191)) :=
+  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨
+      (146 ≤ j ∧ j ≤ 149) ∨ (150 ≤ j ∧ j ≤ 191)) :=
     of_decide_eq_true hj
   have h100 : j < 100 ∨ 120 < j := by
     by_cases h : j < 100
@@ -79,14 +80,15 @@ theorem arun_core_frame (idx : Nat) (s : AState) :
 private theorem mobiusInit_avoids_core (t j : Nat)
     (hj : CoreReg j = true) :
     (mobiusInit t).all (avoidsReg j) = true := by
-  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨ (150 ≤ j ∧ j ≤ 191)) :=
+  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨
+      (146 ≤ j ∧ j ≤ 149) ∨ (150 ≤ j ∧ j ≤ 191)) :=
     of_decide_eq_true hj
   have h150 : j < 150 ∨ 191 < j := by
     by_cases h : j < 150
     · exact Or.inl h
     · refine Or.inr (Nat.lt_of_not_ge ?_)
       intro hj191
-      exact hw (Or.inr ⟨Nat.le_of_not_gt h, hj191⟩)
+      exact hw (Or.inr (Or.inr ⟨Nat.le_of_not_gt h, hj191⟩))
   simp [mobiusInit, seed, avoidsReg, rT, rTmax, rTmin]
   rcases h150 with h150 | h150 <;> omega
 

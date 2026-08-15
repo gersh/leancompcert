@@ -37,7 +37,8 @@ def combinedEntry (c : Cfg) (t : Nat) : AState :=
 private theorem mobiusInit_avoids_core (t j : Nat)
     (hj : CoreReg j = true) :
     (mobiusInit t).all (avoidsReg j) = true := by
-  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨ (150 ≤ j ∧ j ≤ 191)) :=
+  have hw : ¬((100 ≤ j ∧ j ≤ 120) ∨
+      (146 ≤ j ∧ j ≤ 149) ∨ (150 ≤ j ∧ j ≤ 191)) :=
     of_decide_eq_true hj
   have h100 : j < 100 ∨ 120 < j := by
     by_cases h : j < 100
