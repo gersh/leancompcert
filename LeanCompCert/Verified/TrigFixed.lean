@@ -303,7 +303,102 @@ theorem sinTerm_bracket (X : Nat) (hX : X ≤ B62) (k : Nat) :
       X ^ (2 * k + 1) ≤ (sinTerm X k + 2 * k) * (fOdd k * B62 ^ (2 * k)) :=
   ⟨sinTerm_upper X k, sinTerm_lower X hX k⟩
 
+
+/-! ### Realizing `mulFix` in the fragment
+
+`mulFix a b = a * b / B62` is the right thing to *state*, but it is not
+directly executable: `a * b` is 124 bits and every machine value here is a
+`u64`.  `LogFixed.sq62` solves the squaring case with a bespoke half-limb
+derivation.  For a general product the carry chain is already done —
+`MulWide.hl` returns the exact `(lo, hi)` pair — and the `2⁶²` shift is then
+free, because `B64 = 4 · B62` splits with no carry between the two words.
+
+So the trigonometric recurrence needs **no 128-bit intermediate and no
+division except by the small factorial factor**, which is what makes it
+implementable in the proved fragment. -/
+
+/-- `⌊a·b/2⁶²⌋` from the widening product: the high word contributes four
+times, the low word one shift.  `u64`-realizable throughout. -/
+def mul62 (a b : Nat) : Nat :=
+  let p := MulWide.hl a b
+  4 * p.2 + p.1 / B62
+
+theorem mul62_eq (a b : Nat) (ha : a < MulWide.B64) (hb : b < MulWide.B64) :
+    mul62 a b = mulFix a b := by
+  have h := (MulWide.hl_spec a b ha hb).1
+  have hB : MulWide.B64 * (MulWide.hl a b).2 = B62 * (4 * (MulWide.hl a b).2) := by
+    simp only [MulWide.B64, B62]
+    omega
+  show 4 * (MulWide.hl a b).2 + (MulWide.hl a b).1 / B62 = a * b / B62
+  rw [← h, hB, Nat.add_mul_div_left _ _ (by decide : 0 < B62)]
+  omega
+
+theorem B62_lt_B64 : B62 < MulWide.B64 := by decide
+
+/-! ### The terms stay inside one word
+
+Both operations contract, so every term is bounded by the seed.  This is what
+licenses `mul62_eq` at each step. -/
+
+theorem mulFix_le (a : Nat) {X : Nat} (hX : X ≤ B62) : mulFix a X ≤ a := by
+  have h1 : a * X ≤ a * B62 := Nat.mul_le_mul (Nat.le_refl a) hX
+  have h2 : a * B62 / B62 = a := by
+    rw [Nat.mul_div_cancel a (by decide : 0 < B62)]
+  calc mulFix a X = a * X / B62 := rfl
+    _ ≤ a * B62 / B62 := Nat.div_le_div_right h1
+    _ = a := h2
+
+theorem cosTerm_le (X : Nat) (hX : X ≤ B62) : ∀ k, cosTerm X k ≤ B62
+  | 0 => Nat.le_refl _
+  | k + 1 => by
+    have ih := cosTerm_le X hX k
+    calc cosTerm X (k + 1)
+        ≤ mulFix (mulFix (cosTerm X k) X) X := Nat.div_le_self _ _
+      _ ≤ mulFix (cosTerm X k) X := mulFix_le _ hX
+      _ ≤ cosTerm X k := mulFix_le _ hX
+      _ ≤ B62 := ih
+
+theorem sinTerm_le (X : Nat) (hX : X ≤ B62) : ∀ k, sinTerm X k ≤ B62
+  | 0 => hX
+  | k + 1 => by
+    have ih := sinTerm_le X hX k
+    calc sinTerm X (k + 1)
+        ≤ mulFix (mulFix (sinTerm X k) X) X := Nat.div_le_self _ _
+      _ ≤ mulFix (sinTerm X k) X := mulFix_le _ hX
+      _ ≤ sinTerm X k := mulFix_le _ hX
+      _ ≤ B62 := ih
+
+/-- **The cosine recurrence, in fragment operations.**  Two widening
+multiply-shifts and one division by the incoming factorial factor. -/
+theorem cosTerm_succ_mul62 {X : Nat} (hX : X ≤ B62) (k : Nat) :
+    cosTerm X (k + 1)
+      = mul62 (mul62 (cosTerm X k) X) X / ((2 * k + 1) * (2 * k + 2)) := by
+  have hXb : X < MulWide.B64 := Nat.lt_of_le_of_lt hX B62_lt_B64
+  have ht : cosTerm X k < MulWide.B64 :=
+    Nat.lt_of_le_of_lt (cosTerm_le X hX k) B62_lt_B64
+  have h1 : mul62 (cosTerm X k) X = mulFix (cosTerm X k) X := mul62_eq _ _ ht hXb
+  have hu : mulFix (cosTerm X k) X < MulWide.B64 :=
+    Nat.lt_of_le_of_lt (Nat.le_trans (mulFix_le _ hX) (cosTerm_le X hX k)) B62_lt_B64
+  rw [h1, mul62_eq _ _ hu hXb]
+  rfl
+
+/-- **The sine recurrence, in fragment operations.** -/
+theorem sinTerm_succ_mul62 {X : Nat} (hX : X ≤ B62) (k : Nat) :
+    sinTerm X (k + 1)
+      = mul62 (mul62 (sinTerm X k) X) X / ((2 * k + 2) * (2 * k + 3)) := by
+  have hXb : X < MulWide.B64 := Nat.lt_of_le_of_lt hX B62_lt_B64
+  have ht : sinTerm X k < MulWide.B64 :=
+    Nat.lt_of_le_of_lt (sinTerm_le X hX k) B62_lt_B64
+  have h1 : mul62 (sinTerm X k) X = mulFix (sinTerm X k) X := mul62_eq _ _ ht hXb
+  have hu : mulFix (sinTerm X k) X < MulWide.B64 :=
+    Nat.lt_of_le_of_lt (Nat.le_trans (mulFix_le _ hX) (sinTerm_le X hX k)) B62_lt_B64
+  rw [h1, mul62_eq _ _ hu hXb]
+  rfl
+
 #print axioms cosTerm_bracket
 #print axioms sinTerm_bracket
+#print axioms mul62_eq
+#print axioms cosTerm_succ_mul62
+#print axioms sinTerm_succ_mul62
 
 end LeanCompCert.Verified.TrigFixed
