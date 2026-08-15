@@ -892,6 +892,17 @@ def RowCfg.latchBody (c : RowCfg) : List AInstr :=
 Everything from here executes on every iteration and is committed once.  It
 carries twelve divisions, which is why `expUnroll` matters. -/
 
+/-- The six literal instructions producing register `340`, the lower word for
+`(1-ω*) log q + ω* L(q) + 1.36`.  Naming this block does not change the
+emitted instruction stream; it exposes a small source-refinement boundary. -/
+def constLoBlock : List AInstr :=
+  [ .scalar (.binop 340 .mul (.lit k1momLo) (.reg 279))
+  , .scalar (.binop 340 .lshr (.reg 340) (.lit E))
+  , .scalar (.binop 341 .mul (.lit kOmLo) (.reg 325))
+  , .scalar (.binop 341 .lshr (.reg 341) (.lit E))
+  , .scalar (.binop 340 .add (.reg 340) (.reg 341))
+  , .scalar (.binop 340 .add (.reg 340) (.lit k136Lo)) ]
+
 def RowCfg.finishBody (c : RowCfg) : List AInstr :=
   let L := c.segLen
   let endR := endBase + c.slots - 1
@@ -944,15 +955,9 @@ def RowCfg.finishBody (c : RowCfg) : List AInstr :=
   , .scalar (.binop 338 .sub (.reg 336) (.reg 338))
   , .scalar (.binop 338 .ne (.reg 338) (.lit 0))
   , .scalar (.binop 339 .add (.reg 337) (.reg 338))
-    -- the `k`-independent bracket, LOWER
-  , .scalar (.binop 340 .mul (.lit k1momLo) (.reg 279))
-  , .scalar (.binop 340 .lshr (.reg 340) (.lit E))
-  , .scalar (.binop 341 .mul (.lit kOmLo) (.reg 325))
-  , .scalar (.binop 341 .lshr (.reg 341) (.lit E))
-  , .scalar (.binop 340 .add (.reg 340) (.reg 341))
-  , .scalar (.binop 340 .add (.reg 340) (.lit k136Lo))
-    -- κ*, LOWER: log q lower, L upper, c_Δ lower
-  , .scalar (.binop 342 .gt (.reg 279) (.reg 326))
+  ] ++ constLoBlock ++
+  [ -- κ*, LOWER: log q lower, L upper, c_Δ lower
+    .scalar (.binop 342 .gt (.reg 279) (.reg 326))
   , .scalar (.binop 343 .sub (.reg 279) (.reg 326))
   , .scalar (.binop 343 .mul (.reg 343) (.reg 342))
   , .scalar (.binop 343 .mul (.lit k1momLo) (.reg 343))
@@ -1126,6 +1131,22 @@ def rowProgram (c : RowCfg) : AProgram := {
   epilogue := c.epilogue
   output := outputReg
 }
+
+/-- Loop count for an exact prefix of the configured padded windows.  Every
+complete window pays one full `period`; a final partial window still runs the
+whole mark phase and then exactly `rows % segLen` transform rows. -/
+def RowCfg.prefixLoopCount (c : RowCfg) (rows : Nat) : Nat :=
+  let full := rows / c.segLen
+  let tail := rows % c.segLen
+  full * c.period +
+    if tail = 0 then 0
+    else c.markSteps + tail * c.slots * c.roundsPerSlot
+
+/-- The row producer stopped after exactly `rows` rows.  Production can use
+large fixed windows without sweeping padding or compiling a separate tiny
+tail translation unit. -/
+def rowPrefixProgram (c : RowCfg) (rows : Nat) : AProgram :=
+  { rowProgram c with loopCount := c.prefixLoopCount rows }
 
 /-! ## Emit-time configuration -/
 
@@ -1303,6 +1324,13 @@ theorem rowProgram_wf (c : RowCfg) : (rowProgram c).WF :=
    forall_wf_of_all (body_all c),
    forall_wf_of_all (epilogue_all c)⟩
 
+theorem rowPrefixProgram_wf (c : RowCfg) (rows : Nat) :
+    (rowPrefixProgram c rows).WF :=
+  ⟨show outputReg < regCount by decide,
+   forall_wf_of_all (init_all c),
+   forall_wf_of_all (body_all c),
+   forall_wf_of_all (epilogue_all c)⟩
+
 /-- **The bridge, instantiated for the per-`q` row.**  For any array base at
 which the planes fit, the compiled CCIR trace — and through
 `Verified.MemFragment` the emitted C — leaves the program's denotation, the
@@ -1317,5 +1345,18 @@ theorem rowProgram_compiled (c : RowCfg) (base : Int)
         (fun m : Verified.MemFragment.MCCState =>
           m.env ⟨(rowProgram c).output + 1⟩) = some ((n : Nat) : Int) :=
   AProgram.evalCC_compile _ (rowProgram_wf c) base hBase n hDenote
+
+theorem rowPrefixProgram_compiled (c : RowCfg) (rows : Nat) (base : Int)
+    (hBase : BaseOk (rowPrefixProgram c rows).arrayLen base)
+    (n : Nat) (hDenote : (rowPrefixProgram c rows).denote = some n) :
+    Option.bind
+        (Verified.MemFragment.evalMCCSequence
+          ((rowPrefixProgram c rows).initialMCC base)
+          (rowPrefixProgram c rows).compile)
+        (fun m : Verified.MemFragment.MCCState =>
+          m.env ⟨(rowPrefixProgram c rows).output + 1⟩) =
+      some ((n : Nat) : Int) :=
+  AProgram.evalCC_compile _ (rowPrefixProgram_wf c rows)
+    base hBase n hDenote
 
 end LeanCompCert.Ports.Prop1224Row
