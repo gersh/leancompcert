@@ -42,6 +42,7 @@ import LeanCompCert.Verified.AddWide
 import LeanCompCert.Verified.LogAccum
 import LeanCompCert.Ports.AddWidePort
 import LeanCompCert.Ports.PsiSegSieve
+import LeanCompCert.Ports.PsiRuntimePrimeLogBodySemantics
 import LeanCompCert.Verified.DyadicBisect
 import LeanCompCert.Verified.ExpFixed
 import LeanCompCert.Verified.Prop1224Margin
