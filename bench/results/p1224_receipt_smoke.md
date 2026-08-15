@@ -44,5 +44,8 @@ both failure controls pass.
 This benchmark is evidence for the executable behavior.  The Lean theorems
 in `Ports/Prop1224{Row,Cell}ReceiptBridge.lean` separately transport retained
 compiled executions to exact source executions and result cells.  The
-paper-facing real-enclosure/source-semantics theorem and the production sweep
-are still required before retiring the literature atom.
+literal five-instruction cell-envelope block is now proved to compute exactly
+`ceil(32*afHi/t) * 2^(C-E)`, and the downstream MathExtras theorem proves that
+this emitted word is an upper enclosure of the paper's negative term.  The
+remaining whole-campaign readiness/coverage invariants and the production
+sweep are still required before retiring the literature atom.

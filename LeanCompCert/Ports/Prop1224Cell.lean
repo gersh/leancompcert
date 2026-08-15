@@ -396,6 +396,16 @@ def CellCfg.marginCheckBlock (c : CellCfg) : List AInstr :=
   , .scalar (.binop rVMargin .add (.reg rVMargin) (.reg 226))
   , .scalar (.binop rCells .add (.reg rCells) (.reg 223)) ]
 
+/-- The literal five-instruction ceiling and rescaling block for the negative
+envelope.  Naming it leaves the emitted stream unchanged and exposes the
+exact word passed to `marginCheckBlock`. -/
+def CellCfg.envelopeBlock (c : CellCfg) : List AInstr :=
+  [ .scalar (.binop 213 .shl (.lit c.afHi) (.lit 5))
+  , .scalar (.binop 214 .add (.reg 213) (.reg rT))
+  , .scalar (.binop 215 .sub (.reg 214) (.lit 1))
+  , .scalar (.binop 216 .udiv (.reg 215) (.reg rT))
+  , .scalar (.binop 217 .shl (.reg 216) (.lit (C - E))) ]
+
 def CellCfg.logBody (c : CellCfg) : List AInstr :=
   [ -- where we are: cell `rCi`, round `rK`
     .scalar (.binop 120 .eq (.reg rK) (.lit 0))
@@ -487,13 +497,7 @@ def CellCfg.logBody (c : CellCfg) : List AInstr :=
   , .scalar (.binop 210 .mul (.lit c.phiLo) (.reg 209))
   , .scalar (.binop 211 .lshr (.reg 210) (.lit E))
   , .scalar (.binop 212 .shl (.reg 211) (.lit (C - E)))     -- pos, LOWER
-    -- the envelope, at the cell scale
-  , .scalar (.binop 213 .shl (.lit c.afHi) (.lit 5))
-  , .scalar (.binop 214 .add (.reg 213) (.reg rT))
-  , .scalar (.binop 215 .sub (.reg 214) (.lit 1))
-  , .scalar (.binop 216 .udiv (.reg 215) (.reg rT))         -- envHi, UPPER
-  , .scalar (.binop 217 .shl (.reg 216) (.lit (C - E)))
-  ] ++ c.marginCheckBlock ++
+  ] ++ c.envelopeBlock ++ c.marginCheckBlock ++
   [
     -- the running minimum margin, biased so that it stays a `Nat`
     .scalar (.binop 227 .add (.lit marginBias) (.reg 212))
@@ -639,16 +643,9 @@ theorem cbrtStep_all (n : Nat) : (cbrtStep n).all (ainstrWFB regCount) = true :=
 
 set_option maxRecDepth 40000 in
 theorem logBody_all (c : CellCfg) : c.logBody.all (ainstrWFB regCount) = true := by
-  have h : ∀ l₁ l₂ l₃ l₄ l₅ : List AInstr,
-      l₁.all (ainstrWFB regCount) = true →
-      l₂.all (ainstrWFB regCount) = true →
-      l₃.all (ainstrWFB regCount) = true →
-      l₄.all (ainstrWFB regCount) = true →
-      l₅.all (ainstrWFB regCount) = true →
-      (l₁ ++ l₂ ++ l₃ ++ l₄ ++ l₅).all (ainstrWFB regCount) = true := by
-    intro l₁ l₂ l₃ l₄ l₅ h₁ h₂ h₃ h₄ h₅
-    simp only [List.all_append, h₁, h₂, h₃, h₄, h₅, Bool.and_self]
-  exact h _ _ _ _ _ (by rfl) (cbrtStep_all _) (by rfl) (by rfl) (by rfl)
+  simp only [CellCfg.logBody, List.all_append, cbrtStep_all,
+    CellCfg.envelopeBlock, CellCfg.marginCheckBlock]
+  rfl
 
 set_option maxRecDepth 40000 in
 theorem tailBody_all (c : CellCfg) : c.tailBody.all (ainstrWFB regCount) = true := by

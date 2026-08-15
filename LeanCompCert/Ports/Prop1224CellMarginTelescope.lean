@@ -58,13 +58,14 @@ def CellCfg.bodyAfterMargin (c : CellCfg) : List AInstr :=
 theorem body_eq_margin_decomp (c : CellCfg) :
     c.body = c.bodyBeforeMargin ++ c.marginCheckBlock ++ c.bodyAfterMargin := by
   simp [CellCfg.body, CellCfg.bodyBeforeMargin, CellCfg.bodyAfterMargin,
-    CellCfg.logBody, CellCfg.marginCheckBlock, cbrtAttempts, cbrtStep,
-    List.append_assoc]
+    CellCfg.logBody, CellCfg.envelopeBlock, CellCfg.marginCheckBlock,
+    cbrtAttempts, cbrtStep, List.append_assoc]
 
 theorem bodyBeforeMargin_vmargin_frame (c : CellCfg) :
     writes rVMargin c.bodyBeforeMargin = false := by
   simpa [CellCfg.bodyBeforeMargin, CellCfg.markBody, CellCfg.accBody,
     CellCfg.logBody, cbrtAttempts, cbrtStep, instrWrites, sdest, rVMargin,
+    CellCfg.envelopeBlock,
     rR, rW, rPi, rQp, rBp,
     rFs, rJ, rViol, rVMark, rG, rEx, rTh, rVLog2, rXm, rAa, rT, rK,
     rVCbrt, rVCbrtHi, rCells, rMin, rCi] using

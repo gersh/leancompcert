@@ -49,12 +49,14 @@ theorem payload_position_frame (c : CellCfg) :
     writes rR (c.markBody ++ c.accBody ++ c.logBody) = false ∧
       writes rW (c.markBody ++ c.accBody ++ c.logBody) = false := by
   constructor
-  · simpa [CellCfg.markBody, CellCfg.accBody, CellCfg.logBody, instrWrites, sdest,
+  · simpa [CellCfg.markBody, CellCfg.accBody, CellCfg.logBody,
+      CellCfg.envelopeBlock, instrWrites, sdest,
       rR, rW, rPi, rQp, rBp, rFs, rJ, rViol, rVMark, rG, rEx, rTh,
       rVLog2, rXm, rAa, rT, rK, rVCbrt, rVCbrtHi, rVMargin, rCells, rMin, rCi] using
         And.intro (coprimeBody_position_frame c.qPrimes).1
           (And.intro (cbrtStep_position_frame cbrtAttempts).1 (by rfl))
-  · simpa [CellCfg.markBody, CellCfg.accBody, CellCfg.logBody, instrWrites, sdest,
+  · simpa [CellCfg.markBody, CellCfg.accBody, CellCfg.logBody,
+      CellCfg.envelopeBlock, instrWrites, sdest,
       rR, rW, rPi, rQp, rBp, rFs, rJ, rViol, rVMark, rG, rEx, rTh,
       rVLog2, rXm, rAa, rT, rK, rVCbrt, rVCbrtHi, rVMargin, rCells, rMin, rCi] using
         And.intro (coprimeBody_position_frame c.qPrimes).2
