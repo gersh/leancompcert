@@ -2137,9 +2137,12 @@ Hurst and CDEM live consumers built in 9.61 s at 6,734,740 KiB and 11.31 s at
 `ArraySegMertensLiveFold.lean` extends the residue-private core projection to
 the live Hurst/CDEM registers, transports the existing complete production
 Möbius signal schedule to the actual core-plus-live-residue body, and proves a
-whole-trace biased-Mertens invariant over the interleaved execution.  The
-Mathlib consumer then identifies that word with the exact `mertensInt`
-endpoint prefix.  No production trace was materialized.
+whole-trace biased-Mertens invariant over the interleaved execution.  It now
+also classifies idle and active selector events and proves that the same
+literal trace preserves the `Q,G` invariant, advancing the row count by the
+selector gate and `Q` by the emitted support bit.  The Mathlib consumers
+identify the two words with the exact `mertensInt` and natural squarefree
+prefixes at the schedule endpoint.  No production trace was materialized.
 
 The leaf source check took 0.47 s wall at 641,320 KiB peak RSS.  Its focused
 target build, including invalidation from the corrected private-register
@@ -2147,3 +2150,10 @@ projection, took 3.74 s at 722,344 KiB.  The focused Mathlib consumer build
 took 31.39 s at 6,840,712 KiB while rebuilding the affected schedule chain;
 its final capstone depends only on `propext`, `Classical.choice`, and
 `Quot.sound`.
+
+The expanded leaf source check took 0.63 s wall at 657,628 KiB peak RSS.  A
+warm focused target rebuild took 0.73 s at 644,344 KiB.  The expanded
+squarefree consumer checked from source in 5.79 s at 6,850,192 KiB and its
+focused build completed in 36.96 s at 6,878,840 KiB after the affected
+schedule dependencies were replayed.  The new Q/G capstones likewise depend
+only on `propext`, `Classical.choice`, and `Quot.sound`.

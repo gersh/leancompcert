@@ -2,6 +2,7 @@ import LeanCompCert.Ports.ArraySegMobiusResidueFold
 import LeanCompCert.Ports.ArraySegMobiusIndexedSignal
 import LeanCompCert.Ports.ArraySegMobiusSquaredFold
 import LeanCompCert.Ports.ArraySegMertensTelescope
+import LeanCompCert.Ports.ArraySegSquarefreeTelescope
 import LeanCompCert.Ports.ArraySegMobiusSignal
 
 /-!
@@ -29,6 +30,8 @@ open LeanCompCert.Ports.ArraySegMobiusIndexedSignal
 open LeanCompCert.Ports.MobiusResidueRealisation
 open LeanCompCert.Ports.ArraySegMobiusSquaredFold
 open LeanCompCert.Ports.ArraySegMertensTelescope
+open LeanCompCert.Ports.ArraySegSquarefreeTelescope
+open LeanCompCert.Ports.MobiusResidueTrial
 
 private theorem liveResidue_avoids_core (bNum bDen j : Nat)
     (hj : CoreReg j = true) :
@@ -231,10 +234,146 @@ theorem liveCombinedIndexedRun_mInvariant
       rw [← Int.add_assoc]
       exact hstep
 
+/-! ## The actual interleaved squarefree accumulators -/
+
+/-- Natural support bit carried by a compiled Mobius signal. -/
+def supportSignal (g : Sig) : Nat := g.pos + g.neg
+
+/-- The selector gates in a consecutive schedule count exactly its active
+mathematical rows. -/
+theorem ConsecutiveSignalSchedule.gate_sum
+    {mu : Nat → Int} {lo N : Nat} {xs : List Sig}
+    (h : ConsecutiveSignalSchedule mu lo xs N) :
+    (xs.map Sig.gate).sum = N := by
+  induction h with
+  | nil lo => rfl
+  | idle tail ih => simpa [idleSig] using ih
+  | step tail ih => simp [muSig, ih, Nat.add_comm]
+
+/-- Per-event classification and word bounds for the two CDEM accumulator
+words.  The constructors deliberately distinguish the selector's idle events
+from its active mathematical rows. -/
+inductive LiveQGCombinedEventReady (index : Nat) (s : AState) : Prop
+  | idle (n : Nat)
+      (signal_eq : readSig s = idleSig n)
+      (squarefree_eq : s.regs 81 = 0)
+      (q_lt : s.regs rQ < M)
+      (g_lt : s.regs rG < M) :
+      LiveQGCombinedEventReady index s
+  | main
+      (ready : LiveQGStepReady
+        { index := index, squarefree := supportSignal (readSig s) } s) :
+      LiveQGCombinedEventReady index s
+
+/-- Every actual post-core pre-residue state is classified and satisfies the
+corresponding no-wrap obligations. -/
+def LiveQGCombinedReady (idx : Nat) (c : Cfg) (bNum bDen : Nat) :
+    Nat → AState → Prop
+  | 0, _ => True
+  | fuel + 1, s =>
+      LiveQGCombinedReady idx c bNum bDen fuel s ∧
+        let prior := liveCombinedIndexedRun idx c bNum bDen fuel s
+        let core := arun (idx + fuel) prior c.coreBody
+        LiveQGCombinedEventReady (idx + fuel) core
+
+private theorem core_preserves_liveQGInvariant
+    (c : Cfg) (idx n q : Nat) (s : AState)
+    (h : LiveQGInvariant n q s) :
+    LiveQGInvariant n q (arun idx s c.coreBody) := by
+  refine { q_eq := ?_, g_eq := ?_, bias_le := h.bias_le }
+  · rw [arun_reg_frame idx rQ c.coreBody s (by rfl)]
+    exact h.q_eq
+  · rw [arun_reg_frame idx rG c.coreBody s (by rfl)]
+    exact h.g_eq
+
+/-- One literal core-plus-live-residue event updates the logical row count by
+the selector gate and the logical squarefree count by the signal support. -/
+theorem liveCombinedStep_preserves_qgInvariant
+    (idx : Nat) (c : Cfg) (bNum bDen n q : Nat) (s : AState)
+    (hinv : LiveQGInvariant n q s)
+    (hready :
+      let core := arun idx s c.coreBody
+      LiveQGCombinedEventReady idx core) :
+    let core := arun idx s c.coreBody
+    let g := readSig core
+    LiveQGInvariant (n + g.gate) (q + supportSignal g)
+      (arun idx s (c.coreBody ++ mertensLiveResidue bNum bDen)) := by
+  let core := arun idx s c.coreBody
+  have hcore : LiveQGInvariant n q core :=
+    core_preserves_liveQGInvariant c idx n q s hinv
+  rw [arun_append]
+  cases hready with
+  | idle idleN hsig hsq hqM hgM =>
+      have hout := mertensLiveResidue_qg_idle bNum bDen idx core q
+        (core.regs rG) hcore.q_eq hsq rfl
+        (by simpa [readSig, idleSig] using congrArg Sig.gate hsig)
+        (by rw [hcore.q_eq] at hqM; exact hqM) hgM
+      have hsupport : supportSignal (readSig core) = 0 := by
+        rw [hsig]
+        simp [supportSignal, idleSig]
+      have hgate : (readSig core).gate = 0 := by
+        rw [hsig]
+        rfl
+      change LiveQGInvariant
+        (n + (readSig core).gate) (q + supportSignal (readSig core))
+        (arun idx core (mertensLiveResidue bNum bDen))
+      rw [hgate, hsupport, Nat.add_zero]
+      exact { q_eq := hout.1
+              g_eq := hout.2.trans hcore.g_eq
+              bias_le := hcore.bias_le }
+  | main hmain =>
+      simpa only [supportSignal, readSig, hmain.gate_eq, Nat.add_one] using
+        mertensLiveResidue_preserves_qg_invariant bNum bDen n q
+          { index := idx,
+            squarefree := supportSignal (readSig core) }
+          core hcore hmain
+
+set_option maxRecDepth 10000 in
+/-- Whole actual interleaved Q/G telescope.  Its elaboration cost is
+independent of the production endpoint; only a runtime receipt must discharge
+the event readiness predicate. -/
+theorem liveCombinedIndexedRun_qgInvariant
+    (idx : Nat) (c : Cfg) (bNum bDen fuel n q : Nat) (s : AState)
+    (hinv : LiveQGInvariant n q s)
+    (hready : LiveQGCombinedReady idx c bNum bDen fuel s) :
+    LiveQGInvariant
+      (n + ((liveCombinedSignals idx c bNum bDen fuel s).map
+        Sig.gate).sum)
+      (q + ((liveCombinedSignals idx c bNum bDen fuel s).map
+        supportSignal).sum)
+      (liveCombinedIndexedRun idx c bNum bDen fuel s) := by
+  induction fuel with
+  | zero => simpa [liveCombinedSignals] using hinv
+  | succ k ih =>
+      have hprev := ih hready.1
+      let prior := liveCombinedIndexedRun idx c bNum bDen k s
+      let g := readSig (arun (idx + k) prior c.coreBody)
+      have hstep := liveCombinedStep_preserves_qgInvariant
+        (idx + k) c bNum bDen
+        (n + ((liveCombinedSignals idx c bNum bDen k s).map
+          Sig.gate).sum)
+        (q + ((liveCombinedSignals idx c bNum bDen k s).map
+          supportSignal).sum)
+        prior hprev hready.2
+      rw [liveCombinedIndexedRun_succ]
+      have hsignals :
+          liveCombinedSignals idx c bNum bDen (k + 1) s =
+            liveCombinedSignals idx c bNum bDen k s ++ [g] := by
+        unfold liveCombinedSignals
+        rw [List.range_succ, List.map_append]
+        rfl
+      rw [hsignals, List.map_append, List.sum_append,
+        List.map_append, List.sum_append]
+      simp only [List.map_singleton, List.sum_singleton]
+      simpa only [Nat.add_assoc] using hstep
+
 #print axioms arun_liveResidue_core_frame
 #print axioms liveCombinedIndexedRun_core
 #print axioms liveCombinedSignals_eq_residueCombinedSignals
 #print axioms liveCombinedSignals_schedule_of_residueSchedule
 #print axioms liveCombinedIndexedRun_mInvariant
+#print axioms liveCombinedStep_preserves_qgInvariant
+#print axioms liveCombinedIndexedRun_qgInvariant
+#print axioms ConsecutiveSignalSchedule.gate_sum
 
 end LeanCompCert.Ports.ArraySegMertensLiveFold

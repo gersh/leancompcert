@@ -149,6 +149,58 @@ theorem mertensLiveResidue_eq_qg_decomp (bNum bDen : Nat) :
       rw [List.drop_drop]
       rfl
 
+/-- Exact modulo-word semantics of the `Q,G` fields through the complete
+live residue, with an arbitrary phase gate. -/
+theorem mertensLiveResidue_qg_exact
+    (bNum bDen index : Nat) (s : AState)
+    (q squarefree g gate : Nat)
+    (hq : s.regs rQ = q) (hsq : s.regs 81 = squarefree)
+    (hg : s.regs rG = g) (hgate : s.regs 133 = gate) :
+    let out := arun index s (mertensLiveResidue bNum bDen)
+    out.regs rQ = qNext q squarefree ∧
+      out.regs rG = gNext g squarefree gate (cdemC % M) := by
+  let before := arun index s (beforeQG bNum bDen)
+  let middle := arun index before (lift qgBlock)
+  have hbQ : before.regs rQ = q :=
+    (arun_frame index rQ (beforeQG bNum bDen) (by rfl) s).trans hq
+  have hbSq : before.regs 81 = squarefree :=
+    (arun_frame index 81 (beforeQG bNum bDen) (by rfl) s).trans hsq
+  have hbG : before.regs rG = g :=
+    (arun_frame index rG (beforeQG bNum bDen) (by rfl) s).trans hg
+  have hbGate : before.regs 133 = gate :=
+    (arun_frame index 133 (beforeQG bNum bDen) (by rfl) s).trans hgate
+  have hm := qgBlock_run index before.regs q squarefree g gate
+    hbQ hbSq hbG hbGate
+  have hmQ : middle.regs rQ = qNext q squarefree := by
+    change (arun index before (lift qgBlock)).regs rQ = _
+    rw [arun_lift_regs]
+    exact hm.1
+  have hmG : middle.regs rG = gNext g squarefree gate (cdemC % M) := by
+    change (arun index before (lift qgBlock)).regs rG = _
+    rw [arun_lift_regs]
+    exact hm.2
+  have haQ : (arun index middle (afterQG bNum bDen)).regs rQ =
+      qNext q squarefree :=
+    (arun_frame index rQ (afterQG bNum bDen) (by rfl) middle).trans hmQ
+  have haG : (arun index middle (afterQG bNum bDen)).regs rG =
+      gNext g squarefree gate (cdemC % M) :=
+    (arun_frame index rG (afterQG bNum bDen) (by rfl) middle).trans hmG
+  rw [mertensLiveResidue_eq_qg_decomp, arun_append, arun_append]
+  exact ⟨haQ, haG⟩
+
+/-- Idle marking/root events leave both squarefree accumulators unchanged. -/
+theorem mertensLiveResidue_qg_idle
+    (bNum bDen index : Nat) (s : AState) (q g : Nat)
+    (hq : s.regs rQ = q) (hsq : s.regs 81 = 0)
+    (hg : s.regs rG = g) (hgate : s.regs 133 = 0)
+    (hqM : q < M) (hgM : g < M) :
+    let out := arun index s (mertensLiveResidue bNum bDen)
+    out.regs rQ = q ∧ out.regs rG = g := by
+  have hrun := mertensLiveResidue_qg_exact bNum bDen index s q 0 g 0
+    hq hsq hg hgate
+  simpa [qNext, gNext, shiftedSquarefree, coefficientStep,
+    Nat.mod_eq_of_lt hqM, Nat.mod_eq_of_lt hgM, Nat.add_mod] using hrun
+
 /-- One complete emitted live residue has exactly the proved `Q,G` update;
 all instructions before and after the literal slice frame both accumulators. -/
 theorem mertensLiveResidue_qg_main_nowrap
@@ -265,6 +317,8 @@ theorem runLiveQG_invariant
 #print axioms runQG_invariant
 #print axioms runQG_outputs
 #print axioms mertensLiveResidue_eq_qg_decomp
+#print axioms mertensLiveResidue_qg_exact
+#print axioms mertensLiveResidue_qg_idle
 #print axioms mertensLiveResidue_qg_main_nowrap
 #print axioms mertensLiveResidue_preserves_qg_invariant
 #print axioms runLiveQG_invariant
