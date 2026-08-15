@@ -336,7 +336,7 @@ theorem SourceAgree.trans {bound : Nat} {a b c : AState}
   · intro j hj
     exact (hab.2 j hj).trans (hbc.2 j hj)
 
-private theorem denoteOperand_congr {bound idx : Nat} {a s : AState}
+theorem denoteOperand_congr {bound idx : Nat} {a s : AState}
     (h : SourceAgree bound a s) {o : Operand} (ho : o.WF bound) :
     denoteOperand idx a.regs o = denoteOperand idx s.regs o := by
   cases o with
@@ -347,7 +347,7 @@ private theorem denoteOperand_congr {bound idx : Nat} {a s : AState}
 /-- Total execution of one source instruction respects source-state
 agreement.  This lemma is valid even for a partial instruction: both total
 executions make the same `getD 0` choice. -/
-private theorem astep_sourceAgree {bound idx : Nat} {a s : AState}
+theorem astep_sourceAgree {bound idx : Nat} {a s : AState}
     {i : AInstr} (h : SourceAgree bound a s) (hi : i.WF bound) :
     SourceAgree bound (astep idx a i) (astep idx s i) := by
   cases i with

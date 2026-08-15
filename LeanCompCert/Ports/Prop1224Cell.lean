@@ -33,7 +33,10 @@ test for "a prime above `⌊√hi⌋` remains".  What is needed per cell is diff
 `prod` and `phi` are only *meaningful* when `sqf` is clear, which is the only
 case the sum uses, so the three planes carry no multiplicity at all and the
 mark budget drops back from `Σ 1/(p−1)` to `Σ 1/p` plus the `Σ 1/p^j`, `j ≥ 2`,
-that set `sqf`.
+that set `sqf`.  This classification is valid on the entire interval
+`1 ≤ r ≤ hi`, not merely above `⌊√hi⌋`: after every prime at most `√hi` has
+been removed, at most one prime factor can remain, and it has multiplicity
+one.  Thus a row may start at `r = 1` with the exact zero `G_q` carry.
 
 **Coprimality needs no plane and no `gcd`.**  `ω(q) ≤ 10` for every `q` in the
 paper's range (`2·3·5·7·11·13·17·19·23·29 = 6.47·10⁹`), and the primes of `q`
@@ -112,7 +115,8 @@ structure CellCfg where
   kHi : Nat
   /-- The distinct primes of `q`, for the straight-line coprimality test. -/
   qPrimes : List Nat
-  /-- First integer of the main sweep; must exceed `⌊√(kHi−1)⌋`. -/
+  /-- First integer of the sweep.  Production rows start at `1`, avoiding an
+  externally computed `G_q` carry. -/
   lo : Nat
   segLen : Nat
   segCount : Nat
@@ -164,10 +168,10 @@ def rT : Nat := 195     -- the certified cube root, at scale 2^5
 def rXm : Nat := 196    -- mantissa
 def rAa : Nat := 197    -- log bits so far
 
-/-! ### The four failure classes, counted apart
+/-! ### The five failure classes, counted apart
 
-`rViol` is the aggregate and stays the program's output.  One of the four is
-the mathematics — the per-cell margin — and the other three say the run left
+`rViol` is the aggregate and stays the program's output.  One of the five is
+the mathematics — the per-cell margin — and the other four say the run left
 the range in which its own arithmetic is exact, so on those cells the margin
 was not tested at all. -/
 
@@ -175,11 +179,12 @@ def rVMargin : Nat := 250  -- the margin went negative: the clause failed
 def rVMark : Nat := 251    -- the mark cursor did not reach the end of the table
 def rVLog2 : Nat := 252    -- one `⌊log₂ r⌋` increment did not suffice
 def rVCbrt : Nat := 253    -- the cube root was still advanceable at the last round
+def rVCbrtHi : Nat := 254  -- the current cube root exceeded its proved lower bound
 
-/-- The per-class counters in the order they occupy result slots `6 … 9`.
+/-- The per-class counters in the order they occupy result slots `6 … 10`.
 They sum to `rViol`.  `bench/Prop1224CellEmit.lean` labels them in this
 order. -/
-def violRegs : List Nat := [rVMargin, rVMark, rVLog2, rVCbrt]
+def violRegs : List Nat := [rVMargin, rVMark, rVLog2, rVCbrt, rVCbrtHi]
 
 def regCount : Nat := 400
 def outputReg : Nat := 190
@@ -373,8 +378,25 @@ def cbrtStep : Nat → List AInstr
       , .scalar (.binop 158 .mul (.reg 157) (.reg 13))
       , .scalar (.binop rT .add (.reg rT) (.reg 158)) ] ++ cbrtStep n
 
-def CellCfg.logBody (c : CellCfg) : List AInstr :=
+/-- The literal load, window gate, and margin-failure update.  Naming this
+block leaves the emitted instruction stream unchanged and gives the source
+proof a small boundary around the actual comparison. -/
+def CellCfg.marginCheckBlock (c : CellCfg) : List AInstr :=
   let L := c.segLen
+  [ .scalar (.binop 218 .add (.reg rCi) (.lit (3 * L)))
+  , .load 219 218
+  , .scalar (.binop 220 .ge (.reg 122) (.lit c.kLo))
+  , .scalar (.binop 221 .lt (.reg 122) (.lit c.kHi))
+  , .scalar (.binop 222 .mul (.reg 220) (.reg 221))
+  , .scalar (.binop 223 .mul (.reg 222) (.reg 161))
+  , .scalar (.binop 224 .add (.reg 219) (.reg 217))
+  , .scalar (.binop 225 .lt (.reg 212) (.reg 224))
+  , .scalar (.binop 226 .mul (.reg 225) (.reg 223))
+  , .scalar (.binop rViol .add (.reg rViol) (.reg 226))
+  , .scalar (.binop rVMargin .add (.reg rVMargin) (.reg 226))
+  , .scalar (.binop rCells .add (.reg rCells) (.reg 223)) ]
+
+def CellCfg.logBody (c : CellCfg) : List AInstr :=
   [ -- where we are: cell `rCi`, round `rK`
     .scalar (.binop 120 .eq (.reg rK) (.lit 0))
   , .scalar (.binop 121 .mul (.reg 120) (.reg 13))          -- first round
@@ -438,6 +460,23 @@ def CellCfg.logBody (c : CellCfg) : List AInstr :=
   , .scalar (.binop 204 .mul (.reg 203) (.reg 161))
   , .scalar (.binop rViol .add (.reg rViol) (.reg 204))
   , .scalar (.binop rVCbrt .add (.reg rVCbrt) (.reg 204))
+    -- A too-large seed is the dangerous direction: it makes the reciprocal
+    -- envelope too small.  Check the current lower bound on tested cells.
+    -- The explicit `t < 2^21` guard makes the following cube exact in u64.
+  , .scalar (.binop 260 .lt (.reg rT) (.lit 2097152))
+  , .scalar (.binop 261 .sub (.lit 1) (.reg 260))
+  , .scalar (.binop 262 .mul (.reg rT) (.reg rT))
+  , .scalar (.binop 263 .mul (.reg 262) (.reg rT))
+  , .scalar (.binop 264 .gt (.reg 263) (.reg 153))
+  , .scalar (.binop 265 .add (.reg 261) (.reg 264))
+  , .scalar (.binop 266 .ne (.reg 265) (.lit 0))
+  , .scalar (.binop 267 .ge (.reg 122) (.lit c.kLo))
+  , .scalar (.binop 268 .lt (.reg 122) (.lit c.kHi))
+  , .scalar (.binop 269 .mul (.reg 267) (.reg 268))
+  , .scalar (.binop 270 .mul (.reg 266) (.reg 269))
+  , .scalar (.binop 271 .mul (.reg 270) (.reg 161))
+  , .scalar (.binop rViol .add (.reg rViol) (.reg 271))
+  , .scalar (.binop rVCbrtHi .add (.reg rVCbrtHi) (.reg 271))
     -- ⌊2^E·log r⌋ from below: one multiply, one shift
   , .scalar (.binop 205 .shl (.reg rEx) (.lit S))
   , .scalar (.binop 206 .add (.reg 205) (.reg rAa))         -- logFix S r
@@ -454,22 +493,10 @@ def CellCfg.logBody (c : CellCfg) : List AInstr :=
   , .scalar (.binop 215 .sub (.reg 214) (.lit 1))
   , .scalar (.binop 216 .udiv (.reg 215) (.reg rT))         -- envHi, UPPER
   , .scalar (.binop 217 .shl (.reg 216) (.lit (C - E)))
-    -- the accumulated `G_q(r)`
-  , .scalar (.binop 218 .add (.reg rCi) (.lit (3 * L)))
-  , .load 219 218
-    -- the test, on the cells of the window only
-  , .scalar (.binop 220 .ge (.reg 122) (.lit c.kLo))
-  , .scalar (.binop 221 .lt (.reg 122) (.lit c.kHi))
-  , .scalar (.binop 222 .mul (.reg 220) (.reg 221))
-  , .scalar (.binop 223 .mul (.reg 222) (.reg 161))         -- test this cell
-  , .scalar (.binop 224 .add (.reg 219) (.reg 217))         -- G + env
-  , .scalar (.binop 225 .lt (.reg 212) (.reg 224))          -- margin < 0
-  , .scalar (.binop 226 .mul (.reg 225) (.reg 223))
-  , .scalar (.binop rViol .add (.reg rViol) (.reg 226))
-  , .scalar (.binop rVMargin .add (.reg rVMargin) (.reg 226))
-  , .scalar (.binop rCells .add (.reg rCells) (.reg 223))
+  ] ++ c.marginCheckBlock ++
+  [
     -- the running minimum margin, biased so that it stays a `Nat`
-  , .scalar (.binop 227 .add (.lit marginBias) (.reg 212))
+    .scalar (.binop 227 .add (.lit marginBias) (.reg 212))
   , .scalar (.binop 228 .sub (.reg 227) (.reg 224))
   , .scalar (.binop 229 .lt (.reg 228) (.reg rMin))
   , .scalar (.binop 230 .mul (.reg 229) (.reg 223))
@@ -612,11 +639,16 @@ theorem cbrtStep_all (n : Nat) : (cbrtStep n).all (ainstrWFB regCount) = true :=
 
 set_option maxRecDepth 40000 in
 theorem logBody_all (c : CellCfg) : c.logBody.all (ainstrWFB regCount) = true := by
-  have h : ∀ l₁ l₂ : List AInstr,
-      l₁.all (ainstrWFB regCount) = true → l₂.all (ainstrWFB regCount) = true →
-      (l₁ ++ cbrtStep cbrtAttempts ++ l₂).all (ainstrWFB regCount) = true :=
-    fun _ _ h₁ h₂ => all_append (all_append h₁ (cbrtStep_all _)) h₂
-  exact h _ _ (by rfl) (by rfl)
+  have h : ∀ l₁ l₂ l₃ l₄ l₅ : List AInstr,
+      l₁.all (ainstrWFB regCount) = true →
+      l₂.all (ainstrWFB regCount) = true →
+      l₃.all (ainstrWFB regCount) = true →
+      l₄.all (ainstrWFB regCount) = true →
+      l₅.all (ainstrWFB regCount) = true →
+      (l₁ ++ l₂ ++ l₃ ++ l₄ ++ l₅).all (ainstrWFB regCount) = true := by
+    intro l₁ l₂ l₃ l₄ l₅ h₁ h₂ h₃ h₄ h₅
+    simp only [List.all_append, h₁, h₂, h₃, h₄, h₅, Bool.and_self]
+  exact h _ _ _ _ _ (by rfl) (cbrtStep_all _) (by rfl) (by rfl) (by rfl)
 
 set_option maxRecDepth 40000 in
 theorem tailBody_all (c : CellCfg) : c.tailBody.all (ainstrWFB regCount) = true := by
@@ -705,8 +737,9 @@ def cbrtSeed (r : Nat) : Nat := Id.run do
     step := step / 2
   return t
 
-/-- The configuration for one row.  `lo` must exceed `⌊√hi⌋`, so that a cell
-whose radical differs from `r` really does hide a single large prime. -/
+/-- The configuration for one row.  The table contains every prime at most
+`⌊√hi⌋`; consequently a squarefree cell whose marked radical differs from
+`r ≤ hi` has exactly one remaining (large) prime factor. -/
 def CellCfg.ofRow (q phiLo constLo afHi kLo kHi : Nat) (qPrimes : List Nat)
     (lo segLen segCount : Nat) : CellCfg :=
   let hi := lo + segLen * segCount - 1

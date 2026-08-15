@@ -30,6 +30,51 @@ def AProgram.runFromArray (p : AProgram) (arr : Nat → Nat) : Option AState := 
     (fun s index => denoteAInstrs p.arrayLen index s p.body) s
   denoteAInstrs p.arrayLen 0 s p.epilogue
 
+/-- Any successful execution from a caller-owned array is exactly the total
+`arun` trace.  This is the `runFromArray` counterpart of
+`output_eq_arun_of_denote_eq_some`; it lets physical success receipts expose
+the symbolic source fold without replaying that fold in Lean. -/
+theorem AProgram.eq_arun_of_runFromArray_eq_some
+    (p : AProgram) (arr : Nat → Nat) (out : AState)
+    (hRun : p.runFromArray arr = some out) :
+    out = arun 0
+      ((List.range p.loopCount).foldl
+        (fun s index => arun index s p.body)
+        (arun 0 (initialAStateWithArray arr) p.init))
+      p.epilogue := by
+  unfold AProgram.runFromArray at hRun
+  cases hinit : denoteAInstrs p.arrayLen 0
+      (initialAStateWithArray arr) p.init with
+  | none => simp [hinit] at hRun
+  | some entry =>
+      have hentry : entry = arun 0 (initialAStateWithArray arr) p.init :=
+        eq_arun_of_denoteAInstrs_eq_some p.arrayLen 0 p.init
+          (initialAStateWithArray arr) entry hinit
+      rw [hinit] at hRun
+      change ((List.range p.loopCount).foldlM
+          (fun s index => denoteAInstrs p.arrayLen index s p.body) entry).bind
+          (fun s => denoteAInstrs p.arrayLen 0 s p.epilogue) = some out at hRun
+      cases hloop : (List.range p.loopCount).foldlM
+          (fun s index => denoteAInstrs p.arrayLen index s p.body) entry with
+      | none => simp [hloop] at hRun
+      | some loopOut =>
+          have hloopOut : loopOut = (List.range p.loopCount).foldl
+              (fun s index => arun index s p.body) entry :=
+            eq_foldl_arun_of_foldlM_denote_eq_some p.arrayLen p.body
+              (List.range p.loopCount) entry loopOut hloop
+          rw [hloop] at hRun
+          simp only [Option.bind_some] at hRun
+          cases hepi : denoteAInstrs p.arrayLen 0 loopOut p.epilogue with
+          | none => simp [hepi] at hRun
+          | some final =>
+              have hfinal : final = arun 0 loopOut p.epilogue :=
+                eq_arun_of_denoteAInstrs_eq_some p.arrayLen 0 p.epilogue
+                  loopOut final hepi
+              rw [hepi] at hRun
+              simp only [Option.some.injEq] at hRun
+              subst out
+              rw [hfinal, hloopOut, hentry]
+
 def AProgram.initialMCCWithMem (p : AProgram) (base : Int) (mem : Mem) : MCCState :=
   { env := (p.initialMCC base).env, mem := mem }
 
@@ -207,6 +252,7 @@ theorem AProgram.evalCC_compile_fromArray_three
   exact ⟨mp, mq, mr, hpEval, hqEval, hrEval, hrRel⟩
 
 #print axioms AProgram.evalCC_compile_fromArray
+#print axioms AProgram.eq_arun_of_runFromArray_eq_some
 #print axioms AProgram.runFromArray_eq_foldl_mem
 #print axioms AProgram.evalCC_compile_fromArray_two
 #print axioms AProgram.evalCC_compile_fromArray_three

@@ -50,6 +50,60 @@ theorem AProgram.evalCC_rolledCompile_fromArray
     simpa [AProgram.initialMCCWithMem] using hEval
   · simpa [AProgram.counterAugment] using hRel
 
+/-- Identify a retained rolled machine state with a successful source run.
+The machine execution is supplied as a receipt; determinism equates it with
+the state produced by compiler simulation.  This is uniform in the loop count
+and does not replay the source fold. -/
+theorem AProgram.sourceRel_of_rolledCompile_fromArray
+    (p : AProgram) (hWF : p.WF)
+    (base : Int) (hBase : BaseOk p.arrayLen base)
+    (arr : Nat → Nat) (mem : Mem)
+    (hCells : ∀ k, k < p.arrayLen →
+      mem (cellAddr base k) = some (((arr k : Nat) : Int)))
+    (hCellsLt : ∀ k, k < p.arrayLen → arr k < M)
+    (out : AState) (hRun : p.runFromArray arr = some out)
+    (m : MCCState)
+    (hEval : evalMCCSequence
+      (p.counterAugment.initialMCCWithMem base mem) p.rolledCompile = some m) :
+    ∃ out',
+      p.counterAugment.runFromArray arr = some out' ∧
+      AState.AgreeBelow p.regCount out out' ∧
+      ARel p.counterAugment.regCount p.arrayLen base out' m := by
+  obtain ⟨out', hRun', hAgree⟩ :=
+    p.counterAugment_runFromArray_of_runFromArray hWF arr out hRun
+  obtain ⟨m', hEval', hRel⟩ := p.evalCC_rolledCompile_fromArray hWF base
+    hBase arr mem hCells hCellsLt out' hRun'
+  have hm : m' = m := by
+    rw [hEval] at hEval'
+    exact (Option.some.inj hEval').symm
+  subst m'
+  exact ⟨out', hRun', hAgree, hRel⟩
+
+/-- Read one retained result cell back to the original source state. -/
+theorem AProgram.cell_eq_of_rolledCompile_fromArray
+    (p : AProgram) (hWF : p.WF)
+    (base : Int) (hBase : BaseOk p.arrayLen base)
+    (arr : Nat → Nat) (mem : Mem)
+    (hCells : ∀ k, k < p.arrayLen →
+      mem (cellAddr base k) = some (((arr k : Nat) : Int)))
+    (hCellsLt : ∀ k, k < p.arrayLen → arr k < M)
+    (out : AState) (hRun : p.runFromArray arr = some out)
+    (m : MCCState)
+    (hEval : evalMCCSequence
+      (p.counterAugment.initialMCCWithMem base mem) p.rolledCompile = some m)
+    (k value : Nat) (hk : k < p.arrayLen)
+    (hCell : m.mem (cellAddr base k) = some (value : Int)) :
+    out.arr k = value := by
+  obtain ⟨out', _hRun', hAgree, hRel⟩ :=
+    p.sourceRel_of_rolledCompile_fromArray hWF base hBase arr mem hCells
+      hCellsLt out hRun m hEval
+  have hSourceCell := hRel.hcells k hk
+  rw [hCell] at hSourceCell
+  have hOut' : out'.arr k = value := by
+    exact_mod_cast (Option.some.inj hSourceCell).symm
+  rw [hAgree.2]
+  exact hOut'
+
 /-- Read a successful rolled execution back into the already-proved symbolic
 source state.  The expensive loop is executed by the compiled artifact; Lean
 uses determinism of the CCIR trace and the compiler simulation to identify
@@ -87,6 +141,8 @@ theorem AProgram.output_eq_of_rolledCompile_fromArray
   exact (hAgree.1 p.output hWF.1).trans hOut'
 
 #print axioms AProgram.evalCC_rolledCompile_fromArray
+#print axioms AProgram.sourceRel_of_rolledCompile_fromArray
+#print axioms AProgram.cell_eq_of_rolledCompile_fromArray
 #print axioms AProgram.output_eq_of_rolledCompile_fromArray
 
 end LeanCompCert.Verified.ArrayState
