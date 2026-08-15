@@ -85,6 +85,8 @@ with `u = k·2ⁿ`, and it is the reason the whole setup fits in twelve `mov`s.
 | `TGProth.body_step` | the 505-instruction loop body computes exactly two `Mont2.montMul2` applications and one branchless select |
 | `TGProth.prothProgram_wf` | well-formedness, program-sized and decidable |
 | **`TGProth.prothProgram_denote`** | **the bridge**: the program's denotation is `0` iff `a^((N−1)/2) mod N = N − 1` |
+| `TGProth.prothComputation_returns_zero_iff` | the packaged LeanCompCert computation returns `0` iff the witness congruence holds |
+| `TGProth.prothComputation_target_zero_iff` | the generated-C semantics returns `0` iff the witness congruence holds |
 
 One precondition is worth naming because it was found the hard way, by the
 statement being false without it: **`kbits ≤ 64`**.  Operand literals denote

@@ -2,6 +2,7 @@ import LeanCompCert.Verified.Mont2
 import LeanCompCert.Verified.InstrBlock
 import LeanCompCert.Verified.FoldBridge
 import LeanCompCert.Verified.Rolled
+import LeanCompCert.Verified.Package
 
 /-!
 # Stage (b) of the Helfgott–Platt prime ladder: the Proth test
@@ -2403,5 +2404,42 @@ theorem prothProgram_denote (n kbits k a : Nat)
     · rw [if_pos (hiff.mpr hc), if_pos hc]
     · rw [if_neg (fun hx => hc (hiff.mp hx)), if_neg hc]
   rw [hmain]
+
+/-! ## Packaged compiled checker
+
+The certificate consumer records the exit value produced by the emitted C
+program.  These declarations package the proved reflective program through the
+production lowering path and state its public contract directly in terms of
+that compiled return value.  In particular, the modular exponentiation is not
+replayed by Lean when a run certificate is consumed.
+-/
+
+/-- The CompCert-backed Proth congruence checker. -/
+def prothComputation (n kbits k a : Nat) : LeanCompCert.Verified.Computation :=
+  (prothProgram n kbits k a).toComputation "TGProth" (prothProgram_wf n kbits k a)
+
+/-- The emitted checker returns zero exactly when its witness satisfies the
+Proth congruence. -/
+theorem prothComputation_returns_zero_iff (n kbits k a : Nat)
+    (hn : 32 ≤ n) (hk64 : kbits ≤ 64) (hkb : 0 < k) (hkw : k < 2 ^ kbits)
+    (hwide : prothN n k < 2 ^ 127) (hbig : 2 ^ 64 < prothN n k)
+    (ha : 0 < a) :
+    (prothComputation n kbits k a).Returns ((0 : Nat) : Int) ↔
+      a ^ ((prothN n k - 1) / 2) % prothN n k = prothN n k - 1 := by
+  unfold prothComputation
+  rw [LeanCompCert.Verified.Reflect.toComputation_returns]
+  rw [prothProgram_denote n kbits k a hn hk64 hkb hkw hwide hbig ha]
+  by_cases h :
+      a ^ ((prothN n k - 1) / 2) % prothN n k = prothN n k - 1 <;> simp [h]
+
+/-- The same contract stated for the generated-C semantics. -/
+theorem prothComputation_target_zero_iff (n kbits k a : Nat)
+    (hn : 32 ≤ n) (hk64 : kbits ≤ 64) (hkb : 0 < k) (hkw : k < 2 ^ kbits)
+    (hwide : prothN n k < 2 ^ 127) (hbig : 2 ^ 64 < prothN n k)
+    (ha : 0 < a) :
+    (prothComputation n kbits k a).targetResult = some ((0 : Nat) : Int) ↔
+      a ^ ((prothN n k - 1) / 2) % prothN n k = prothN n k - 1 := by
+  rw [(prothComputation n kbits k a).targetReturns_iff]
+  exact prothComputation_returns_zero_iff n kbits k a hn hk64 hkb hkw hwide hbig ha
 
 end LeanCompCert.Ports.TGProth
