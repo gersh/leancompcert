@@ -1,0 +1,102 @@
+{
+  "schema": "leancompcert.run_manifest.v1",
+  "date": "2026-08-15",
+  "status": "both dense shards and both fail-safe audits accepted; all 22 carry words equal their Lean definitions",
+  "scope": "R2 dense head over the inclusive ranges [3, 1000] and [1001, 144999]",
+  "memory_policy": "static BSS arrays sized from the emitted configuration; no dynamic allocation",
+  "toolchain": {
+    "ccomp_version": "The CompCert C verified compiler, version 3.17",
+    "ccomp_path": "/usr/local/bin/ccomp",
+    "ccomp_digest": "3de246dba53b6c55901dc40d135c7bd43bf802fee6227816840f58c2068f6bf6",
+    "gcc_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "lean_toolchain": "leanprover/lean4:v4.32.1",
+    "leancompcert_commit": "1d439a9eebbfffe094e76f08d3f466fedef9c0c8",
+    "claude_math_commit": "b97cc92c2f3a5c71212885e45adc8c12746ead99",
+    "uname": "Linux 6.17.0-1026-nvidia"
+  },
+  "carry_word_order": ["d", "err", "prev", "terms", "sq", "sq2", "ex", "th",
+                       "ln", "thr", "viol"],
+  "shards": [
+    {
+      "shard": "first",
+      "mode": "positive",
+      "emitter": "bench/R2DenseHeadProductionEmit.lean",
+      "args": ["first", "positive"],
+      "range": "[3, 1000] inclusive",
+      "array_len": 7434,
+      "loop_count": 28347,
+      "observed_out": 0,
+      "observed_carry": [281475517734600, 69492, 1000, 701, 31, 1024, 9, 1024,
+                         115892902, 6933846013, 0],
+      "expected_carry_definition": "LeanCompCert.Ports.R2SegSieve.denseHeadFirstCarry",
+      "carry_matches_definition": true,
+      "c_sha256": "ffef6088d2b0e6bc966b9421575cedb033d2b6212a389e973bc5778224f7ee76",
+      "ccomp_binary_sha256": "434342b02cf4a305801288e015b5f9c6b3ba4c1aab73bc88130faa0d92b8d9f5",
+      "ccomp_compile_exit": 0,
+      "ccomp_run_exit": 0,
+      "gcc_agrees": true,
+      "discharges": "LeanCompCert.Ports.R2SegSieve.denseHeadFirst_compcert_run"
+    },
+    {
+      "shard": "first",
+      "mode": "audit",
+      "emitter": "bench/R2DenseHeadProductionEmit.lean",
+      "args": ["first", "audit"],
+      "array_len": 7434,
+      "loop_count": 28347,
+      "observed_out": 0,
+      "c_sha256": "1992dbec1aeeaf913b95597ed65675f7c807c7555cfb88b713c52b34edf2bf91",
+      "ccomp_binary_sha256": "8f3a78be1a6493236193d8ada51f66326f7b50dabd6132041aafedd294b6a0b1",
+      "ccomp_compile_exit": 0,
+      "ccomp_run_exit": 0,
+      "gcc_agrees": true,
+      "discharges": "LeanCompCert.Ports.R2SegSieve.denseHeadFirstAudit_compcert_run"
+    },
+    {
+      "shard": "second",
+      "mode": "positive",
+      "emitter": "bench/R2DenseHeadProductionEmit.lean",
+      "args": ["second", "positive"],
+      "range": "[1001, 144999] inclusive",
+      "array_len": 1008348,
+      "loop_count": 4007032,
+      "observed_out": 0,
+      "observed_carry": [281482090502886, 10983953, 144999, 61171, 380, 145161,
+                         17, 262144, 199388523, 146230987829, 0],
+      "expected_carry_definition": "LeanCompCert.Ports.R2SegSieve.denseHeadFinalCarry",
+      "carry_matches_definition": true,
+      "c_sha256": "5f0cbb5d1febaab5ea3a44f88939d1e256d806fa618ba058f2435ffdb5bb7ea2",
+      "ccomp_binary_sha256": "80c8cfd8ad0e1ddfb617eb80ee2043c21ffd58917918061eb36c8725d685e344",
+      "ccomp_compile_exit": 0,
+      "ccomp_run_exit": 0,
+      "gcc_agrees": true,
+      "discharges": "LeanCompCert.Ports.R2SegSieve.denseHeadSecond_compcert_run"
+    },
+    {
+      "shard": "second",
+      "mode": "audit",
+      "emitter": "bench/R2DenseHeadProductionEmit.lean",
+      "args": ["second", "audit"],
+      "array_len": 1008348,
+      "loop_count": 4007032,
+      "observed_out": 0,
+      "c_sha256": "66be3a0f8f2b8b63274a4fbd3f1a446ca4fae71a9498512933ca803084fce003",
+      "ccomp_binary_sha256": "3a3da221af46a5fa388fff68bf7ff957ec2e4062633037cbffaa043273bc33a4",
+      "ccomp_compile_exit": 0,
+      "ccomp_run_exit": 0,
+      "gcc_agrees": true,
+      "discharges": "LeanCompCert.Ports.R2SegSieve.denseHeadSecondAudit_compcert_run"
+    }
+  ],
+  "chain": "denseHeadSecondSeed is denseHeadFirstCarry by definition, so the second shard consumes exactly the first shard's observed carry; denseHeadFinalCarry_eq_runtimeProductionSeed then hands the observed final carry to the R2 runtime production suffix.",
+  "proof": {
+    "run_axioms": [
+      "LeanCompCert.Ports.R2SegSieve.denseHeadFirst_compcert_run",
+      "LeanCompCert.Ports.R2SegSieve.denseHeadFirstAudit_compcert_run",
+      "LeanCompCert.Ports.R2SegSieve.denseHeadSecond_compcert_run",
+      "LeanCompCert.Ports.R2SegSieve.denseHeadSecondAudit_compcert_run"
+    ],
+    "consumer_theorem": "LeanCompCert.Ports.R2SegSieve.denseHead_source_run_of_audit"
+  },
+  "trust_note": "Each positive artifact exposes the eleven retained carry words on stdout; all twenty-two equal the corresponding fields of denseHeadFirstCarry and denseHeadFinalCarry as written in LeanCompCert/Ports/R2DenseHeadProduction.lean. The fail-safe audit programs are emitted independently and certify that every partial source operation in both folds was defined; both returned 0. CompCert's semantic-preservation theorem covers the C-to-assembly step only; the Lean frontend, emitter, C printer, assembler, linker, and operating system remain trusted. gcc agreement is weak corroboration, not independent evidence: both compilers consume the same emitted C."
+}

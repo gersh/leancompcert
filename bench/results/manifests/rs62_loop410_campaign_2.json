@@ -1,0 +1,152 @@
+{
+  "schema": "leancompcert.run_manifest.v1",
+  "date": "2026-08-15",
+  "status": "both compiled equation-(4.10) segments and both configuration checks accepted with every audit latch clear",
+  "scope": "RS62 equation (4.10) product/logarithm consumer over [2003, 99991) and [99991, 100000001)",
+  "memory_policy": "static BSS arrays sized from the emitted configuration; no dynamic allocation",
+  "compcert_version": "The CompCert C verified compiler, version 3.17",
+  "toolchain": {
+    "ccomp_version": "The CompCert C verified compiler, version 3.17",
+    "ccomp_path": "/usr/local/bin/ccomp",
+    "ccomp_digest": "3de246dba53b6c55901dc40d135c7bd43bf802fee6227816840f58c2068f6bf6",
+    "gcc_version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "lean_toolchain": "leanprover/lean4:v4.32.1",
+    "leancompcert_commit": "1d439a9eebbfffe094e76f08d3f466fedef9c0c8",
+    "claude_math_commit": "b97cc92c2f3a5c71212885e45adc8c12746ead99",
+    "uname": "Linux 6.17.0-1026-nvidia"
+  },
+  "segments": [
+    {
+      "row": "seed",
+      "emitter": "bench/RS62Loop410Emit.lean",
+      "args": [2003, 97988, 1009, 169, 215736,
+               1000000000000000000, 3820670970257713, 44, 2002, 2001,
+               0, 1001100689307500039, 5773442372576424],
+      "lo": 2003,
+      "fuel": 97988,
+      "root_cap": 1009,
+      "main_prime_count": 169,
+      "mark_steps": 215736,
+      "array_len": 294151,
+      "bytes_per_array": 2353208,
+      "initial_SL": 1000000000000000000,
+      "initial_product": 3820670970257713,
+      "initial_sqrt": 44,
+      "initial_den": 2002,
+      "initial_nm2": 2001,
+      "observed": {
+        "mark_audit": 0, "mark": 0, "norm": 0, "consumer_audit": 0,
+        "bad": 0, "logL": 1001100689307500039, "product": 5773442372576424
+      },
+      "expected_logL": 1001100689307500039,
+      "expected_product": 5773442372576424,
+      "expected_bad": 0,
+      "c_sha256": "ec1102ce8e507cd97d4ffb772456f6d1337b7f27e4cf67d92a0625f1a288a248",
+      "c_bytes": 150861,
+      "ccomp_binary_sha256": "08abd0baeb716e17e24ca66a86da9cfc9c365f6189156e0a283c76db6f519d45",
+      "ccomp_compile_exit": 0,
+      "ccomp_run_exit": 0,
+      "gcc_compile_exit": 0,
+      "gcc_run_exit": 0,
+      "gcc_agrees": true,
+      "discharges": "LeanCompCert.Ports.RS62Loop410Certificate.seedSegment_compcert_run"
+    },
+    {
+      "row": "main",
+      "emitter": "bench/RS62Loop410Emit.lean",
+      "args": [99991, 99900010, 10000, 1229, 248059571,
+               3240575047941118, 5773442372576424, 316, 99990, 99989,
+               0, 5184960590949722, 9234827679873124],
+      "lo": 99991,
+      "fuel": 99900010,
+      "root_cap": 10000,
+      "main_prime_count": 1229,
+      "mark_steps": 248059571,
+      "array_len": 299701277,
+      "bytes_per_array": 2397610216,
+      "initial_SL": 3240575047941118,
+      "initial_product": 5773442372576424,
+      "initial_sqrt": 316,
+      "initial_den": 99990,
+      "initial_nm2": 99989,
+      "observed": {
+        "mark_audit": 0, "mark": 0, "norm": 0, "consumer_audit": 0,
+        "bad": 0, "logL": 5184960590949722, "product": 9234827679873124
+      },
+      "expected_logL": 5184960590949722,
+      "expected_product": 9234827679873124,
+      "expected_bad": 0,
+      "c_sha256": "87924df2d34eb2e140273d27a578e1141004a0196c54106c545fad2bad2e2f07",
+      "c_bytes": 152556,
+      "ccomp_binary_sha256": "2da9309527a8fb491908bc102eca03e640de10e0e333c490d2370d66a492aa6a",
+      "ccomp_compile_exit": 0,
+      "ccomp_run_exit": 0,
+      "run_user_seconds": 23.36,
+      "run_wall_seconds": 24.9,
+      "run_max_rss_kib": 3123200,
+      "gcc_compile_exit": 0,
+      "gcc_run_exit": 0,
+      "gcc_agrees": true,
+      "discharges": "LeanCompCert.Ports.RS62Loop410Certificate.segment_compcert_run"
+    }
+  ],
+  "configuration_receipts": [
+    {
+      "row": "main",
+      "emitter": "bench/RS62CheckpointConfigEmit.lean",
+      "args": [410, 10000, 1229, 99900010, 248059571],
+      "sieve_bound": 134,
+      "table_len": 10001,
+      "count_loops": 1350135,
+      "budget_loops": 1350135,
+      "observed": { "count": 1229, "budget": 0 },
+      "expected_count": 1229,
+      "expected_budget": 0,
+      "c_sha256": "b4c6374a3db7d48e5e2672b86bd77620e95453cad801e8f97f570e4861449d63",
+      "ccomp_binary_sha256": "8d99954925fb7d47e27075f21651333d93d0d9df2eeba56e3bc8d422916af69e",
+      "ccomp_compile_exit": 0,
+      "ccomp_run_exit": 0,
+      "gcc_agrees": true,
+      "discharges": [
+        "LeanCompCert.Ports.RS62Loop410Certificate.primeCount_compcert_run",
+        "LeanCompCert.Ports.RS62Loop410Certificate.markBudget_compcert_run"
+      ]
+    },
+    {
+      "row": "seed",
+      "emitter": "bench/RS62CheckpointConfigEmit.lean",
+      "args": [4102003, 1009, 169, 97988, 215736],
+      "sieve_bound": 134,
+      "table_len": 1010,
+      "count_loops": 136350,
+      "budget_loops": 136350,
+      "observed": { "count": 169, "budget": 0 },
+      "expected_count": 169,
+      "expected_budget": 0,
+      "c_sha256": "46547b9217109dfe610e11f48224b3e7dfe2276f3d849cf565c4c9553c142448",
+      "ccomp_binary_sha256": "4a6e7f445b97756c33c220319a58f8c7f8a666d95be6e6b60ced395dc0f29784",
+      "ccomp_compile_exit": 0,
+      "ccomp_run_exit": 0,
+      "gcc_agrees": true,
+      "discharges": [
+        "LeanCompCert.Ports.RS62Loop410Certificate.seedPrimeCount_compcert_run",
+        "LeanCompCert.Ports.RS62Loop410Certificate.seedMarkBudget_compcert_run"
+      ]
+    }
+  ],
+  "proof": {
+    "compiled_segment_theorems": [
+      "LeanCompCert.Ports.RS62Loop410Certificate.production_sourceFold",
+      "LeanCompCert.Ports.RS62Loop410Certificate.seed_sourceFold"
+    ],
+    "run_axioms": [
+      "LeanCompCert.Ports.RS62Loop410Certificate.segment_compcert_run",
+      "LeanCompCert.Ports.RS62Loop410Certificate.seedSegment_compcert_run",
+      "LeanCompCert.Ports.RS62Loop410Certificate.primeCount_compcert_run",
+      "LeanCompCert.Ports.RS62Loop410Certificate.markBudget_compcert_run",
+      "LeanCompCert.Ports.RS62Loop410Certificate.seedPrimeCount_compcert_run",
+      "LeanCompCert.Ports.RS62Loop410Certificate.seedMarkBudget_compcert_run"
+    ]
+  },
+  "trust_note": "Every observed result word equals the value its Lean run axiom asserts, and both audit latches plus the normalization word are zero, so no arithmetic wrapped. CompCert's semantic-preservation theorem covers the C-to-assembly step only; the Lean frontend, emitter, C printer, assembler, linker, and operating system remain trusted. gcc agreement is recorded as weak corroboration, not independent evidence: both compilers consume the same emitted C."
+}
