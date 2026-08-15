@@ -179,9 +179,51 @@ theorem upperAllPass_of_terminal_zero (c : PsiCfg)
   apply upperAllPass_of_trace_sum_zero
   omega
 
+/-- State immediately before list position `i` in a complete-body trace. -/
+def psiPrefixState (c : PsiCfg) (indices : List Nat) (i : Nat)
+    (s : AState) : AState :=
+  runBodies c (indices.take i) s
+
+/-- A whole-trace lower pass exposes the exact local zero at any scheduled
+event, with the state produced by the preceding complete bodies. -/
+theorem LowerAllPass.at (c : PsiCfg) (indices : List Nat) (s : AState)
+    (hpass : LowerAllPass c indices s) (i : Nat) (hi : i < indices.length) :
+    lowerFailureAt c (indices.get ⟨i, hi⟩) (psiPrefixState c indices i s) = 0 := by
+  induction indices generalizing s i with
+  | nil => simp at hi
+  | cons idx indices ih =>
+      cases i with
+      | zero =>
+          change lowerFailureAt c idx s = 0
+          exact hpass.1
+      | succ i =>
+          have hi' : i < indices.length := by
+            simpa only [List.length_cons, Nat.succ_lt_succ_iff] using hi
+          have htail := ih (s := arun idx s c.body) hpass.2 i hi'
+          simpa [psiPrefixState, runBodies] using htail
+
+/-- The analogous indexed observation for the upper comparison. -/
+theorem UpperAllPass.at (c : PsiCfg) (indices : List Nat) (s : AState)
+    (hpass : UpperAllPass c indices s) (i : Nat) (hi : i < indices.length) :
+    upperFailureAt c (indices.get ⟨i, hi⟩) (psiPrefixState c indices i s) = 0 := by
+  induction indices generalizing s i with
+  | nil => simp at hi
+  | cons idx indices ih =>
+      cases i with
+      | zero =>
+          change upperFailureAt c idx s = 0
+          exact hpass.1
+      | succ i =>
+          have hi' : i < indices.length := by
+            simpa only [List.length_cons, Nat.succ_lt_succ_iff] using hi
+          have htail := ih (s := arun idx s c.body) hpass.2 i hi'
+          simpa [psiPrefixState, runBodies] using htail
+
 #print axioms runBodies_vlo
 #print axioms lowerAllPass_of_terminal_zero
 #print axioms runBodies_vup
 #print axioms upperAllPass_of_terminal_zero
+#print axioms LowerAllPass.at
+#print axioms UpperAllPass.at
 
 end LeanCompCert.Ports.PsiSegClauseTelescope
