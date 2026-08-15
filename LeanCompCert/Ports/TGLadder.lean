@@ -37,12 +37,18 @@ is needed to check it.  This is the analogue, for this port, of
   `step`, ending within `step` of the target, leaves no point of
   `(anchor, target]` uncovered.  Induction on the chain; nothing depends on
   its length.
+* `coversOddFour` — the paper-faithful endpoint theorem: odd rungs with
+  gap at most `step` cover odd targets by intervals
+  `[rung + 4, rung + step + 2]`.
 * `gapChain_of_deltas` — a delta stream bounded by `step / 2 ⁿ` builds such
   a chain.
 * `ladderProgram_denote` — **the bridge**: an `LProgram` over the delta
   stream whose output is `0` exactly when every delta is in range and the
   running total matches the declared final `k`.  Fail-closed: any other
   output rejects.
+* `ladderComputation_returns_zero_iff` and
+  `ladderComputation_target_zero_iff` — the same acceptance contract for
+  the packaged source and generated-C semantics.
 
 ## Scale note
 
@@ -94,6 +100,10 @@ def lastNum : Nat → List Nat → Nat
   | a, [] => a
   | _, N :: rest => lastNum N rest
 
+/-- Odd natural numbers, stated locally so this arithmetic port does not need
+the whole Mathlib parity hierarchy. -/
+def OddNat (n : Nat) : Prop := ∃ k, n = 2 * k + 1
+
 /--
 **The coverage theorem.**
 
@@ -127,6 +137,48 @@ theorem covers (step : Nat) :
           · exact Or.inr (List.mem_cons_self ..)
           · exact Or.inr (List.mem_cons_of_mem _ hmem), h1, h2⟩
       · exact ⟨a, Or.inl rfl, hax, by omega⟩
+
+/--
+**Odd-target coverage with the binary-Goldbach lower endpoint.**
+
+For odd targets and odd rungs, the interval certified by a rung is
+`[rung + 4, rung + step + 2]`, not merely `(rung, rung + step]`.  If a target
+is only two above the next rung, use the preceding rung: its gap is at most
+`step`, so the target is at most `step + 2` above it.  This is the exact
+reason the Helfgott--Platt producer uses prime-gap step `4*10^18 - 2` while
+the verified binary-Goldbach radius is `4*10^18`.
+-/
+theorem coversOddFour (step : Nat) :
+    ∀ (Ns : List Nat) (a target : Nat), GapChain step a Ns →
+      (∀ N, (N = a ∨ N ∈ Ns) → OddNat N) →
+      target ≤ lastNum a Ns + step + 2 →
+      ∀ x, OddNat x → a + 4 ≤ x → x ≤ target →
+        ∃ N, (N = a ∨ N ∈ Ns) ∧ N + 4 ≤ x ∧ x ≤ N + step + 2 := by
+  intro Ns
+  induction Ns with
+  | nil =>
+      intro a target _ _ hlast x _ hax hxt
+      exact ⟨a, Or.inl rfl, hax,
+        by simpa only [lastNum] using Nat.le_trans hxt hlast⟩
+  | cons N rest ih =>
+      intro a target hchain hodd hlast x hxodd hax hxt
+      obtain ⟨haN, hgap, hrest⟩ := hchain
+      by_cases hNx : N + 4 ≤ x
+      · obtain ⟨N', hmem, hlower, hupper⟩ := ih N target hrest
+          (fun y hy => hodd y (by
+            rcases hy with rfl | hy
+            · exact Or.inr (List.mem_cons_self ..)
+            · exact Or.inr (List.mem_cons_of_mem _ hy)))
+          (by simpa only [lastNum] using hlast) x hxodd hNx hxt
+        exact ⟨N', by
+          rcases hmem with rfl | hmem
+          · exact Or.inr (List.mem_cons_self ..)
+          · exact Or.inr (List.mem_cons_of_mem _ hmem), hlower, hupper⟩
+      · have hNodd : OddNat N := hodd N (Or.inr (List.mem_cons_self ..))
+        obtain ⟨u, hu⟩ := hxodd
+        obtain ⟨v, hv⟩ := hNodd
+        refine ⟨a, Or.inl rfl, hax, ?_⟩
+        omega
 
 /-! ## From a delta stream to a chain -/
 
@@ -568,6 +620,41 @@ theorem covers_of_accepts (n step anchor target k₀ expected : Nat)
         (runningK k₀ ds).map (prothNumber n)) ∧ N < x ∧ x ≤ N + step :=
   covers_of_deltas n step anchor target k₀ ds haccept.1 hlow hfirst hhigh
 
+/-- Every Proth-form rung is odd once the exponent is positive. -/
+theorem prothNumber_odd (n k : Nat) (hn : 1 ≤ n) : OddNat (prothNumber n k) := by
+  rcases n with _ | n
+  · omega
+  · refine ⟨k * 2 ^ n, ?_⟩
+    simp [prothNumber, Nat.pow_succ, Nat.mul_comm, Nat.mul_left_comm]
+
+/-- Acceptance of the delta checker gives the paper-faithful odd-target
+coverage interval `[p+4, p+step+2]`. -/
+theorem coversOddFour_of_accepts (n step anchor target k₀ expected : Nat)
+    (ds : List Nat) (hn : 1 ≤ n)
+    (hanchorOdd : OddNat anchor)
+    (haccept : Accepts (deltaBound n step) expected ds)
+    (hlow : anchor + 4 ≤ prothNumber n k₀)
+    (hfirst : prothNumber n k₀ ≤ anchor + step)
+    (hhigh : target ≤ prothNumber n (finalK k₀ ds) + step + 2) :
+    ∀ x, OddNat x → anchor + 4 ≤ x → x ≤ target →
+      ∃ N, (N = anchor ∨ N ∈ prothNumber n k₀ ::
+        (runningK k₀ ds).map (prothNumber n)) ∧
+        N + 4 ≤ x ∧ x ≤ N + step + 2 := by
+  apply coversOddFour step
+      (prothNumber n k₀ :: (runningK k₀ ds).map (prothNumber n)) anchor target
+  · exact ⟨by omega, hfirst, gapChain_of_deltas n step ds k₀ haccept.1⟩
+  · intro N hN
+    rcases hN with rfl | hN
+    · exact hanchorOdd
+    · simp only [List.mem_cons, List.mem_map] at hN
+      rcases hN with rfl | ⟨k, _, rfl⟩
+      · exact prothNumber_odd n k₀ hn
+      · exact prothNumber_odd n k hn
+  · show target ≤ lastNum (prothNumber n k₀)
+      ((runningK k₀ ds).map (prothNumber n)) + step + 2
+    rw [lastNum_runningK n ds k₀]
+    exact hhigh
+
 /-- The declared total really is the final `k` offset: `finalK k₀ ds` is
 `k₀` plus the sum of the deltas, which is what the checker compares. -/
 theorem finalK_eq :
@@ -580,6 +667,38 @@ theorem finalK_eq :
       intro k
       rw [finalK, ih (k + d), List.foldl_cons, foldl_add_shift rest (0 + d)]
       omega
+
+/-! ## Packaged compiled checker -/
+
+/-- Package the delta-stream checker through the production LeanCompCert
+lowering path. -/
+def ladderComputation (bound expected : Nat) (ds : List Nat) :
+    Verified.Computation :=
+  (ladderProgram bound expected ds).toComputation "TGLadder"
+    (ladderProgram_wf bound expected ds)
+
+/-- A packaged compiled zero receipt is exactly acceptance of the delta
+stream. -/
+theorem ladderComputation_returns_zero_iff (bound expected : Nat) (ds : List Nat)
+    (hbound : bound < M) (hexp : expected < M) (hdM : ∀ d ∈ ds, d < M)
+    (hviol : ds.foldl (fun a d => a + badOf bound d) 0 + 1 < M)
+    (htot : ds.foldl (fun a d => a + d) 0 < M) :
+    (ladderComputation bound expected ds).Returns ((0 : Nat) : Int) ↔
+      Accepts bound expected ds := by
+  unfold ladderComputation
+  rw [LProgram.toComputation_returns]
+  exact ladderProgram_denote bound expected ds hbound hexp hdM hviol htot
+
+/-- The same contract for the generated-C semantics. -/
+theorem ladderComputation_target_zero_iff (bound expected : Nat) (ds : List Nat)
+    (hbound : bound < M) (hexp : expected < M) (hdM : ∀ d ∈ ds, d < M)
+    (hviol : ds.foldl (fun a d => a + badOf bound d) 0 + 1 < M)
+    (htot : ds.foldl (fun a d => a + d) 0 < M) :
+    (ladderComputation bound expected ds).targetResult = some ((0 : Nat) : Int) ↔
+      Accepts bound expected ds := by
+  rw [(ladderComputation bound expected ds).targetReturns_iff]
+  exact ladderComputation_returns_zero_iff bound expected ds
+    hbound hexp hdM hviol htot
 
 /-! ## Emission packaging (artifact path, not a theorem)
 

@@ -181,12 +181,20 @@ word-safe reduction:
   of at most `step`, ending within `step` of the target, leave no point of
   `(anchor, target]` uncovered.  Induction on the chain; cost independent
   of the number of rungs.
+* `coversOddFour`, `coversOddFour_of_accepts` — for odd targets and odd
+  rungs, the accepted stream covers by the exact intervals
+  `[p+4, p+step+2]`.  This proves the paper's endpoint handoff: setting
+  `step = 4·10¹⁸−2` leaves an even remainder in `[4, 4·10¹⁸]`.
 * `gapChain_of_deltas`, `covers_of_deltas`, `covers_of_accepts` — a delta
   stream bounded by `step / 2ⁿ` builds such a chain, so acceptance by the
   `u64` checker implies coverage.
 * `ladderProgram_denote` — the bridge, fail-closed: the `LProgram`'s output
   is `0` **iff** every delta lies in `[1, bound]` and the deltas total the
   declared value.
+* `ladderComputation_returns_zero_iff`,
+  `ladderComputation_target_zero_iff` — package that bridge through the
+  production LeanCompCert computation and generated-C semantics.  A run
+  receipt is consumed as a theorem; Lean does not replay the stream.
 
 Measured on the producer's own stream for range 4·10²³
 (`bench/results/tg_ladder.csv`):
@@ -210,6 +218,13 @@ blocks are therefore strongly preferred, and
 makes them sound.  At 1 000-record blocks the full 2.5·10⁸-rung ladder
 would cost ≈ 2.6·10⁵ s ≈ **72 core-hours** to check — about 150× the cost
 of *producing* it, but embarrassingly parallel and proof-carrying.
+
+The source-scale Helfgott--Platt threshold projects about `2.2·10¹²` rungs.
+Scaling the same 1,000-record proof-carrying block path gives roughly
+`2.3·10⁹` CPU-seconds, or **about 70 core-years**, for ladder receipt
+checking.  This is an execution estimate only; the endpoint and packaged
+semantics proofs above compile in under one second and do not execute the
+campaign.
 
 ## Reproducing
 
