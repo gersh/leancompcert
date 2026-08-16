@@ -87,6 +87,61 @@ theorem tcOfSignG_spec (k : Nat) (s : RegState) (n m dst t0 t1 : Nat)
       Nat.mul_zero, Nat.zero_mod, Nat.add_zero, Nat.zero_add]
     simp
 
+/-! ## The accumulator operations
+
+★ One instruction each, and — unlike every other block here — **no register
+distinctness is needed**.  A single instruction reads its operands from the
+incoming state and only then writes, so the destination may freely alias
+either source.  That is worth stating explicitly, because every other spec in
+this file carries a pile of `≠` hypotheses and it would be natural to assume
+these do too. -/
+
+/-- Two's complement addition: the machine's `.add`. -/
+def tcAddG (a b dst : Nat) : List Instr :=
+  [Instr.binop dst .add (.reg a) (.reg b)]
+
+/-- Two's complement subtraction: the machine's `.sub`. -/
+def tcSubG (a b dst : Nat) : List Instr :=
+  [Instr.binop dst .sub (.reg a) (.reg b)]
+
+theorem tcAddG_spec (k : Nat) (s : RegState) (a b dst : Nat) :
+    srun k s (tcAddG a b dst) dst = (s a + s b) % M := by
+  simp only [tcAddG, srun_cons, srun_nil, sdest, sval, denoteOperand,
+    denoteOp, Option.getD_some, RegState.set, if_pos rfl, if_true]
+
+theorem tcSubG_spec (k : Nat) (s : RegState) (a b dst : Nat) :
+    srun k s (tcSubG a b dst) dst = (s a + (M - s b)) % M := by
+  simp only [tcSubG, srun_cons, srun_nil, sdest, sval, denoteOperand,
+    denoteOp, Option.getD_some, RegState.set, if_pos rfl, if_true]
+
+theorem tcAddG_preserves {a b dst r : Nat} (h : dst ≠ r) :
+    Preserves (tcAddG a b dst) r :=
+  preserves_singleton (by simpa [sdest] using h)
+
+theorem tcSubG_preserves {a b dst r : Nat} (h : dst ≠ r) :
+    Preserves (tcSubG a b dst) r :=
+  preserves_singleton (by simpa [sdest] using h)
+
+/-- **The emitted add denotes the signed sum**, given the range condition. -/
+theorem tcAddG_val (k : Nat) (s : RegState) (a b dst : Nat)
+    (ha : s a < B64) (hb : s b < B64)
+    (hrange : -(H : Int) ≤ tcVal (s a) + tcVal (s b) ∧
+      tcVal (s a) + tcVal (s b) < (H : Int)) :
+    tcVal (srun k s (tcAddG a b dst) dst) = tcVal (s a) + tcVal (s b) := by
+  have hB : M = B64 := by decide
+  rw [tcAddG_spec, hB]
+  exact tcAdd_val (s a) (s b) ha hb hrange
+
+/-- **The emitted subtract denotes the signed difference.** -/
+theorem tcSubG_val (k : Nat) (s : RegState) (a b dst : Nat)
+    (ha : s a < B64) (hb : s b < B64)
+    (hrange : -(H : Int) ≤ tcVal (s a) - tcVal (s b) ∧
+      tcVal (s a) - tcVal (s b) < (H : Int)) :
+    tcVal (srun k s (tcSubG a b dst) dst) = tcVal (s a) - tcVal (s b) := by
+  have hB : M = B64 := by decide
+  rw [tcSubG_spec, hB]
+  exact tcSub_val (s a) (s b) ha hb hrange
+
 /-! ## Checks -/
 
 /-- `+5` converts to `5`. -/
@@ -99,6 +154,8 @@ example : tcOfSign 1 5 = B64 - 5 := by decide
 relies on `0 - 0` wrapping to `0`, which the modular subtraction does. -/
 example : tcOfSign 1 0 = 0 := by decide
 
+#print axioms tcAddG_val
+#print axioms tcSubG_val
 #print axioms tcOfSignG_spec
 #print axioms tcOfSignG_preserves
 

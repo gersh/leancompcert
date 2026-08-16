@@ -82,6 +82,28 @@ theorem tcAdd_val (a b : Nat) (ha : a < B64) (hb : b < B64)
     rw [ea, eb] at hlo hhi <;> rw [ea, eb, ec] <;>
     simp only [B64, H] at * <;> omega
 
+/-- **`.sub` is two's complement subtraction.**
+
+The machine's `.sub a b` is `(a + (M - b)) % M`, and that is the signed
+difference whenever the result is in range.
+
+⚠ Note the encoding handles `b = 0` by wrapping: `(a + M) % M = a`, not
+`a + M`.  Without that the block would need a special case. -/
+theorem tcSub_val (a b : Nat) (ha : a < B64) (hb : b < B64)
+    (hrange : -(H : Int) ≤ tcVal a - tcVal b ∧ tcVal a - tcVal b < (H : Int)) :
+    tcVal ((a + (B64 - b)) % B64) = tcVal a - tcVal b := by
+  obtain ⟨hlo, hhi⟩ := hrange
+  have hc : (a + (B64 - b)) % B64 < B64 := Nat.mod_lt _ (by decide)
+  have hmod : (a + (B64 - b)) % B64 = a + (B64 - b) ∨
+      (a + (B64 - b)) % B64 + B64 = a + (B64 - b) := by
+    simp only [B64] at ha hb ⊢
+    omega
+  rcases tcVal_eq a ha with ⟨ea, ha'⟩ | ⟨ea, ha'⟩ <;>
+    rcases tcVal_eq b hb with ⟨eb, hb'⟩ | ⟨eb, hb'⟩ <;>
+    rcases tcVal_eq _ hc with ⟨ec, hc'⟩ | ⟨ec, hc'⟩ <;>
+    rw [ea, eb] at hlo hhi <;> rw [ea, eb, ec] <;>
+    simp only [B64, H] at * <;> omega
+
 /-- Sign-magnitude to two's complement. -/
 def tcOfSign (n m : Nat) : Nat := if n = 1 then (B64 - m) % B64 else m
 
@@ -122,6 +144,7 @@ example : tcVal ((H - 1 + 1) % B64) = -(H : Int) := by decide
 example : ¬ (tcVal (H - 1) + tcVal 1 < (H : Int)) := by decide
 
 #print axioms tcAdd_val
+#print axioms tcSub_val
 #print axioms tcOfSign_val
 
 end LeanCompCert.Verified.TwosComplement
