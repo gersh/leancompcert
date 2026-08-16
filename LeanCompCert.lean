@@ -34,6 +34,7 @@ import LeanCompCert.Verified.SignedFixedMul
 import LeanCompCert.Verified.ComplexFixedMul
 import LeanCompCert.Verified.MainSumFold
 import LeanCompCert.Verified.BlockCompose
+import LeanCompCert.Verified.TwosComplement
 import LeanCompCert.Ports.FixedMulBlock
 import LeanCompCert.Ports.MulWide3Port
 import LeanCompCert.Ports.RS62Loop314Program
