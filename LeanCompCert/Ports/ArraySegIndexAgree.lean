@@ -6,6 +6,8 @@ import LeanCompCert.Ports.ArraySegSieve
 import LeanCompCert.Ports.CDEMAbelIndexIndependence
 import LeanCompCert.Ports.ArraySegMobiusIndexedRun
 import LeanCompCert.Ports.ArraySegMobiusCursorModel
+import LeanCompCert.Ports.ArraySegMobiusIndexedSignal
+import LeanCompCert.Ports.ArraySegMobiusSquaredSignal
 
 /-!
 # Index agreement for the segmented sieve's core body
@@ -120,6 +122,46 @@ theorem indexedBodyRun_eq_bodyRun (c : Cfg) (idx : Nat)
       rw [indexedBodyRun_succ, bodyRun_succ, hprev]
       refine arun_coreBody_agree c (idx + fuel) idx _ (by omega) (by omega)
         hspanM (by omega) hi (by omega) hiNe
+
+open LeanCompCert.Ports.ArraySegMobiusIndexedRun in
+open LeanCompCert.Ports.ArraySegMobiusCursorModel in
+open LeanCompCert.Ports.ArraySegMobiusIndexedSignal in
+open LeanCompCert.Ports.ArraySegMobiusResidueFold in
+open LeanCompCert.Ports.ArraySegMobiusResidueFrame in
+open LeanCompCert.Ports.ArraySegMobiusSquaredFold in
+open LeanCompCert.Ports.ArraySegMobiusSquaredSignal in
+open LeanCompCert.Ports.MobiusResidueRealisation in
+/-- **The main phase's emitted signals are the mathematical schedule.**
+
+The root phase (`combinedSignals_root_schedule`) and the marking phase
+(`combinedSignals_main_mark_schedule`) are already known idle; this is the
+third and last one, and the only one that carries information.
+
+`hcell` is the emitted-cell equation — `readSig_windowRun_main_cell_eq_rootFoldValue`'s
+conclusion — taken as a hypothesis rather than restated with its twenty-one
+side conditions about table, budget and cursor.  Everything between it and the
+schedule is the index bookkeeping proved above. -/
+theorem combinedSignals_main_active_schedule
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k : Nat)
+    (combined core : AState)
+    (hagree : CoreAgree combined core)
+    (hspanM : c.rootSpan < M) (hmain : c.rootSpan ≤ idx)
+    (hspanPos : 0 < c.rootSpan) (hidxM : idx + c.segLen < M)
+    (hcell : ∀ i, i < c.segLen →
+      readSig (arun idx (bodyRun idx c i core) c.coreBody)
+        = muSig mu (lo + i + 1)) :
+    ConsecutiveSignalSchedule mu lo
+      (combinedSignals idx c k c.segLen combined) c.segLen := by
+  have hidxNe : idx ≠ c.rootSpan - 1 := by omega
+  refine combinedSignals_schedule_of_active mu lo idx c k c.segLen combined
+    (fun j hj => ?_)
+  rw [readSig_combinedIndexedRun_eq_indexedBodyRun idx c k j hagree,
+    indexedBodyRun_eq_bodyRun c idx hspanM hmain hidxNe j (by omega) core,
+    arun_coreBody_agree c (idx + j) idx (bodyRun idx c j core)
+      (by omega) (by omega) hspanM (by omega) hmain (by omega) hidxNe]
+  exact hcell j hj
+
+#print axioms combinedSignals_main_active_schedule
 
 #print axioms indexedBodyRun_eq_bodyRun
 
