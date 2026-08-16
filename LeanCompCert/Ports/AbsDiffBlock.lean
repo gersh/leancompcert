@@ -98,6 +98,68 @@ theorem absDiffG_spec (k : Nat) (s : RegState) (a b dst t0 t1 : Nat)
     rw [Nat.mod_eq_of_lt hlt, Nat.mod_eq_of_lt hlt]
     omega
 
+
+/-! ### Branchless `max`
+
+Same selection idiom, one instruction shorter because neither candidate needs
+a subtraction first. -/
+
+def maxG (a b dst t0 t1 : Nat) : List Instr :=
+  [ Instr.binop t0 .ge (.reg a) (.reg b)
+  , Instr.binop t1 .mul (.reg a) (.reg t0)
+  , Instr.binop t0 .sub (.lit 1) (.reg t0)
+  , Instr.binop dst .mul (.reg b) (.reg t0)
+  , Instr.binop dst .add (.reg dst) (.reg t1) ]
+
+theorem maxG_noDiv (a b dst t0 t1 : Nat) :
+    (maxG a b dst t0 t1).all NoDivI = true := rfl
+
+theorem maxG_spec (k : Nat) (s : RegState) (a b dst t0 t1 : Nat)
+    (hs : ∀ j, s j < M)
+    (ht01 : t0 ≠ t1) (ht0a : t0 ≠ a) (ht0b : t0 ≠ b)
+    (ht1a : t1 ≠ a) (ht1b : t1 ≠ b)
+    (hda : dst ≠ a) (hdb : dst ≠ b) (hdt0 : dst ≠ t0) (hdt1 : dst ≠ t1) :
+    srun k s (maxG a b dst t0 t1) dst = max (s a) (s b) := by
+  have hMv : M = 18446744073709551616 := by decide
+  have ha := hs a
+  have hb := hs b
+  simp only [maxG, srun_cons, srun_nil, sdest, sval, denoteOperand,
+    denoteOp, Option.getD_some, RegState.set]
+  simp only [if_neg ht01, if_neg (Ne.symm ht01), if_neg ht0a, if_neg ht0b,
+    if_neg ht1a, if_neg ht1b, if_neg hda, if_neg hdb, if_neg hdt0,
+    if_neg hdt1, if_neg (Ne.symm hda), if_neg (Ne.symm hdb),
+    if_neg (Ne.symm hdt0), if_neg (Ne.symm hdt1), if_neg (Ne.symm ht0a),
+    if_neg (Ne.symm ht0b), if_neg (Ne.symm ht1a), if_neg (Ne.symm ht1b),
+    if_pos rfl, if_true]
+  rw [show (1 : Nat) % M = 1 by decide]
+  by_cases hge : s a ≥ s b
+  · rw [if_pos hge]
+    have e2 : (1 + (M - 1)) % M = 0 := by simp only [hMv]
+    rw [e2]
+    simp only [Nat.mul_one, Nat.mul_zero, Nat.zero_mod, Nat.zero_add,
+      Nat.add_zero]
+    rw [Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt ha]
+    omega
+  · rw [if_neg hge]
+    have e2 : (1 + (M - 0)) % M = 1 := by simp only [hMv]
+    rw [e2]
+    simp only [Nat.mul_one, Nat.mul_zero, Nat.zero_mod, Nat.add_zero,
+      Nat.zero_add]
+    rw [Nat.mod_eq_of_lt hb, Nat.mod_eq_of_lt hb]
+    omega
+
+#print axioms maxG_spec
+
+
+/-! ### Composing them
+
+`RamareCombined100M.Model.intervalAbsUpper lo hi = max lo.natAbs hi.natAbs`,
+with both endpoints arriving as a difference of `Nat` accumulators, is
+`absDiffG` twice followed by `maxG` — seventeen instructions and no `Int`.
+The composite is not stated here because its register-separation side
+conditions are cheapest to discharge once the consuming port fixes concrete
+registers, as `TrigFixPort.cosBodyG` does. -/
+
 #print axioms absDiffG_spec
 
 end LeanCompCert.Ports.AbsDiffBlock
