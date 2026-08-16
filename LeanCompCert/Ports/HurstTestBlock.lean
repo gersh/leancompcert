@@ -5,6 +5,7 @@ Authors: Gershon Bialer
 -/
 import LeanCompCert.Ports.AbsDiffBlock
 import LeanCompCert.Ports.Section413G1Denote
+import LeanCompCert.Verified.ArrayScalarBlock
 
 /-!
 # Hurst's test, as an instruction block
@@ -277,6 +278,41 @@ theorem hurstBodyG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
     exact hT
 
 #print axioms hurstBodyG_spec
+
+
+/-! ### Lifted into the array machine
+
+The sieve lives in the array machine and the body above is scalar, so the
+body has to be lifted.  `arun_lift` makes that free *and* records the fact
+the composition actually needs: a lifted block leaves `arr` alone.  That is
+what lets the accumulator run after the sieve without disturbing the table
+the sieve is still using. -/
+
+def hurstBodyA : List ArrayState.AInstr := ArrayScalarBlock.lift hurstBodyG
+
+theorem hurstBodyA_spec (k : Nat) (s : ArrayState.AState)
+    (hs : ∀ j, s.regs j < M)
+    (h30 : s.regs 30 + s.regs 79 < M) (h31 : s.regs 31 + s.regs 80 < M)
+    (hfit : 1000 * (((s.regs 30 + s.regs 79 : Nat) : Int)
+        - ((s.regs 31 + s.regs 80 : Nat) : Int)).natAbs < M) :
+    (ArrayFoldBridge.arun k s hurstBodyA).regs 30 = s.regs 30 + s.regs 79
+      ∧ (ArrayFoldBridge.arun k s hurstBodyA).regs 31 = s.regs 31 + s.regs 80
+      ∧ (ArrayFoldBridge.arun k s hurstBodyA).regs 40
+          = (if (1000 * (((s.regs 30 + s.regs 79 : Nat) : Int)
+                  - ((s.regs 31 + s.regs 80 : Nat) : Int)).natAbs)
+                * (1000 * (((s.regs 30 + s.regs 79 : Nat) : Int)
+                  - ((s.regs 31 + s.regs 80 : Nat) : Int)).natAbs)
+              ≤ 326041 * s.regs 32 then 1 else 0)
+      ∧ (ArrayFoldBridge.arun k s hurstBodyA).arr = s.arr := by
+  obtain ⟨g30, g31, g40⟩ := hurstBodyG_spec k s.regs hs h30 h31 hfit
+  have hlift := ArrayScalarBlock.arun_lift k hurstBodyG s
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [hurstBodyA, hlift]; exact g30
+  · rw [hurstBodyA, hlift]; exact g31
+  · rw [hurstBodyA, hlift]; exact g40
+  · rw [hurstBodyA, hlift]
+
+#print axioms hurstBodyA_spec
 
 #print axioms scaledAbsG_spec
 
