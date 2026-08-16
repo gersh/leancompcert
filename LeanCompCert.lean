@@ -37,6 +37,7 @@ import LeanCompCert.Verified.BlockCompose
 import LeanCompCert.Verified.TwosComplement
 import LeanCompCert.Verified.TwosComplementFold
 import LeanCompCert.Ports.FixedMulBlock
+import LeanCompCert.Ports.TwosComplementBlock
 import LeanCompCert.Ports.MulWide3Port
 import LeanCompCert.Ports.RS62Loop314Program
 import LeanCompCert.Ports.RS62Loop314Sound
