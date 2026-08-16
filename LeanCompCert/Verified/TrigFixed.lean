@@ -395,10 +395,99 @@ theorem sinTerm_succ_mul62 {X : Nat} (hX : X ≤ B62) (k : Nat) :
   rw [h1, mul62_eq _ _ hu hXb]
   rfl
 
+
+/-! ### The terms at least halve
+
+Each round divides by a factorial factor of at least two on top of two
+contractions, so the sequence decreases geometrically.  Two consequences, and
+both are load-bearing downstream: the partial sums stay inside a single word
+(so an emitted accumulator cannot overflow), and the alternating series has
+decreasing terms (so consecutive partial sums straddle the value). -/
+
+theorem cosTerm_succ_le_half (X : Nat) (hX : X ≤ B62) (k : Nat) :
+    cosTerm X (k + 1) ≤ cosTerm X k / 2 := by
+  have hc : 2 ≤ (2 * k + 1) * (2 * k + 2) := by
+    have h := Nat.mul_le_mul (show 1 ≤ 2 * k + 1 by omega) (show 2 ≤ 2 * k + 2 by omega)
+    omega
+  have h1 : mulFix (mulFix (cosTerm X k) X) X ≤ cosTerm X k :=
+    Nat.le_trans (mulFix_le _ hX) (mulFix_le _ hX)
+  show mulFix (mulFix (cosTerm X k) X) X / ((2 * k + 1) * (2 * k + 2))
+      ≤ cosTerm X k / 2
+  exact Nat.le_trans (Nat.div_le_div_right h1)
+    (Nat.div_le_div_left hc (by decide))
+
+theorem sinTerm_succ_le_half (X : Nat) (hX : X ≤ B62) (k : Nat) :
+    sinTerm X (k + 1) ≤ sinTerm X k / 2 := by
+  have hc : 2 ≤ (2 * k + 2) * (2 * k + 3) := by
+    have h := Nat.mul_le_mul (show 2 ≤ 2 * k + 2 by omega) (show 1 ≤ 2 * k + 3 by omega)
+    omega
+  have h1 : mulFix (mulFix (sinTerm X k) X) X ≤ sinTerm X k :=
+    Nat.le_trans (mulFix_le _ hX) (mulFix_le _ hX)
+  show mulFix (mulFix (sinTerm X k) X) X / ((2 * k + 2) * (2 * k + 3))
+      ≤ sinTerm X k / 2
+  exact Nat.le_trans (Nat.div_le_div_right h1)
+    (Nat.div_le_div_left hc (by decide))
+
+/-- The running sum of cosine terms. -/
+def cosSum (X : Nat) : Nat → Nat
+  | 0 => 0
+  | n + 1 => cosSum X n + cosTerm X n
+
+/-- **The partial sums fit in one word**, with room to spare: geometric decay
+caps them at `2 · B62 = 2^63`, half of `M`.  The `+ 2 * cosTerm X n` is what
+makes the induction go through. -/
+theorem cosSum_bound (X : Nat) (hX : X ≤ B62) : ∀ n,
+    cosSum X n + 2 * cosTerm X n ≤ 2 * B62
+  | 0 => by simp [cosSum, cosTerm]
+  | n + 1 => by
+    have ih := cosSum_bound X hX n
+    have hhalf := cosTerm_succ_le_half X hX n
+    have h2 : 2 * cosTerm X (n + 1) ≤ 2 * (cosTerm X n / 2) :=
+      Nat.mul_le_mul (Nat.le_refl 2) hhalf
+    have h3 : 2 * (cosTerm X n / 2) ≤ cosTerm X n := by
+      have := Nat.div_add_mod (cosTerm X n) 2
+      omega
+    show cosSum X n + cosTerm X n + 2 * cosTerm X (n + 1) ≤ 2 * B62
+    omega
+
+theorem cosSum_lt (X : Nat) (hX : X ≤ B62) (n : Nat) : cosSum X n < MulWide.B64 := by
+  have h := cosSum_bound X hX n
+  have hb : 2 * B62 < MulWide.B64 := by decide
+  omega
+
+
+/-- The two parity sums an emitted accumulator maintains. -/
+def evenSum (X : Nat) : Nat → Nat
+  | 0 => 0
+  | n + 1 => evenSum X n + (if n % 2 = 0 then cosTerm X n else 0)
+
+def oddSum (X : Nat) : Nat → Nat
+  | 0 => 0
+  | n + 1 => oddSum X n + (if n % 2 = 0 then 0 else cosTerm X n)
+
+theorem evenSum_add_oddSum (X : Nat) : ∀ n, evenSum X n + oddSum X n = cosSum X n
+  | 0 => rfl
+  | n + 1 => by
+    have ih := evenSum_add_oddSum X n
+    show evenSum X n + (if n % 2 = 0 then cosTerm X n else 0)
+      + (oddSum X n + (if n % 2 = 0 then 0 else cosTerm X n))
+      = cosSum X n + cosTerm X n
+    by_cases h : n % 2 = 0 <;> simp only [h, if_pos, if_neg, if_true, if_false] <;> omega
+
+theorem evenSum_le_cosSum (X : Nat) (n : Nat) : evenSum X n ≤ cosSum X n := by
+  have h := evenSum_add_oddSum X n
+  omega
+
+theorem oddSum_le_cosSum (X : Nat) (n : Nat) : oddSum X n ≤ cosSum X n := by
+  have h := evenSum_add_oddSum X n
+  omega
+
 #print axioms cosTerm_bracket
 #print axioms sinTerm_bracket
 #print axioms mul62_eq
 #print axioms cosTerm_succ_mul62
 #print axioms sinTerm_succ_mul62
+#print axioms cosTerm_succ_le_half
+#print axioms cosSum_bound
 
 end LeanCompCert.Verified.TrigFixed

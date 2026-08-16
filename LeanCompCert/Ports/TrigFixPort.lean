@@ -371,6 +371,115 @@ theorem accG_spec (k : Nat) (s : RegState) (hk : k < M)
     rw [Nat.mod_eq_of_lt ht, Nat.mod_eq_of_lt hO, Nat.mod_eq_of_lt h20]
     exact ⟨rfl, rfl⟩
 
+
+/-! ### One full loop step
+
+`accG` writes only 20..23 and `cosBodyG` never touches those, so the two
+compose with nothing but `srun_untouched` between them. -/
+
+def cosStepG : List Instr := accG ++ cosBodyG
+
+theorem cosStepG_spec (k : Nat) (s : RegState) (X : Nat)
+    (hs : ∀ j, s j < M) (hX1 : s 1 = X) (hXb : X ≤ B62)
+    (ht : s 2 = cosTerm X k) (hk : k < M)
+    (hc : (2 * k + 1) * (2 * k + 2) < M)
+    (hE : s 20 + s 2 < M) (hO : s 21 + s 2 < M) :
+    srun k s cosStepG 2 = cosTerm X (k + 1)
+      ∧ srun k s cosStepG 20 = (if k % 2 = 0 then s 20 + cosTerm X k else s 20)
+      ∧ srun k s cosStepG 21 = (if k % 2 = 0 then s 21 else s 21 + cosTerm X k)
+      ∧ srun k s cosStepG 1 = X := by
+  have hacc := accG_spec k s hk (hs 2) hE hO
+  have hw : ∀ j, srun k s accG j < M := srun_lt k accG (by decide) s hs
+  have hp1 : srun k s accG 1 = X := by
+    rw [srun_untouched k 1 accG (by decide)]; exact hX1
+  have hp2 : srun k s accG 2 = cosTerm X k := by
+    rw [srun_untouched k 2 accG (by decide)]; exact ht
+  have hbody := cosBodyG_spec k (srun k s accG) X hw hp1 hXb hp2 hk hc
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [cosStepG, srun_append]; exact hbody
+  · rw [cosStepG, srun_append, srun_untouched k 20 cosBodyG (by decide)]
+    rw [hacc.1, ht]
+  · rw [cosStepG, srun_append, srun_untouched k 21 cosBodyG (by decide)]
+    rw [hacc.2, ht]
+  · rw [cosStepG, srun_append, srun_untouched k 1 cosBodyG (by decide)]
+    exact hp1
+
+
+/-! ### The loop
+
+`cosFold` is the state after `n` iterations.  Proving the invariant on it and
+relating it to the `List.range` fold separately keeps the induction free of
+list bookkeeping. -/
+
+/-- Registers at loop entry: the argument in 1, the seed term `B62` in 2,
+both sums zero. -/
+def cosState (X : Nat) : RegState :=
+  fun j => if j = 1 then X else if j = 2 then B62 else 0
+
+theorem cosState_word (X : Nat) (hX : X ≤ B62) : ∀ j, cosState X j < M := by
+  intro j
+  have hBM : B62 < M := by decide
+  unfold cosState
+  split
+  · omega
+  · split
+    · omega
+    · decide
+
+def cosFold (X : Nat) : Nat → RegState
+  | 0 => cosState X
+  | n + 1 => srun n (cosFold X n) cosStepG
+
+theorem cosFold_eq (X : Nat) : ∀ n,
+    cosFold X n = (List.range n).foldl (fun st k => srun k st cosStepG) (cosState X)
+  | 0 => rfl
+  | n + 1 => by
+    rw [List.range_succ, List.foldl_append, ← cosFold_eq X n]
+    simp only [List.foldl_cons, List.foldl_nil]
+    rw [cosFold]
+
+/-- **The loop invariant.**  After `n` iterations the term register holds
+`cosTerm X n` and the two accumulators hold the parity sums of everything
+before it.  The bound `2n + 2 < 2^32` is what keeps the factorial factor
+inside a word. -/
+theorem cosFold_spec (X : Nat) (hX : X ≤ B62) : ∀ n, 2 * n + 2 < 4294967296 →
+    (∀ j, cosFold X n j < M) ∧ cosFold X n 1 = X ∧ cosFold X n 2 = cosTerm X n
+      ∧ cosFold X n 20 = evenSum X n ∧ cosFold X n 21 = oddSum X n
+  | 0 => by
+    intro _
+    exact ⟨cosState_word X hX, rfl, rfl, rfl, rfl⟩
+  | n + 1 => by
+    intro hn
+    obtain ⟨hw, h1, h2, h20, h21⟩ := cosFold_spec X hX n (by omega)
+    have hMv : M = 18446744073709551616 := by decide
+    have hkM : n < M := by omega
+    have hc : (2 * n + 1) * (2 * n + 2) < M := by
+      have := Nat.mul_lt_mul_of_lt_of_le (show 2 * n + 1 < 4294967296 by omega)
+        (show 2 * n + 2 ≤ 4294967296 by omega) (by omega)
+      omega
+    have hsum := cosSum_bound X hX n
+    have hev := evenSum_le_cosSum X n
+    have hod := oddSum_le_cosSum X n
+    have hBM : 2 * B62 < M := by decide
+    have hE : cosFold X n 20 + cosFold X n 2 < M := by rw [h20, h2]; omega
+    have hO : cosFold X n 21 + cosFold X n 2 < M := by rw [h21, h2]; omega
+    obtain ⟨s2, s20, s21, s1⟩ :=
+      cosStepG_spec n (cosFold X n) X hw h1 hX h2 hkM hc hE hO
+    refine ⟨?_, ?_, ?_, ?_, ?_⟩
+    · exact fun j => srun_lt_of_lt n cosStepG (cosFold X n) hw j
+    · exact s1
+    · exact s2
+    · rw [show cosFold X (n + 1) = srun n (cosFold X n) cosStepG from rfl, s20, h20]
+      show _ = evenSum X n + (if n % 2 = 0 then cosTerm X n else 0)
+      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+    · rw [show cosFold X (n + 1) = srun n (cosFold X n) cosStepG from rfl, s21, h21]
+      show _ = oddSum X n + (if n % 2 = 0 then 0 else cosTerm X n)
+      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+
+#print axioms cosFold_spec
+
+#print axioms cosStepG_spec
+
 #print axioms accG_spec
 
 #print axioms cFactorG_spec
