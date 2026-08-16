@@ -1247,4 +1247,315 @@ theorem hurstProgram_wf (c : Cfg) : (hurstProgram c).WF :=
 #print axioms hurstProgram_wf
 
 
+
+/-! ## From the flat index space to candidates
+
+`MertensCDEM`'s block section is written against `RowFail`, so it does not
+apply to a substituted predicate.  What *is* shared is everything the
+predicate does not touch: `moAdvance`, `moAt`, `trialRun`, `trialPrefix` and
+the accumulator's exact recurrence (`moAt_succ`, `moAt_bounds`).  The Hurst
+copies below track only the violation flag, which is the one component that
+differs.
+
+★ Worth stating plainly: `hurstGstep` and `gstep` produce *identical* `mo` and
+`t` at every index (`hurstGstep_mo_eq`, `hurstGstep_t_eq`, both `rfl`).  The
+accumulator this file reasons about is therefore literally CDEM's, and every
+theorem CDEM proves about `moAt` is available unchanged. -/
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The abstract step with the decode named. -/
+theorem hurstGstep_qX (c : Cfg) (idx : Nat) (a : Abs) (q X : Nat)
+    (hq : idx % c.rounds = q) (hX : c.lo + idx / c.rounds = X) :
+    hurstGstep c idx a =
+      (let t := trialStep (q + 2) (if q = 0 then ⟨X, 0, 0⟩ else a.t)
+      let last := if q = c.rounds - 1 then 1 else 0
+      let mo := moStep a.mo (last * muPlus t) (last * muMinus t)
+      ⟨a.bad ||| (if HurstRowFail c.lower c.cap X mo c.bias ∨ AnchorFail c X mo
+          then last else 0), mo, t⟩) := by
+  have ht : (gB c idx (gA c idx a)).t
+      = trialStep (q + 2) (if q = 0 then ⟨X, 0, 0⟩ else a.t) := by
+    show trialStep (idx % c.rounds + 2) _ = _
+    rw [hq, gA_t, hq, hX]
+  have hbad : (gB c idx (gA c idx a)).bad = a.bad := rfl
+  have hmo : (gB c idx (gA c idx a)).mo = a.mo := rfl
+  refine Abs.eq_of ?_ ?_ ht
+  · show hurstBadOf c (c.lo + idx / c.rounds) _ _ _ = _
+    simp only [hurstBadOf, moOf, hX, hq, hbad, hmo, ht, muPlus, muMinus]
+    rfl
+  · show moOf _ _ _ = _
+    simp only [moOf, hq, hbad, hmo, ht, muPlus, muMinus]
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- One round of one candidate, in ordinary arithmetic. -/
+theorem hurstGstep_round (c : Cfg) (n r : Nat) (hr : r < c.rounds) (a : Abs)
+    (hmo : a.mo < M) :
+    hurstGstep c (n * c.rounds + r) a =
+      (let t := trialStep (r + 2) (if r = 0 then ⟨c.lo + n, 0, 0⟩ else a.t)
+      if r + 1 = c.rounds then
+        (let mo := moAdvance a.mo t
+        ⟨a.bad ||| (if HurstRowFail c.lower c.cap (c.lo + n) mo c.bias
+            ∨ AnchorFail c (c.lo + n) mo then 1 else 0), mo, t⟩)
+      else ⟨a.bad, a.mo, t⟩) := by
+  obtain ⟨hdiv, hmod⟩ := index_decode c n r hr
+  rw [hurstGstep_qX c (n * c.rounds + r) a r (c.lo + n) hmod (by rw [hdiv])]
+  by_cases hlast : r + 1 = c.rounds
+  · have hq : r = c.rounds - 1 := by omega
+    simp only [if_pos hlast, if_pos hq, Nat.one_mul, moAdvance]
+    rfl
+  · have hq : ¬ (r = c.rounds - 1) := by omega
+    simp only [if_neg hlast, if_neg hq, Nat.zero_mul, ite_self, Nat.or_zero,
+      moStep_zero _ hmo]
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBlock_prefix (c : Cfg) (hR : 0 < c.rounds) (n : Nat) (a : Abs)
+    (hmo : a.mo < M) :
+    ∀ k, k < c.rounds →
+      (List.range (k + 1)).foldl (fun x r => hurstGstep c (n * c.rounds + r) x) a =
+        (let t := trialPrefix (c.lo + n) (k + 1)
+        if k + 1 = c.rounds then
+          (let mo := moAdvance a.mo t
+          ⟨a.bad ||| (if HurstRowFail c.lower c.cap (c.lo + n) mo c.bias
+              ∨ AnchorFail c (c.lo + n) mo then 1 else 0), mo, t⟩)
+        else ⟨a.bad, a.mo, t⟩) := by
+  intro k
+  induction k with
+  | zero =>
+      intro hk
+      rw [show (List.range 1) = [0] from rfl, List.foldl_cons, List.foldl_nil,
+        hurstGstep_round c n 0 hk a hmo]
+      simp only [trialPrefix, show (List.range 1) = [0] from rfl,
+        List.foldl_cons, List.foldl_nil, if_pos rfl]
+      rfl
+  | succ k ih =>
+      intro hk
+      have hklt : k < c.rounds := by omega
+      have hkne : ¬ (k + 1 = c.rounds) := by omega
+      rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
+        ih hklt]
+      rw [if_neg hkne]
+      rw [hurstGstep_round c n (k + 1) hk
+        ⟨a.bad, a.mo, trialPrefix (c.lo + n) (k + 1)⟩ hmo]
+      have hne0 : ¬ (k + 1 = 0) := by omega
+      simp only [if_neg hne0, trialPrefix, List.range_succ, List.foldl_append,
+        List.foldl_cons, List.foldl_nil]
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBlock_spec (c : Cfg) (hR : 0 < c.rounds) (n : Nat) (a : Abs)
+    (hmo : a.mo < M) :
+    BlockedFold.block c.rounds (fun x i => hurstGstep c i x) a n =
+      (let mo := moAdvance a.mo (trialRun (c.lo + n) c.rounds)
+      ⟨a.bad ||| (if HurstRowFail c.lower c.cap (c.lo + n) mo c.bias
+          ∨ AnchorFail c (c.lo + n) mo then 1 else 0), mo,
+        trialRun (c.lo + n) c.rounds⟩) := by
+  have h := hurstBlock_prefix c hR n a hmo (c.rounds - 1) (by omega)
+  rw [show c.rounds - 1 + 1 = c.rounds from by omega] at h
+  rw [BlockedFold.block_eq_shift, h]
+  simp only [reduceIte, trialPrefix_full]
+  rfl
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The flag candidate `n` contributes. -/
+def hurstRowFlag (c : Cfg) (n : Nat) : Nat :=
+  if HurstRowFail c.lower c.cap (c.lo + n) (moAt c (n + 1)) c.bias
+      ∨ AnchorFail c (c.lo + n) (moAt c (n + 1))
+    then 1 else 0
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The violation flag after `n` candidates. -/
+def hurstBadAt (c : Cfg) : Nat → Nat
+  | 0 => 0
+  | n + 1 => hurstBadAt c n ||| hurstRowFlag c n
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBadAt_le (c : Cfg) : ∀ n, hurstBadAt c n ≤ 1
+  | 0 => by rw [hurstBadAt]; omega
+  | n + 1 => by
+      rw [hurstBadAt]
+      exact hbitOr _ _ (hurstBadAt_le c n) (hbitLe _)
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstFold_blocks (c : Cfg) (hR : 0 < c.rounds) (hm0 : c.m0 < M) : ∀ n,
+    ((List.range n).foldl
+        (BlockedFold.block c.rounds (fun y i => hurstGstep c i y))
+        (obs (entry c))).bad = hurstBadAt c n ∧
+    ((List.range n).foldl
+        (BlockedFold.block c.rounds (fun y i => hurstGstep c i y))
+        (obs (entry c))).mo = moAt c n := by
+  intro n
+  induction n with
+  | zero =>
+      refine ⟨?_, ?_⟩
+      · show (initialState.set 1 (c.m0 % M)) 0 = 0
+        simp [RegState.set, initialState]
+      · show (initialState.set 1 (c.m0 % M)) 1 = c.m0 % M
+        simp [RegState.set]
+  | succ n ih =>
+      rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
+      rw [hurstBlock_spec c hR n _ (by rw [ih.2]; exact moAt_lt c hm0 n)]
+      refine ⟨?_, ?_⟩
+      · show _ ||| _ = _
+        rw [ih.1, ih.2, hurstBadAt, hurstRowFlag, moAt]
+      · show moAdvance _ _ = _
+        rw [ih.2, moAt]
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstValue_eq_badAt (c : Cfg) (hR : 0 < c.rounds) (hm0 : c.m0 < M) :
+    hurstValue c = hurstBadAt c c.len := by
+  rw [hurstValue, BlockedFold.foldl_range_mul c.len c.rounds
+    (fun a index => hurstGstep c index a) (obs (entry c))]
+  exact (hurstFold_blocks c hR hm0 c.len).1
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBadAt_eq_zero (c : Cfg) :
+    ∀ n, hurstBadAt c n = 0 → ∀ m, m < n → hurstRowFlag c m = 0 := by
+  intro n
+  induction n with
+  | zero => intro _ m hm; omega
+  | succ n ih =>
+      intro h m hm
+      rw [hurstBadAt] at h
+      have hb := hurstBadAt_le c n
+      have hf : hurstRowFlag c n ≤ 1 := hbitLe _
+      have hsplit : hurstBadAt c n = 0 ∧ hurstRowFlag c n = 0 := by
+        have h1 : hurstBadAt c n = 0 ∨ hurstBadAt c n = 1 := by omega
+        have h2 : hurstRowFlag c n = 0 ∨ hurstRowFlag c n = 1 := by omega
+        rcases h1 with h1 | h1 <;> rcases h2 with h2 | h2 <;>
+          rw [h1, h2] at h <;> simp_all
+      rcases Nat.lt_or_ge m n with hlt | hge
+      · exact ih hsplit.1 m hlt
+      · have hmn : m = n := by omega
+        subst hmn
+        exact hsplit.2
+
+#print axioms hurstValue_eq_badAt
+
+
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- A passing row was compared against the **true** `|M(X)|`, not the clamp.
+This is where `HurstAdmissible.capSound` is spent. -/
+theorem hurstAbsClamped_eq (c : Cfg) (hcap : HurstAdmissible c) (X mo : Nat)
+    (hX : X < c.lo + c.len) (hlow : c.lower ≤ X)
+    (hpass : ¬ HurstRowFail c.lower c.cap X mo c.bias) :
+    absClampedBias c.cap c.bias mo = absOfBias c.bias mo := by
+  have hno : ¬ (c.cap ≤ absOfBias c.bias mo) := by
+    intro hcl
+    exact hpass (hurstCap_engaged_fails c.lower c.cap X mo c.bias
+      (hcap.capSound X hX) hcl hlow)
+  unfold absClampedBias
+  omega
+
+open LeanCompCert.Ports.MertensCDEM in
+/--
+**The certificate's meaning.**
+
+If the program denotes `0` then, at every candidate of the shard, the biased
+running value satisfies Hurst's inequality in its exact integer form
+
+    (1000·|M(X)|)² ≤ 326041·X            i.e.  |M(X)| ≤ 0.571·√X
+
+and the anchor holds.  `moAt` is still the *program's* running value;
+identifying `absOf c (moAt c (n+1))` with `|Σ_{k ≤ X} μ(k)|` is the consumer's
+obligation, and `MathExtras.SieveProgramBridge` is what discharges it.
+
+The clamp is invisible in the conclusion: `hurstAbsClamped_eq` shows a passing
+row was compared against the true `|M(X)|`.
+-/
+theorem hurstValue_eq_zero_sound (c : Cfg) (hadm : Admissible c)
+    (hcap : HurstAdmissible c) (hval : hurstValue c = 0)
+    (n : Nat) (hn : n < c.len) :
+    (c.lower ≤ c.lo + n →
+      (1000 * absOf c (moAt c (n + 1))) * (1000 * absOf c (moAt c (n + 1)))
+        ≤ 326041 * (c.lo + n)) ∧
+    (c.lo + n = c.anchorX → moAt c (n + 1) = c.anchorM) := by
+  have hflag : hurstRowFlag c n = 0 := by
+    refine hurstBadAt_eq_zero c c.len ?_ n hn
+    rw [← hurstValue_eq_badAt c hadm.roundsPos hadm.m0Lt]
+    exact hval
+  have hnot : ¬ (HurstRowFail c.lower c.cap (c.lo + n) (moAt c (n + 1)) c.bias
+      ∨ AnchorFail c (c.lo + n) (moAt c (n + 1))) := by
+    rw [hurstRowFlag] at hflag
+    intro h
+    rw [if_pos h] at hflag
+    omega
+  constructor
+  · intro hlow
+    have hrow : ¬ HurstRowFail c.lower c.cap (c.lo + n) (moAt c (n + 1)) c.bias :=
+      fun h => hnot (Or.inl h)
+    have hEq := hurstAbsClamped_eq c hcap (c.lo + n) (moAt c (n + 1))
+      (by omega) hlow hrow
+    rw [HurstRowFail] at hrow
+    have hpass : (1000 * absClampedBias c.cap c.bias (moAt c (n + 1)))
+        * (1000 * absClampedBias c.cap c.bias (moAt c (n + 1)))
+        ≤ 326041 * (c.lo + n) :=
+      Decidable.byContradiction (fun hcon => hrow ⟨hlow, hcon⟩)
+    rwa [hEq] at hpass
+  · intro hax
+    have hanc : ¬ AnchorFail c (c.lo + n) (moAt c (n + 1)) :=
+      fun h => hnot (Or.inr h)
+    rw [AnchorFail] at hanc
+    exact Decidable.byContradiction (fun hcon => hanc ⟨hax, hcon⟩)
+
+#print axioms hurstValue_eq_zero_sound
+
+
+
+/-! ## Kernel sanity checks
+
+The denotation is proved by simulation, so these evaluate nothing the proof
+depends on; they exist to catch a mis-transcribed instruction.  `M(8) = −2`,
+so the biased running value at `X = 8` is `98`.
+
+The third check is the one that matters for this port: with the row test
+switched **on** from `X = 1`, the sweep must reject, because Hurst's bound
+`|M(x)| ≤ 0.571√x` is false at small `x` — `|M(1)| = 1` and
+`0.571·√1 < 1`.  A test that silently passed here would be one that never
+looked at the row.
+-/
+
+open LeanCompCert.Ports.MertensCDEM in
+def tinyHurstCfg (lower anchorM : Nat) : Cfg :=
+  { lo := 1, len := 8, rounds := 3, bias := 100, m0 := 100
+  , lower := lower, den := 4345, slack := 1070, cap := 1000
+  , anchorX := 8, anchorM := anchorM }
+
+set_option maxRecDepth 100000 in
+/-- Rows off, anchor correct: accepts. -/
+example : (hurstProgram (tinyHurstCfg 1000000 98)).denote = some 0 := by
+  decide +kernel
+
+set_option maxRecDepth 100000 in
+/-- Rows off, anchor wrong: rejects. -/
+example : (hurstProgram (tinyHurstCfg 1000000 97)).denote = some 1 := by
+  decide +kernel
+
+set_option maxRecDepth 100000 in
+/-- Rows on from `X = 1`, anchor correct: rejects, because Hurst's bound is
+false below `x = 33`. -/
+example : (hurstProgram (tinyHurstCfg 1 98)).denote = some 1 := by
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+/-- **A shard where the row test genuinely passes**, which none of the three
+checks above exercises.  `X ∈ [33, 40]`, divisors `2 … 7` (and `8² = 64 > 40`),
+rows on from the first candidate, seeded at `bias + M(32) = 100 − 4 = 96`, and
+anchored at `M(40) = 0`.  Hurst's bound holds throughout that range, so the
+sweep must accept — and it does. -/
+def tinyHurstPassCfg : MertensCDEM.Cfg :=
+  { lo := 33, len := 8, rounds := 6, bias := 100, m0 := 96
+  , lower := 33, den := 4345, slack := 1070, cap := 1000
+  , anchorX := 40, anchorM := 100 }
+
+set_option maxRecDepth 100000 in
+example : (hurstProgram tinyHurstPassCfg).denote = some 0 := by decide +kernel
+
+set_option maxRecDepth 100000 in
+/-- … and the same shard with the anchor moved by one rejects, so the accept
+above is not vacuous. -/
+example :
+    (hurstProgram { tinyHurstPassCfg with anchorM := 101 }).denote = some 1 := by
+  decide +kernel
+
+
 end LeanCompCert.Ports.HurstTestBlock
