@@ -404,6 +404,14 @@ both are load-bearing downstream: the partial sums stay inside a single word
 (so an emitted accumulator cannot overflow), and the alternating series has
 decreasing terms (so consecutive partial sums straddle the value). -/
 
+/-- The halving, at the level of the register file rather than the sequence:
+two contractions and a divisor of at least two. -/
+theorem step_le_half (t X c : Nat) (hX : X ≤ B62) (hc : 2 ≤ c) :
+    mulFix (mulFix t X) X / c ≤ t / 2 :=
+  Nat.le_trans (Nat.div_le_div_right
+    (Nat.le_trans (mulFix_le _ hX) (mulFix_le _ hX)))
+    (Nat.div_le_div_left hc (by decide))
+
 theorem cosTerm_succ_le_half (X : Nat) (hX : X ≤ B62) (k : Nat) :
     cosTerm X (k + 1) ≤ cosTerm X k / 2 := by
   have hc : 2 ≤ (2 * k + 1) * (2 * k + 2) := by

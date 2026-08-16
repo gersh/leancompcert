@@ -5,6 +5,7 @@ Authors: Gershon Bialer
 -/
 import LeanCompCert.Ports.Section413G1Denote
 import LeanCompCert.Verified.TrigFixed
+import LeanCompCert.Verified.FoldBridge
 
 /-!
 # The fixed-point multiply-and-shift as an instruction block
@@ -47,6 +48,7 @@ open LeanCompCert.Verified
 open LeanCompCert.Ports.Section413G1Denote
 open LeanCompCert.Verified.TrigFixed
 open LeanCompCert.Verified.InstrBlock
+open LeanCompCert.Verified.FoldBridge
 
 /-- `mul62` as straight-line code: the widening product, then two shifts and
 an add. -/
@@ -231,64 +233,55 @@ theorem mulBG_word (k : Nat) (s : RegState) (hs : ∀ j, s j < M) :
     ∀ j, srun k s mulBG j < M :=
   srun_lt k mulBG (by decide) s hs
 
-/-- **One iteration advances `cosTerm`.**  Register 2 holds the next series
-term exactly. -/
-theorem cosBodyG_spec (k : Nat) (s : RegState) (X : Nat)
+/-- **One iteration, stated against the register file.**  The generalisation of
+`cosBodyG_spec`: nothing here mentions `cosTerm`, so the loop bridge can use it
+at an arbitrary reachable state. -/
+theorem cosBodyG_raw (k : Nat) (s : RegState) (X : Nat)
     (hs : ∀ j, s j < M) (hX : s 1 = X) (hXb : X ≤ B62)
-    (ht : s 2 = cosTerm X k) (hk : k < M)
+    (htb : s 2 ≤ B62) (hk : k < M)
     (hc : (2 * k + 1) * (2 * k + 2) < M) :
-    srun k s cosBodyG 2 = cosTerm X (k + 1) := by
+    srun k s cosBodyG 2
+      = mulFix (mulFix (s 2) X) X / ((2 * k + 1) * (2 * k + 2)) := by
   have hMv : M = 18446744073709551616 := by decide
   have hB : B62 < M := by decide
-  -- state after the factorial factor
   have e1 : srun k s cFactorG 9 = (2 * k + 1) * (2 * k + 2) :=
     cFactorG_spec k s hk hc
   have e1a : srun k s cFactorG 1 = X := by
     rw [cFactorG_pres k s 1 (by decide)]; exact hX
-  have e1b : srun k s cFactorG 2 = cosTerm X k := by
-    rw [cFactorG_pres k s 2 (by decide)]; exact ht
+  have e1b : srun k s cFactorG 2 = s 2 := cFactorG_pres k s 2 (by decide)
   have w1 := cFactorG_word k s hs
-  -- state after the first multiply
-  have e2 : srun k (srun k s cFactorG) mulAG 5
-      = cosTerm X k * X / B62 := by
+  have e2 : srun k (srun k s cFactorG) mulAG 5 = s 2 * X / B62 := by
     have := mul62G_eq_mulFix k (srun k s cFactorG) 2 1 5 3 4
       10 11 12 13 14 15 16 17 (by unfold Distinct8; decide)
       (by unfold NotIn8; decide) (by unfold NotIn8; decide)
-      (by unfold NotIn8; decide) (by unfold NotIn8; decide) (by decide) w1 (by rw [e1b]; exact cosTerm_le X hXb k)
-      (by rw [e1a]; exact hXb)
-    rw [mulAG]
-    rw [this, e1a, e1b]
+      (by unfold NotIn8; decide) (by unfold NotIn8; decide) (by decide) w1
+      (by rw [e1b]; exact htb) (by rw [e1a]; exact hXb)
+    rw [mulAG, this, e1a, e1b]
   have e2a : srun k (srun k s cFactorG) mulAG 1 = X := by
     rw [srun_untouched k 1 mulAG (by decide)]; exact e1a
-  have e2b : srun k (srun k s cFactorG) mulAG 9
-      = (2 * k + 1) * (2 * k + 2) := by
+  have e2b : srun k (srun k s cFactorG) mulAG 9 = (2 * k + 1) * (2 * k + 2) := by
     rw [srun_untouched k 9 mulAG (by decide)]; exact e1
   have w2 := mulAG_word k (srun k s cFactorG) w1
   have h5le : srun k (srun k s cFactorG) mulAG 5 ≤ B62 := by
-    rw [e2]
-    exact Nat.le_trans (mulFix_le _ hXb) (cosTerm_le X hXb k)
-  -- state after the second multiply
+    rw [e2]; exact Nat.le_trans (mulFix_le _ hXb) htb
   have e3 : srun k (srun k (srun k s cFactorG) mulAG) mulBG 6
-      = cosTerm X k * X / B62 * X / B62 := by
+      = s 2 * X / B62 * X / B62 := by
     have := mul62G_eq_mulFix k (srun k (srun k s cFactorG) mulAG) 5 1 6 3 4
       10 11 12 13 14 15 16 17 (by unfold Distinct8; decide)
       (by unfold NotIn8; decide) (by unfold NotIn8; decide)
-      (by unfold NotIn8; decide) (by unfold NotIn8; decide) (by decide) w2 h5le (by rw [e2a]; exact hXb)
+      (by unfold NotIn8; decide) (by unfold NotIn8; decide) (by decide) w2
+      h5le (by rw [e2a]; exact hXb)
     rw [mulBG, this, e2, e2a]
   have e3b : srun k (srun k (srun k s cFactorG) mulAG) mulBG 9
       = (2 * k + 1) * (2 * k + 2) := by
     rw [srun_untouched k 9 mulBG (by decide)]; exact e2b
-  have w3 := mulBG_word k (srun k (srun k s cFactorG) mulAG) w2
-  -- the final division
   have hcpos : 0 < (2 * k + 1) * (2 * k + 2) := Nat.mul_pos (by omega) (by omega)
-  have h1 : cosTerm X k * X / B62 * X / B62 ≤ B62 :=
-    Nat.le_trans (mulFix_le (cosTerm X k * X / B62) hXb)
-      (Nat.le_trans (mulFix_le (cosTerm X k) hXb) (cosTerm_le X hXb k))
-  have hres : cosTerm X k * X / B62 * X / B62 / ((2 * k + 1) * (2 * k + 2)) < M := by
-    have h2 : cosTerm X k * X / B62 * X / B62
-        / ((2 * k + 1) * (2 * k + 2)) ≤ cosTerm X k * X / B62 * X / B62 :=
-      Nat.div_le_self _ _
-    have hBM : B62 < M := by decide
+  have h1 : s 2 * X / B62 * X / B62 ≤ B62 :=
+    Nat.le_trans (mulFix_le (s 2 * X / B62) hXb)
+      (Nat.le_trans (mulFix_le (s 2) hXb) htb)
+  have hres : s 2 * X / B62 * X / B62 / ((2 * k + 1) * (2 * k + 2)) < M := by
+    have h2 : s 2 * X / B62 * X / B62 / ((2 * k + 1) * (2 * k + 2))
+        ≤ s 2 * X / B62 * X / B62 := Nat.div_le_self _ _
     omega
   rw [cosBodyG, srun_append, srun_append, srun_append]
   simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
@@ -298,6 +291,15 @@ theorem cosBodyG_spec (k : Nat) (s : RegState) (X : Nat)
   rw [Nat.mod_eq_of_lt hres]
   rfl
 
+/-- **One iteration advances `cosTerm`.**  Register 2 holds the next series
+term exactly. -/
+theorem cosBodyG_spec (k : Nat) (s : RegState) (X : Nat)
+    (hs : ∀ j, s j < M) (hX : s 1 = X) (hXb : X ≤ B62)
+    (ht : s 2 = cosTerm X k) (hk : k < M)
+    (hc : (2 * k + 1) * (2 * k + 2) < M) :
+    srun k s cosBodyG 2 = cosTerm X (k + 1) := by
+  rw [cosBodyG_raw k s X hs hX hXb (by rw [ht]; exact cosTerm_le X hXb k) hk hc, ht]
+  rfl
 
 /-! ### Branchless alternating accumulation
 
@@ -526,6 +528,10 @@ def cosProgram (X n out : Nat) : Program := {
   output := out
 }
 
+theorem cosInit_noDiv (X : Nat) :
+    ([Instr.mov 1 (.lit X), Instr.mov 2 (.lit B62)] : List Instr).all NoDivI = true :=
+  rfl
+
 theorem cosProgram_init (X : Nat) (hX : X ≤ B62) :
     srun 0 initialState [Instr.mov 1 (.lit X), Instr.mov 2 (.lit B62)] = cosState X := by
   have hXM : X % M = X := Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt hX (by decide))
@@ -540,6 +546,190 @@ theorem cosProgram_init (X : Nat) (hX : X ≤ B62) :
       simp only [show ¬((1 : Nat) = 2) by decide, if_false, if_pos rfl]
     · simp only [h1, h2, if_false]
 
+
+
+/-! ### The loop bridge
+
+`Verified/FoldBridge.lean` folds a program's body into a `Nat`-level fold
+*without ever unfolding the body* — which is what makes the wrapper feasible;
+threading `denoteInstrs` through the fold by hand blows the kernel up on 53
+instructions.  What the bridge wants is an observation of the register file, a
+`g` advancing it, and an invariant closed under the step. -/
+
+/-- Current term and the two parity sums. -/
+def cosObs (s : RegState) : Nat × Nat × Nat := (s 2, s 20, s 21)
+
+def cosG (X : Nat) (index : Nat) (a : Nat × Nat × Nat) : Nat × Nat × Nat :=
+  (mulFix (mulFix a.1 X) X / ((2 * index + 1) * (2 * index + 2)),
+   (if index % 2 = 0 then a.2.1 + a.1 else a.2.1),
+   (if index % 2 = 0 then a.2.2 else a.2.2 + a.1))
+
+/-- Words, the argument in place, and one budget inequality that ties the two
+sums to the current term.  Geometric decay is exactly what makes it closed. -/
+def CosInv (X : Nat) (s : RegState) : Prop :=
+  (∀ j, s j < M) ∧ s 1 = X ∧ s 20 + s 21 + 2 * s 2 ≤ 2 * B62
+
+theorem CosInv_term_le {X : Nat} {s : RegState} (h : CosInv X s) : s 2 ≤ B62 := by
+  obtain ⟨_, _, hb⟩ := h; omega
+
+theorem CosInv_sums {X : Nat} {s : RegState} (h : CosInv X s) :
+    s 20 + s 2 < M ∧ s 21 + s 2 < M := by
+  obtain ⟨_, _, hb⟩ := h
+  have : 2 * B62 < M := by decide
+  omega
+
+theorem cosStepG_obs (k : Nat) (s : RegState) (X : Nat) (hXb : X ≤ B62)
+    (hI : CosInv X s) (hk : k < M) (hc : (2 * k + 1) * (2 * k + 2) < M) :
+    cosObs (srun k s cosStepG) = cosG X k (cosObs s) := by
+  have hw0 := hI.1
+  have hX1 := hI.2.1
+  have htb := CosInv_term_le hI
+  have hsum := CosInv_sums hI
+  have hacc := accG_spec k s hk (hw0 2) hsum.1 hsum.2
+  have hw : ∀ j, srun k s accG j < M := srun_lt k accG (by decide) s hw0
+  have hp1 : srun k s accG 1 = X := by
+    rw [srun_untouched k 1 accG (by decide)]; exact hX1
+  have hp2 : srun k s accG 2 = s 2 := srun_untouched k 2 accG (by decide) s
+  have hbody := cosBodyG_raw k (srun k s accG) X hw hp1 hXb (by rw [hp2]; exact htb) hk hc
+  simp only [cosObs, cosG, Prod.mk.injEq]
+  refine ⟨?_, ?_, ?_⟩
+  · rw [cosStepG, srun_append, hbody, hp2]
+  · rw [cosStepG, srun_append, srun_untouched k 20 cosBodyG (by decide), hacc.1]
+  · rw [cosStepG, srun_append, srun_untouched k 21 cosBodyG (by decide), hacc.2]
+
+theorem CosInv_closed (k : Nat) (s : RegState) (X : Nat) (hXb : X ≤ B62)
+    (hI : CosInv X s) (hk : k < M) (hc : (2 * k + 1) * (2 * k + 2) < M) :
+    CosInv X (srun k s cosStepG) := by
+  have hw0 := hI.1
+  have hX1 := hI.2.1
+  have hb := hI.2.2
+  have htb := CosInv_term_le hI
+  have hobs := cosStepG_obs k s X hXb hI hk hc
+  have hc2 : 2 ≤ (2 * k + 1) * (2 * k + 2) := by
+    have := Nat.mul_le_mul (show 1 ≤ 2 * k + 1 by omega) (show 2 ≤ 2 * k + 2 by omega)
+    omega
+  have hhalf : mulFix (mulFix (s 2) X) X / ((2 * k + 1) * (2 * k + 2)) ≤ s 2 / 2 :=
+    step_le_half (s 2) X _ hXb hc2
+  have hd : 2 * (s 2 / 2) ≤ s 2 := by
+    have := Nat.div_add_mod (s 2) 2; omega
+  have h2 : srun k s cosStepG 2 = mulFix (mulFix (s 2) X) X / ((2 * k + 1) * (2 * k + 2)) :=
+    congrArg Prod.fst hobs
+  have h20 : srun k s cosStepG 20 = (if k % 2 = 0 then s 20 + s 2 else s 20) :=
+    congrArg (fun p => p.2.1) hobs
+  have h21 : srun k s cosStepG 21 = (if k % 2 = 0 then s 21 else s 21 + s 2) :=
+    congrArg (fun p => p.2.2) hobs
+  refine ⟨fun j => srun_lt_of_lt k cosStepG s hw0 j, ?_, ?_⟩
+  · rw [srun_untouched k 1 cosStepG (by decide)]; exact hX1
+  · rw [h2, h20, h21]
+    by_cases h : k % 2 = 0 <;>
+      simp only [h, if_neg, if_true, if_false] <;> omega
+
+
+/-- The `Nat`-level fold the bridge produces. -/
+def cosFoldObs (X : Nat) (n : Nat) : Nat × Nat × Nat :=
+  (List.range n).foldl (fun a index => cosG X index a) (B62, 0, 0)
+
+theorem cosFoldObs_eq (X : Nat) (hX : X ≤ B62) : ∀ n,
+    cosFoldObs X n = (cosTerm X n, evenSum X n, oddSum X n)
+  | 0 => rfl
+  | n + 1 => by
+    have ih := cosFoldObs_eq X hX n
+    show (List.range (n + 1)).foldl (fun a index => cosG X index a) (B62, 0, 0) = _
+    rw [List.range_succ, List.foldl_append]
+    show cosG X n (cosFoldObs X n) = _
+    rw [ih]
+    simp only [cosG, Prod.mk.injEq]
+    refine ⟨rfl, ?_, ?_⟩
+    · show _ = evenSum X n + (if n % 2 = 0 then cosTerm X n else 0)
+      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+    · show _ = oddSum X n + (if n % 2 = 0 then 0 else cosTerm X n)
+      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+
+/-- **The program denotes the even parity sum.**  Proved through
+`Program.denote_eq_obs_foldl_mem`, so the 53-instruction body is never
+unfolded inside the fold. -/
+theorem cosProgram_even (X n : Nat) (hX : X ≤ B62) (hn : 2 * n + 2 < 4294967296) :
+    (cosProgram X n 20).denote = some (evenSum X n) := by
+  have hMv : M = 18446744073709551616 := by decide
+  have hbounds : ∀ index, index < n → index < M ∧
+      (2 * index + 1) * (2 * index + 2) < M := by
+    intro index hi
+    refine ⟨by omega, ?_⟩
+    have := Nat.mul_lt_mul_of_lt_of_le (show 2 * index + 1 < 4294967296 by omega)
+      (show 2 * index + 2 ≤ 4294967296 by omega) (by omega)
+    omega
+  have hres := Program.denote_eq_obs_foldl_mem (cosProgram X n 20) (CosInv X)
+    (fun index s => srun index s cosStepG) cosObs (cosG X) (fun a => a.2.1)
+    (cosState X)
+    (by
+      simp only [cosProgram]
+      rw [srun_correct 0 _
+        (fun i hi => List.all_eq_true.mp (cosInit_noDiv X) i hi) initialState,
+        cosProgram_init X hX])
+    (by
+      refine ⟨cosState_word X hX, rfl, ?_⟩
+      show (0 : Nat) + 0 + 2 * B62 ≤ 2 * B62
+      omega)
+    (by
+      intro index s hi hP
+      obtain ⟨h1, h2⟩ := hbounds index hi
+      exact denoteInstrs_eq_srun index cosStepG s (cosStepG_defined index s h1 h2))
+    (by
+      intro index s hi hP
+      obtain ⟨h1, h2⟩ := hbounds index hi
+      exact CosInv_closed index s X hX hP h1 h2)
+    (by
+      intro index s hi hP
+      obtain ⟨h1, h2⟩ := hbounds index hi
+      exact cosStepG_obs index s X hX hP h1 h2)
+    (by intro s _; rfl)
+  rw [hres]
+  show some ((cosFoldObs X n).2.1) = _
+  rw [cosFoldObs_eq X hX n]
+
+/-- **The odd parity sum**, from the same program with a different output
+register. -/
+theorem cosProgram_odd (X n : Nat) (hX : X ≤ B62) (hn : 2 * n + 2 < 4294967296) :
+    (cosProgram X n 21).denote = some (oddSum X n) := by
+  have hMv : M = 18446744073709551616 := by decide
+  have hbounds : ∀ index, index < n → index < M ∧
+      (2 * index + 1) * (2 * index + 2) < M := by
+    intro index hi
+    refine ⟨by omega, ?_⟩
+    have := Nat.mul_lt_mul_of_lt_of_le (show 2 * index + 1 < 4294967296 by omega)
+      (show 2 * index + 2 ≤ 4294967296 by omega) (by omega)
+    omega
+  have hres := Program.denote_eq_obs_foldl_mem (cosProgram X n 21) (CosInv X)
+    (fun index s => srun index s cosStepG) cosObs (cosG X) (fun a => a.2.2)
+    (cosState X)
+    (by
+      simp only [cosProgram]
+      rw [srun_correct 0 _
+        (fun i hi => List.all_eq_true.mp (cosInit_noDiv X) i hi) initialState,
+        cosProgram_init X hX])
+    (by
+      refine ⟨cosState_word X hX, rfl, ?_⟩
+      show (0 : Nat) + 0 + 2 * B62 ≤ 2 * B62
+      omega)
+    (by
+      intro index s hi hP
+      obtain ⟨h1, h2⟩ := hbounds index hi
+      exact denoteInstrs_eq_srun index cosStepG s (cosStepG_defined index s h1 h2))
+    (by
+      intro index s hi hP
+      obtain ⟨h1, h2⟩ := hbounds index hi
+      exact CosInv_closed index s X hX hP h1 h2)
+    (by
+      intro index s hi hP
+      obtain ⟨h1, h2⟩ := hbounds index hi
+      exact cosStepG_obs index s X hX hP h1 h2)
+    (by intro s _; rfl)
+  rw [hres]
+  show some ((cosFoldObs X n).2.2) = _
+  rw [cosFoldObs_eq X hX n]
+
+#print axioms cosProgram_even
+#print axioms cosProgram_odd
 
 /-! ### What remains
 
