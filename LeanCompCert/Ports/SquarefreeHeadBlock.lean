@@ -223,6 +223,15 @@ theorem coreC_noDiv : coreC.all NoDivI = true := rfl
 theorem coreD_noDiv : coreD.all NoDivI = true := rfl
 theorem sqfCore_noDiv : sqfCore.all NoDivI = true := rfl
 
+/-! The core's frame, as three standalone facts.  Proving them inline as
+`by decide` inside a larger theorem makes the kernel recurse too deeply — the
+whole 40-instruction list is re-evaluated inside the enclosing term each
+time. -/
+
+theorem sqfCore_dest1 : ∀ i ∈ sqfCore, sdest i ≠ 1 := by decide
+theorem sqfCore_dest9 : ∀ i ∈ sqfCore, sdest i ≠ 9 := by decide
+theorem sqfCore_dest48 : ∀ i ∈ sqfCore, sdest i ≠ 48 := by decide
+
 set_option maxHeartbeats 1000000 in
 /-- **The core decides one clause.**  `hfit` is what rules out the `+31`
 wrapping; without it a quantity near `2^64` would round to a *small* value and
@@ -294,5 +303,258 @@ theorem sqfCore_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
   rw [hleft, hright]
 
 #print axioms sqfCore_spec
+
+
+/-! ## The two clauses
+
+Each clause is a prelude that puts its quantity in register 40 and the budget
+coefficient in 31, followed by the shared core.  `pre_core_spec` composes the
+two once, so neither clause repeats the core's argument. -/
+
+theorem pre_core_spec (cf : SqfCfg) (k : Nat) (s : RegState) (pre : List Instr)
+    (hnd : ∀ i ∈ pre, NoDivI i = true) (hs : ∀ j, s j < M) (v : Nat)
+    (h40 : srun k s pre 40 = v) (h31 : srun k s pre 31 = cf.K)
+    (hfit : v + 31 < M) :
+    srun k s (pre ++ sqfCore) 47
+      = (if up32 v * up32 v ≤ cf.K * (srun k s pre 9) then 1 else 0) := by
+  have hw : ∀ j, srun k s pre j < M := srun_lt k _ hnd s hs
+  rw [srun_append, sqfCore_spec k _ hw (by rw [h40]; exact hfit), h40, h31]
+
+/-- Clause 1's prelude: `Δ = acc ⊖ bias`. -/
+def sqfPre1 (cf : SqfCfg) : List Instr :=
+  [ .mov 30 (.lit cf.base.bias), .mov 31 (.lit cf.K) ]
+    ++ tsubG 1 30 40 68 69
+
+/-- Clause 2's prelude: `E = (W + X) ⊖ acc`. -/
+def sqfPre2 (cf : SqfCfg) : List Instr :=
+  [ .mov 32 (.lit cf.W)
+  , .binop 33 .add (.reg 9) (.reg 32)
+  , .mov 31 (.lit cf.K) ]
+    ++ tsubG 33 1 40 68 69
+
+theorem sqfPre1_noDiv (cf : SqfCfg) : (sqfPre1 cf).all NoDivI = true := rfl
+theorem sqfPre2_noDiv (cf : SqfCfg) : (sqfPre2 cf).all NoDivI = true := rfl
+
+theorem sqfPre2_dest (cf : SqfCfg) (r : Nat)
+    (h30 : r ≠ 31) (h32 : r ≠ 32) (h33 : r ≠ 33) (h40 : r ≠ 40)
+    (h68 : r ≠ 68) (h69 : r ≠ 69) :
+    ∀ i ∈ sqfPre2 cf, sdest i ≠ r := by
+  intro i hi
+  simp only [sqfPre2, tsubG, List.mem_cons, List.not_mem_nil, or_false,
+    List.mem_append] at hi
+  rcases hi with (h|h|h)|(h|h|h) <;> rw [h] <;> simp only [sdest] <;>
+    exact Ne.symm ‹_›
+
+theorem sqfPre1_spec (cf : SqfCfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
+    (hbM : cf.base.bias < M) (hK : cf.K < M) :
+    srun k s (sqfPre1 cf) 40 = truncSub (s 1) cf.base.bias
+      ∧ srun k s (sqfPre1 cf) 31 = cf.K
+      ∧ srun k s (sqfPre1 cf) 9 = s 9
+      ∧ srun k s (sqfPre1 cf) 1 = s 1 := by
+  have hset : ∀ j, ((s.set 30 (cf.base.bias % M)).set 31 (cf.K % M)) j < M := by
+    intro j
+    by_cases h1 : j = 31
+    · subst h1; simpa [RegState.set] using Nat.mod_lt _ M_pos
+    · by_cases h0 : j = 30
+      · subst h0; simpa [RegState.set, if_neg h1] using Nat.mod_lt _ M_pos
+      · simpa [RegState.set, if_neg h1, if_neg h0] using hs j
+  have hsplit : srun k s (sqfPre1 cf)
+      = srun k ((s.set 30 (cf.base.bias % M)).set 31 (cf.K % M))
+          (tsubG 1 30 40 68 69) := by
+    simp only [sqfPre1, srun_cons, srun_nil, srun_append, sdest, sval,
+      denoteOperand, if_true]
+  have e1 : ((s.set 30 (cf.base.bias % M)).set 31 (cf.K % M)) 1 = s 1 := by
+    simp [RegState.set]
+  have e30 : ((s.set 30 (cf.base.bias % M)).set 31 (cf.K % M)) 30
+      = cf.base.bias := by simp [RegState.set, Nat.mod_eq_of_lt hbM]
+  have e31 : ((s.set 30 (cf.base.bias % M)).set 31 (cf.K % M)) 31 = cf.K := by
+    simp [RegState.set, Nat.mod_eq_of_lt hK]
+  have e9 : ((s.set 30 (cf.base.bias % M)).set 31 (cf.K % M)) 9 = s 9 := by
+    simp [RegState.set]
+  have hT := tsubG_spec k _ 1 30 40 68 69 hset
+    (by decide) (by decide) (by decide) (by decide) (by decide)
+    (by decide) (by decide) (by decide) (by decide)
+  rw [e1, e30] at hT
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [hsplit, hT]; rfl
+  · rw [hsplit, srun_untouched k 31 _ (by decide)]; exact e31
+  · rw [hsplit, srun_untouched k 9 _ (by decide)]; exact e9
+  · rw [hsplit, srun_untouched k 1 _ (by decide)]; exact e1
+
+theorem sqfPre2_spec (cf : SqfCfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
+    (hWM : cf.W < M) (hK : cf.K < M) (hWX : cf.W + s 9 < M) :
+    srun k s (sqfPre2 cf) 40 = truncSub (cf.W + s 9) (s 1)
+      ∧ srun k s (sqfPre2 cf) 31 = cf.K
+      ∧ srun k s (sqfPre2 cf) 9 = s 9
+      ∧ srun k s (sqfPre2 cf) 1 = s 1 := by
+  have hWm : cf.W % M = cf.W := Nat.mod_eq_of_lt hWM
+  have hset : ∀ j, (((s.set 32 (cf.W % M)).set 33 ((s 9 + cf.W % M) % M)).set 31
+      (cf.K % M)) j < M := by
+    intro j
+    by_cases h1 : j = 31
+    · subst h1; simpa [RegState.set] using Nat.mod_lt _ M_pos
+    · by_cases h2 : j = 33
+      · subst h2; simpa [RegState.set, if_neg h1] using Nat.mod_lt _ M_pos
+      · by_cases h3 : j = 32
+        · subst h3
+          simpa [RegState.set, if_neg h1, if_neg h2] using Nat.mod_lt _ M_pos
+        · simpa [RegState.set, if_neg h1, if_neg h2, if_neg h3] using hs j
+  have hsplit : srun k s (sqfPre2 cf)
+      = srun k (((s.set 32 (cf.W % M)).set 33 ((s 9 + cf.W % M) % M)).set 31
+          (cf.K % M)) (tsubG 33 1 40 68 69) := by
+    simp only [sqfPre2, srun_cons, srun_nil, srun_append, sdest, sval,
+      denoteOperand, denoteOp, Option.getD_some, reduceIte, reduceCtorEq,
+      Nat.reduceEqDiff, if_true]
+    rfl
+  have e1 : (((s.set 32 (cf.W % M)).set 33 ((s 9 + cf.W % M) % M)).set 31
+      (cf.K % M)) 1 = s 1 := by simp [RegState.set]
+  have e33 : (((s.set 32 (cf.W % M)).set 33 ((s 9 + cf.W % M) % M)).set 31
+      (cf.K % M)) 33 = cf.W + s 9 := by
+    show ((s 9 + cf.W % M) % M) = cf.W + s 9
+    rw [hWm, Nat.mod_eq_of_lt (show s 9 + cf.W < M by omega), Nat.add_comm]
+  have e31 : (((s.set 32 (cf.W % M)).set 33 ((s 9 + cf.W % M) % M)).set 31
+      (cf.K % M)) 31 = cf.K := by simp [RegState.set, Nat.mod_eq_of_lt hK]
+  have e9 : (((s.set 32 (cf.W % M)).set 33 ((s 9 + cf.W % M) % M)).set 31
+      (cf.K % M)) 9 = s 9 := by simp [RegState.set]
+  have hT := tsubG_spec k _ 33 1 40 68 69 hset
+    (by decide) (by decide) (by decide) (by decide) (by decide)
+    (by decide) (by decide) (by decide) (by decide)
+  rw [e1, e33] at hT
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · rw [hsplit, hT]; rfl
+  · rw [hsplit, srun_untouched k 31 _ (by decide)]; exact e31
+  · rw [hsplit, srun_untouched k 9 _ (by decide)]; exact e9
+  · rw [hsplit, srun_untouched k 1 _ (by decide)]; exact e1
+
+#print axioms sqfPre1_spec
+#print axioms sqfPre2_spec
+
+
+/-! ## The row verdict
+
+Clause 1, save it, clause 2, multiply.  The save is what lets both clauses use
+the same core: register 47 is the core's only output, so it has to be moved
+out of the way before the core runs again. -/
+
+/-- Clause 1 end to end.  Named, so that rewriting with `srun_append` at the
+top level cannot reach inside it — otherwise the association the proof works
+against is not the one `simp` produces. -/
+def sqfPart1 (cf : SqfCfg) : List Instr := sqfPre1 cf ++ sqfCore
+
+/-- Clause 2 end to end. -/
+def sqfPart2 (cf : SqfCfg) : List Instr := sqfPre2 cf ++ sqfCore
+
+def sqfRowG (cf : SqfCfg) : List Instr :=
+  sqfPart1 cf ++ [ .mov 48 (.reg 47) ]
+    ++ sqfPart2 cf ++ [ .binop 49 .mul (.reg 48) (.reg 47) ]
+
+theorem sqfRowG_noDiv (cf : SqfCfg) : (sqfRowG cf).all NoDivI = true := by
+  simp only [sqfRowG, sqfPart1, sqfPart2, List.all_append, sqfPre1_noDiv,
+    sqfPre2_noDiv, sqfCore_noDiv, Bool.true_and, Bool.and_true]
+  rfl
+
+private theorem and_bit (a b : Bool) :
+    (if a && b then (1 : Nat) else 0)
+      = (if a then 1 else 0) * (if b then 1 else 0) := by
+  cases a <;> cases b <;> decide
+
+private theorem bit_le_one (a : Bool) : (if a then (1 : Nat) else 0) ≤ 1 := by
+  cases a <;> decide
+
+set_option maxHeartbeats 1000000 in
+theorem sqfRowG_spec (cf : SqfCfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
+    (hbM : cf.base.bias < M) (hK : cf.K < M) (hWM : cf.W < M)
+    (hWX : cf.W + s 9 < M)
+    (hf1 : truncSub (s 1) cf.base.bias + 31 < M)
+    (hf2 : truncSub (cf.W + s 9) (s 1) + 31 < M) :
+    srun k s (sqfRowG cf) 49
+      = (if sqfPass cf (s 9) (s 1) then 1 else 0) := by
+  have hnd1 : ∀ i ∈ sqfPart1 cf, NoDivI i = true := by
+    intro i hi
+    rw [sqfPart1] at hi
+    rcases List.mem_append.mp hi with h | h
+    · exact List.all_eq_true.mp (sqfPre1_noDiv cf) i h
+    · exact List.all_eq_true.mp sqfCore_noDiv i h
+  have hnd2 : ∀ i ∈ sqfPart2 cf, NoDivI i = true := by
+    intro i hi
+    rw [sqfPart2] at hi
+    rcases List.mem_append.mp hi with h | h
+    · exact List.all_eq_true.mp (sqfPre2_noDiv cf) i h
+    · exact List.all_eq_true.mp sqfCore_noDiv i h
+  have hp1 := sqfPre1_spec cf k s hs hbM hK
+  -- clause 1
+  have hc1 : srun k s (sqfPart1 cf) 47
+      = (if up32 (truncSub (s 1) cf.base.bias)
+              * up32 (truncSub (s 1) cf.base.bias) ≤ cf.K * s 9
+          then 1 else 0) := by
+    rw [sqfPart1, pre_core_spec cf k s (sqfPre1 cf)
+      (fun i hi => List.all_eq_true.mp (sqfPre1_noDiv cf) i hi) hs _ hp1.1 hp1.2.1
+      hf1, hp1.2.2.1]
+  have hA1 : srun k s (sqfPart1 cf) 1 = s 1 := by
+    rw [sqfPart1, srun_append, srun_untouched k 1 _ sqfCore_dest1]
+    exact hp1.2.2.2
+  have hA9 : srun k s (sqfPart1 cf) 9 = s 9 := by
+    rw [sqfPart1, srun_append, srun_untouched k 9 _ sqfCore_dest9]
+    exact hp1.2.2.1
+  have hAlt : ∀ j, srun k s (sqfPart1 cf) j < M := srun_lt k _ hnd1 s hs
+  -- the save
+  have hsplit : srun k s (sqfRowG cf)
+      = srun k (srun k (srun k (srun k s (sqfPart1 cf))
+            [ .mov 48 (.reg 47) ]) (sqfPart2 cf))
+          [ .binop 49 .mul (.reg 48) (.reg 47) ] := by
+    simp only [sqfRowG, srun_append]
+  have hB : srun k (srun k s (sqfPart1 cf)) [ .mov 48 (.reg 47) ]
+      = (srun k s (sqfPart1 cf)).set 48
+          (srun k s (sqfPart1 cf) 47) := by
+    simp only [srun_cons, srun_nil, sdest, sval, denoteOperand]
+  have hBlt : ∀ j, ((srun k s (sqfPart1 cf)).set 48
+      (srun k s (sqfPart1 cf) 47)) j < M := by
+    intro j
+    by_cases h : j = 48
+    · subst h; simpa [RegState.set] using hAlt 47
+    · simpa [RegState.set, if_neg h] using hAlt j
+  have hB1 : ((srun k s (sqfPart1 cf)).set 48
+      (srun k s (sqfPart1 cf) 47)) 1 = s 1 := by
+    simp only [RegState.set, if_neg (by decide : ¬ (1 = 48))]; exact hA1
+  have hB9 : ((srun k s (sqfPart1 cf)).set 48
+      (srun k s (sqfPart1 cf) 47)) 9 = s 9 := by
+    simp only [RegState.set, if_neg (by decide : ¬ (9 = 48))]; exact hA9
+  have hB48 : ((srun k s (sqfPart1 cf)).set 48
+      (srun k s (sqfPart1 cf) 47)) 48
+      = srun k s (sqfPart1 cf) 47 := by simp [RegState.set]
+  -- clause 2
+  have hp2 := sqfPre2_spec cf k _ hBlt hWM hK (by rw [hB9]; exact hWX)
+  rw [hB9] at hp2
+  rw [hB1] at hp2
+  have hc2 : srun k ((srun k s (sqfPart1 cf)).set 48
+        (srun k s (sqfPart1 cf) 47)) (sqfPart2 cf) 47
+      = (if up32 (truncSub (cf.W + s 9) (s 1))
+              * up32 (truncSub (cf.W + s 9) (s 1)) ≤ cf.K * s 9
+          then 1 else 0) := by
+    rw [sqfPart2, pre_core_spec cf k _ (sqfPre2 cf)
+      (fun i hi => List.all_eq_true.mp (sqfPre2_noDiv cf) i hi) hBlt _ hp2.1
+      hp2.2.1 hf2, hp2.2.2.1]
+  have hC48 : srun k ((srun k s (sqfPart1 cf)).set 48
+        (srun k s (sqfPart1 cf) 47)) (sqfPart2 cf) 48
+      = srun k s (sqfPart1 cf) 47 := by
+    rw [sqfPart2, srun_append, srun_untouched k 48 _ sqfCore_dest48,
+      srun_untouched k 48 _ (sqfPre2_dest cf 48 (by decide) (by decide)
+        (by decide) (by decide) (by decide) (by decide)), hB48]
+  -- combine.  ⚠ The last step must be stated *generically in the state*: a
+  -- `simp only [srun_cons, …]` applied directly to the assembled goal makes the
+  -- kernel walk the whole four-stage `srun` chain and it reports deep
+  -- recursion.  Quantifying over `t` keeps the chain opaque.
+  have hfin : ∀ t : RegState,
+      srun k t [ .binop 49 .mul (.reg 48) (.reg 47) ] 49 = (t 48 * t 47) % M := by
+    intro t
+    simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
+      Option.getD_some, RegState.set, reduceIte, if_true]
+  rw [hsplit, hB, hfin, hC48, hc2, hc1, sqfPass, and_bit]
+  simp only [decide_eq_true_eq]
+  refine Nat.mod_eq_of_lt ?_
+  have hM := ArrayFoldBridge.one_lt_M
+  split <;> split <;> omega
+
+#print axioms sqfRowG_spec
 
 end LeanCompCert.Ports.SquarefreeHeadBlock
