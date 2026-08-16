@@ -206,6 +206,30 @@ theorem minG_spec (k : Nat) (s : RegState) (a b dst t0 t1 : Nat)
 
 #print axioms minG_spec
 
+/-- Well-formedness is about register indices only, so it survives widening
+the register file.  A port that reuses another's stages at a larger
+`regCount` needs exactly this and nothing else. -/
+theorem Instr.WF_mono {i : Instr} {m n : Nat} (hmn : m ≤ n) (h : i.WF m) :
+    i.WF n := by
+  cases i with
+  | mov d src =>
+      obtain ⟨hd, hs⟩ := h
+      refine ⟨by omega, ?_⟩
+      cases src with
+      | reg r => exact Nat.lt_of_lt_of_le hs hmn
+      | _ => trivial
+  | binop d op l r =>
+      obtain ⟨hd, hl, hr⟩ := h
+      refine ⟨by omega, ?_, ?_⟩
+      · cases l with
+        | reg x => exact Nat.lt_of_lt_of_le hl hmn
+        | _ => trivial
+      · cases r with
+        | reg x => exact Nat.lt_of_lt_of_le hr hmn
+        | _ => trivial
+
+#print axioms Instr.WF_mono
+
 
 /-! ### Composing them
 

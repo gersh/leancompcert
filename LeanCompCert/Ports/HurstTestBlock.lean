@@ -1075,4 +1075,176 @@ theorem hurstBody_obs (c : Cfg) (idx : Nat) (s : RegState)
 #print axioms hurstBody_obs
 
 
+
+/-! ## The program
+
+`MertensCDEM`'s init block, entry state and invariant are reused unchanged —
+the substitution touches only the fifth body stage, and the loop's shape is
+identical.  `regCount` widens from 54 to 78 for the test's registers, which is
+why `Instr.WF_mono` is needed: CDEM's stages are proved well-formed at 54.
+-/
+
+open LeanCompCert.Ports.MertensCDEM in
+def hurstProgram (c : Cfg) : Program :=
+  { regCount := hurstRegCount
+  , loopCount := c.len * c.rounds
+  , init := initBlock c
+  , body := hurstBody c
+  , epilogue := []
+  , output := 0 }
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The value the loop computes, as a fold in ordinary mathematics. -/
+def hurstValue (c : Cfg) : Nat :=
+  ((List.range (c.len * c.rounds)).foldl (fun a index => hurstGstep c index a)
+    (obs (entry c))).bad
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The substituted body is defined wherever CDEM's is: the only partial
+operations are the index decode and the three trial-division ops, all in the
+shared prefix.  The clamp and the widening test divide nowhere. -/
+theorem hurstBody_defined (c : Cfg) (idx : Nat) (s : RegState)
+    (hadm : Admissible c) (hs : ∀ j, s j < M) (hidx : idx < c.len * c.rounds) :
+    SAllDefined idx s (hurstBody c) := by
+  have hRM : c.rounds < M := by have := hadm.divLt; omega
+  have hne : ¬ (c.rounds % M = 0) := by
+    rw [Nat.mod_eq_of_lt hRM]; have := hadm.roundsPos; omega
+  have hA := bodyA_spec c idx s hadm hs hidx
+  have hd0 : ¬ ((srun idx s (bodyA c)) 7 = 0) := by rw [hA.2.2.2.1]; omega
+  rw [show hurstBody c
+        = bodyA c ++ (bodyB ++ (bodyC1 c ++ (bodyC2a c ++ hurstBodyC2b c)))
+      from by simp only [hurstBody, hurstPrefix, List.append_assoc],
+    SAllDefined_append, SAllDefined_append, SAllDefined_append,
+    SAllDefined_append]
+  refine ⟨bodyA_defined c idx s hne, bodyB_defined idx _ hd0, ?_, ?_, ?_⟩
+  · simp only [bodyC1, SAllDefined, SDefined, sdest, sval, denoteOperand,
+      denoteOp, RegState.set, Option.getD_some, Option.isSome_some, reduceIte,
+      reduceCtorEq, Nat.reduceEqDiff, if_true, and_true, true_and]
+  · simp only [bodyC2a, SAllDefined, SDefined, sdest, sval, denoteOperand,
+      denoteOp, RegState.set, Option.getD_some, Option.isSome_some, reduceIte,
+      reduceCtorEq, Nat.reduceEqDiff, if_true, and_true, true_and]
+  · exact SAllDefined_of_noDiv idx _
+      (fun i hi => List.all_eq_true.mp (hurstBodyC2b_noDiv c) i hi) _
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBody_denote (c : Cfg) (idx : Nat) (s : RegState)
+    (hadm : Admissible c) (hs : ∀ j, s j < M) (hidx : idx < c.len * c.rounds) :
+    denoteInstrs idx s (hurstBody c) = some (hurstStep c idx s) :=
+  denoteInstrs_eq_srun idx (hurstBody c) s (hurstBody_defined c idx s hadm hs hidx)
+
+private theorem hbitLe (P : Prop) [Decidable P] :
+    (if P then (1 : Nat) else 0) ≤ 1 := by split <;> omega
+
+private theorem hgateLe (P : Prop) [Decidable P] (y : Nat) (hy : y ≤ 1) :
+    (if P then y else 0) ≤ 1 := by split <;> omega
+
+private theorem hbitOr (a b : Nat) (ha : a ≤ 1) (hb : b ≤ 1) : a ||| b ≤ 1 := by
+  have ea : a = 0 ∨ a = 1 := by omega
+  have eb : b = 0 ∨ b = 1 := by omega
+  rcases ea with rfl | rfl <;> rcases eb with rfl | rfl <;> decide
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The abstract step preserves bit-ness.  `hurstBadOf` has exactly
+`badOf`'s shape — a disjunction with a gated bit — so only the row predicate
+inside the gate differs, and bit-ness does not see it. -/
+theorem hurstGstep_bits (c : Cfg) (idx : Nat) (a : Abs)
+    (hbad : a.bad ≤ 1) (hsq : a.t.sq ≤ 1) (hpar : a.t.par ≤ 1) :
+    (hurstGstep c idx a).bad ≤ 1 ∧ (hurstGstep c idx a).t.sq ≤ 1
+      ∧ (hurstGstep c idx a).t.par ≤ 1 := by
+  have hAsq : (gA c idx a).t.sq ≤ 1 := by
+    show (if idx % c.rounds = 0 then 0 else a.t.sq) ≤ 1
+    split <;> omega
+  have hApar : (gA c idx a).t.par ≤ 1 := by
+    show (if idx % c.rounds = 0 then 0 else a.t.par) ≤ 1
+    split <;> omega
+  have hB := trialStep_bits (idx % c.rounds + 2) (gA c idx a).t hAsq hApar
+  refine ⟨?_, hB.1, hB.2⟩
+  show (_ ||| (if _ then (if idx % c.rounds = c.rounds - 1 then (1:Nat) else 0)
+                else 0)) ≤ 1
+  exact hbitOr _ _ hbad (hgateLe _ _ (hbitLe _))
+
+set_option maxRecDepth 8000 in
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstStep_inv (c : Cfg) (idx : Nat) (s : RegState) (hadm : Admissible c)
+    (hcap : HurstAdmissible c) (hI : Inv s) (hidx : idx < c.len * c.rounds) :
+    Inv (hurstStep c idx s) := by
+  obtain ⟨hs, h0, h3, h4⟩ := hI
+  have hobs := hurstBody_obs c idx s hadm hcap hs h0 h3 h4 hidx
+  have hb := hurstGstep_bits c idx (obs s) h0 h3 h4
+  refine ⟨srun_lt_of_lt idx (hurstBody c) s hs, ?_, ?_, ?_⟩
+  · show (obs (hurstStep c idx s)).bad ≤ 1
+    rw [hobs]; exact hb.1
+  · show (obs (hurstStep c idx s)).t.sq ≤ 1
+    rw [hobs]; exact hb.2.1
+  · show (obs (hurstStep c idx s)).t.par ≤ 1
+    rw [hobs]; exact hb.2.2
+
+set_option maxHeartbeats 1000000 in
+open LeanCompCert.Ports.MertensCDEM in
+/-- **The denotation theorem.**  The Hurst sweep denotes the violation flag of
+the fold `hurstGstep`, in ordinary `Nat` arithmetic.  No fold is evaluated, so
+this costs the same at `len = 24` and at `len = 10^16 / rounds`. -/
+theorem hurstProgram_denote (c : Cfg) (hadm : Admissible c)
+    (hcap : HurstAdmissible c) :
+    (hurstProgram c).denote = some (hurstValue c) := by
+  have hLoop : (hurstProgram c).loopCount = c.len * c.rounds := rfl
+  refine FoldBridge.Program.denote_eq_obs_foldl_mem (hurstProgram c) Inv
+    (hurstStep c) obs (hurstGstep c) Abs.bad (entry c) (entry_init c)
+    (entry_inv c) ?_ ?_ ?_ ?_
+  · intro index s hidx hI
+    exact hurstBody_denote c index s hadm hI.1 (hLoop ▸ hidx)
+  · intro index s hidx hI
+    exact hurstStep_inv c index s hadm hcap hI (hLoop ▸ hidx)
+  · intro index s hidx hI
+    exact hurstBody_obs c index s hadm hcap hI.1 hI.2.1 hI.2.2.1 hI.2.2.2
+      (hLoop ▸ hidx)
+  · intro s _
+    rfl
+
+#print axioms hurstProgram_denote
+
+/-! ### Well-formedness -/
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBody_wf (c : Cfg) : ∀ i ∈ hurstBody c, i.WF hurstRegCount := by
+  have hmono : ∀ i : Instr, i.WF regCount → i.WF hurstRegCount :=
+    fun i h => Instr.WF_mono (by decide) h
+  intro i hi
+  rw [show hurstBody c
+        = bodyA c ++ (bodyB ++ (bodyC1 c ++ (bodyC2a c ++ hurstBodyC2b c)))
+      from by simp only [hurstBody, hurstPrefix, List.append_assoc]] at hi
+  rcases List.mem_append.mp hi with h | h
+  · exact hmono i (bodyA_wf c i h)
+  rcases List.mem_append.mp h with h | h
+  · exact hmono i (bodyB_wf i h)
+  rcases List.mem_append.mp h with h | h
+  · exact hmono i (bodyC1_wf c i h)
+  rcases List.mem_append.mp h with h | h
+  · exact hmono i (bodyC2a_wf c i h)
+  · rw [hurstBodyC2b, List.mem_append] at h
+    rcases h with h | h
+    · revert h
+      simp only [hurstClampG, minG, List.mem_cons, List.not_mem_nil, or_false,
+        List.mem_append]
+      rintro (h|(h|h|h|h|h)|h) <;> rw [h] <;>
+        simp +decide [Instr.WF, Operand.WF, hurstRegCount]
+    · rw [hurstTestFlagG, List.mem_append] at h
+      rcases h with h | h
+      · exact hurstRowG_wf i h
+      · revert h
+        simp only [List.mem_cons, List.not_mem_nil, or_false]
+        rintro (rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl) <;>
+          simp +decide [Instr.WF, Operand.WF, hurstRegCount]
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstProgram_wf (c : Cfg) : (hurstProgram c).WF :=
+  ⟨by show 0 < 78; omega,
+   fun i hi => Instr.WF_mono (m := regCount) (n := hurstRegCount) (by decide)
+     (initBlock_wf c i hi),
+   hurstBody_wf c,
+   (by intro i hi; cases hi)⟩
+
+#print axioms hurstProgram_wf
+
+
 end LeanCompCert.Ports.HurstTestBlock
