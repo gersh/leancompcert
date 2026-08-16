@@ -80,6 +80,84 @@ theorem pair_append (k : Nat) (s : RegState)
   · exact spec_append_of_preserves k s h₁ hp
   · rw [srun_append]; exact h₂
 
+/-! ## The register footprint
+
+★ The frames above are stated one register at a time, and in an assembly that
+is the wrong granularity: wiring five blocks needs each one checked against
+every earlier one's outputs, which is quadratically many `≠` hypotheses.
+
+`Writes` replaces all of them with a single **computable list**.  For a block
+with concrete register numbers `Writes l` reduces to a literal by `rfl`, so
+every frame obligation becomes a decidable membership test — and `decide` on
+`r ∉ [310, 311, 340]` is cheap where deciding sixty inequalities was not. -/
+
+/-- The registers a block writes, in order. -/
+def Writes : List Instr → List Nat
+  | [] => []
+  | i :: l => sdest i :: Writes l
+
+@[simp] theorem writes_nil : Writes [] = [] := rfl
+
+@[simp] theorem writes_cons (i : Instr) (l : List Instr) :
+    Writes (i :: l) = sdest i :: Writes l := rfl
+
+/-- ★ The footprint of a concatenation is the concatenation of footprints,
+which is what makes the whole scheme compositional. -/
+@[simp] theorem writes_append : ∀ (l₁ l₂ : List Instr),
+    Writes (l₁ ++ l₂) = Writes l₁ ++ Writes l₂
+  | [], _ => rfl
+  | i :: l, l₂ => by
+      show sdest i :: Writes (l ++ l₂) = sdest i :: (Writes l ++ Writes l₂)
+      rw [writes_append l l₂]
+
+/-- **A register outside the footprint is preserved.**  This is the bridge
+from the decidable test to the frame. -/
+theorem preserves_of_not_mem {l : List Instr} {r : Nat} (h : r ∉ Writes l) :
+    Preserves l r := by
+  induction l with
+  | nil => intro i hi; cases hi
+  | cons j l ih =>
+      have h1 : r ≠ sdest j := fun hc => h (List.mem_cons.mpr (Or.inl hc))
+      have h2 : r ∉ Writes l := fun hc => h (List.mem_cons.mpr (Or.inr hc))
+      intro i hi
+      rcases List.mem_cons.mp hi with rfl | hi'
+      · exact fun hEq => h1 hEq.symm
+      · exact ih h2 i hi'
+
+/-- A register outside the footprint keeps its value. -/
+theorem srun_outside (k : Nat) (s : RegState) {l : List Instr} {r : Nat}
+    (h : r ∉ Writes l) : srun k s l r = s r :=
+  srun_preserves k s (preserves_of_not_mem h)
+
+/-- **The composition lemma, footprint form.**  Everything a caller has to
+supply is one membership test. -/
+theorem spec_append_of_not_mem (k : Nat) (s : RegState)
+    {l₁ l₂ : List Instr} {r v : Nat}
+    (h₁ : srun k s l₁ r = v) (h₂ : r ∉ Writes l₂) :
+    srun k s (l₁ ++ l₂) r = v :=
+  spec_append_of_preserves k s h₁ (preserves_of_not_mem h₂)
+
+/-! ### Decomposing a chain
+
+⚠ Decomposing an assembled block by `show` and definitional unfolding times
+out the kernel once the block is a few hundred instructions long — it forces
+the whole `++` chain open.  These make the split syntactic, which is
+instant. -/
+
+theorem srun_append3 (k : Nat) (s : RegState) (l₁ l₂ l₃ : List Instr) :
+    srun k s (l₁ ++ l₂ ++ l₃) = srun k (srun k (srun k s l₁) l₂) l₃ := by
+  rw [srun_append, srun_append]
+
+theorem srun_append4 (k : Nat) (s : RegState) (l₁ l₂ l₃ l₄ : List Instr) :
+    srun k s (l₁ ++ l₂ ++ l₃ ++ l₄)
+      = srun k (srun k (srun k (srun k s l₁) l₂) l₃) l₄ := by
+  rw [srun_append, srun_append, srun_append]
+
+theorem srun_append5 (k : Nat) (s : RegState) (l₁ l₂ l₃ l₄ l₅ : List Instr) :
+    srun k s (l₁ ++ l₂ ++ l₃ ++ l₄ ++ l₅)
+      = srun k (srun k (srun k (srun k (srun k s l₁) l₂) l₃) l₄) l₅ := by
+  rw [srun_append, srun_append, srun_append, srun_append]
+
 /-! ## Discharging `Preserves`
 
 ⚠ The frame proofs in this development have blown up twice, both times for the
@@ -96,5 +174,8 @@ theorem preserves_singleton {i : Instr} {r : Nat} (h : sdest i ≠ r) :
 #print axioms spec_append_of_preserves
 #print axioms pair_append
 #print axioms preserves_append
+#print axioms writes_append
+#print axioms preserves_of_not_mem
+#print axioms spec_append_of_not_mem
 
 end LeanCompCert.Verified.BlockCompose

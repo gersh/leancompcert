@@ -69,9 +69,17 @@ abbrev prrm : Nat := 311
 abbrev piin : Nat := 312  -- `x.im·y.im`
 abbrev piim : Nat := 313
 
+abbrev priN : Nat := 314  -- `x.re·y.im`
+abbrev priM : Nat := 315
+abbrev pirN : Nat := 316  -- `x.im·y.re`
+abbrev pirM : Nat := 317
+
 abbrev arr : Nat := 320   -- the two products, two's complement
 abbrev aii : Nat := 321
+abbrev ari : Nat := 322
+abbrev air : Nat := 323
 abbrev outRe : Nat := 330
+abbrev outIm : Nat := 331
 
 abbrev rlo : Nat := 340
 abbrev rhi : Nat := 341
@@ -249,7 +257,125 @@ theorem reBlock_spec (k : Nat) (s : RegState) (S : Nat) (hS : S ≤ 64)
   rw [hdecomp, tcSubG_spec, h4arr, h4aii, h3arr, h3piin, h3piim,
     hs2pre prrn (by regdec), hs2pre prrm (by regdec), h1n, h1m, h2n, h2m]
 
+/-! ### The footprint does not depend on the scale
+
+⚠ `S` appears only in shift *operands*, never in a destination, so the
+footprint is independent of it — but `decide` needs a closed term, so that has
+to be said out loud. -/
+
+theorem writes_mulRR (S : Nat) : Writes (mulRR S) = Writes (mulRR 0) := rfl
+theorem writes_mulII (S : Nat) : Writes (mulII S) = Writes (mulII 0) := rfl
+
+/-! ### The imaginary part
+
+★ Built with `Writes` rather than the fourteen-hypothesis
+`sfpMulG_preserves`.  Every frame below is a single decidable membership test,
+which is the whole point of the footprint machinery. -/
+
+/-- `x.re · y.im`. -/
+def mulRI (S : Nat) : List Instr :=
+  sfpMulG S xrn xrm yin yim priN priM rlo rhi tt0 tt1 c0 c1 c2 c3 c4 c5 c6 c7
+
+/-- `x.im · y.re`. -/
+def mulIR (S : Nat) : List Instr :=
+  sfpMulG S xin xim yrn yrm pirN pirM rlo rhi tt0 tt1 c0 c1 c2 c3 c4 c5 c6 c7
+
+theorem writes_mulRI (S : Nat) : Writes (mulRI S) = Writes (mulRI 0) := rfl
+theorem writes_mulIR (S : Nat) : Writes (mulIR S) = Writes (mulIR 0) := rfl
+
+/-- **The imaginary part of the complex product.** -/
+def imBlock (S : Nat) : List Instr :=
+  mulRI S ++ mulIR S
+    ++ tcOfSignG priN priM ari u0 u1
+    ++ tcOfSignG pirN pirM air u0 u1
+    ++ tcAddG ari air outIm
+
+private def it1 (k : Nat) (s : RegState) (S : Nat) : RegState :=
+  srun k s (mulRI S)
+
+private def it2 (k : Nat) (s : RegState) (S : Nat) : RegState :=
+  srun k (it1 k s S) (mulIR S)
+
+private def it3 (k : Nat) (s : RegState) (S : Nat) : RegState :=
+  srun k (it2 k s S) (tcOfSignG priN priM ari u0 u1)
+
+private def it4 (k : Nat) (s : RegState) (S : Nat) : RegState :=
+  srun k (it3 k s S) (tcOfSignG pirN pirM air u0 u1)
+
+set_option maxHeartbeats 2000000 in
+/-- **The imaginary part, emitted and proved.** -/
+theorem imBlock_spec (k : Nat) (s : RegState) (S : Nat) (hS : S ≤ 64)
+    (hs : ∀ j, s j < M)
+    (hxr : s xrn ≤ 1) (hyi : s yin ≤ 1)
+    (hxi : s xin ≤ 1) (hyr : s yrn ≤ 1)
+    (hfit1 : (hl (s xrm) (s yim)).2 < 2 ^ S)
+    (hfit2 : (hl (s xim) (s yrm)).2 < 2 ^ S) :
+    srun k s (imBlock S) outIm
+      = (tcOfSign (if s xrn = s yin then 0 else 1) (fpMul S (s xrm) (s yim))
+          + tcOfSign (if s xin = s yrn then 0 else 1)
+              (fpMul S (s xim) (s yrm))) % M := by
+  have hs1M : ∀ j, it1 k s S j < M := srun_lt_of_lt k _ s hs
+  have hs1pre : ∀ j, j ∉ Writes (mulRI S) → it1 k s S j = s j := fun j hj =>
+    srun_outside k s hj
+  have h1m : it1 k s S priM = fpMul S (s xrm) (s yim) :=
+    sfpMulG_mag k s S xrn xrm yin yim priN priM rlo rhi tt0 tt1
+      c0 c1 c2 c3 c4 c5 c6 c7 hS hD8 (hNI (by decide)) (hNI (by decide))
+      (hNI (by decide)) (hNI (by decide)) (by regdec) hs (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec) hfit1
+  have h1n : it1 k s S priN = if s xrn = s yin then 0 else 1 :=
+    sfpMulG_sign k s S xrn xrm yin yim priN priM rlo rhi tt0 tt1
+      c0 c1 c2 c3 c4 c5 c6 c7 hxr hyi (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+  have hs2M : ∀ j, it2 k s S j < M := srun_lt_of_lt k _ _ hs1M
+  have hs2pre : ∀ j, j ∉ Writes (mulIR S) → it2 k s S j = it1 k s S j :=
+    fun j hj => srun_outside k _ hj
+  have h2m : it2 k s S pirM = fpMul S (s xim) (s yrm) := by
+    have hh := sfpMulG_mag k (it1 k s S) S xin xim yrn yrm pirN pirM
+      rlo rhi tt0 tt1 c0 c1 c2 c3 c4 c5 c6 c7 hS hD8 (hNI (by decide))
+      (hNI (by decide)) (hNI (by decide)) (hNI (by decide)) (by regdec)
+      hs1M (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec)
+      (by rw [hs1pre xim (by rw [writes_mulRI]; decide), hs1pre yrm (by rw [writes_mulRI]; decide)]; exact hfit2)
+    rw [it2, mulIR, hh, hs1pre xim (by rw [writes_mulRI]; decide), hs1pre yrm (by rw [writes_mulRI]; decide)]
+  have h2n : it2 k s S pirN = if s xin = s yrn then 0 else 1 := by
+    have hh := sfpMulG_sign k (it1 k s S) S xin xim yrn yrm pirN pirM
+      rlo rhi tt0 tt1 c0 c1 c2 c3 c4 c5 c6 c7
+      (by rw [hs1pre xin (by rw [writes_mulRI]; decide)]; exact hxi)
+      (by rw [hs1pre yrn (by rw [writes_mulRI]; decide)]; exact hyr)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by regdec) (by regdec)
+    rw [it2, mulIR, hh, hs1pre xin (by rw [writes_mulRI]; decide), hs1pre yrn (by rw [writes_mulRI]; decide)]
+  have hs3M : ∀ j, it3 k s S j < M := srun_lt_of_lt k _ _ hs2M
+  have h3ari : it3 k s S ari = tcOfSign (it2 k s S priN) (it2 k s S priM) :=
+    tcOfSignG_spec k (it2 k s S) priN priM ari u0 u1 (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by rw [hs2pre priN (by rw [writes_mulIR]; decide), h1n]; split <;> omega)
+      (hs2M priM)
+  have h3pirN : it3 k s S pirN = it2 k s S pirN :=
+    srun_outside k _ (by decide)
+  have h3pirM : it3 k s S pirM = it2 k s S pirM :=
+    srun_outside k _ (by decide)
+  have h4air : it4 k s S air = tcOfSign (it3 k s S pirN) (it3 k s S pirM) :=
+    tcOfSignG_spec k (it3 k s S) pirN pirM air u0 u1 (by regdec) (by regdec)
+      (by regdec) (by regdec) (by regdec) (by regdec) (by regdec)
+      (by rw [h3pirN, h2n]; split <;> omega) (hs3M pirM)
+  have h4ari : it4 k s S ari = it3 k s S ari := srun_outside k _ (by decide)
+  have hdecomp : srun k s (imBlock S) outIm
+      = srun k (it4 k s S) (tcAddG ari air outIm) outIm := by
+    rw [imBlock, srun_append, srun_append, srun_append, srun_append,
+      it4, it3, it2, it1]
+  rw [hdecomp, tcAddG_spec, h4ari, h4air, h3ari, h3pirN, h3pirM,
+    hs2pre priN (by rw [writes_mulIR]; decide), hs2pre priM (by rw [writes_mulIR]; decide), h1n, h1m, h2n, h2m]
+
 #print axioms mulRR_preserves
 #print axioms reBlock_spec
+#print axioms imBlock_spec
 
 end LeanCompCert.Ports.ComplexMulBlock
