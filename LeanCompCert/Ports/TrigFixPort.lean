@@ -298,6 +298,81 @@ theorem cosBodyG_spec (k : Nat) (s : RegState) (X : Nat)
   rw [Nat.mod_eq_of_lt hres]
   rfl
 
+
+/-! ### Branchless alternating accumulation
+
+The series is alternating, but `Nat` has no signs and the fragment has no
+branches, so the two parities are accumulated into separate registers and the
+subtraction is left to the consumer (where `ℝ` exists and signs are free).
+`MathExtras.TrigTransport.cos_series_dist_le` is stated against exactly that
+pair, so nothing is lost.
+
+Selection is by `idx &&& 1` multiplied in, which is why the block divides into
+no cases at run time and needs none in its proof beyond the parity split.
+
+```
+ 2   t          the current term
+20   even       running sum over even k
+21   odd        running sum over odd k
+22 23           parity scratch
+```
+-/
+
+def accG : List Instr :=
+  [ Instr.binop 22 .band .idx (.lit 1)
+  , Instr.binop 23 .sub (.lit 1) (.reg 22)
+  , Instr.binop 23 .mul (.reg 23) (.reg 2)
+  , Instr.binop 20 .add (.reg 20) (.reg 23)
+  , Instr.binop 22 .mul (.reg 22) (.reg 2)
+  , Instr.binop 21 .add (.reg 21) (.reg 22) ]
+
+/-- **The accumulator routes the term by parity.**  Exactly one of the two
+sums moves, and the term and argument registers are untouched. -/
+theorem accG_spec (k : Nat) (s : RegState) (hk : k < M)
+    (ht : s 2 < M) (hE : s 20 + s 2 < M) (hO : s 21 + s 2 < M) :
+    srun k s accG 20 = (if k % 2 = 0 then s 20 + s 2 else s 20)
+      ∧ srun k s accG 21 = (if k % 2 = 0 then s 21 else s 21 + s 2) := by
+  have hMv : M = 18446744073709551616 := by decide
+  have hpar : k % M &&& 1 = k % 2 := by
+    rw [Nat.mod_eq_of_lt hk]
+    exact Nat.and_one_is_mod k
+  have hlt2 : k % 2 < 2 := Nat.mod_lt _ (by decide)
+  simp only [accG, srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
+    Option.getD_some, RegState.set]
+  simp only [show ¬((22 : Nat) = 23) by decide, show ¬((23 : Nat) = 22) by decide,
+    show ¬((20 : Nat) = 22) by decide, show ¬((20 : Nat) = 23) by decide,
+    show ¬((21 : Nat) = 22) by decide, show ¬((21 : Nat) = 23) by decide,
+    show ¬((22 : Nat) = 20) by decide, show ¬((23 : Nat) = 20) by decide,
+    show ¬((2 : Nat) = 20) by decide, show ¬((2 : Nat) = 22) by decide,
+    show ¬((2 : Nat) = 23) by decide,
+    show ¬((20 : Nat) = 21) by decide, show ¬((21 : Nat) = 20) by decide,
+    show (1 : Nat) % M = 1 by decide, if_true, if_false, if_pos rfl]
+  rw [hpar]
+  have h21 : s 21 < M := by omega
+  have h20 : s 20 < M := by omega
+  by_cases hpar0 : k % 2 = 0
+  · rw [hpar0]
+    have hz : (0 : Nat) % M = 0 := by decide
+    rw [hz]
+    have h1M : (1 + (M - 0)) % M = 1 := by simp only [hMv]
+    rw [h1M]
+    simp only [if_pos rfl, Nat.one_mul, Nat.zero_mul, Nat.zero_mod,
+      Nat.add_zero]
+    rw [Nat.mod_eq_of_lt ht, Nat.mod_eq_of_lt hE, Nat.mod_eq_of_lt h21]
+    exact ⟨rfl, rfl⟩
+  · have h1 : k % 2 = 1 := by omega
+    rw [h1]
+    have hz : (1 : Nat) % M = 1 := by decide
+    rw [hz]
+    have h1M : (1 + (M - 1)) % M = 0 := by simp only [hMv]
+    rw [h1M]
+    simp only [show ¬((1 : Nat) = 0) by decide, if_false, Nat.one_mul,
+      Nat.zero_mul, Nat.zero_mod, Nat.add_zero]
+    rw [Nat.mod_eq_of_lt ht, Nat.mod_eq_of_lt hO, Nat.mod_eq_of_lt h20]
+    exact ⟨rfl, rfl⟩
+
+#print axioms accG_spec
+
 #print axioms cFactorG_spec
 #print axioms cosBodyG_spec
 
