@@ -195,6 +195,40 @@ theorem fpMulG_frame (k : Nat) (s : RegState)
     mulWideG_frame k s 4294967295 4294967296 ra rb rlo rhi
       s0 s1 s2 s3 s4 s5 s6 s7 j hlo hhi h0 h1 h2 h3 h4 h5 h6 h7]
 
+/-! ### The same frames, as `Preserves`
+
+★ `Preserves` composes through `preserves_append`, which the `srun`-shaped
+frames above do not.  Every assembly downstream wants this form. -/
+
+theorem fpMulTail_preserves {S dst rlo rhi t0 t1 r : Nat}
+    (hd : dst ≠ r) (h0 : t0 ≠ r) (h1 : t1 ≠ r) :
+    Preserves (fpMulTail S dst rlo rhi t0 t1) r := by
+  intro i hi
+  simp only [fpMulTail, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with h | h | h <;> subst h <;> simp only [sdest] <;> omega
+
+theorem mulWideG_preserves {mask base ra rb rlo rhi
+    s0 s1 s2 s3 s4 s5 s6 s7 r : Nat}
+    (hlo : rlo ≠ r) (hhi : rhi ≠ r)
+    (h0 : s0 ≠ r) (h1 : s1 ≠ r) (h2 : s2 ≠ r) (h3 : s3 ≠ r)
+    (h4 : s4 ≠ r) (h5 : s5 ≠ r) (h6 : s6 ≠ r) (h7 : s7 ≠ r) :
+    Preserves (mulWideG mask base ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7) r := by
+  intro i hi
+  simp only [mulWideG, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h <;>
+    subst h <;> simp only [sdest] <;> omega
+
+theorem fpMulG_preserves {S ra rb dst rlo rhi t0 t1
+    s0 s1 s2 s3 s4 s5 s6 s7 r : Nat}
+    (hd : dst ≠ r) (hlo : rlo ≠ r) (hhi : rhi ≠ r)
+    (ht0 : t0 ≠ r) (ht1 : t1 ≠ r)
+    (h0 : s0 ≠ r) (h1 : s1 ≠ r) (h2 : s2 ≠ r) (h3 : s3 ≠ r)
+    (h4 : s4 ≠ r) (h5 : s5 ≠ r) (h6 : s6 ≠ r) (h7 : s7 ≠ r) :
+    Preserves (fpMulG S ra rb dst rlo rhi t0 t1 s0 s1 s2 s3 s4 s5 s6 s7) r :=
+  preserves_append
+    (mulWideG_preserves hlo hhi h0 h1 h2 h3 h4 h5 h6 h7)
+    (fpMulTail_preserves hd ht0 ht1)
+
 /-! ## The signed layer, emitted
 
 Sign-magnitude makes this one extra instruction: the sign is an `xor`. -/
@@ -273,6 +307,20 @@ theorem sfpMulG_sign (k : Nat) (s : RegState)
   rw [hMv]
   split <;> omega
 
+theorem sfpMulG_preserves {S nsa msa nsb msb ndst mdst rlo rhi t0 t1
+    s0 s1 s2 s3 s4 s5 s6 s7 r : Nat}
+    (hnd : ndst ≠ r) (hmd : mdst ≠ r) (hlo : rlo ≠ r) (hhi : rhi ≠ r)
+    (ht0 : t0 ≠ r) (ht1 : t1 ≠ r)
+    (h0 : s0 ≠ r) (h1 : s1 ≠ r) (h2 : s2 ≠ r) (h3 : s3 ≠ r)
+    (h4 : s4 ≠ r) (h5 : s5 ≠ r) (h6 : s6 ≠ r) (h7 : s7 ≠ r) :
+    Preserves (sfpMulG S nsa msa nsb msb ndst mdst rlo rhi t0 t1
+      s0 s1 s2 s3 s4 s5 s6 s7) r :=
+  preserves_append
+    (fpMulG_preserves hmd hlo hhi ht0 ht1 h0 h1 h2 h3 h4 h5 h6 h7)
+    (preserves_singleton (by simpa [sdest] using hnd))
+
+#print axioms fpMulG_preserves
+#print axioms sfpMulG_preserves
 #print axioms fpMulTail_spec
 #print axioms fpMulG_spec
 #print axioms fpMulG_frame
