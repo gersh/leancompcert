@@ -160,6 +160,84 @@ The composite is not stated here because its register-separation side
 conditions are cheapest to discharge once the consuming port fixes concrete
 registers, as `TrigFixPort.cosBodyG` does. -/
 
+
+/-! ### Comparing two 128-bit values
+
+A scan that squares an accumulator leaves the word behind.  Hurst's test is
+`10^6·M(n)^2 ≤ 571^2·n` with `|M(n)| ~ 10^8` at `n = 10^16`, so the left side
+reaches about `10^22` — past `2^64 ≈ 1.8·10^19`.  Both sides are therefore
+carried as `(lo, hi)` limb pairs and compared as such.
+
+The comparison is branchless for the same reason the others are: the high
+words decide unless they are equal, and those two cases are mutually
+exclusive, so the two indicator bits can simply be added. -/
+
+/-- `dst ← 1` when `lo1 + 2^64·hi1 ≤ lo2 + 2^64·hi2`, else `0`. -/
+def le128G (lo1 hi1 lo2 hi2 dst t0 t1 : Nat) : List Instr :=
+  [ Instr.binop t0 .lt (.reg hi1) (.reg hi2)
+  , Instr.binop t1 .eq (.reg hi1) (.reg hi2)
+  , Instr.binop dst .le (.reg lo1) (.reg lo2)
+  , Instr.binop t1 .mul (.reg t1) (.reg dst)
+  , Instr.binop dst .add (.reg t0) (.reg t1) ]
+
+theorem le128G_noDiv (lo1 hi1 lo2 hi2 dst t0 t1 : Nat) :
+    (le128G lo1 hi1 lo2 hi2 dst t0 t1).all NoDivI = true := rfl
+
+/-- **The block decides the 128-bit comparison.**  `hlo1` is what makes the
+`hi1 < hi2` case conclusive: without it a low word could be large enough to
+overturn a strict high-word inequality. -/
+theorem le128G_spec (k : Nat) (s : RegState)
+    (lo1 hi1 lo2 hi2 dst t0 t1 : Nat)
+    (hlo1 : s lo1 < M) (hlo2 : s lo2 < M)
+    (ht01 : t0 ≠ t1) (ht0lo1 : t0 ≠ lo1) (ht0hi1 : t0 ≠ hi1)
+    (ht0lo2 : t0 ≠ lo2) (ht0hi2 : t0 ≠ hi2)
+    (ht1lo1 : t1 ≠ lo1) (ht1hi1 : t1 ≠ hi1)
+    (ht1lo2 : t1 ≠ lo2) (ht1hi2 : t1 ≠ hi2)
+    (hdlo1 : dst ≠ lo1) (hdhi1 : dst ≠ hi1)
+    (hdlo2 : dst ≠ lo2) (hdhi2 : dst ≠ hi2)
+    (hdt0 : dst ≠ t0) (hdt1 : dst ≠ t1) :
+    srun k s (le128G lo1 hi1 lo2 hi2 dst t0 t1) dst
+      = (if s lo1 + M * s hi1 ≤ s lo2 + M * s hi2 then 1 else 0) := by
+  simp only [le128G, srun_cons, srun_nil, sdest, sval, denoteOperand,
+    denoteOp, Option.getD_some, RegState.set]
+  simp only [if_neg ht01, if_neg (Ne.symm ht01), if_neg ht0lo1, if_neg ht0hi1,
+    if_neg ht0lo2, if_neg ht0hi2, if_neg ht1lo1, if_neg ht1hi1, if_neg ht1lo2,
+    if_neg ht1hi2, if_neg hdlo1, if_neg hdhi1, if_neg hdlo2, if_neg hdhi2,
+    if_neg hdt0, if_neg hdt1, if_neg (Ne.symm hdlo1), if_neg (Ne.symm hdhi1),
+    if_neg (Ne.symm hdlo2), if_neg (Ne.symm hdhi2), if_neg (Ne.symm hdt0),
+    if_neg (Ne.symm hdt1), if_neg (Ne.symm ht0lo1), if_neg (Ne.symm ht0hi1),
+    if_neg (Ne.symm ht0lo2), if_neg (Ne.symm ht0hi2), if_neg (Ne.symm ht1lo1),
+    if_neg (Ne.symm ht1hi1), if_neg (Ne.symm ht1lo2), if_neg (Ne.symm ht1hi2),
+    if_pos rfl, if_true]
+  rcases Nat.lt_trichotomy (s hi1) (s hi2) with hlt | heq | hgt
+  · rw [if_pos hlt, if_neg (Nat.ne_of_lt hlt)]
+    have : s lo1 + M * s hi1 ≤ s lo2 + M * s hi2 := by
+      have h1 : M * s hi1 + M ≤ M * s hi2 := by
+        have h : M * (s hi1 + 1) ≤ M * s hi2 := Nat.mul_le_mul (Nat.le_refl M) hlt
+        have e : M * (s hi1 + 1) = M * s hi1 + M := Nat.mul_succ M (s hi1)
+        omega
+      omega
+    rw [if_pos this]
+    simp [show (1 : Nat) % M = 1 by decide, show (0 : Nat) % M = 0 by decide]
+  · rw [if_neg (by omega : ¬ (s hi1 < s hi2)), if_pos heq, heq]
+    by_cases hle : s lo1 ≤ s lo2
+    · rw [if_pos hle, if_pos (by omega)]
+      simp [show (1 : Nat) % M = 1 by decide, show (0 : Nat) % M = 0 by decide]
+    · rw [if_neg hle, if_neg (by omega)]
+      simp [show (1 : Nat) % M = 1 by decide, show (0 : Nat) % M = 0 by decide]
+  · rw [if_neg (by omega : ¬ (s hi1 < s hi2)),
+      if_neg (by omega : ¬ (s hi1 = s hi2))]
+    have : ¬ (s lo1 + M * s hi1 ≤ s lo2 + M * s hi2) := by
+      have h1 : M * s hi2 + M ≤ M * s hi1 := by
+        have h : M * (s hi2 + 1) ≤ M * s hi1 := Nat.mul_le_mul (Nat.le_refl M) hgt
+        have e : M * (s hi2 + 1) = M * s hi2 + M := Nat.mul_succ M (s hi2)
+        omega
+      omega
+    rw [if_neg this]
+    simp [show (1 : Nat) % M = 1 by decide, show (0 : Nat) % M = 0 by decide]
+
+#print axioms le128G_spec
+
 #print axioms absDiffG_spec
 
 end LeanCompCert.Ports.AbsDiffBlock
