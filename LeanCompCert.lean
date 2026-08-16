@@ -30,6 +30,7 @@ import LeanCompCert.Verified.Dyadic
 import LeanCompCert.Verified.MulWide
 import LeanCompCert.Verified.MulWide3
 import LeanCompCert.Verified.FixedMul
+import LeanCompCert.Verified.SignedFixedMul
 import LeanCompCert.Ports.MulWide3Port
 import LeanCompCert.Ports.RS62Loop314Program
 import LeanCompCert.Ports.RS62Loop314Sound
