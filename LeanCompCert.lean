@@ -33,6 +33,7 @@ import LeanCompCert.Verified.FixedMul
 import LeanCompCert.Verified.SignedFixedMul
 import LeanCompCert.Verified.ComplexFixedMul
 import LeanCompCert.Verified.MainSumFold
+import LeanCompCert.Ports.FixedMulBlock
 import LeanCompCert.Ports.MulWide3Port
 import LeanCompCert.Ports.RS62Loop314Program
 import LeanCompCert.Ports.RS62Loop314Sound
