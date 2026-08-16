@@ -557,4 +557,254 @@ theorem sqfRowG_spec (cf : SqfCfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M
 
 #print axioms sqfRowG_spec
 
+
+/-! ## The violation flag
+
+`MertensCDEM.bodyC2b`'s algebra with the row verdict already computed.  Taking
+the verdict as a *hypothesis* rather than inlining the row block is what keeps
+this proof to the flag algebra alone. -/
+
+def sqfFlagG (cf : SqfCfg) : List Instr :=
+  [ .binop 50 .sub (.lit 1) (.reg 49)
+  , .binop 51 .ge (.reg 9) (.lit cf.base.lower)
+  , .binop 52 .mul (.reg 51) (.reg 50)
+  , .binop 53 .eq (.reg 9) (.lit cf.base.anchorX)
+  , .binop 54 .ne (.reg 1) (.lit cf.base.anchorM)
+  , .binop 55 .mul (.reg 53) (.reg 54)
+  , .binop 56 .bor (.reg 52) (.reg 55)
+  , .binop 57 .mul (.reg 22) (.reg 56)
+  , .binop 0 .bor (.reg 0) (.reg 57) ]
+
+theorem sqfFlagG_noDiv (cf : SqfCfg) : (sqfFlagG cf).all NoDivI = true := rfl
+
+set_option maxHeartbeats 1000000 in
+theorem sqfFlagG_spec (cf : SqfCfg) (idx : Nat) (s : RegState)
+    (hs : ∀ j, s j < M) (h0 : s 0 ≤ 1) (h22 : s 22 ≤ 1)
+    (h49 : s 49 = if sqfPass cf (s 9) (s 1) then 1 else 0)
+    (hlowM : cf.base.lower < M) (haxM : cf.base.anchorX < M)
+    (hamM : cf.base.anchorM < M) :
+    srun idx s (sqfFlagG cf) 0
+      = s 0 ||| (if sqfFail cf (s 9) (s 1) then s 22 else 0) := by
+  have hlow' : cf.base.lower % M = cf.base.lower := Nat.mod_eq_of_lt hlowM
+  have hax' : cf.base.anchorX % M = cf.base.anchorX := Nat.mod_eq_of_lt haxM
+  have ham' : cf.base.anchorM % M = cf.base.anchorM := Nat.mod_eq_of_lt hamM
+  have h1c : (1 : Nat) % M = 1 := by decide
+  have h0c : (0 : Nat) % M = 0 := by decide
+  have hb1 : (1 + (M - 1)) % M = 0 := by decide
+  have hb0 : (1 + (M - 0)) % M = 1 := by decide
+  have hbit : ∀ (P : Prop) (inst : Decidable P),
+      (@ite _ P inst (1 : Nat) 0) % M = @ite _ P inst 1 0 := by
+    intro P inst
+    cases inst
+    · exact h0c
+    · exact h1c
+  have hor1 : ∀ (P : Prop) (inst : Decidable P),
+      (1 ||| (@ite _ P inst (1 : Nat) 0)) % M = 1 := by
+    intro P inst
+    cases inst
+    · show (1 ||| (0 : Nat)) % M = 1
+      decide
+    · show (1 ||| (1 : Nat)) % M = 1
+      decide
+  have hone : ∀ (P : Prop) (inst : Decidable P),
+      (1 ||| (@ite _ P inst (1 : Nat) 0)) = 1 := by
+    intro P inst
+    cases inst
+    · show (1 ||| (0 : Nat)) = 1
+      decide
+    · show (1 ||| (1 : Nat)) = 1
+      decide
+  have hor2 : ∀ (P : Prop) (inst : Decidable P),
+      ((@ite _ P inst (1 : Nat) 0) ||| 1) % M = 1 := by
+    intro P inst
+    cases inst
+    · show ((0 : Nat) ||| 1) % M = 1
+      decide
+    · show ((1 : Nat) ||| 1) % M = 1
+      decide
+  unfold sqfFail
+  simp only [sqfFlagG, srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
+    Option.getD_some, RegState.set, if_true, reduceIte, reduceCtorEq,
+    Nat.reduceEqDiff, h49, hlow', hax', ham', h1c, h0c, hb1, hb0]
+  have e0 : s 0 = 0 ∨ s 0 = 1 := by omega
+  have e22 : s 22 = 0 ∨ s 22 = 1 := by omega
+  by_cases hpass : sqfPass cf (s 9) (s 1) = true <;>
+    by_cases hax : s 9 = cf.base.anchorX <;>
+    by_cases ham : s 1 = cf.base.anchorM <;>
+    by_cases hlow : cf.base.lower ≤ s 9 <;>
+    rcases e0 with q0 | q0 <;> rcases e22 with q22 | q22 <;>
+    simp_all [hbit, hor1, hor2, hone]
+
+#print axioms sqfFlagG_spec
+
+
+/-! ## Frames
+
+The three stages' destination sets, as facts about the code shape.  `decide`
+cannot do these: the instruction lists mention `cf` in their *operands*, so
+membership is not closed even though every destination is a literal. -/
+
+theorem sqfC1_dest (cf : SqfCfg) (r : Nat)
+    (h22 : r ≠ 22) (h25 : r ≠ 25) (h26 : r ≠ 26) (h27 : r ≠ 27)
+    (h28 : r ≠ 28) (h1 : r ≠ 1) :
+    ∀ i ∈ sqfC1 cf, sdest i ≠ r := by
+  intro i hi
+  simp only [sqfC1, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with h|h|h|h|h|h|h <;> rw [h] <;> simp only [sdest] <;>
+    exact Ne.symm ‹_›
+
+theorem sqfPre1_dest (cf : SqfCfg) (r : Nat)
+    (h30 : r ≠ 30) (h31 : r ≠ 31) (h40 : r ≠ 40) (h68 : r ≠ 68) (h69 : r ≠ 69) :
+    ∀ i ∈ sqfPre1 cf, sdest i ≠ r := by
+  intro i hi
+  simp only [sqfPre1, tsubG, List.mem_cons, List.not_mem_nil, or_false,
+    List.mem_append] at hi
+  rcases hi with (h|h)|(h|h|h) <;> rw [h] <;> simp only [sdest] <;>
+    exact Ne.symm ‹_›
+
+theorem sqfFlagG_dest (cf : SqfCfg) (r : Nat)
+    (h50 : r ≠ 50) (h51 : r ≠ 51) (h52 : r ≠ 52) (h53 : r ≠ 53) (h54 : r ≠ 54)
+    (h55 : r ≠ 55) (h56 : r ≠ 56) (h57 : r ≠ 57) (h0 : r ≠ 0) :
+    ∀ i ∈ sqfFlagG cf, sdest i ≠ r := by
+  intro i hi
+  simp only [sqfFlagG, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with h|h|h|h|h|h|h|h|h <;> rw [h] <;> simp only [sdest] <;>
+    exact Ne.symm ‹_›
+
+/-- Every register the row block writes lies in `[30,49] ∪ [68,77]`.  Stated as
+a bound rather than a list of `≠`s so one `omega` covers any caller. -/
+def RowDest (d : Nat) : Prop := (30 ≤ d ∧ d ≤ 49) ∨ (68 ≤ d ∧ d ≤ 77)
+
+instance (d : Nat) : Decidable (RowDest d) := by unfold RowDest; infer_instance
+
+theorem sqfCore_rowDest : ∀ i ∈ sqfCore, RowDest (sdest i) := by decide
+
+theorem sqfPre1_rowDest (cf : SqfCfg) : ∀ i ∈ sqfPre1 cf, RowDest (sdest i) := by
+  intro i hi
+  simp only [sqfPre1, tsubG, List.mem_cons, List.not_mem_nil, or_false,
+    List.mem_append] at hi
+  rcases hi with (h|h)|(h|h|h) <;> rw [h] <;> simp only [sdest, RowDest] <;> omega
+
+theorem sqfPre2_rowDest (cf : SqfCfg) : ∀ i ∈ sqfPre2 cf, RowDest (sdest i) := by
+  intro i hi
+  simp only [sqfPre2, tsubG, List.mem_cons, List.not_mem_nil, or_false,
+    List.mem_append] at hi
+  rcases hi with (h|h|h)|(h|h|h) <;> rw [h] <;> simp only [sdest, RowDest] <;>
+    omega
+
+theorem sqfRowG_rowDest (cf : SqfCfg) : ∀ i ∈ sqfRowG cf, RowDest (sdest i) := by
+  intro i hi
+  simp only [sqfRowG, sqfPart1, sqfPart2, List.mem_append, List.mem_cons,
+    List.not_mem_nil, or_false] at hi
+  rcases hi with ((h|h)|h)|h
+  · rcases h with h | h
+    · exact sqfPre1_rowDest cf i h
+    · exact sqfCore_rowDest i h
+  · rw [h]; simp only [sdest, RowDest]; omega
+  · rcases h with h | h
+    · exact sqfPre2_rowDest cf i h
+    · exact sqfCore_rowDest i h
+  · rw [h]; simp only [sdest, RowDest]; omega
+
+theorem sqfRowG_dest (cf : SqfCfg) (r : Nat) (h : ¬ RowDest r) :
+    ∀ i ∈ sqfRowG cf, sdest i ≠ r := by
+  intro i hi hEq
+  exact h (hEq ▸ sqfRowG_rowDest cf i hi)
+
+
+/-! ## The body
+
+`bodyA` and `bodyB` are CDEM's, unchanged: the sieve is the same, only what is
+accumulated and tested differs. -/
+
+def sqfBodyC (cf : SqfCfg) : List Instr :=
+  sqfC1 cf ++ sqfRowG cf ++ sqfFlagG cf
+
+def sqfPrefix (cf : SqfCfg) : List Instr := bodyA cf.base ++ bodyB
+
+def sqfBody (cf : SqfCfg) : List Instr := sqfPrefix cf ++ sqfBodyC cf
+
+/-- The test needs registers up to 77. -/
+def sqfRegCount : Nat := 78
+
+/-- What the head test adds to `MertensCDEM.Admissible`. -/
+structure SqfAdmissible (cf : SqfCfg) : Prop where
+  /-- The sieve's own conditions. -/
+  baseAdm : Admissible cf.base
+  /-- The bias leaves room for the `+31` of the round-up. -/
+  biasBig : 31 < cf.base.bias
+  /-- … as does the second clause's `W + X`. -/
+  wFit : cf.W + cf.base.lo + cf.base.len + 31 < M
+  /-- The head constants are words. -/
+  dLtM : cf.D < M
+  aLtM : cf.A < M
+  kLtM : cf.K < M
+  wLtM : cf.W < M
+
+theorem sqfBodyC_noDiv (cf : SqfCfg) : (sqfBodyC cf).all NoDivI = true := by
+  simp only [sqfBodyC, List.all_append, sqfC1_noDiv, sqfRowG_noDiv,
+    sqfFlagG_noDiv, Bool.and_self]
+
+set_option maxHeartbeats 1000000 in
+theorem sqfPrefix_spec (cf : SqfCfg) (idx : Nat) (s : RegState)
+    (hadm : Admissible cf.base) (hs : ∀ j, s j < M) (h3 : s 3 ≤ 1) (h4 : s 4 ≤ 1)
+    (hidx : idx < cf.base.len * cf.base.rounds) :
+    (∀ j, srun idx s (sqfPrefix cf) j < M)
+      ∧ srun idx s (sqfPrefix cf) 0 = s 0
+      ∧ srun idx s (sqfPrefix cf) 1 = s 1
+      ∧ srun idx s (sqfPrefix cf) 6 = idx % cf.base.rounds
+      ∧ srun idx s (sqfPrefix cf) 9 = cf.base.lo + idx / cf.base.rounds
+      ∧ srun idx s (sqfPrefix cf) 2
+          = (gB cf.base idx (gA cf.base idx (obs s))).t.res
+      ∧ srun idx s (sqfPrefix cf) 3
+          = (gB cf.base idx (gA cf.base idx (obs s))).t.sq
+      ∧ srun idx s (sqfPrefix cf) 4
+          = (gB cf.base idx (gA cf.base idx (obs s))).t.par
+      ∧ srun idx s (sqfPrefix cf) 3 ≤ 1 := by
+  have hR : 0 < cf.base.rounds := hadm.roundsPos
+  have hA := bodyA_spec cf.base idx s hadm hs hidx
+  have hAlt : ∀ j, (srun idx s (bodyA cf.base)) j < M :=
+    srun_lt_of_lt idx (bodyA cf.base) s hs
+  have hA3 : (srun idx s (bodyA cf.base)) 3
+      = (if idx % cf.base.rounds = 0 then 0 else s 3) := hA.2.2.2.2.2.2.1
+  have hA4 : (srun idx s (bodyA cf.base)) 4
+      = (if idx % cf.base.rounds = 0 then 0 else s 4) := hA.2.2.2.2.2.2.2
+  have hA3le : (srun idx s (bodyA cf.base)) 3 ≤ 1 := by rw [hA3]; split <;> omega
+  have hA4le : (srun idx s (bodyA cf.base)) 4 ≤ 1 := by rw [hA4]; split <;> omega
+  have hqlt : idx % cf.base.rounds < cf.base.rounds := Nat.mod_lt _ hR
+  have hd2 : 2 ≤ idx % cf.base.rounds + 2 := by omega
+  have hdM : idx % cf.base.rounds + 2 < M := by have := hadm.divLt; omega
+  have hB := bodyB_spec idx (idx % cf.base.rounds + 2) (srun idx s (bodyA cf.base))
+    hAlt hA.2.2.2.1 hd2 hdM hA3le hA4le
+  have hsplit : srun idx s (sqfPrefix cf)
+      = srun idx (srun idx s (bodyA cf.base)) bodyB := by
+    rw [sqfPrefix, srun_append]
+  have hglt : ∀ j, srun idx s (sqfPrefix cf) j < M := by
+    rw [hsplit]; exact srun_lt_of_lt idx bodyB _ hAlt
+  have hTrial : ∀ f : Trial → Nat,
+      f (gB cf.base idx (gA cf.base idx (obs s))).t
+        = f (trialStep (idx % cf.base.rounds + 2)
+            ⟨srun idx s (bodyA cf.base) 2, srun idx s (bodyA cf.base) 3,
+             srun idx s (bodyA cf.base) 4⟩) := by
+    intro f
+    congr 1
+    show trialStep (idx % cf.base.rounds + 2) _ = _
+    congr 1
+    refine Trial.eq_of ?_ ?_ ?_
+    · simp only [gA, obs]; rw [hA.2.2.2.2.2.1]
+    · simp only [gA, obs]; rw [hA3]
+    · simp only [gA, obs]; rw [hA4]
+  refine ⟨hglt, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [hsplit, hB.1, hA.1]
+  · rw [hsplit, hB.2.1, hA.2.1]
+  · rw [hsplit, hB.2.2.1, hA.2.2.1]
+  · rw [hsplit, hB.2.2.2.2.1, hA.2.2.2.2.1]
+  · rw [hsplit, hB.2.2.2.2.2.1, hTrial Trial.res]
+  · rw [hsplit, hB.2.2.2.2.2.2.1, hTrial Trial.sq]
+  · rw [hsplit, hB.2.2.2.2.2.2.2, hTrial Trial.par]
+  · rw [hsplit, hB.2.2.2.2.2.2.1]
+    exact (trialStep_bits _ _ hA3le hA4le).1
+
+#print axioms sqfPrefix_spec
+
 end LeanCompCert.Ports.SquarefreeHeadBlock
