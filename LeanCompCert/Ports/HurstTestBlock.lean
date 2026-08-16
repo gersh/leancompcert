@@ -627,9 +627,15 @@ def hurstBodyC2b (c : Cfg) : List Instr :=
 
 
 open LeanCompCert.Ports.MertensCDEM in
-/-- The substituted body.  The first four stages are CDEM's, unmodified. -/
+/-- CDEM's first four stages, unmodified.  Everything Hurst-specific is in the
+fifth. -/
+def hurstPrefix (c : Cfg) : List Instr :=
+  bodyA c ++ bodyB ++ bodyC1 c ++ bodyC2a c
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The substituted body. -/
 def hurstBody (c : Cfg) : List Instr :=
-  bodyA c ++ bodyB ++ bodyC1 c ++ bodyC2a c ++ hurstBodyC2b c
+  hurstPrefix c ++ hurstBodyC2b c
 
 /-- The test needs registers up to 77. -/
 def hurstRegCount : Nat := 78
@@ -906,5 +912,167 @@ theorem hurstBodyC2b_flag (c : Cfg) (idx : Nat) (s : RegState)
 
 #print axioms hurstBodyC2b_flag
 #print axioms hurstBodyC2b_pres
+
+
+/-! ### The prefix, in the fold's own terms
+
+`MertensCDEM.body_obs` derives everything below inside its own proof and
+exposes none of it, so the four shared stages have to be re-derived here.
+Stating them once as `hurstPrefix_spec` is what keeps the substituted body's
+observation short — and it says exactly what the substitution needs: where the
+candidate, the last-round flag, the updated accumulator and `|M|` live when
+the fifth stage begins. -/
+
+set_option maxHeartbeats 1000000 in
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstPrefix_spec (c : Cfg) (idx : Nat) (s : RegState)
+    (hadm : Admissible c) (hs : ∀ j, s j < M)
+    (h0 : s 0 ≤ 1) (h3 : s 3 ≤ 1) (h4 : s 4 ≤ 1)
+    (hidx : idx < c.len * c.rounds) :
+    (∀ j, srun idx s (hurstPrefix c) j < M)
+      ∧ srun idx s (hurstPrefix c) 0 = s 0
+      ∧ srun idx s (hurstPrefix c) 9 = c.lo + idx / c.rounds
+      ∧ srun idx s (hurstPrefix c) 22
+          = (if idx % c.rounds = c.rounds - 1 then 1 else 0)
+      ∧ srun idx s (hurstPrefix c) 1 = (gstep c idx (obs s)).mo
+      ∧ srun idx s (hurstPrefix c) 2 = (gstep c idx (obs s)).t.res
+      ∧ srun idx s (hurstPrefix c) 3 = (gstep c idx (obs s)).t.sq
+      ∧ srun idx s (hurstPrefix c) 4 = (gstep c idx (obs s)).t.par
+      ∧ srun idx s (hurstPrefix c) 37
+          = absOf c (srun idx s (hurstPrefix c) 1) := by
+  have hR : 0 < c.rounds := hadm.roundsPos
+  have hRM : c.rounds < M := by have := hadm.divLt; omega
+  have hA := bodyA_spec c idx s hadm hs hidx
+  have hAlt : ∀ j, (srun idx s (bodyA c)) j < M := srun_lt_of_lt idx (bodyA c) s hs
+  have hA0 : (srun idx s (bodyA c)) 0 = s 0 := hA.1
+  have hA1 : (srun idx s (bodyA c)) 1 = s 1 := hA.2.1
+  have hA6 : (srun idx s (bodyA c)) 6 = idx % c.rounds := hA.2.2.1
+  have hA7 : (srun idx s (bodyA c)) 7 = idx % c.rounds + 2 := hA.2.2.2.1
+  have hA9 : (srun idx s (bodyA c)) 9 = c.lo + idx / c.rounds := hA.2.2.2.2.1
+  have hA3 : (srun idx s (bodyA c)) 3 = (if idx % c.rounds = 0 then 0 else s 3) :=
+    hA.2.2.2.2.2.2.1
+  have hA4 : (srun idx s (bodyA c)) 4 = (if idx % c.rounds = 0 then 0 else s 4) :=
+    hA.2.2.2.2.2.2.2
+  have hA3le : (srun idx s (bodyA c)) 3 ≤ 1 := by rw [hA3]; split <;> omega
+  have hA4le : (srun idx s (bodyA c)) 4 ≤ 1 := by rw [hA4]; split <;> omega
+  have hqlt : idx % c.rounds < c.rounds := Nat.mod_lt _ hR
+  have hd2 : 2 ≤ idx % c.rounds + 2 := by omega
+  have hdM : idx % c.rounds + 2 < M := by have := hadm.divLt; omega
+  have hB := bodyB_spec idx (idx % c.rounds + 2) (srun idx s (bodyA c)) hAlt hA7 hd2 hdM
+    hA3le hA4le
+  have hBlt : ∀ j, (srun idx (srun idx s (bodyA c)) bodyB) j < M :=
+    srun_lt_of_lt idx bodyB (srun idx s (bodyA c)) hAlt
+  have hBsq : (srun idx (srun idx s (bodyA c)) bodyB) 3 ≤ 1 := by
+    rw [hB.2.2.2.2.2.2.1]; exact (trialStep_bits _ _ hA3le hA4le).1
+  have hBpar : (srun idx (srun idx s (bodyA c)) bodyB) 4 ≤ 1 := by
+    rw [hB.2.2.2.2.2.2.2]; exact (trialStep_bits _ _ hA3le hA4le).2
+  have hC1 := bodyC1_spec c idx (srun idx (srun idx s (bodyA c)) bodyB) hBlt hRM hBsq hBpar
+  have hC1lt : ∀ j, (srun idx (srun idx (srun idx s (bodyA c)) bodyB) (bodyC1 c)) j < M :=
+    srun_lt_of_lt idx (bodyC1 c) (srun idx (srun idx s (bodyA c)) bodyB) hBlt
+  have hlast : (srun idx (srun idx (srun idx s (bodyA c)) bodyB) (bodyC1 c)) 22
+      = (if idx % c.rounds = c.rounds - 1 then 1 else 0) := by
+    rw [hC1.2.2.2.2.2.2.1, hB.2.2.1, hA6]
+  have hC2a := bodyC2a_spec c idx
+    (srun idx (srun idx (srun idx s (bodyA c)) bodyB) (bodyC1 c)) hC1lt hadm.biasLt
+  have hsplit : srun idx s (hurstPrefix c)
+      = srun idx (srun idx (srun idx (srun idx s (bodyA c)) bodyB) (bodyC1 c))
+          (bodyC2a c) := by
+    simp only [hurstPrefix, srun_append]
+  have hglt : ∀ j, srun idx s (hurstPrefix c) j < M := by
+    rw [hsplit]
+    exact srun_lt_of_lt idx (bodyC2a c) _ hC1lt
+  refine ⟨hglt, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [hsplit, hC2a.1, hC1.1, hB.1, hA0]
+  · rw [hsplit, hC2a.2.2.1, hC1.2.2.2.2.2.1, hB.2.2.2.2.1, hA9]
+  · rw [hsplit, hC2a.2.2.2.1, hlast]
+  · rw [hsplit, hC2a.2.1, hC1.2.2.2.2.2.2.2, hB.2.2.1, hA6, hB.2.1, hA1]
+    simp only [gstep, gC, gB, gA, obs]
+    congr 1
+    rw [hB.2.2.2.2.2.1, hB.2.2.2.2.2.2.1, hB.2.2.2.2.2.2.2,
+      hA.2.2.2.2.2.1, hA3, hA4]
+  · rw [hsplit, hC2a.2.2.2.2.1, hC1.2.1, hB.2.2.2.2.2.1]
+    simp only [gstep, gC, gB, gA, obs]
+    rw [hA.2.2.2.2.2.1, hA3, hA4]
+  · rw [hsplit, hC2a.2.2.2.2.2.1, hC1.2.2.1, hB.2.2.2.2.2.2.1]
+    simp only [gstep, gC, gB, gA, obs]
+    rw [hA.2.2.2.2.2.1, hA3, hA4]
+  · rw [hsplit, hC2a.2.2.2.2.2.2.1, hC1.2.2.2.1, hB.2.2.2.2.2.2.2]
+    simp only [gstep, gC, gB, gA, obs]
+    rw [hA.2.2.2.2.2.1, hA3, hA4]
+  · rw [hsplit, hC2a.2.2.2.2.2.2.2, hC2a.2.1]
+
+#print axioms hurstPrefix_spec
+
+
+
+/-! ### The observation equation
+
+With the prefix packaged, the substituted body's observation is the
+composition of two facts and nothing else: the prefix puts the candidate, the
+last-round flag, the updated accumulator and `|M|` where the fifth stage
+expects them, and the fifth stage's flag algebra is `hurstBadOf`.
+
+`hurstCapAdmissible` is the extra config obligation the clamp introduces —
+two inequalities, both about `Cfg` alone. -/
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- What the clamp adds to `MertensCDEM.Admissible`. -/
+structure HurstAdmissible (c : Cfg) : Prop where
+  /-- The clamp constant is a word … -/
+  capLtM : c.cap < M
+  /-- … and survives the ×1000 scale. -/
+  capFit : 1000 * c.cap < M
+  /-- A clamped row can never pass, so clamping is conservative
+  (`hurstCap_engaged_fails`). -/
+  capSound : ∀ X, X < c.lo + c.len → 326041 * X < (1000 * c.cap) * (1000 * c.cap)
+
+open LeanCompCert.Ports.MertensCDEM in
+def hurstStep (c : Cfg) (idx : Nat) (s : RegState) : RegState :=
+  srun idx s (hurstBody c)
+
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 8000 in
+open LeanCompCert.Ports.MertensCDEM in
+/-- **The observation equation for the substituted body.**  One iteration
+advances the abstract state by `hurstGstep`. -/
+theorem hurstBody_obs (c : Cfg) (idx : Nat) (s : RegState)
+    (hadm : Admissible c) (hcap : HurstAdmissible c) (hs : ∀ j, s j < M)
+    (h0 : s 0 ≤ 1) (h3 : s 3 ≤ 1) (h4 : s 4 ≤ 1)
+    (hidx : idx < c.len * c.rounds) :
+    obs (hurstStep c idx s) = hurstGstep c idx (obs s) := by
+  have hp := hurstPrefix_spec c idx s hadm hs h0 h3 h4 hidx
+  have hsplit : hurstStep c idx s
+      = srun idx (srun idx s (hurstPrefix c)) (hurstBodyC2b c) := by
+    simp only [hurstStep, hurstBody, srun_append]
+  have h22le : srun idx s (hurstPrefix c) 22 ≤ 1 := by
+    rw [hp.2.2.2.1]; split <;> omega
+  have hflag := hurstBodyC2b_flag c idx (srun idx s (hurstPrefix c)) hp.1
+    (by rw [hp.2.1]; exact h0) h22le
+    (by rw [hp.2.2.2.2.2.2.2.2]; rfl)
+    hadm.lowerLt hadm.anchorXLt hadm.anchorMLt hcap.capLtM hcap.capFit
+  have hpres := hurstBodyC2b_pres c idx (srun idx s (hurstPrefix c))
+  have hmo : (hurstGstep c idx (obs s)).mo = (gstep c idx (obs s)).mo :=
+    hurstGstep_mo_eq c idx (obs s)
+  have ht : (hurstGstep c idx (obs s)).t = (gstep c idx (obs s)).t :=
+    hurstGstep_t_eq c idx (obs s)
+  have hbad : (hurstGstep c idx (obs s)).bad
+      = hurstBadOf c (c.lo + idx / c.rounds)
+          (if idx % c.rounds = c.rounds - 1 then 1 else 0) (s 0)
+          (gstep c idx (obs s)).mo := rfl
+  refine Abs.eq_of ?_ ?_ (Trial.eq_of ?_ ?_ ?_)
+  · show (hurstStep c idx s) 0 = (hurstGstep c idx (obs s)).bad
+    rw [hsplit, hflag, hp.2.1, hp.2.2.1, hp.2.2.2.1, hp.2.2.2.2.1, hbad,
+      hurstBadOf]
+  · show (hurstStep c idx s) 1 = (hurstGstep c idx (obs s)).mo
+    rw [hsplit, hpres.1, hp.2.2.2.2.1, hmo]
+  · show (hurstStep c idx s) 2 = (hurstGstep c idx (obs s)).t.res
+    rw [hsplit, hpres.2.1, hp.2.2.2.2.2.1, ht]
+  · show (hurstStep c idx s) 3 = (hurstGstep c idx (obs s)).t.sq
+    rw [hsplit, hpres.2.2.1, hp.2.2.2.2.2.2.1, ht]
+  · show (hurstStep c idx s) 4 = (hurstGstep c idx (obs s)).t.par
+    rw [hsplit, hpres.2.2.2, hp.2.2.2.2.2.2.2.1, ht]
+
+#print axioms hurstBody_obs
+
 
 end LeanCompCert.Ports.HurstTestBlock
