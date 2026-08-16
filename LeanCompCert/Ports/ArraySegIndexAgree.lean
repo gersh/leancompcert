@@ -161,6 +161,67 @@ theorem combinedSignals_main_active_schedule
       (by omega) (by omega) hspanM (by omega) hmain (by omega) hidxNe]
   exact hcell j hj
 
+open LeanCompCert.Ports.ArraySegMobiusResidueFold in
+open LeanCompCert.Ports.ArraySegMobiusSquaredFold in
+open LeanCompCert.Ports.MobiusResidueRealisation in
+/-- **One window's schedule**: marking (idle) followed by the main segment.
+Both halves are taken as hypotheses so this composes with whichever phase
+theorem a caller has. -/
+theorem combinedSignals_window_schedule
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k : Nat) (s : AState)
+    (hmark : ConsecutiveSignalSchedule mu lo
+      (combinedSignals idx c k c.markSteps s) 0)
+    (hmain : ConsecutiveSignalSchedule mu lo
+      (combinedSignals (idx + c.markSteps) c k c.segLen
+        (combinedIndexedRun idx c k c.markSteps s)) c.segLen) :
+    ConsecutiveSignalSchedule mu lo
+      (combinedSignals idx c k (c.markSteps + c.segLen) s) c.segLen := by
+  rw [combinedSignals_add]
+  simpa using ConsecutiveSignalSchedule.append hmark (by simpa using hmain)
+
+open LeanCompCert.Ports.ArraySegMobiusResidueFold in
+open LeanCompCert.Ports.ArraySegMobiusSquaredFold in
+open LeanCompCert.Ports.MobiusResidueRealisation in
+/-- **Many windows.**  The whole main run is `W` windows of `markSteps +
+segLen` steps, contributing `segLen` mathematical points each.  This is the
+shape a sharded sweep needs: the count is a parameter, not eight cases.
+
+⚠ Window `t` starts at mathematical prefix `lo + t·segLen`, not `lo` — the
+marking steps advance the machine but not the mathematics, which is exactly
+what `hmark`'s count of `0` records. -/
+theorem combinedSignals_windows_schedule
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k : Nat) :
+    ∀ (W : Nat) (s : AState),
+      (∀ t, t < W →
+        ConsecutiveSignalSchedule mu (lo + t * c.segLen)
+          (combinedSignals (idx + t * (c.markSteps + c.segLen)) c k
+            (c.markSteps + c.segLen)
+            (combinedIndexedRun idx c k (t * (c.markSteps + c.segLen)) s))
+          c.segLen) →
+      ConsecutiveSignalSchedule mu lo
+        (combinedSignals idx c k (W * (c.markSteps + c.segLen)) s)
+        (W * c.segLen) := by
+  intro W
+  induction W with
+  | zero =>
+      intro s _
+      rw [Nat.zero_mul, Nat.zero_mul,
+        show combinedSignals idx c k 0 s = [] from by simp [combinedSignals]]
+      exact ConsecutiveSignalSchedule.nil lo
+  | succ W ih =>
+      intro s h
+      have hsplit : (W + 1) * (c.markSteps + c.segLen)
+          = W * (c.markSteps + c.segLen) + (c.markSteps + c.segLen) :=
+        Nat.succ_mul W (c.markSteps + c.segLen)
+      have harith : (W + 1) * c.segLen = W * c.segLen + c.segLen :=
+        Nat.succ_mul W c.segLen
+      rw [hsplit, combinedSignals_add, harith]
+      exact ConsecutiveSignalSchedule.append (ih s (fun t ht => h t (by omega)))
+        (h W (by omega))
+
+#print axioms combinedSignals_window_schedule
+#print axioms combinedSignals_windows_schedule
+
 #print axioms combinedSignals_main_active_schedule
 
 #print axioms indexedBodyRun_eq_bodyRun
