@@ -58,13 +58,20 @@ open LeanCompCert.Ports.Section413G1Denote
 def scaledAbsG : List Instr :=
   absDiffG 30 31 33 41 42 ++ [Instr.binop 34 .mul (.reg 33) (.lit 1000)]
 
+/-- The left-hand widening square, `(35,36) ← 34·34`. -/
+def wideL : List Instr :=
+  mulWideG 4294967295 4294967296 34 34 35 36 50 51 52 53 54 55 56 57
+
+/-- Load `571² = 326041`. -/
+def constR : List Instr := [Instr.mov 39 (.lit 326041)]
+
+/-- The right-hand widening product, `(37,38) ← 39·32`. -/
+def wideR : List Instr :=
+  mulWideG 4294967295 4294967296 39 32 37 38 50 51 52 53 54 55 56 57
+
 /-- The whole test.  `40` ends as `1` exactly when the inequality holds. -/
 def hurstTestG : List Instr :=
-  scaledAbsG
-  ++ mulWideG 4294967295 4294967296 34 34 35 36 50 51 52 53 54 55 56 57
-  ++ [Instr.mov 39 (.lit 326041)]
-  ++ mulWideG 4294967295 4294967296 39 32 37 38 50 51 52 53 54 55 56 57
-  ++ le128G 35 36 37 38 40 41 42
+  scaledAbsG ++ wideL ++ constR ++ wideR ++ le128G 35 36 37 38 40 41 42
 
 theorem scaledAbsG_noDiv : scaledAbsG.all NoDivI = true := rfl
 
@@ -88,6 +95,91 @@ theorem scaledAbsG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
   have hfit' : ((s 30 : Int) - (s 31 : Int)).natAbs * 1000 < M := by omega
   rw [Nat.mod_eq_of_lt hfit']
   omega
+
+
+/-! ### The assembled block -/
+
+theorem wideL_noDiv : wideL.all NoDivI = true := rfl
+theorem wideR_noDiv : wideR.all NoDivI = true := rfl
+theorem constR_noDiv : constR.all NoDivI = true := rfl
+
+theorem hurstTestG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
+    (hfit : 1000 * ((s 30 : Int) - (s 31 : Int)).natAbs < M) :
+    srun k s hurstTestG 40
+      = (if (1000 * ((s 30 : Int) - (s 31 : Int)).natAbs)
+              * (1000 * ((s 30 : Int) - (s 31 : Int)).natAbs)
+            ≤ 326041 * s 32 then 1 else 0) := by
+  have hMB : M = MulWide.B64 := by decide
+  -- stage 1 : the scaled absolute difference
+  have e1 := scaledAbsG_spec k s hs hfit
+  have w1 : ∀ j, srun k s scaledAbsG j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp scaledAbsG_noDiv i hi) s hs
+  have p1n : srun k s scaledAbsG 32 = s 32 := srun_untouched k 32 _ (by decide) s
+  -- stage 2 : the left widening square
+  have e2 := mulWideG_hl k (srun k s scaledAbsG) 34 34 35 36 50 51 52 53 54 55 56 57
+    (by unfold Distinct8; decide) (by unfold NotIn8; decide)
+    (by unfold NotIn8; decide) (by unfold NotIn8; decide)
+    (by unfold NotIn8; decide) (by decide) w1
+  have w2 : ∀ j, srun k (srun k s scaledAbsG) wideL j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp wideL_noDiv i hi) _ w1
+  have p2n : srun k (srun k s scaledAbsG) wideL 32 = s 32 := by
+    rw [wideL, srun_untouched k 32 _ (by decide)]; exact p1n
+  -- stage 3 : the constant
+  have w3 : ∀ j, srun k (srun k (srun k s scaledAbsG) wideL) constR j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp constR_noDiv i hi) _ w2
+  have e3 : srun k (srun k (srun k s scaledAbsG) wideL) constR 39 = 326041 := by
+    simp only [constR, srun_cons, srun_nil, sdest, sval, denoteOperand,
+      RegState.set, if_true]
+    decide
+  have p3n : srun k (srun k (srun k s scaledAbsG) wideL) constR 32 = s 32 := by
+    rw [srun_untouched k 32 _ (by decide)]; exact p2n
+  have p3lo : srun k (srun k (srun k s scaledAbsG) wideL) constR 35
+      = srun k (srun k s scaledAbsG) wideL 35 := srun_untouched k 35 _ (by decide) _
+  have p3hi : srun k (srun k (srun k s scaledAbsG) wideL) constR 36
+      = srun k (srun k s scaledAbsG) wideL 36 := srun_untouched k 36 _ (by decide) _
+  -- stage 4 : the right widening product
+  have e4 := mulWideG_hl k (srun k (srun k (srun k s scaledAbsG) wideL) constR)
+    39 32 37 38 50 51 52 53 54 55 56 57
+    (by unfold Distinct8; decide) (by unfold NotIn8; decide)
+    (by unfold NotIn8; decide) (by unfold NotIn8; decide)
+    (by unfold NotIn8; decide) (by decide) w3
+  have w4 : ∀ j, srun k (srun k (srun k (srun k s scaledAbsG) wideL) constR) wideR j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp wideR_noDiv i hi) _ w3
+  have p4lo : srun k (srun k (srun k (srun k s scaledAbsG) wideL) constR) wideR 35
+      = srun k (srun k s scaledAbsG) wideL 35 := by
+    rw [wideR, srun_untouched k 35 _ (by decide)]; exact p3lo
+  have p4hi : srun k (srun k (srun k (srun k s scaledAbsG) wideL) constR) wideR 36
+      = srun k (srun k s scaledAbsG) wideL 36 := by
+    rw [wideR, srun_untouched k 36 _ (by decide)]; exact p3hi
+  -- the two 128-bit values
+  have hleft : srun k (srun k (srun k (srun k s scaledAbsG) wideL) constR) wideR 35
+      + M * srun k (srun k (srun k (srun k s scaledAbsG) wideL) constR) wideR 36
+      = (1000 * ((s 30 : Int) - (s 31 : Int)).natAbs)
+        * (1000 * ((s 30 : Int) - (s 31 : Int)).natAbs) := by
+    have hE : srun k s scaledAbsG 34 < MulWide.B64 := by rw [← hMB]; exact w1 34
+    have hspecL := (MulWide.hl_spec (srun k s scaledAbsG 34)
+      (srun k s scaledAbsG 34) hE hE).1
+    rw [p4lo, p4hi, wideL, e2.1, e2.2, hMB, hspecL, e1]
+  have hright : srun k (srun k (srun k (srun k s scaledAbsG) wideL) constR) wideR 37
+      + M * srun k (srun k (srun k (srun k s scaledAbsG) wideL) constR) wideR 38
+      = 326041 * s 32 := by
+    have h39 : srun k (srun k (srun k s scaledAbsG) wideL) constR 39 < MulWide.B64 := by
+      rw [← hMB]; exact w3 39
+    have h32 : srun k (srun k (srun k s scaledAbsG) wideL) constR 32 < MulWide.B64 := by
+      rw [← hMB]; exact w3 32
+    have hspecR := (MulWide.hl_spec
+      (srun k (srun k (srun k s scaledAbsG) wideL) constR 39)
+      (srun k (srun k (srun k s scaledAbsG) wideL) constR 32) h39 h32).1
+    rw [wideR, e4.1, e4.2, hMB, hspecR, e3, p3n]
+  -- the verdict
+  rw [hurstTestG, srun_append, srun_append, srun_append, srun_append,
+    le128G_spec k _ 35 36 37 38 40 41 42 (w4 35) (w4 37)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)]
+  rw [hleft, hright]
+
+#print axioms hurstTestG_spec
 
 #print axioms scaledAbsG_spec
 
