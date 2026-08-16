@@ -181,6 +181,59 @@ theorem hurstTestG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
 
 #print axioms hurstTestG_spec
 
+
+/-! ### The accumulator
+
+The sieve's signal already carries what the accumulator needs.  `muSig` is
+`⟨n, [μ(n) = 1], [μ(n) = −1], 1⟩`, and `readSig` reads those from registers
+`65, 79, 80, 133`.  So the two indicator bits are sitting in `79` and `80`,
+and the update is two adds — no decoding, no comparison, no branch.
+
+That is also why the accumulator is a *pair* of counts rather than a signed
+value: the signal is already split by sign, so keeping it split costs nothing
+and avoids representing negatives in a machine that has none. -/
+
+def hurstAccG : List Instr :=
+  [ Instr.binop 30 .add (.reg 30) (.reg 79)
+  , Instr.binop 31 .add (.reg 31) (.reg 80) ]
+
+theorem hurstAccG_noDiv : hurstAccG.all NoDivI = true := rfl
+
+theorem hurstAccG_spec (k : Nat) (s : RegState)
+    (h30 : s 30 + s 79 < M) (h31 : s 31 + s 80 < M) :
+    srun k s hurstAccG 30 = s 30 + s 79 ∧ srun k s hurstAccG 31 = s 31 + s 80 := by
+  have hsimp : ∀ r : Nat, srun k s hurstAccG r
+      = (if r = 31 then
+            ((if (31 : Nat) = 30 then (s 30 + s 79) % M else s 31)
+              + (if (80 : Nat) = 30 then (s 30 + s 79) % M else s 80)) % M
+          else if r = 30 then (s 30 + s 79) % M else s r) := by
+    intro r
+    simp only [hurstAccG, srun_cons, srun_nil, sdest, sval, denoteOperand,
+      denoteOp, Option.getD_some, RegState.set, if_true]
+  constructor
+  · rw [hsimp 30]
+    simp only [show ¬((30 : Nat) = 31) by decide, if_false, if_pos rfl]
+    exact Nat.mod_eq_of_lt h30
+  · rw [hsimp 31]
+    simp only [if_pos rfl, show ¬((31 : Nat) = 30) by decide,
+      show ¬((80 : Nat) = 30) by decide, if_false]
+    exact Nat.mod_eq_of_lt h31
+
+/-- **What the two counters mean.**  Their difference advances by exactly
+`μ(n)`, which is what makes the split representation track `mertensInt`.
+
+The hypothesis is the only thing needed of `μ`: that it is `-1`, `0` or `1`.
+Nothing about how the sieve produced it enters. -/
+theorem acc_step_int (Spos Sneg : Nat) (mu : Int)
+    (hmu : mu = 1 ∨ mu = 0 ∨ mu = -1) :
+    ((Spos + (if mu = 1 then 1 else 0) : Nat) : Int)
+        - ((Sneg + (if mu = -1 then 1 else 0) : Nat) : Int)
+      = ((Spos : Int) - (Sneg : Int)) + mu := by
+  rcases hmu with h | h | h <;> subst h <;> simp <;> omega
+
+#print axioms hurstAccG_spec
+#print axioms acc_step_int
+
 #print axioms scaledAbsG_spec
 
 end LeanCompCert.Ports.HurstTestBlock
