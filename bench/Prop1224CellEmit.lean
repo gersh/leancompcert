@@ -1,17 +1,22 @@
 import LeanCompCert.Ports.Prop1224Cell
+import LeanCompCert.Verified.ArrayAudit
 
 /-!
 Emission driver for the per-cell margin of `Ports.Prop1224Cell`.
 
 ```
-lake env lean --run bench/Prop1224CellEmit.lean Q PHILO CONSTLO AF KLO KHI LO SEGLEN SEGCOUNT G EX TH T PRIMES OUT
+lake env lean --run bench/Prop1224CellEmit.lean Q PHILO CONSTLO AF KLO KHI LO SEGLEN SEGCOUNT G EX TH T PRIMES OUT [audit]
 ```
 
 `PRIMES` is a comma-separated list of the distinct primes of `Q` (empty for
-`Q = 1`).  `G`, `EX`, `TH`, `T` are the carry-in at `LO − 1`: the running `G_q`
-at scale `2^C`, `⌊log₂(LO−1)⌋`, `2^(⌊log₂(LO−1)⌋+1)`, and
-`⌊2^5·(20000(LO−1))^{1/3}⌋`.  `LO` must exceed `⌊√hi⌋`, so that a cell whose
-radical differs from `r` hides exactly one prime above the root.
+`Q = 1`).  `G`, `EX`, and `TH` are the carry-in at `LO − 1`: the running `G_q`
+at scale `2^C`, `⌊log₂(LO−1)⌋`, and `2^(⌊log₂(LO−1)⌋+1)` (use `EX=0`,
+`TH=2` when `LO=1`).  `T` may instead be seeded at
+`⌊2^5·(20000k₀)^{1/3}⌋`, where `k₀` is the first tested cell.  Production
+rows can start at `LO = 1` with `G = 0`; marking every prime through
+`⌊√hi⌋` makes the factor classification valid over the entire sweep.  Seeding
+the cube-root cursor at the first tested cell is safe because earlier cells do
+not use the margin, and avoids a costly unverified prefix computation.
 
 The driver prints the six result cells:
 
@@ -20,7 +25,7 @@ slot0 G   slot1 cells   slot2 minMargin+2^(C+6)   slot3 cubeRoot
 slot4 ⌊log₂⌋            slot5 violations
 ```
 
-followed by the four failure classes in `slot6 … slot9`, which sum to `slot5`.
+followed by the five failure classes in `slot6 … slot10`, which sum to `slot5`.
 
 ## The emitted `main` carries a verdict
 
@@ -30,13 +35,14 @@ class:
 | exit | class | meaning |
 | ---: | --- | --- |
 | `0` | — | accepted |
-| `1` | `INCONSISTENT` | the four classes do not sum to the aggregate |
+| `1` | `INCONSISTENT` | the five classes do not sum to the aggregate |
 | `2` | `budget_marktable` | the mark cursor had not finished: the sieve was truncated |
 | `3` | `guard_log2` | one `⌊log₂ r⌋` increment did not suffice |
 | `4` | `budget_cuberoot` | the certified cube root was still advanceable |
-| `5` | `margin` | the per-cell margin went negative — the clause failed |
+| `5` | `guard_cuberoot_lower` | the current cube root was not a valid lower bound |
+| `6` | `margin` | the per-cell margin went negative — the clause failed |
 
-The three budgets and guards come first because they retract the run: on those
+The four budgets and guards come first because they retract the run: on those
 cells the margin was not tested at all.
 
 Emission only; no proof obligation is discharged here.
@@ -93,7 +99,7 @@ def verdictDriver (name : String) (cells base slots classBase : Nat)
   "\n#include <stdio.h>\n" ++
   "static uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
-  "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    uint64_t r = l_" ++ name ++ "(cells);\n" ++
   "    uint64_t sum = 0;\n" ++
   "    printf(\"violations %llu\\n\", (unsigned long long)r);\n" ++
   "    for (int i = 0; i < " ++ toString slots ++ "; i++)\n" ++
@@ -106,18 +112,27 @@ def verdictDriver (name : String) (cells base slots classBase : Nat)
   "    printf(\"verdict PASS\\n\");\n" ++
   "    return 0;\n}\n"
 
+def auditDriver (name : String) (cells : Nat) : String :=
+  "\n#include <stdio.h>\n" ++
+  "static uint64_t cells[" ++ toString cells ++ "];\n" ++
+  "int main(void)\n{\n" ++
+  "    uint64_t r = l_" ++ name ++ "(cells);\n" ++
+  "    printf(\"audit %llu\\n\", (unsigned long long)r);\n" ++
+  "    return r == UINT64_C(0) ? 0 : 1;\n}\n"
 
-/-- The four classes, in scan order: the three that retract the run, then the
+
+/-- The five classes, in scan order: the four that retract the run, then the
 margin.  Slot offsets follow `Ports.Prop1224Cell.violRegs`,
-`[Margin, Mark, Log2, Cbrt]`. -/
+`[Margin, Mark, Log2, Cbrt-too-low, Cbrt-too-high]`. -/
 def classes : List Class :=
   [ ("budget_marktable", 1, 2)
   , ("guard_log2", 2, 3)
   , ("budget_cuberoot", 3, 4)
-  , ("margin", 0, 5) ]
+  , ("guard_cuberoot_lower", 4, 5)
+  , ("margin", 0, 6) ]
 
 def parsePrimes (s : String) : List Nat :=
-  (s.splitOn ",").filterMap (fun t => t.trim.toNat?)
+  (s.splitOn ",").filterMap (fun t => t.trimAscii.toString.toNat?)
 
 end Bench.Prop1224CellEmit
 
@@ -125,7 +140,7 @@ open Bench.Prop1224CellEmit in
 def main (args : List String) : IO UInt32 := do
   match args with
   | qS :: plS :: clS :: afS :: kloS :: khiS :: loS :: lenS :: cntS ::
-    gS :: exS :: thS :: tS :: psS :: out :: _ => do
+    gS :: exS :: thS :: tS :: psS :: out :: rest => do
       let nat (s : String) (nm : String) : IO Nat := do
         match s.toNat? with
         | some v => pure v
@@ -144,23 +159,24 @@ def main (args : List String) : IO UInt32 := do
       let th ← nat thS "TH"
       let t ← nat tS "T"
       let c := CellCfg.ofRow q pl cl af klo khi (parsePrimes psS) lo len cnt
-      if lo ≤ c.root then
-        IO.eprintln s!"LO={lo} must exceed floor(sqrt(hi))={c.root}"
-        return 1
       let s : CellSeed := { g := g, ex := ex, th := th, t := t, cells := 0 }
       let p := cellProgram c s
-      let name := s!"P1224CellQ{q}L{len}N{cnt}"
-      match p.emitRolled name with
+      let auditMode := rest.head? = some "audit"
+      let emitted := if auditMode then
+        LeanCompCert.Verified.ArrayAudit.auditProgram p else p
+      let name := s!"P1224CellQ{q}L{len}N{cnt}{if auditMode then "Audit" else ""}"
+      match emitted.emitRolled name with
       | .error errs => (for e in errs do IO.eprintln e); return 1
       | .ok src =>
-          IO.FS.writeFile out
-            (src ++ verdictDriver name p.arrayLen (p.arrayLen - 12) 6 6 classes
-              [] true)
+          let driver := if auditMode then auditDriver name emitted.arrayLen
+            else verdictDriver name p.arrayLen (p.arrayLen - 12) 6 6 classes
+              [] true
+          IO.FS.writeFile out (src ++ driver)
           IO.println s!"q={q} lo={lo} hi={c.hi} root={c.root} name={name}"
           IO.println s!"  tableLen={c.tableLen} markSteps={c.markSteps} period={c.period}"
           IO.println s!"  bodyLen={p.body.length} arrayLen={p.arrayLen} loopCount={p.loopCount}"
           IO.println s!"  instructions={p.body.length * p.loopCount}"
           return 0
   | _ => do
-      IO.eprintln "usage: Q PHILO CONSTLO AF KLO KHI LO SEGLEN SEGCOUNT G EX TH T PRIMES OUT"
+      IO.eprintln "usage: Q PHILO CONSTLO AF KLO KHI LO SEGLEN SEGCOUNT G EX TH T PRIMES OUT [audit]"
       return 1

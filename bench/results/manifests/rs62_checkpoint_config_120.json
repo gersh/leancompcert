@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "date": "2026-08-13",
+  "status": "all 120 compiled configuration checks passed",
+  "scope": "RS62 checkpoint rows 1..120",
+  "checkpoint_count": 120,
+  "sieve_bound": 134,
+  "checked_outputs_per_checkpoint": [
+    "exact_prime_count",
+    "mark_budget_verdict"
+  ],
+  "memory_limits": {
+    "lean_emit": {
+      "high": "768M",
+      "max": "1G",
+      "swap_max": "0"
+    },
+    "ccomp": {
+      "high": "768M",
+      "max": "1G",
+      "swap_max": "0"
+    },
+    "run": {
+      "high": "128M",
+      "max": "256M",
+      "swap_max": "0"
+    }
+  },
+  "timings_seconds": {
+    "emit": 29.382,
+    "compile": 7.685,
+    "run": 5.451
+  },
+  "max_rss_kb": {
+    "emit": 545900,
+    "compile": 16088,
+    "run": 1648
+  },
+  "aggregate_transcript": {
+    "sha256": "ce64237d789dfd1300b9a10862c811feda1112d6b12a00afb8924e37541387b2",
+    "format": "one canonical semicolon-separated line per checkpoint"
+  },
+  "source_artifacts": {
+    "LeanCompCert/Ports/RS62CheckpointManifestData.lean": "79cb0a308ae5f721d9a5e5dc8be2d2de5b50d638fdf90b8798e3e7f712ebfdcf",
+    "bench/RS62CheckpointConfigEmit.lean": "535b53d54f593183065ea1918c03c1a83e127407b4f7aa0c5580efa06ce074ec",
+    "LeanCompCert/Ports/RS62CheckpointConfigCertificate.lean": "1685ea3861b949e06589ddd2c183f4a5f233ee996d4002547f93b72cd3089c8a"
+  },
+  "first_checkpoint": "r001:count 1233;budget 0",
+  "last_checkpoint": "r120:count 2064;budget 0",
+  "trust_note": "Prime enumeration and weighted summation ran only in CompCert-produced C. Lean proves the two array-program denotations and consumes their return words."
+}

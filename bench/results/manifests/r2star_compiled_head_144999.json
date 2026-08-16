@@ -4,8 +4,7 @@
   "scale": 24,
   "range": [3, 144999],
   "memory_policy": {
-    "memory_high": "1300M",
-    "memory_max": "1900M",
+    "memory_max": "64G",
     "memory_swap_max": "0",
     "lean_threads": 1
   },
@@ -22,6 +21,21 @@
         "gcc_peak_rss_kb": 31588
       },
       "run_peak_rss_kb": 1264,
+      "leancompcert_receipt_refresh": {
+        "emitter": "bench/R2DenseHeadProductionEmit.lean",
+        "positive_source_sha256": "ffef6088d2b0e6bc966b9421575cedb033d2b6212a389e973bc5778224f7ee76",
+        "audit_source_sha256": "1992dbec1aeeaf913b95597ed65675f7c807c7555cfb88b713c52b34edf2bf91",
+        "positive_compile_wall_s": 0.17,
+        "positive_compile_peak_rss_kb": 27836,
+        "audit_compile_wall_s": 0.22,
+        "audit_compile_peak_rss_kb": 29436,
+        "positive_run_wall_s": 0.00,
+        "positive_run_peak_rss_kb": 1264,
+        "audit_run_wall_s": 0.00,
+        "audit_run_peak_rss_kb": 1264,
+        "positive_exit": 0,
+        "audit_exit": 0
+      },
       "violations": 0,
       "carry": [
         281475517734600,
@@ -56,6 +70,21 @@
         "gcc_user_s": 0.10,
         "gcc_peak_rss_kb": 6928
       },
+      "leancompcert_receipt_refresh": {
+        "emitter": "bench/R2DenseHeadProductionEmit.lean",
+        "positive_source_sha256": "5f0cbb5d1febaab5ea3a44f88939d1e256d806fa618ba058f2435ffdb5bb7ea2",
+        "audit_source_sha256": "66be3a0f8f2b8b63274a4fbd3f1a446ca4fae71a9498512933ca803084fce003",
+        "positive_compile_wall_s": 0.17,
+        "positive_compile_peak_rss_kb": 29280,
+        "audit_compile_wall_s": 0.17,
+        "audit_compile_peak_rss_kb": 28672,
+        "positive_run_wall_s": 0.14,
+        "positive_run_peak_rss_kb": 6876,
+        "audit_run_wall_s": 0.16,
+        "audit_run_peak_rss_kb": 6860,
+        "positive_exit": 0,
+        "audit_exit": 0
+      },
       "violations": 0,
       "carry": [
         281482090502886,
@@ -73,5 +102,5 @@
     }
   ],
   "cross_compiler_agreement": true,
-  "note": "The second shard consumes the exact eleven-word compiled receipt of the first. Both hosted drivers returned PASS with every failure-class counter zero. Lean constructs and proves the fixed program; it does not fold this numerical range."
+  "note": "The second shard consumes the exact eleven-word compiled receipt of the first. Positive and fail-safe audit binaries for both shards returned zero. R2DenseHeadReceipt.lean uses compiler simulation, audit soundness, and trace determinism to expose the source carry without replaying either numerical fold in Lean."
 }

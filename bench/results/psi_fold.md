@@ -346,6 +346,18 @@ reports an overflow.
 
 **No full-scale run was started.**
 
+### 2026-08-14 proof-oriented multiplier update
+
+The clause-1 products now use two instances of the library's proved generic
+half-limb `u64 × u64 → u128` multiplier.  This replaces the two bespoke
+optimized circuits and increases the body from 246 to 254 instructions without
+changing the exact integer comparison.  Scaling the measured law above by
+`254 / 246` gives **163.6 ns/integer**, or **18.9 CompCert core-days** through
+`10¹³`; the corresponding gcc projection is about **100.5 ns/integer** or
+**11.6 core-days**.  These are conservative projections from the existing
+calibration, not a new full-range run.  The emitted multiplication and
+comparison slices have exact denotation theorems in `PsiSegClauseCheck`.
+
 ## 8. What is built and what is not
 
 Built and proved (`propext, Classical.choice, Quot.sound`, no `sorry`, no

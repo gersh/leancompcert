@@ -1,7 +1,7 @@
 {
   "artifact": "bench/R2RuntimeProductionEmit.lean",
   "purpose": "Production R2* pipeline with all finite scans in CompCert-compiled code",
-  "status": "emission-and-compilation-validated; production execution pending",
+  "status": "production CompCert execution complete",
   "range": [145000, 21000144999],
   "compiled_head_receipt_range": [3, 144999],
   "configuration": {
@@ -24,7 +24,7 @@
     "lean_threads": 1
   },
   "emit": {
-    "command": "lake env lean --run bench/R2RuntimeProductionEmit.lean /tmp/r2_runtime_production.c",
+    "command": "lake env lean --run bench/R2RuntimeProductionEmit.lean positive /tmp/r2_runtime_production.c",
     "wall_s": 0.29,
     "user_s": 0.20,
     "sys_s": 0.09,
@@ -41,6 +41,78 @@
     "binary_bytes": 70800,
     "binary_sha256": "925183f2aa10d86a0bb5d3b7f73e15f6ee1c0a9693b41f97e6bacdd20e3175ed"
   },
+  "run": {
+    "date": "2026-08-13",
+    "command": "/tmp/r2_runtime_production.ccomp",
+    "wall_s": 7456.0,
+    "user_s": 7454.32,
+    "sys_s": 0.01,
+    "cpu_pct": 99,
+    "peak_rss_kb": 30396,
+    "swaps": 0,
+    "exit_status": 0,
+    "stdout": [
+      "mark 0",
+      "count 13415",
+      "receipt 0",
+      "violations 0",
+      "slot0 282485211074226",
+      "slot1 1781404027878",
+      "slot2 21000144997",
+      "slot3 4802318405",
+      "slot4 144914",
+      "slot5 21000357225",
+      "slot6 34",
+      "slot7 34359738368",
+      "slot8 398757432",
+      "slot9 111525658352741",
+      "slot10 0",
+      "slot11 0",
+      "slot12 0",
+      "slot13 0",
+      "slot14 0",
+      "slot15 0",
+      "slot16 0",
+      "slot17 0",
+      "slot18 0",
+      "slot19 0"
+    ]
+  },
+  "audit_run": {
+    "date": "2026-08-13",
+    "command": "/tmp/r2_runtime_audit",
+    "mode": "audit",
+    "source_bytes": 82107,
+    "source_sha256": "07ce0d4771b3fd250c8885eecb4916dbed03f2a66cee7aecee74aaf0f1011d8f",
+    "binary_bytes": 70776,
+    "binary_sha256": "631d9f35a25483ee86344256c96ea3a4292979368e165a4981fff1ff8c1a28f2",
+    "wall_s": 8966.0,
+    "user_s": 8964.48,
+    "sys_s": 0.01,
+    "cpu_pct": 99,
+    "peak_rss_kb": 30380,
+    "swaps": 0,
+    "exit_status": 0,
+    "stdout": [
+      "mark 0",
+      "count 13415",
+      "receipt 0",
+      "audit 0"
+    ],
+    "memory_policy": {
+      "memory_high": "128M",
+      "memory_max": "256M",
+      "memory_swap_max": "0"
+    },
+    "meaning": "The instrumented compiled sweep checked that every partial source operation was defined; generic LeanCompCert audit soundness turns the zero audit verdict into existence of the source run without replaying the fold in Lean."
+  },
+  "control": {
+    "date": "2026-08-13",
+    "mode": "control",
+    "method": "flip bit 0 of packed table cell 100 before the compiled receipt checker",
+    "result": "mark 0; count 13415; receipt 1; exit status 0 (expected rejection observed)",
+    "note": "The control exits before the 221,163,768,000-step sweep, after proving that the shared-memory setup receipt rejects corrupted runtime input."
+  },
   "lean_work": "Emit four rolled verified programs and the hosted driver; no prime enumeration, logarithm table construction, budget scan, head fold, or production sweep is evaluated by Lean.",
   "compiled_work": [
     "root composite marking",
@@ -48,5 +120,15 @@
     "table receipt checking",
     "R2* segmented production sweep"
   ],
-  "note": "The historical full-range result used an emitter-built literal table and head fold. This emitter removes those Lean computations. A new full physical run and its run-admission certificate are still required before replacing the literature atom."
+  "proof": {
+    "physical_setup_receipt": "LeanCompCert.Ports.R2SegSieve.runtimeRootSetup_compcert_run",
+    "physical_to_symbolic_theorem": "LeanCompCert.Ports.R2SegSieve.runtimeRootSetup_source_table",
+    "physical_full_run_receipt": "LeanCompCert.Ports.R2SegSieve.runtimeProduction_compcert_run",
+    "physical_full_run_projection": "LeanCompCert.Ports.R2SegSieve.runtimeProduction_verified_zero_and_endpoint",
+    "physical_audit_receipt": "LeanCompCert.Ports.R2SegSieve.runtimeProductionAudit_compcert_run",
+    "physical_to_source_observation": "LeanCompCert.Ports.R2SegSieve.runtimeProduction_verified_source_observation",
+    "source": "LeanCompCert/Ports/R2RuntimeSetupReceipt.lean; LeanCompCert/Ports/R2RuntimeProductionReceipt.lean; LeanCompCert/Ports/R2RuntimeProductionAuditReceipt.lean",
+    "generic_theorem_axioms": ["propext", "Classical.choice", "Quot.sound"]
+  },
+  "note": "The historical full-range result used an emitter-built literal table and head fold. These runs instead performed root marking, table packing, receipt checking, and all 221,163,768,000 sweep iterations only in CompCert-compiled code. Both the exact positive observation and the fail-safe definedness audit are complete. The remaining formal task is the whole-sweep symbolic telescope from the proved source observation to the paper-shaped finite atom."
 }

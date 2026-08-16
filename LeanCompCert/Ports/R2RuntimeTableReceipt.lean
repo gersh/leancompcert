@@ -269,6 +269,11 @@ theorem rootReceiptEpilogue_defined (s : AState) :
     denoteOperand, denoteOp, AState.writeReg, hbase, hlast, hsentinel,
     hbaseM, hlastM, hsentinelM]
 
+/-- The receipt epilogue only reads the packed table. -/
+theorem rootReceiptEpilogue_arr (s : AState) :
+    (arun 0 s (rootReceiptEpilogue runtimeProductionCfg)).arr = s.arr := by
+  simp [rootReceiptEpilogue, arun, astep, AState.writeReg]
+
 theorem rootReceiptEpilogue_zero (arr : Nat → Nat) (s : AState)
     (harr : s.arr = arr) (hhash : s.regs rrHash = rootReceiptExpectedHash)
     (hok : RootReceiptOK arr) :

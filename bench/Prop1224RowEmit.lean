@@ -1,10 +1,11 @@
 import LeanCompCert.Ports.Prop1224Row
+import LeanCompCert.Verified.ArrayAudit
 
 /-!
 Emission driver for the per-`q` row of `Ports.Prop1224Row`.
 
 ```
-lake env lean --run bench/Prop1224RowEmit.lean LO SEGLEN SEGCOUNT TABLEHI UNROLL ROWS OUT
+lake env lean --run bench/Prop1224RowEmit.lean LO SEGLEN SEGCOUNT TABLEHI UNROLL ROWS OUT [audit]
 ```
 
 `TABLEHI` is the **global** `hi` the mark table is built for — `3300000000` in
@@ -69,7 +70,7 @@ def hostedDriver (name : String) (cells rowBase segLen resultBase lo rows : Nat)
   "\n#include <stdio.h>\n" ++
   "static uint64_t cells[" ++ toString cells ++ "];\n" ++
   "int main(void)\n{\n" ++
-  "    uint64_t r = l_" ++ name ++ "((uint64_t)(uintptr_t)cells);\n" ++
+  "    uint64_t r = l_" ++ name ++ "(cells);\n" ++
   "    uint64_t sum = 0;\n" ++
   "    const uint64_t RB = " ++ toString rowBase ++ ", L = " ++ toString segLen ++
   ", RES = " ++ toString resultBase ++ ", LO = " ++ toString lo ++ ";\n" ++
@@ -103,12 +104,22 @@ def hostedDriver (name : String) (cells rowBase segLen resultBase lo rows : Nat)
   "    printf(\"verdict PASS\\n\");\n" ++
   "    return 0;\n}\n"
 
+/-- Fail-safe driver.  The mechanically audited function returns zero only
+when every partial source operation in the shard was defined. -/
+def auditHostedDriver (name : String) (cells : Nat) : String :=
+  "\n#include <stdio.h>\n" ++
+  "static uint64_t cells[" ++ toString cells ++ "];\n" ++
+  "int main(void)\n{\n" ++
+  "    uint64_t r = l_" ++ name ++ "(cells);\n" ++
+  "    printf(\"audit %llu\\n\", (unsigned long long)r);\n" ++
+  "    return r == UINT64_C(0) ? 0 : 1;\n}\n"
+
 end Bench.Prop1224RowEmit
 
 open Bench.Prop1224RowEmit in
 def main (args : List String) : IO UInt32 := do
   match args with
-  | loS :: lenS :: cntS :: thiS :: unrS :: rowsS :: out :: _ => do
+  | loS :: lenS :: cntS :: thiS :: unrS :: rowsS :: out :: rest => do
       let nat (s : String) (nm : String) : IO Nat := do
         match s.toNat? with
         | some v => pure v
@@ -128,13 +139,17 @@ def main (args : List String) : IO UInt32 := do
       if !tableOK thi then
         IO.eprintln "a packed mark-table field does not round-trip"; return 1
       let p := rowProgram c
-      let name := s!"P1224RowLo{lo}L{len}N{cnt}U{unr}"
-      match p.emitRolled name with
+      let auditMode := rest.head? = some "audit"
+      let emitted := if auditMode then
+        LeanCompCert.Verified.ArrayAudit.auditProgram p else p
+      let name := s!"P1224RowLo{lo}L{len}N{cnt}U{unr}{if auditMode then "Audit" else ""}"
+      match emitted.emitRolled name with
       | .error errs => (for e in errs do IO.eprintln e); return 1
       | .ok src =>
-          IO.FS.writeFile out
-            (src ++ hostedDriver name p.arrayLen c.rowBase c.segLen c.resultBase
-              lo (min rows len))
+          let driver := if auditMode then auditHostedDriver name emitted.arrayLen
+            else hostedDriver name p.arrayLen c.rowBase c.segLen c.resultBase
+              lo (min rows len)
+          IO.FS.writeFile out (src ++ driver)
           IO.println s!"lo={lo} hi={c.hi} tableHi={thi} root={Nat.sqrt thi} name={name}"
           IO.println s!"  primes={c.entries} markSteps={c.markSteps} slots={c.slots} \
 smallQ={c.smallQ} roundsPerSlot={c.roundsPerSlot}"
@@ -145,5 +160,5 @@ instructions={p.body.length * p.loopCount}"
           IO.println s!"  instrPerRow={(p.body.length * p.loopCount) / (c.segLen * c.segCount)}"
           return 0
   | _ => do
-      IO.eprintln "usage: LO SEGLEN SEGCOUNT TABLEHI UNROLL ROWS OUT"
+      IO.eprintln "usage: LO SEGLEN SEGCOUNT TABLEHI UNROLL ROWS OUT [audit]"
       return 1

@@ -589,6 +589,40 @@ def PsiCfg.compactBody (c : PsiCfg) : List AInstr :=
 
 /-! ## Phase four: the logarithm and the two clauses -/
 
+/-- The standard proved half-limb `u64 x u64 -> u128` circuit.  Keeping this
+literal here avoids making the production emitter depend on the much larger
+CDEM port; `PsiSegClauseCheck` proves it is exactly the generic
+`Verified.MulWide.hl` realization. -/
+def psiMulWideBody
+    (ra rb rlo rhi s0 s1 s2 s3 s4 s5 s6 s7 : Nat) : List AInstr :=
+  [ .scalar (.binop s0 .band (.reg ra) (.lit 4294967295))
+  , .scalar (.binop s1 .lshr (.reg ra) (.lit 32))
+  , .scalar (.binop s2 .band (.reg rb) (.lit 4294967295))
+  , .scalar (.binop s3 .lshr (.reg rb) (.lit 32))
+  , .scalar (.binop s4 .mul (.reg s0) (.reg s2))
+  , .scalar (.binop s5 .mul (.reg s0) (.reg s3))
+  , .scalar (.binop s6 .mul (.reg s1) (.reg s2))
+  , .scalar (.binop s7 .mul (.reg s1) (.reg s3))
+  , .scalar (.binop s0 .add (.reg s5) (.reg s6))
+  , .scalar (.binop s1 .lt (.reg s0) (.reg s5))
+  , .scalar (.binop s2 .shl (.reg s0) (.lit 32))
+  , .scalar (.binop rlo .add (.reg s4) (.reg s2))
+  , .scalar (.binop s3 .lt (.reg rlo) (.reg s4))
+  , .scalar (.binop s5 .lshr (.reg s0) (.lit 32))
+  , .scalar (.binop s6 .mul (.reg s1) (.lit 4294967296))
+  , .scalar (.binop rhi .add (.reg s7) (.reg s5))
+  , .scalar (.binop rhi .add (.reg rhi) (.reg s6))
+  , .scalar (.binop rhi .add (.reg rhi) (.reg s3)) ]
+
+/-- Exact `V^2` limbs used by clause 1. -/
+def upperSquareBody : List AInstr :=
+  psiMulWideBody 402 402 410 414 403 404 405 406 407 408 409 411
+
+/-- Exact `cUp16^2 * n` limbs used by clause 1. -/
+def PsiCfg.upperRhsBody (c : PsiCfg) : List AInstr :=
+  [ .scalar (.mov 415 (.lit (cUp16Sq c.sc))) ] ++
+    psiMulWideBody 415 rNe 428 431 416 417 418 419 420 421 422 423
+
 def PsiCfg.logBody (c : PsiCfg) : List AInstr :=
   [ -- the stream entry under the read cursor
     .scalar (.binop 240 .shl (.reg rEcur) (.lit 1))
@@ -740,41 +774,11 @@ def PsiCfg.logBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 400 .gt (.reg 337) (.lit (bias16Of c.sc)))
   , .scalar (.binop 401 .sub (.reg 337) (.lit (bias16Of c.sc)))
   , .scalar (.binop 402 .mul (.reg 401) (.reg 400))        -- V
-    -- V², 128 bits.  `rVAcc`'s guard keeps `V < 2^(S+8)`, so at `S ≤ 48` the
-    -- doubled cross term `2·vh·vl` is below `2^57` and does not wrap.
-  , .scalar (.binop 403 .lshr (.reg 402) (.lit 32))        -- vh
-  , .scalar (.binop 404 .band (.reg 402) (.lit 4294967295))-- vl
-  , .scalar (.binop 405 .mul (.reg 404) (.reg 404))        -- vl²
-  , .scalar (.binop 406 .mul (.reg 403) (.reg 404))        -- vh·vl
-  , .scalar (.binop 407 .mul (.reg 403) (.reg 403))        -- vh²
-  , .scalar (.binop 408 .add (.reg 406) (.reg 406))        -- 2·vh·vl
-  , .scalar (.binop 409 .shl (.reg 408) (.lit 32))
-  , .scalar (.binop 410 .add (.reg 405) (.reg 409))        -- (V²).lo
-  , .scalar (.binop 411 .lt (.reg 410) (.reg 405))         -- carry out
-  , .scalar (.binop 412 .lshr (.reg 408) (.lit 32))
-  , .scalar (.binop 413 .add (.reg 407) (.reg 412))
-  , .scalar (.binop 414 .add (.reg 413) (.reg 411))        -- (V²).hi
-    -- cUp16²·n, 128 bits, from four `32×32` products.  The multiplier's two
-    -- halves are emit-time literals; `cUp16Fits` is why they are 32 bits.
-  , .scalar (.binop 415 .lshr (.reg rNe) (.lit 32))        -- nh
-  , .scalar (.binop 416 .band (.reg rNe) (.lit 4294967295))-- nl
-  , .scalar (.binop 417 .mul (.reg 416) (.lit (cUp16SqLo c.sc)))
-  , .scalar (.binop 418 .mul (.reg 416) (.lit (cUp16SqHi c.sc)))
-  , .scalar (.binop 419 .mul (.reg 415) (.lit (cUp16SqLo c.sc)))
-  , .scalar (.binop 420 .mul (.reg 415) (.lit (cUp16SqHi c.sc)))
-  , .scalar (.binop 421 .lshr (.reg 417) (.lit 32))
-  , .scalar (.binop 422 .add (.reg 418) (.reg 421))
-  , .scalar (.binop 423 .band (.reg 422) (.lit 4294967295))
-  , .scalar (.binop 424 .lshr (.reg 422) (.lit 32))
-  , .scalar (.binop 425 .add (.reg 419) (.reg 423))
-  , .scalar (.binop 426 .band (.reg 417) (.lit 4294967295))
-  , .scalar (.binop 427 .shl (.reg 425) (.lit 32))
-  , .scalar (.binop 428 .bor (.reg 427) (.reg 426))        -- (C²n).lo
-  , .scalar (.binop 429 .lshr (.reg 425) (.lit 32))
-  , .scalar (.binop 430 .add (.reg 420) (.reg 424))
-  , .scalar (.binop 431 .add (.reg 430) (.reg 429))        -- (C²n).hi
+  ] ++ upperSquareBody ++ c.upperRhsBody ++
+  [ -- Both products above use the library's proved half-limb circuit.  The
+    -- comparison below is the ordinary lexicographic order on their limbs.
     -- the 128-bit comparison; the two disjuncts are disjoint, so `add` is `or`
-  , .scalar (.binop 432 .gt (.reg 414) (.reg 431))
+    .scalar (.binop 432 .gt (.reg 414) (.reg 431))
   , .scalar (.binop 433 .eq (.reg 414) (.reg 431))
   , .scalar (.binop 434 .gt (.reg 410) (.reg 428))
   , .scalar (.binop 435 .mul (.reg 433) (.reg 434))

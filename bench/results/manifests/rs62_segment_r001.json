@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-08-13",
+  "purpose": "first paper checkpoint of the compiled RS62 segmented prime-mask and ladder campaign",
+  "configuration": {
+    "checkpoint": "r001",
+    "lo": 100000001,
+    "seg_len": 984459,
+    "hi": 100984459,
+    "bootstrap_bound": 1000,
+    "bootstrap_prime_count": 168,
+    "root_cap": 10050,
+    "main_prime_count": 1233,
+    "mark_steps": 2446707,
+    "mark_loop_count": 5877873,
+    "ladder_loop_count": 984459,
+    "initial_lower": 386481147529431,
+    "initial_upper": 386487029388140,
+    "expected_lower": 386630652868483,
+    "expected_upper": 386636534780568,
+    "array_cells": 2954628,
+    "bytes_per_array": 23637024
+  },
+  "memory_scope": {
+    "workers": 1,
+    "lean_memory_high": "3G",
+    "lean_memory_max": "4G",
+    "compile_memory_high": "1G",
+    "compile_memory_max": "2G",
+    "run_memory_high": "128M",
+    "run_memory_max": "256M",
+    "swap_max": 0
+  },
+  "proof": {
+    "theorem": "LeanCompCert.Ports.RS62SegmentedReceipt.source_loopE_of_segmentReceipt",
+    "source_sha256": "27b4c19079409c13453101429c39656dbda5a7c6778e9a92be1ece7bfac6b8b7",
+    "target_build": "pass",
+    "axioms": ["propext", "Classical.choice", "Quot.sound"]
+  },
+  "emission": {
+    "command": "lake env lean --run bench/RS62SegmentedPipelineEmit.lean 100000001 984459 10050 1233 2446707 386481147529431 386487029388140 386630652868483 386636534780568 /tmp/rs62_segmented_r001.c",
+    "wall_seconds": 0.44,
+    "max_rss_kib": 583192,
+    "c_bytes": 117835,
+    "c_sha256": "51a7afef5dbefad8f4e443dadd81014a50a9c057dc0e076333c95590c7d8b93f",
+    "emitter_sha256": "be30a1dd34e70046ae5d131d78aa7ea8cbdecfa2e1ca11f02af7b29d3acb6b9f"
+  },
+  "compcert": {
+    "version": "3.17",
+    "command": "ccomp -O2 /tmp/rs62_segmented_r001.c -o /tmp/rs62_segmented_r001",
+    "wall_seconds": 0.17,
+    "user_seconds": 0.14,
+    "system_seconds": 0.01,
+    "max_rss_kib": 26400,
+    "binary_bytes": 70872,
+    "binary_sha256": "a691ab3e28bfe6e3f23a9627f163e8310b1f3cb04c2af3b2f732147aeaef9bf0"
+  },
+  "compiled_run": {
+    "command": "/tmp/rs62_segmented_r001",
+    "wall_seconds": 0.27,
+    "user_seconds": 0.22,
+    "system_seconds": 0.02,
+    "max_rss_kib": 32000,
+    "exit_status": 0,
+    "mark_audit": 0,
+    "mark": 0,
+    "normalize": 0,
+    "ladder_audit": 0,
+    "lower": 386630652868483,
+    "upper": 386636534780568,
+    "reference": "bit-for-bit agreement with the retained r001 source checkpoint"
+  },
+  "proof_boundary": "The physical receipt theorem converts this six-stage CompCert trace into the exact RS62 source recurrence without evaluating the segment fold in Lean. A separate finite compiled configuration receipt must still prove the schedule literals before registeredReplay can be retired."
+}

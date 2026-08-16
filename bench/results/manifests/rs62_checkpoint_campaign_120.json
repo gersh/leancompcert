@@ -1,0 +1,55 @@
+{
+  "schema": 2,
+  "date": "2026-08-13",
+  "status": "all 120 compiled checkpoint and overflow checks passed",
+  "scope": "RS62 checkpoint rows 1..120",
+  "checkpoint_count": 120,
+  "checked_outputs_per_checkpoint": [
+    "mark_audit",
+    "mark",
+    "normalize",
+    "ladder_overflow",
+    "ladder_audit",
+    "lower",
+    "upper"
+  ],
+  "memory_limits": {
+    "lean_emit": {
+      "high": "768M",
+      "max": "1G",
+      "swap_max": "0"
+    },
+    "ccomp": {
+      "high": "768M",
+      "max": "1G",
+      "swap_max": "0"
+    },
+    "run": {
+      "high": "128M",
+      "max": "256M",
+      "swap_max": "0"
+    }
+  },
+  "timings_seconds": {
+    "emit": 47.599,
+    "compile": 22.836,
+    "run": 59.592
+  },
+  "max_rss_kb": {
+    "emit": 607376,
+    "compile": 27712,
+    "run": 100000
+  },
+  "aggregate_transcript": {
+    "sha256": "7a8e329d6c55872c8aa1508ea1c66095214e159d2f53cbb0b36599e85ab23adb",
+    "format": "one canonical semicolon-separated line per checkpoint"
+  },
+  "source_artifacts": {
+    "LeanCompCert/Ports/RS62CheckpointManifestData.lean": "79cb0a308ae5f721d9a5e5dc8be2d2de5b50d638fdf90b8798e3e7f712ebfdcf",
+    "bench/RS62SegmentedPipelineEmit.lean": "65d1269e79d88c5eb0b89e413ce4050457d8e0178942186f4946db80226a4b2e",
+    "LeanCompCert/Ports/RS62PrimeMaskLadderOverflow.lean": "7e29ab269dd4ea2537bb83bc56b906366b3536852c9b996bd44594112b4eb5fe"
+  },
+  "first_checkpoint": "r001:mark_audit 0;mark 0;norm 0;overflow 0;ladder_audit 0;lower 386630652868483;upper 386636534780568",
+  "last_checkpoint": "r120:mark_audit 0;mark 0;norm 0;overflow 0;ladder_audit 0;lower 403894059638590;upper 403899953215277",
+  "trust_note": "Every range-dependent loop ran in CompCert-produced code. The overflow stage checks the actual normalized prime mask; Lean does not evaluate the checkpoint folds."
+}

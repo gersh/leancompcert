@@ -517,8 +517,11 @@ def rG : Nat := 116
 def rGmax : Nat := 118
 def rGmin : Nat := 123
 
-/-- `c = ⌊(6/π²)·2^cdemScale⌋`, computed once at emit time. -/
-def cdemC : Nat := sixOverPiSqScaled cdemScale
+/-- The pinned downward-rounded fixed-point coefficient for `6/π²` at scale
+`2^cdemScale`.  Keeping the emitted literal here avoids evaluating a Machin
+series while elaborating every production configuration; its two required
+real enclosures are proved in the consumer bridge. -/
+def cdemC : Nat := 41776432333
 
 def mertensResidue : List AInstr :=
   [ .scalar (.binop 101 .add (.reg rM) (.reg 79))
@@ -628,6 +631,28 @@ def hurstA : Nat := 571 * 2 ^ 32 / 1000
 both CDEM clauses. -/
 def cdemB (bNum bDen : Nat) : Nat := bNum * 2 ^ cdemScale / bDen
 
+/-- The literal six-instruction Hurst comparison used inside
+`mertensLiveResidue`, named so its semantics can be proved without expanding
+the complete Mertens/squarefree residue. -/
+def hurstLiveCheckBlock : List AInstr :=
+  [ .scalar (.binop 154 .mul (.reg rS) (.lit hurstA))
+  , .scalar (.binop 155 .lshr (.reg 154) (.lit 32))
+  , .scalar (.binop 156 .add (.lit mertensBias) (.reg 155))
+  , .scalar (.binop 157 .sub (.lit mertensBias) (.reg 155))
+  , .scalar (.binop 158 .gt (.reg rM) (.reg 156))
+  , .scalar (.binop 159 .lt (.reg rM) (.reg 157)) ]
+
+/-- The literal six-instruction CDEM squarefree comparison used inside
+`mertensLiveResidue`, named so its exact semantics can be proved independently
+of the complete segmented residue. -/
+def squarefreeLiveCheckBlock (bNum bDen : Nat) : List AInstr :=
+  [ .scalar (.binop 160 .mul (.reg rS) (.lit (cdemB bNum bDen)))
+  , .scalar (.binop 161 .add (.lit gBias) (.reg 160))
+  , .scalar (.binop 162 .add (.lit (gBias + cdemC + 1)) (.reg 65))
+  , .scalar (.binop 163 .sub (.reg 162) (.reg 160))
+  , .scalar (.binop 164 .gt (.reg rG) (.reg 161))
+  , .scalar (.binop 165 .lt (.reg rG) (.reg 163)) ]
+
 /-- Mertens and squarefree with the four clauses tested at every integer.
 Register `65` holds `n`, `133` gates the main accumulation phase; the count
 of failed tests accumulates in `rViol`, which the epilogue moves to the
@@ -650,23 +675,9 @@ def mertensLiveResidue (bNum bDen : Nat) : List AInstr :=
   , .scalar (.binop 152 .add (.reg 151) (.lit 1))
   , .scalar (.binop 153 .mul (.reg 150) (.reg 152))
   , .scalar (.binop rSq .add (.reg rSq) (.reg 153))
-    -- Hurst: |M(n)| ≤ 0.571·√n
-  , .scalar (.binop 154 .mul (.reg rS) (.lit hurstA))
-  , .scalar (.binop 155 .lshr (.reg 154) (.lit 32))
-  , .scalar (.binop 156 .add (.lit mertensBias) (.reg 155))
-  , .scalar (.binop 157 .sub (.lit mertensBias) (.reg 155))
-  , .scalar (.binop 158 .gt (.reg rM) (.reg 156))
-  , .scalar (.binop 159 .lt (.reg rM) (.reg 157))
-    -- CDEM clause 1, `G ≤ b·2^k·√n`, and clause 2,
-    -- `G ≥ c + n + 1 − b·2^k·√n`
-  , .scalar (.binop 160 .mul (.reg rS) (.lit (cdemB bNum bDen)))
-  , .scalar (.binop 161 .add (.lit gBias) (.reg 160))
-  , .scalar (.binop 162 .add (.lit (gBias + cdemC + 1)) (.reg 65))
-  , .scalar (.binop 163 .sub (.reg 162) (.reg 160))
-  , .scalar (.binop 164 .gt (.reg rG) (.reg 161))
-  , .scalar (.binop 165 .lt (.reg rG) (.reg 163))
-    -- the aggregate, gated to the main accumulation phase …
-  , .scalar (.binop 166 .add (.reg 158) (.reg 159))
+  ] ++ hurstLiveCheckBlock ++ squarefreeLiveCheckBlock bNum bDen ++
+  [ -- the aggregate, gated to the main accumulation phase …
+    .scalar (.binop 166 .add (.reg 158) (.reg 159))
   , .scalar (.binop 167 .add (.reg 164) (.reg 165))
   , .scalar (.binop 168 .add (.reg 166) (.reg 167))
   , .scalar (.binop 169 .mul (.reg 168) (.reg 133))
@@ -1533,10 +1544,9 @@ set_option maxRecDepth 20000000 in
 set_option maxHeartbeats 4000000 in
 example : (liveProbe rQ).denote = some (refQ 1 24) := by decide
 
--- `G` is not kernel-checked here: `cdemC` is a Machin computation of `π` at
--- 128 bits, and reducing it once per fold step costs more than the check is
--- worth.  `G` is checked instead against `bench/ref_seg.c`, which carries the
--- identical fixed-point convention, at `10⁸` and at `lo = 10¹⁰` (slot 2).
+-- The real enclosures for the pinned `cdemC` literal are proved in the
+-- consumer bridge.  The runtime `G` recurrence is checked separately against
+-- `bench/ref_seg.c` at `10⁸` and at `lo = 10¹⁰` (slot 2).
 
 -- The incrementally maintained `⌊√n⌋` reaches `⌊√24⌋ = 4`.
 set_option maxRecDepth 20000000 in

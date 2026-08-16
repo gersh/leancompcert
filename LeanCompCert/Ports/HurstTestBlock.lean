@@ -631,23 +631,100 @@ theorem hurstBodyC2b_pres (c : Cfg) (idx : Nat) (s : RegState) :
 
 /-! ### The flag algebra
 
-The remaining half of the stage spec — that register 0 becomes
-`hurstBadOf c (s 9) (s 22) (s 0) (s 1)` — is **not proved here**.
+Simpler than `MertensCDEM`'s: there is no `cap`, so no case split on whether
+the clamp bites and no lemma that a clamped comparison stays inside a word.
 
-It mirrors `MertensCDEM.bodyC2b_spec`, and is in fact simpler: there is no
-`cap`, so no case split on whether the clamp bites and no lemma that a
-clamped comparison stays inside a word.  What it needs is the same
-`0`/`1` mod-arithmetic over the flag registers, driven off
-`hurstRowG_spec`'s verdict in register 66 and the four preserved reads
-`p0`/`p1`/`p9`/`p22` that `hurstBodyC2b_dest` already licenses.
+The verdict has to be resolved into an explicitly-typed `have` **before** any
+`simp` touches the goal — `rw ... at *` fails here, because the verdict's `if`
+sits under a binder in the unfolded `srun` chain and the motive does not
+typecheck. -/
 
-⚠ The obstacle is mechanical rather than mathematical: rewriting the verdict
-into the goal has to avoid `rw ... at *`, which produces a
-motive-not-type-correct error because the verdict's `if` appears under a
-binder in the unfolded `srun` chain.  `MertensCDEM` handles the analogous
-step by pre-computing every mod identity as a named `have` and firing one
-large `simp only`; the same shape should work here. -/
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBodyC2b_flag (c : Cfg) (idx : Nat) (s : RegState)
+    (hs : ∀ j, s j < M) (h0 : s 0 ≤ 1) (h22 : s 22 ≤ 1)
+    (h37 : s 37 = absOfBias c.bias (s 1))
+    (hlowM : c.lower < M) (haxM : c.anchorX < M) (hamM : c.anchorM < M)
+    (hfit : 1000 * s 37 < M) :
+    srun idx s (hurstBodyC2b c) 0
+      = s 0 ||| (if HurstRowFail c.lower (s 9) (s 1) c.bias
+                     ∨ AnchorFail c (s 9) (s 1)
+                 then s 22 else 0) := by
+  have hrow := hurstRowG_spec idx s hs hfit
+  rw [h37] at hrow
+  have hw : ∀ j, srun idx s hurstRowG j < M :=
+    srun_lt idx _ (fun i hi => List.all_eq_true.mp hurstRowG_noDiv i hi) s hs
+  have p0 : srun idx s hurstRowG 0 = s 0 := srun_untouched idx 0 _ (by decide) s
+  have p1 : srun idx s hurstRowG 1 = s 1 := srun_untouched idx 1 _ (by decide) s
+  have p9 : srun idx s hurstRowG 9 = s 9 := srun_untouched idx 9 _ (by decide) s
+  have p22 : srun idx s hurstRowG 22 = s 22 := srun_untouched idx 22 _ (by decide) s
+  have hlow' : c.lower % M = c.lower := Nat.mod_eq_of_lt hlowM
+  have hax' : c.anchorX % M = c.anchorX := Nat.mod_eq_of_lt haxM
+  have ham' : c.anchorM % M = c.anchorM := Nat.mod_eq_of_lt hamM
+  have h1c : (1 : Nat) % M = 1 := by decide
+  have h0c : (0 : Nat) % M = 0 := by decide
+  have hb1 : (1 + (M - 1)) % M = 0 := by decide
+  have hb0 : (1 + (M - 0)) % M = 1 := by decide
+  have hbit : ∀ (P : Prop) (inst : Decidable P),
+      (@ite _ P inst (1 : Nat) 0) % M = @ite _ P inst 1 0 := by
+    intro P inst
+    cases inst
+    · exact h0c
+    · exact h1c
+  have hor1 : ∀ (P : Prop) (inst : Decidable P),
+      (1 ||| (@ite _ P inst (1 : Nat) 0)) % M = 1 := by
+    intro P inst
+    cases inst
+    · show (1 ||| (0 : Nat)) % M = 1
+      decide
+    · show (1 ||| (1 : Nat)) % M = 1
+      decide
+  have hone : ∀ (P : Prop) (inst : Decidable P),
+      (1 ||| (@ite _ P inst (1 : Nat) 0)) = 1 := by
+    intro P inst
+    cases inst
+    · show (1 ||| (0 : Nat)) = 1
+      decide
+    · show (1 ||| (1 : Nat)) = 1
+      decide
+  have hor2 : ∀ (P : Prop) (inst : Decidable P),
+      ((@ite _ P inst (1 : Nat) 0) ||| 1) % M = 1 := by
+    intro P inst
+    cases inst
+    · show ((0 : Nat) ||| 1) % M = 1
+      decide
+    · show ((1 : Nat) ||| 1) % M = 1
+      decide
+  rw [hurstBodyC2b, srun_append]
+  unfold HurstRowFail AnchorFail
+  by_cases hineq : (1000 * absOfBias c.bias (s 1)) * (1000 * absOfBias c.bias (s 1))
+      ≤ 326041 * s 9
+  · have h66 : srun idx s hurstRowG 66 = 1 := by rw [hrow, if_pos hineq]
+    simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
+      Option.getD_some, RegState.set, if_true, reduceIte, reduceCtorEq,
+      Nat.reduceEqDiff, h66, p0, p1, p9, p22,
+      hlow', hax', ham', h1c, h0c, hb1, hb0]
+    have e0 : s 0 = 0 ∨ s 0 = 1 := by omega
+    have e22 : s 22 = 0 ∨ s 22 = 1 := by omega
+    by_cases hax : s 9 = c.anchorX <;>
+      by_cases ham : s 1 = c.anchorM <;>
+      by_cases hlow : c.lower ≤ s 9 <;>
+      rcases e0 with q0 | q0 <;> rcases e22 with q22 | q22 <;>
+      simp_all [hbit, hor1, hor2, hone]
+  · have h66 : srun idx s hurstRowG 66 = 0 := by rw [hrow, if_neg hineq]
+    simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
+      Option.getD_some, RegState.set, if_true, reduceIte, reduceCtorEq,
+      Nat.reduceEqDiff, h66, p0, p1, p9, p22,
+      hlow', hax', ham', h1c, h0c, hb1, hb0]
+    have e0 : s 0 = 0 ∨ s 0 = 1 := by omega
+    have e22 : s 22 = 0 ∨ s 22 = 1 := by omega
+    by_cases hax : s 9 = c.anchorX <;>
+      by_cases ham : s 1 = c.anchorM <;>
+      by_cases hlow : c.lower ≤ s 9 <;>
+      rcases e0 with q0 | q0 <;> rcases e22 with q22 | q22 <;>
+      simp_all [hbit, hor1, hor2, hone]
 
 #print axioms scaledAbsG_spec
+
+#print axioms hurstBodyC2b_flag
 
 end LeanCompCert.Ports.HurstTestBlock

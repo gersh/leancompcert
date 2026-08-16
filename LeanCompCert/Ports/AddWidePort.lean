@@ -1,5 +1,6 @@
 import LeanCompCert.Verified.AddWide
 import LeanCompCert.Verified.ArrayBridge
+import LeanCompCert.Verified.InstrBlock
 
 /-!
 # The two-limb accumulator as a program of the proved fragment
@@ -43,6 +44,7 @@ open LeanCompCert
 open LeanCompCert.Proof
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.AddWide
+open LeanCompCert.Verified.InstrBlock
 
 /-- The register machine's modulus is the limb base. -/
 theorem M_eq_B64 : M = B64 := by decide
@@ -108,6 +110,13 @@ being taken after. -/
 def subWideLoBody (rLo rHi rC rA : Nat) : List Instr :=
   [ .binop rC .lt (.reg rLo) (.reg rA)
   , .binop rLo .sub (.reg rLo) (.reg rA)
+  , .binop rHi .sub (.reg rHi) (.reg rC) ]
+
+/-- Subtract a full two-limb operand with a borrow chain. -/
+def subWideBody (rLo rHi rC rAlo rAhi : Nat) : List Instr :=
+  [ .binop rC .lt (.reg rLo) (.reg rAlo)
+  , .binop rLo .sub (.reg rLo) (.reg rAlo)
+  , .binop rHi .sub (.reg rHi) (.reg rAhi)
   , .binop rHi .sub (.reg rHi) (.reg rC) ]
 
 /-! ## Denotation -/
@@ -249,6 +258,85 @@ theorem subWideLoBody_denote (rLo rHi rC rA : Nat)
   · intro j hjLo hjHi hjC
     rw [set_ne _ _ hjHi, set_ne _ _ hjLo, set_ne _ _ hjC]
 
+/-- The four-instruction full subtraction computes `subWide`. -/
+theorem subWideBody_denote (rLo rHi rC rAlo rAhi : Nat)
+    (hr : WideRegs rLo rHi rC rAlo rAhi) (index : Nat) (s : RegState) :
+    ∃ s' : RegState,
+      denoteInstrs index s (subWideBody rLo rHi rC rAlo rAhi) = some s' ∧
+      s' rLo = (subWide (s rLo, s rHi) (s rAlo, s rAhi)).1 ∧
+      s' rHi = (subWide (s rLo, s rHi) (s rAlo, s rAhi)).2 ∧
+      ∀ j, j ≠ rLo → j ≠ rHi → j ≠ rC → s' j = s j := by
+  obtain ⟨hloHi, hloC, hhiC, haloLo, haloHi, haloC,
+    hahiLo, hahiHi, hahiC⟩ := hr
+  simp only [subWideBody]
+  rw [denote_cons index rC .lt (.reg rLo) (.reg rAlo) s _
+      (if s rLo < s rAlo then 1 else 0) rfl]
+  rw [denote_cons index rLo .sub (.reg rLo) (.reg rAlo) _ _
+      ((s rLo + (M - s rAlo)) % M) (by
+        simp only [denoteOp, denoteOperand]
+        rw [set_ne _ _ hloC, set_ne _ _ haloC])]
+  rw [denote_cons index rHi .sub (.reg rHi) (.reg rAhi) _ _
+      ((s rHi + (M - s rAhi)) % M) (by
+        simp only [denoteOp, denoteOperand]
+        rw [set_ne _ _ (Ne.symm hloHi), set_ne _ _ hhiC,
+          set_ne _ _ hahiLo, set_ne _ _ hahiC])]
+  rw [denote_cons index rHi .sub (.reg rHi) (.reg rC) _ _
+      (((s rHi + (M - s rAhi)) % M +
+        (M - (if s rLo < s rAlo then 1 else 0))) % M) (by
+        simp only [denoteOp, denoteOperand]
+        rw [set_self, set_ne _ _ (Ne.symm hhiC),
+          set_ne _ _ (Ne.symm hloC), set_self])]
+  refine ⟨_, rfl, ?_, ?_, ?_⟩
+  · rw [set_ne _ _ hloHi, set_ne _ _ hloHi, set_self]
+    simp only [subWide, M_eq_B64]
+  · rw [set_self]
+    simp only [subWide, M_eq_B64]
+  · intro j hjLo hjHi hjC
+    rw [set_ne _ _ hjHi, set_ne _ _ hjHi, set_ne _ _ hjLo,
+      set_ne _ _ hjC]
+
+theorem subWideBody_run (rLo rHi rC rAlo rAhi index : Nat)
+    (hr : WideRegs rLo rHi rC rAlo rAhi) (s : RegState) :
+    let out := srun index s (subWideBody rLo rHi rC rAlo rAhi)
+    (out rLo, out rHi) = subWide (s rLo, s rHi) (s rAlo, s rAhi) ∧
+      ∀ j, j ≠ rLo → j ≠ rHi → j ≠ rC → out j = s j := by
+  have hnodiv : ∀ i ∈ subWideBody rLo rHi rC rAlo rAhi,
+      NoDivI i = true := by
+    intro i hi
+    simp only [subWideBody, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl | rfl <;> rfl
+  have hm := srun_correct index _ hnodiv s
+  obtain ⟨s', hd, hlo, hhi, hf⟩ :=
+    subWideBody_denote rLo rHi rC rAlo rAhi hr index s
+  have heq : s' = srun index s (subWideBody rLo rHi rC rAlo rAhi) := by
+    apply Option.some.inj
+    exact hd.symm.trans hm
+  subst s'
+  exact ⟨Prod.ext hlo hhi, hf⟩
+
+/-- Array-program consumers use the same scalar runner under `lift`; expose
+the one-word addition in the same compositional form as full subtraction. -/
+theorem addWideLoBody_run (rLo rHi rC rA index : Nat)
+    (hloHi : rLo ≠ rHi) (hloC : rLo ≠ rC) (hhiC : rHi ≠ rC)
+    (haLo : rA ≠ rLo) (haHi : rA ≠ rHi) (haC : rA ≠ rC)
+    (s : RegState) (hhi : s rHi < M) :
+    let out := srun index s (addWideLoBody rLo rHi rC rA)
+    (out rLo, out rHi) = addWideLo (s rLo, s rHi) (s rA) ∧
+      ∀ j, j ≠ rLo → j ≠ rHi → j ≠ rC → out j = s j := by
+  have hnodiv : ∀ i ∈ addWideLoBody rLo rHi rC rA,
+      NoDivI i = true := by
+    intro i hi
+    simp only [addWideLoBody, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl <;> rfl
+  have hm := srun_correct index _ hnodiv s
+  obtain ⟨s', hd, hlo, hhi', hf⟩ := addWideLoBody_denote
+    rLo rHi rC rA hloHi hloC hhiC haLo haHi haC index s hhi
+  have heq : s' = srun index s (addWideLoBody rLo rHi rC rA) := by
+    apply Option.some.inj
+    exact hd.symm.trans hm
+  subst s'
+  exact ⟨Prod.ext hlo hhi', hf⟩
+
 /-! ## Well-formedness, and the `AProgram` form
 
 `AInstr.scalar` embeds a fragment instruction verbatim, so the same four
@@ -264,6 +352,11 @@ def addWideLoABody (rLo rHi rC rA : Nat) : List Verified.ArrayState.AInstr :=
 
 def subWideLoABody (rLo rHi rC rA : Nat) : List Verified.ArrayState.AInstr :=
   (subWideLoBody rLo rHi rC rA).map Verified.ArrayState.AInstr.scalar
+
+def subWideABody (rLo rHi rC rAlo rAhi : Nat) :
+    List Verified.ArrayState.AInstr :=
+  (subWideBody rLo rHi rC rAlo rAhi).map
+    Verified.ArrayState.AInstr.scalar
 
 theorem addWideBody_wf (regCount rLo rHi rC rAlo rAhi : Nat)
     (h1 : rLo < regCount) (h2 : rHi < regCount) (h3 : rC < regCount)

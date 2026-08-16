@@ -71,6 +71,55 @@ noncomputable def rootTrialPrimeCount : Nat → Nat
     rootTrialPrimeCount (q + 1) = rootTrialPrimeCount q +
       if RootTrialComposite (q + 2) then 0 else 1 := rfl
 
+/-- Inside the production root range, the mathematical table rank increments
+exactly at primes.  This reformulates the bounded-divisor counter in the
+source-facing prime language without evaluating any prefix. -/
+theorem rootTrialPrimeCount_succ_prime (q : Nat)
+    (hq : q < runtimeRoot - 1) :
+    rootTrialPrimeCount (q + 1) = rootTrialPrimeCount q +
+      if LeanCompCert.Verified.PackedSieve.IsPrime (q + 2) then 1 else 0 := by
+  classical
+  rw [rootTrialPrimeCount_succ]
+  have hx2 : 2 ≤ q + 2 := by omega
+  have hxRoot : q + 2 ≤ runtimeRoot := by omega
+  have hcomp := rootTrialComposite_iff_not_prime hx2 hxRoot
+  by_cases hp : LeanCompCert.Verified.PackedSieve.IsPrime (q + 2)
+  · have hc : ¬ RootTrialComposite (q + 2) :=
+      fun h => hcomp.mp h hp
+    simp [hp, hc]
+  · have hc : RootTrialComposite (q + 2) := by
+      apply Classical.byContradiction
+      intro hncomp
+      have hprime : LeanCompCert.Verified.PackedSieve.IsPrime (q + 2) :=
+        Classical.not_not.mp (fun hnprime => hncomp (hcomp.mpr hnprime))
+      exact hp hprime
+    simp [hp, hc]
+
+/-- Every rank below a finite prime-count prefix is occupied by a unique
+candidate that is prime.  The existence form is the part needed by the
+production cursor invariant; it is proved by symbolic induction on an
+arbitrary prefix and does not construct the production table. -/
+theorem exists_prime_of_lt_rootTrialPrimeCount (limit i : Nat)
+    (hlimit : limit ≤ runtimeRoot - 1)
+    (hi : i < rootTrialPrimeCount limit) :
+    ∃ q, q < limit ∧
+      LeanCompCert.Verified.PackedSieve.IsPrime (q + 2) ∧
+      rootTrialPrimeCount q = i := by
+  induction limit with
+  | zero => simp at hi
+  | succ q ih =>
+      have hqRoot : q < runtimeRoot - 1 := by omega
+      rw [rootTrialPrimeCount_succ_prime q hqRoot] at hi
+      by_cases hp : LeanCompCert.Verified.PackedSieve.IsPrime (q + 2)
+      · simp only [hp, if_pos] at hi
+        by_cases hbelow : i < rootTrialPrimeCount q
+        · obtain ⟨p, hpq, hpPrime, hpRank⟩ := ih (by omega) hbelow
+          exact ⟨p, by omega, hpPrime, hpRank⟩
+        · have hrank : rootTrialPrimeCount q = i := by omega
+          exact ⟨q, by omega, hp, hrank⟩
+      · simp only [hp] at hi
+        obtain ⟨p, hpq, hpPrime, hpRank⟩ := ih (by omega) hi
+        exact ⟨p, by omega, hpPrime, hpRank⟩
 /-- The compiled root-marker cells induce exactly the mathematical bounded
 trial-prime rank, proved symbolically for any prefix. -/
 theorem rootPackCount_marked_eq_trial (q : Nat) (hq : q ≤ runtimeRoot - 1) :
@@ -452,6 +501,85 @@ theorem rootPackLoopState_write_count (arr : Nat → Nat) :
         (rootPackN (r2RootPackProgram runtimeProductionCfg).loopCount - 2) := h
     _ = rootPackCount arr (runtimeRoot - 1) := congrArg _ hfinal
 
+/-- The sentinel epilogue does not alter the table write cursor. -/
+theorem rootPackEpilogue_rpWrite (s :
+    LeanCompCert.Verified.ArrayState.AState) :
+    (LeanCompCert.Verified.ArrayFoldBridge.arun 0 s
+      (rootPackEpilogue runtimeProductionCfg)).regs rpWrite =
+        s.regs rpWrite := by
+  simp [rootPackEpilogue, arun, astep, sval, sdest, denoteOperand,
+    AState.writeReg, AState.writeArr_regs, rpWrite]
+
+/-- Name the definitional handoff from the symbolic loop state to the packed
+state.  Keeping the configuration generic prevents elaboration from reducing
+the concrete production loop count while later proofs rewrite this seam. -/
+theorem rootPackedState_eq_loop_epilogue (c : R2Cfg) (arr : Nat → Nat) :
+    rootPackedState c arr =
+      arun 0 (rootPackLoopState c arr) (rootPackEpilogue c) := by
+  rfl
+
+/-- Exact source result of the production packer.  This strengthens the
+older existential execution theorem with the named symbolic output state;
+the production fold remains opaque. -/
+theorem rootPackProduction_runFromArray_exact (arr : Nat → Nat) :
+    (r2RootPackProgram runtimeProductionCfg).runFromArray arr =
+      some (rootPackedState runtimeProductionCfg arr) := by
+  rw [rootPackedState_eq_loop_epilogue]
+  exact rootPackRunFromArray_of_stages runtimeProductionCfg arr
+    (rootPackStartedState arr)
+    (rootPackLoopState runtimeProductionCfg arr)
+    (arun 0 (rootPackLoopState runtimeProductionCfg arr)
+      (rootPackEpilogue runtimeProductionCfg))
+    (rootPackStartedState_denote runtimeProductionCfg arr)
+    (rootPackLoopState_denote runtimeProductionCfg arr
+      runtimeProductionCfg_rootPackSafe)
+    (rootPackLoopState_epilogue_denote runtimeProductionCfg arr
+      runtimeProductionCfg_rootPackSafe)
+
+/-- The exact selected-candidate count survives the packer epilogue. -/
+theorem rootPackedState_write_count (arr : Nat → Nat) :
+    (rootPackedState runtimeProductionCfg arr).regs rpWrite =
+      rootPackCount arr (runtimeRoot - 1) := by
+  rw [rootPackedState_eq_loop_epilogue]
+  rw [rootPackEpilogue_rpWrite]
+  exact rootPackLoopState_write_count arr
+
+/-- The epilogue writes its inert sentinel at the current write cursor. -/
+theorem rootPackEpilogue_arr_at_write
+    (c : R2Cfg) (s : LeanCompCert.Verified.ArrayState.AState)
+    (hword : s.regs rpWrite + c.tableBase < M) :
+    (arun 0 s (rootPackEpilogue c)).arr
+        (s.regs rpWrite + c.tableBase) =
+      packEntry 1 0 0 := by
+  have haddrMod : (s.regs rpWrite + c.tableBase) % M =
+      s.regs rpWrite + c.tableBase := Nat.mod_eq_of_lt hword
+  have hpack : packEntry 1 0 0 < M := by decide
+  have hpackMod : packEntry 1 0 0 % M = packEntry 1 0 0 :=
+    Nat.mod_eq_of_lt hpack
+  simp [rootPackEpilogue, arun, astep, sval, sdest, denoteOperand,
+    denoteOp, AState.writeReg, AState.writeArr, haddrMod, hpackMod]
+
+/-- The packer epilogue writes the exact inert sentinel immediately after
+the last selected prime.  This is the terminal row used by the main sweep's
+clamped cursor. -/
+theorem rootPackedState_sentinel (arr : Nat → Nat) :
+    (rootPackedState runtimeProductionCfg arr).arr
+        (runtimeProductionCfg.tableBase +
+          rootPackCount arr (runtimeRoot - 1)) = packEntry 1 0 0 := by
+  rw [rootPackedState_eq_loop_epilogue]
+  have hcount := rootPackLoopState_write_count arr
+  have hwrite :
+      (rootPackLoopState runtimeProductionCfg arr).regs rpWrite +
+          runtimeProductionCfg.tableBase < M := by
+    rw [hcount]
+    have hc := rootPackCount_le arr (runtimeRoot - 1)
+    have hlayout : runtimeRoot + runtimeProductionCfg.tableBase < M := by decide
+    omega
+  rw [← hcount]
+  rw [Nat.add_comm runtimeProductionCfg.tableBase]
+  exact rootPackEpilogue_arr_at_write runtimeProductionCfg
+    (rootPackLoopState runtimeProductionCfg arr) hwrite
+
 /-- The sentinel-writing epilogue preserves every other array cell. -/
 theorem rootPackEpilogue_arr_of_ne (s : LeanCompCert.Verified.ArrayState.AState)
     (x : Nat)
@@ -534,11 +662,124 @@ theorem rootProductionPackedState_table_entry (q : Nat)
       (rootMarkedState runtimeProductionCfg (fun _ => 0)).arr).arr x)
     haddr |>.trans hentry
 
+/-- Source-facing form of the production table theorem: every ordinary prime
+in the complete root interval occurs at its exact prime rank with its exact
+fixed-log packed entry. -/
+theorem rootProductionPackedState_prime_entry (q : Nat)
+    (hq : q < runtimeRoot - 1)
+    (hprime : LeanCompCert.Verified.PackedSieve.IsPrime (q + 2)) :
+    (rootPackedState runtimeProductionCfg
+      (rootMarkedState runtimeProductionCfg (fun _ => 0)).arr).arr
+        (runtimeProductionCfg.tableBase + rootTrialPrimeCount q) =
+      packEntry (q + 2)
+        (LeanCompCert.Ports.PsiSegSieve.lnFix runtimeScale (q + 2)) 1 := by
+  have hx2 : 2 ≤ q + 2 := by omega
+  have hxRoot : q + 2 ≤ runtimeRoot := by omega
+  apply rootProductionPackedState_table_entry q hq
+  intro hcomp
+  exact (rootTrialComposite_iff_not_prime hx2 hxRoot).mp hcomp hprime
+
+/-- The compiled production table's terminal cursor is the exact symbolic
+number of primes in the root interval. -/
+theorem rootProductionPackedState_write_count :
+    (rootPackedState runtimeProductionCfg
+      (rootMarkedState runtimeProductionCfg (fun _ => 0)).arr).regs rpWrite =
+        rootTrialPrimeCount (runtimeRoot - 1) := by
+  rw [rootPackedState_write_count]
+  exact rootPackCount_marked_eq_trial (runtimeRoot - 1) (Nat.le_refl _)
+
+/-- Production specialization of the terminal sentinel theorem. -/
+theorem rootProductionPackedState_sentinel :
+    (rootPackedState runtimeProductionCfg
+      (rootMarkedState runtimeProductionCfg (fun _ => 0)).arr).arr
+        (runtimeProductionCfg.tableBase +
+          rootTrialPrimeCount (runtimeRoot - 1)) = packEntry 1 0 0 := by
+  have h := rootPackedState_sentinel
+    (rootMarkedState runtimeProductionCfg (fun _ => 0)).arr
+  rw [rootPackCount_marked_eq_trial (runtimeRoot - 1) (Nat.le_refl _)] at h
+  exact h
+
+/-- Cursor-facing completeness theorem.  Every resident table index below
+the compiled terminal cursor names an actual prime, at its exact rank, and
+the corresponding array word is the verified fixed-log packed entry.  The
+proof is independent of the production table length and performs no table
+construction in Lean. -/
+theorem rootProductionPackedState_entry_of_index (i : Nat)
+    (hi : i < (rootPackedState runtimeProductionCfg
+      (rootMarkedState runtimeProductionCfg (fun _ => 0)).arr).regs rpWrite) :
+    ∃ q, q < runtimeRoot - 1 ∧
+      LeanCompCert.Verified.PackedSieve.IsPrime (q + 2) ∧
+      rootTrialPrimeCount q = i ∧
+      (rootPackedState runtimeProductionCfg
+        (rootMarkedState runtimeProductionCfg (fun _ => 0)).arr).arr
+          (runtimeProductionCfg.tableBase + i) =
+        packEntry (q + 2)
+          (LeanCompCert.Ports.PsiSegSieve.lnFix runtimeScale (q + 2)) 1 := by
+  rw [rootProductionPackedState_write_count] at hi
+  obtain ⟨q, hq, hprime, hrank⟩ :=
+    exists_prime_of_lt_rootTrialPrimeCount (runtimeRoot - 1) i
+      (Nat.le_refl _) hi
+  refine ⟨q, hq, hprime, hrank, ?_⟩
+  rw [← hrank]
+  exact rootProductionPackedState_prime_entry q hq hprime
+
+/-! ## Cursor-facing packed-word decoding -/
+
+/-- The low field of a packed runtime table word is its prime value. -/
+theorem packEntry_value_decode (v w : Nat) (hv : v < 2 ^ valBits) :
+    packEntry v w 1 &&& maskVal = v := by
+  rw [maskVal, Nat.and_two_pow_sub_one_eq_mod]
+  have hshape : packEntry v w 1 =
+      v + 2 ^ valBits * (w + 2 ^ wtBits) := by
+    simp only [packEntry, Nat.one_mul, valBits, wtBits]
+    omega
+  rw [hshape, Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt hv]
+
+/-- Word safety forces the middle field of a production packed word to fit
+the declared 28-bit logarithmic-weight lane. -/
+theorem packEntry_weight_lt (v w : Nat) (hword : packEntry v w 1 < M) :
+    w < 2 ^ wtBits := by
+  simp only [packEntry, Nat.one_mul, valBits, wtBits, M] at hword ⊢
+  omega
+
+/-- The middle field of a word-safe packed runtime table word is its exact
+fixed-log weight. -/
+theorem packEntry_weight_decode (v w : Nat) (hv : v < 2 ^ valBits)
+    (hword : packEntry v w 1 < M) :
+    ((packEntry v w 1 >>> valBits) &&& maskWt) = w := by
+  have hw : w < 2 ^ wtBits := packEntry_weight_lt v w hword
+  have hshape : packEntry v w 1 =
+      v + 2 ^ valBits * (w + 2 ^ wtBits) := by
+    simp only [packEntry, Nat.one_mul, valBits, wtBits]
+    omega
+  rw [hshape, Nat.shiftRight_eq_div_pow,
+    Nat.add_mul_div_left _ _ (Nat.pow_pos (by decide)),
+    Nat.div_eq_of_lt hv, Nat.zero_add, maskWt,
+    Nat.and_two_pow_sub_one_eq_mod]
+  calc
+    (w + 2 ^ wtBits) % 2 ^ wtBits = w % 2 ^ wtBits := by
+      rw [show 2 ^ wtBits = 2 ^ wtBits * 1 by omega]
+      exact Nat.add_mul_mod_self_left w (2 ^ wtBits) 1
+    _ = w := Nat.mod_eq_of_lt hw
+
 #print axioms rootPackAaNext_finish_eq_logFrac
 #print axioms rootPackLnValue_finish_eq_lnFix
+#print axioms rootTrialPrimeCount_succ_prime
+#print axioms exists_prime_of_lt_rootTrialPrimeCount
 #print axioms rootPackModelStep_finish_selected
 #print axioms rootPackModelFold_tableInvariant
 #print axioms rootPackedState_table_entry
+#print axioms rootPackProduction_runFromArray_exact
+#print axioms rootPackedState_write_count
+#print axioms rootPackEpilogue_arr_at_write
+#print axioms rootPackedState_sentinel
 #print axioms rootProductionPackedState_table_entry
+#print axioms rootProductionPackedState_prime_entry
+#print axioms rootProductionPackedState_write_count
+#print axioms rootProductionPackedState_sentinel
+#print axioms rootProductionPackedState_entry_of_index
+#print axioms packEntry_value_decode
+#print axioms packEntry_weight_lt
+#print axioms packEntry_weight_decode
 
 end LeanCompCert.Ports.R2SegSieve

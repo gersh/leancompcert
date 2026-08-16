@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-08-13",
+  "purpose": "production-shaped compiled RS62 segmented prime-mask and linear-ladder control",
+  "configuration": {
+    "lo": 1000001,
+    "seg_len": 1000000,
+    "hi": 2000000,
+    "bootstrap_bound": 1000,
+    "bootstrap_prime_count": 168,
+    "root_cap": 1414,
+    "main_prime_count": 223,
+    "mark_steps": 2245029,
+    "mark_loop_count": 5490058,
+    "ladder_loop_count": 1000000,
+    "initial_lower": 0,
+    "initial_upper": 0,
+    "array_cells": 3000241,
+    "bytes_per_array": 24001928
+  },
+  "memory_scope": {
+    "workers": 1,
+    "lean_memory_high": "3G",
+    "lean_memory_max": "4G",
+    "compile_memory_high": "1G",
+    "compile_memory_max": "2G",
+    "run_memory_high": "128M",
+    "run_memory_max": "256M",
+    "swap_max": 0
+  },
+  "proof_target": {
+    "target": "LeanCompCert.Ports.RS62SegmentedPrimeMask",
+    "direct_wall_seconds": 0.48,
+    "direct_user_seconds": 0.82,
+    "direct_system_seconds": 0.07,
+    "direct_max_rss_kib": 601536,
+    "result": "pass",
+    "axioms": ["propext", "Classical.choice", "Quot.sound"]
+  },
+  "emission": {
+    "command": "lake env lean --run bench/RS62SegmentedPipelineEmit.lean 1000001 1000000 1414 223 2245029 0 0 13782256097335 13782256167786 /tmp/rs62_segmented_smoke.c",
+    "c_bytes": 106054,
+    "c_sha256": "9821c711ba06ee6340390eacdf3083746bb8b40e658089d7b1b07516c3476954",
+    "emitter_sha256": "6152da65a5bd030142dfbcbd12c18e65168c61b6a77813fd27de4b4cc6b7803"
+  },
+  "compcert": {
+    "version": "3.17",
+    "command": "ccomp -O2 /tmp/rs62_segmented_smoke.c -o /tmp/rs62_segmented_smoke",
+    "wall_seconds": 0.18,
+    "user_seconds": 0.12,
+    "system_seconds": 0.03,
+    "max_rss_kib": 24988,
+    "binary_sha256": "fbea5eb2901f520ee34be6c968f7cd6bec1277f510f60f7d493d4796c7945c0a"
+  },
+  "compiled_run": {
+    "command": "/tmp/rs62_segmented_smoke",
+    "wall_seconds": 0.25,
+    "user_seconds": 0.21,
+    "system_seconds": 0.01,
+    "max_rss_kib": 32480,
+    "exit_status": 0,
+    "audit": 0,
+    "mark": 0,
+    "normalize": 0,
+    "lower": 13782256097335,
+    "upper": 13782256167786,
+    "reference": "bit-for-bit agreement with the independent GMP loopE model over [1000001, 2000000]"
+  },
+  "proof_boundary": "The mark-only segmented sieve, zero/nonzero normalizer, and linear mask ladder have foundations-only source refinements. The end-to-end theorem source_loopE_of_compiled_pipeline proves that successful compiled stages imply the exact RS62 loopE recurrence without evaluating the production range in Lean. This smoke run validates the production shape; the concrete configuration receipt and complete checkpoint campaign remain before registeredReplay can be retired."
+}

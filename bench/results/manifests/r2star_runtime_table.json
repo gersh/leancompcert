@@ -53,11 +53,12 @@
     "exit_status": 1
   },
   "proof": {
-    "source": "LeanCompCert/Ports/R2RuntimeTableReceipt.lean",
-    "soundness_theorem": "LeanCompCert.Ports.R2SegSieve.rootReceiptProduction_compiled_zero_sound",
-    "axioms": ["propext", "Quot.sound"],
+    "source": "LeanCompCert/Ports/R2RuntimeSetupReceipt.lean",
+    "soundness_theorem": "LeanCompCert.Ports.R2SegSieve.runtimeRootSetup_source_table",
+    "run_specialization": "LeanCompCert.Ports.R2SegSieve.runtimeRootSetup_verified_table",
+    "axioms": ["propext", "Classical.choice", "Quot.sound"],
     "source_check_wall_s": 1.54,
     "source_check_peak_rss_kb": 628260
   },
-  "status": "The mark, pack, checksum, and accepting receipt are all LeanCompCert programs. Symbolic Lean proofs connect receipt zero to the compact table property without evaluating any production fold. Shared-memory setup composition is proved; the main R2 sweep refinement remains active."
+  "status": "The mark, pack, checksum, and accepting receipt are all LeanCompCert programs. The retained physical three-stage run is represented by one narrow receipt axiom, and compiler simulation plus symbolic source proofs connect it to the compact table property without evaluating any production fold. The main R2 sweep refinement remains active."
 }
