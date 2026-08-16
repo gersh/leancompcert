@@ -140,20 +140,24 @@ third and last one, and the only one that carries information.
 `hcell` is the emitted-cell equation — `readSig_windowRun_main_cell_eq_rootFoldValue`'s
 conclusion — taken as a hypothesis rather than restated with its twenty-one
 side conditions about table, budget and cursor.  Everything between it and the
-schedule is the index bookkeeping proved above. -/
+schedule is the index bookkeeping proved above.
+
+★ `fuel` is a parameter rather than `c.segLen`: a *partial* window is what
+event-level coverage needs, since an interpreted event generally sits inside a
+segment rather than at its end. -/
 theorem combinedSignals_main_active_schedule
-    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k : Nat)
+    (mu : Nat → Int) (lo idx : Nat) (c : Cfg) (k fuel : Nat)
     (combined core : AState)
     (hagree : CoreAgree combined core)
     (hspanM : c.rootSpan < M) (hmain : c.rootSpan ≤ idx)
-    (hspanPos : 0 < c.rootSpan) (hidxM : idx + c.segLen < M)
-    (hcell : ∀ i, i < c.segLen →
+    (hspanPos : 0 < c.rootSpan) (hidxM : idx + fuel < M)
+    (hcell : ∀ i, i < fuel →
       readSig (arun idx (bodyRun idx c i core) c.coreBody)
         = muSig mu (lo + i + 1)) :
     ConsecutiveSignalSchedule mu lo
-      (combinedSignals idx c k c.segLen combined) c.segLen := by
+      (combinedSignals idx c k fuel combined) fuel := by
   have hidxNe : idx ≠ c.rootSpan - 1 := by omega
-  refine combinedSignals_schedule_of_active mu lo idx c k c.segLen combined
+  refine combinedSignals_schedule_of_active mu lo idx c k fuel combined
     (fun j hj => ?_)
   rw [readSig_combinedIndexedRun_eq_indexedBodyRun idx c k j hagree,
     indexedBodyRun_eq_bodyRun c idx hspanM hmain hidxNe j (by omega) core,
