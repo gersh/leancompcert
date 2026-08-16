@@ -234,6 +234,50 @@ theorem acc_step_int (Spos Sneg : Nat) (mu : Int)
 #print axioms hurstAccG_spec
 #print axioms acc_step_int
 
+
+/-! ### The scalar body
+
+Accumulate, then test — in that order, so the verdict is about the counters
+*after* this point is folded in.  This is the whole non-sieve half of the
+body; composing it with the emitted sieve is separate and larger, since
+`readSig_windowRun_main_cell_eq_rootFoldValue` carries twenty-one hypotheses
+about the table, the budget and the cursor. -/
+
+def hurstBodyG : List Instr := hurstAccG ++ hurstTestG
+
+theorem hurstBodyG_noDiv : hurstBodyG.all NoDivI = true := rfl
+
+theorem hurstBodyG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
+    (h30 : s 30 + s 79 < M) (h31 : s 31 + s 80 < M)
+    (hfit : 1000 * (((s 30 + s 79 : Nat) : Int)
+        - ((s 31 + s 80 : Nat) : Int)).natAbs < M) :
+    srun k s hurstBodyG 30 = s 30 + s 79
+      ∧ srun k s hurstBodyG 31 = s 31 + s 80
+      ∧ srun k s hurstBodyG 40
+          = (if (1000 * (((s 30 + s 79 : Nat) : Int)
+                  - ((s 31 + s 80 : Nat) : Int)).natAbs)
+                * (1000 * (((s 30 + s 79 : Nat) : Int)
+                  - ((s 31 + s 80 : Nat) : Int)).natAbs)
+              ≤ 326041 * s 32 then 1 else 0) := by
+  obtain ⟨a30, a31⟩ := hurstAccG_spec k s h30 h31
+  have wA : ∀ j, srun k s hurstAccG j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp hurstAccG_noDiv i hi) s hs
+  have a32 : srun k s hurstAccG 32 = s 32 := srun_untouched k 32 _ (by decide) s
+  have hfit' : 1000 * (((srun k s hurstAccG 30 : Nat) : Int)
+      - ((srun k s hurstAccG 31 : Nat) : Int)).natAbs < M := by
+    rw [a30, a31]; exact hfit
+  have hT := hurstTestG_spec k (srun k s hurstAccG) wA hfit'
+  rw [a30, a31, a32] at hT
+  refine ⟨?_, ?_, ?_⟩
+  · rw [hurstBodyG, srun_append, srun_untouched k 30 hurstTestG (by decide)]
+    exact a30
+  · rw [hurstBodyG, srun_append, srun_untouched k 31 hurstTestG (by decide)]
+    exact a31
+  · rw [hurstBodyG, srun_append]
+    exact hT
+
+#print axioms hurstBodyG_spec
+
 #print axioms scaledAbsG_spec
 
 end LeanCompCert.Ports.HurstTestBlock
