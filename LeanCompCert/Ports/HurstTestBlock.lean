@@ -314,6 +314,121 @@ theorem hurstBodyA_spec (k : Nat) (s : ArrayState.AState)
 
 #print axioms hurstBodyA_spec
 
+
+/-! ### The row test as a drop-in for `MertensCDEM.bodyC2b`
+
+`Ports/MertensCDEM.lean` is a complete, both-arrows-proved Mertens sieve, and
+its stage `bodyC2a` already leaves `|M(X)|` in register 37 with the candidate
+`X` in register 9.  Its `bodyC2b` then tests the *linear* Cohen–Dress–El
+Marraki row inequality `den·|M| + slack ≤ X`.
+
+Hurst differs only in the shape of that test — `(1000·|M|)² ≤ 571²·X` — so the
+whole sieve, the biased accumulator and the sharding are reusable and only the
+row test changes.  `hurstRowG` is that replacement, on registers 60+ so it
+cannot collide with the 0–53 the existing body uses.
+
+Note this needs no `absDiffG`: the biased accumulator has already produced
+`|M|` branchlessly, which is a better arrangement than carrying two counts. -/
+
+def hurstScale : List Instr := [Instr.binop 60 .mul (.reg 37) (.lit 1000)]
+def hurstWideL : List Instr :=
+  mulWideG 4294967295 4294967296 60 60 61 62 70 71 72 73 74 75 76 77
+def hurstConst : List Instr := [Instr.mov 63 (.lit 326041)]
+def hurstWideR : List Instr :=
+  mulWideG 4294967295 4294967296 63 9 64 65 70 71 72 73 74 75 76 77
+
+def hurstRowG : List Instr :=
+  hurstScale ++ hurstWideL ++ hurstConst ++ hurstWideR
+    ++ le128G 61 62 64 65 66 67 68
+
+theorem hurstScale_noDiv : hurstScale.all NoDivI = true := rfl
+theorem hurstWideL_noDiv : hurstWideL.all NoDivI = true := rfl
+theorem hurstConst_noDiv : hurstConst.all NoDivI = true := rfl
+theorem hurstWideR_noDiv : hurstWideR.all NoDivI = true := rfl
+theorem hurstRowG_noDiv : hurstRowG.all NoDivI = true := rfl
+
+/-- **The row verdict.**  Register 66 ends as `1` exactly when Hurst's
+inequality holds at this candidate. -/
+theorem hurstRowG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
+    (hfit : 1000 * s 37 < M) :
+    srun k s hurstRowG 66
+      = (if (1000 * s 37) * (1000 * s 37) ≤ 326041 * s 9 then 1 else 0) := by
+  have hMB : M = MulWide.B64 := by decide
+  have e1 : srun k s hurstScale 60 = 1000 * s 37 := by
+    simp only [hurstScale, srun_cons, srun_nil, sdest, sval, denoteOperand,
+      denoteOp, Option.getD_some, RegState.set, if_true]
+    rw [show (1000 : Nat) % M = 1000 by decide]
+    have h' : s 37 * 1000 < M := by omega
+    rw [Nat.mod_eq_of_lt h']
+    omega
+  have w1 : ∀ j, srun k s hurstScale j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp hurstScale_noDiv i hi) s hs
+  have p1x : srun k s hurstScale 9 = s 9 := srun_untouched k 9 _ (by decide) s
+  have e2 := mulWideG_hl k (srun k s hurstScale) 60 60 61 62 70 71 72 73 74 75 76 77
+    (by unfold Distinct8; decide) (by unfold NotIn8; decide)
+    (by unfold NotIn8; decide) (by unfold NotIn8; decide)
+    (by unfold NotIn8; decide) (by decide) w1
+  have w2 : ∀ j, srun k (srun k s hurstScale) hurstWideL j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp hurstWideL_noDiv i hi) _ w1
+  have p2x : srun k (srun k s hurstScale) hurstWideL 9 = s 9 := by
+    rw [hurstWideL, srun_untouched k 9 _ (by decide)]; exact p1x
+  have w3 : ∀ j, srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp hurstConst_noDiv i hi) _ w2
+  have e3 : srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 63 = 326041 := by
+    simp only [hurstConst, srun_cons, srun_nil, sdest, sval, denoteOperand,
+      RegState.set, if_true]
+    decide
+  have p3x : srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 9 = s 9 := by
+    rw [srun_untouched k 9 _ (by decide)]; exact p2x
+  have p3lo : srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 61
+      = srun k (srun k s hurstScale) hurstWideL 61 := srun_untouched k 61 _ (by decide) _
+  have p3hi : srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 62
+      = srun k (srun k s hurstScale) hurstWideL 62 := srun_untouched k 62 _ (by decide) _
+  have e4 := mulWideG_hl k (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst)
+    63 9 64 65 70 71 72 73 74 75 76 77
+    (by unfold Distinct8; decide) (by unfold NotIn8; decide)
+    (by unfold NotIn8; decide) (by unfold NotIn8; decide)
+    (by unfold NotIn8; decide) (by decide) w3
+  have w4 : ∀ j, srun k (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst)
+      hurstWideR j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp hurstWideR_noDiv i hi) _ w3
+  have p4lo : srun k (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst)
+      hurstWideR 61 = srun k (srun k s hurstScale) hurstWideL 61 := by
+    rw [hurstWideR, srun_untouched k 61 _ (by decide)]; exact p3lo
+  have p4hi : srun k (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst)
+      hurstWideR 62 = srun k (srun k s hurstScale) hurstWideL 62 := by
+    rw [hurstWideR, srun_untouched k 62 _ (by decide)]; exact p3hi
+  have hleft : srun k (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst)
+        hurstWideR 61
+      + M * srun k (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst)
+        hurstWideR 62
+      = (1000 * s 37) * (1000 * s 37) := by
+    have hE : srun k s hurstScale 60 < MulWide.B64 := by rw [← hMB]; exact w1 60
+    have hspecL := (MulWide.hl_spec (srun k s hurstScale 60)
+      (srun k s hurstScale 60) hE hE).1
+    rw [p4lo, p4hi, hurstWideL, e2.1, e2.2, hMB, hspecL, e1]
+  have hright : srun k (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst)
+        hurstWideR 64
+      + M * srun k (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst)
+        hurstWideR 65
+      = 326041 * s 9 := by
+    have h63 : srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 63
+        < MulWide.B64 := by rw [← hMB]; exact w3 63
+    have h9 : srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 9
+        < MulWide.B64 := by rw [← hMB]; exact w3 9
+    have hspecR := (MulWide.hl_spec
+      (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 63)
+      (srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 9) h63 h9).1
+    rw [hurstWideR, e4.1, e4.2, hMB, hspecR, e3, p3x]
+  rw [hurstRowG, srun_append, srun_append, srun_append, srun_append,
+    le128G_spec k _ 61 62 64 65 66 67 68 (w4 61) (w4 64)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide)]
+  rw [hleft, hright]
+
+#print axioms hurstRowG_spec
+
 #print axioms scaledAbsG_spec
 
 end LeanCompCert.Ports.HurstTestBlock
