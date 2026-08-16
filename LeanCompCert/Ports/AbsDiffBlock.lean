@@ -230,6 +230,52 @@ theorem Instr.WF_mono {i : Instr} {m n : Nat} (hmn : m ≤ n) (h : i.WF m) :
 
 #print axioms Instr.WF_mono
 
+/-! ### Truncated subtraction
+
+The machine's `.sub` **wraps**: `a - b` with `b > a` lands near `2^64`, not at
+`0`.  A test that wants "`a - b`, or `0` if that would go negative" — which is
+what an `x ≤ 0 ∨ …` escape becomes on the machine — has to build the
+truncation.  Three instructions, branchless. -/
+
+/-- `dst ← s a - s b` when `s b ≤ s a`, else `0`. -/
+def tsubG (a b dst t0 t1 : Nat) : List Instr :=
+  [ Instr.binop t0 .ge (.reg a) (.reg b)
+  , Instr.binop t1 .sub (.reg a) (.reg b)
+  , Instr.binop dst .mul (.reg t1) (.reg t0) ]
+
+theorem tsubG_noDiv (a b dst t0 t1 : Nat) :
+    (tsubG a b dst t0 t1).all NoDivI = true := rfl
+
+theorem tsubG_spec (k : Nat) (s : RegState) (a b dst t0 t1 : Nat)
+    (hs : ∀ j, s j < M)
+    (ht01 : t0 ≠ t1) (ht0a : t0 ≠ a) (ht0b : t0 ≠ b)
+    (ht1a : t1 ≠ a) (ht1b : t1 ≠ b)
+    (hda : dst ≠ a) (hdb : dst ≠ b) (hdt0 : dst ≠ t0) (hdt1 : dst ≠ t1) :
+    srun k s (tsubG a b dst t0 t1) dst
+      = (if s b ≤ s a then s a - s b else 0) := by
+  have hMv : M = 18446744073709551616 := by decide
+  have ha := hs a
+  have hb := hs b
+  simp only [tsubG, srun_cons, srun_nil, sdest, sval, denoteOperand,
+    denoteOp, Option.getD_some, RegState.set]
+  simp only [if_neg ht01, if_neg (Ne.symm ht01), if_neg ht0a, if_neg ht0b,
+    if_neg ht1a, if_neg ht1b, if_neg hda, if_neg hdb, if_neg hdt0,
+    if_neg hdt1, if_neg (Ne.symm hda), if_neg (Ne.symm hdb),
+    if_neg (Ne.symm hdt0), if_neg (Ne.symm hdt1), if_neg (Ne.symm ht0a),
+    if_neg (Ne.symm ht0b), if_neg (Ne.symm ht1a), if_neg (Ne.symm ht1b),
+    if_pos rfl, if_true]
+  by_cases hge : s a ≥ s b
+  · rw [if_pos hge, if_pos hge]
+    have e : (s a + (M - s b)) % M = s a - s b := by
+      have he : s a + (M - s b) = (s a - s b) + M := by omega
+      rw [he, Nat.add_mod_right]
+      exact Nat.mod_eq_of_lt (by omega)
+    rw [e, Nat.mul_one, Nat.mod_eq_of_lt (by omega)]
+  · rw [if_neg hge, if_neg (by omega : ¬ (s b ≤ s a))]
+    simp only [Nat.mul_zero, Nat.zero_mod]
+
+#print axioms tsubG_spec
+
 
 /-! ### Composing them
 
