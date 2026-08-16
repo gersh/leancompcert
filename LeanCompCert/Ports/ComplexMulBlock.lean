@@ -374,8 +374,74 @@ theorem imBlock_spec (k : Nat) (s : RegState) (S : Nat) (hS : S ≤ 64)
   rw [hdecomp, tcAddG_spec, h4ari, h4air, h3ari, h3pirN, h3pirM,
     hs2pre priN (by rw [writes_mulIR]; decide), hs2pre priM (by rw [writes_mulIR]; decide), h1n, h1m, h2n, h2m]
 
+/-! ### From the block to a signed value
+
+★ `reBlock_spec`/`imBlock_spec` say what the *register* holds.  These say what
+it **denotes**, which is what a consumer needs: the emitted code computes the
+signed real part and imaginary part of the product, exactly. -/
+
+/-- Abbreviation for the sign-magnitude product of two stored operands. -/
+def prodOf (S : Nat) (na ma nb mb : Nat) : Nat × Nat :=
+  (if na = nb then 0 else 1, fpMul S ma mb)
+
+/-- **The real part, as a signed value.** -/
+theorem reBlock_val (k : Nat) (s : RegState) (S : Nat) (hS : S ≤ 64)
+    (hs : ∀ j, s j < M)
+    (hxr : s xrn ≤ 1) (hyr : s yrn ≤ 1)
+    (hxi : s xin ≤ 1) (hyi : s yin ≤ 1)
+    (hfit1 : (hl (s xrm) (s yrm)).2 < 2 ^ S)
+    (hfit2 : (hl (s xim) (s yim)).2 < 2 ^ S)
+    (hlt1 : fpMul S (s xrm) (s yrm) < B64)
+    (hlt2 : fpMul S (s xim) (s yim) < B64)
+    (hrange :
+      -(H : Int) ≤ tcVal (tcOfSign (prodOf S (s xrn) (s xrm) (s yrn) (s yrm)).1
+            (prodOf S (s xrn) (s xrm) (s yrn) (s yrm)).2)
+          - tcVal (tcOfSign (prodOf S (s xin) (s xim) (s yin) (s yim)).1
+            (prodOf S (s xin) (s xim) (s yin) (s yim)).2) ∧
+      tcVal (tcOfSign (prodOf S (s xrn) (s xrm) (s yrn) (s yrm)).1
+            (prodOf S (s xrn) (s xrm) (s yrn) (s yrm)).2)
+          - tcVal (tcOfSign (prodOf S (s xin) (s xim) (s yin) (s yim)).1
+            (prodOf S (s xin) (s xim) (s yin) (s yim)).2) < (H : Int)) :
+    tcVal (srun k s (reBlock S) outRe)
+      = tcVal (tcOfSign (prodOf S (s xrn) (s xrm) (s yrn) (s yrm)).1
+            (prodOf S (s xrn) (s xrm) (s yrn) (s yrm)).2)
+        - tcVal (tcOfSign (prodOf S (s xin) (s xim) (s yin) (s yim)).1
+            (prodOf S (s xin) (s xim) (s yin) (s yim)).2) := by
+  have hB : M = B64 := by decide
+  rw [reBlock_spec k s S hS hs hxr hyr hxi hyi hfit1 hfit2, hB]
+  exact tcSub_val _ _ (tcOfSign_lt _ _ hlt1) (tcOfSign_lt _ _ hlt2) hrange
+
+/-- **The imaginary part, as a signed value.** -/
+theorem imBlock_val (k : Nat) (s : RegState) (S : Nat) (hS : S ≤ 64)
+    (hs : ∀ j, s j < M)
+    (hxr : s xrn ≤ 1) (hyi : s yin ≤ 1)
+    (hxi : s xin ≤ 1) (hyr : s yrn ≤ 1)
+    (hfit1 : (hl (s xrm) (s yim)).2 < 2 ^ S)
+    (hfit2 : (hl (s xim) (s yrm)).2 < 2 ^ S)
+    (hlt1 : fpMul S (s xrm) (s yim) < B64)
+    (hlt2 : fpMul S (s xim) (s yrm) < B64)
+    (hrange :
+      -(H : Int) ≤ tcVal (tcOfSign (prodOf S (s xrn) (s xrm) (s yin) (s yim)).1
+            (prodOf S (s xrn) (s xrm) (s yin) (s yim)).2)
+          + tcVal (tcOfSign (prodOf S (s xin) (s xim) (s yrn) (s yrm)).1
+            (prodOf S (s xin) (s xim) (s yrn) (s yrm)).2) ∧
+      tcVal (tcOfSign (prodOf S (s xrn) (s xrm) (s yin) (s yim)).1
+            (prodOf S (s xrn) (s xrm) (s yin) (s yim)).2)
+          + tcVal (tcOfSign (prodOf S (s xin) (s xim) (s yrn) (s yrm)).1
+            (prodOf S (s xin) (s xim) (s yrn) (s yrm)).2) < (H : Int)) :
+    tcVal (srun k s (imBlock S) outIm)
+      = tcVal (tcOfSign (prodOf S (s xrn) (s xrm) (s yin) (s yim)).1
+            (prodOf S (s xrn) (s xrm) (s yin) (s yim)).2)
+        + tcVal (tcOfSign (prodOf S (s xin) (s xim) (s yrn) (s yrm)).1
+            (prodOf S (s xin) (s xim) (s yrn) (s yrm)).2) := by
+  have hB : M = B64 := by decide
+  rw [imBlock_spec k s S hS hs hxr hyi hxi hyr hfit1 hfit2, hB]
+  exact tcAdd_val _ _ (tcOfSign_lt _ _ hlt1) (tcOfSign_lt _ _ hlt2) hrange
+
 #print axioms mulRR_preserves
 #print axioms reBlock_spec
 #print axioms imBlock_spec
+#print axioms reBlock_val
+#print axioms imBlock_val
 
 end LeanCompCert.Ports.ComplexMulBlock

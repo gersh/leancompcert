@@ -128,6 +128,13 @@ theorem tcOfSign_val (n m : Nat) (hm : m < H) :
     simp only [Bool.false_eq_true, if_false]
     rw [if_pos hm]
 
+/-- The conversion lands in range. -/
+theorem tcOfSign_lt (n m : Nat) (hm : m < B64) : tcOfSign n m < B64 := by
+  unfold tcOfSign
+  split
+  · exact Nat.mod_lt _ (by decide)
+  · exact hm
+
 /-! ## Checks -/
 
 /-- `-1` is `2⁶⁴ - 1`. -/
@@ -145,6 +152,7 @@ example : ¬ (tcVal (H - 1) + tcVal 1 < (H : Int)) := by decide
 
 #print axioms tcAdd_val
 #print axioms tcSub_val
+#print axioms tcOfSign_lt
 #print axioms tcOfSign_val
 
 end LeanCompCert.Verified.TwosComplement
