@@ -65,6 +65,7 @@ open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Ports.AbsDiffBlock
 open LeanCompCert.Ports.Section413G1Denote
 open LeanCompCert.Ports.MertensCDEM
+open LeanCompCert.Ports.SieveRowFold
 
 /-! ## The configuration -/
 
@@ -806,5 +807,338 @@ theorem sqfPrefix_spec (cf : SqfCfg) (idx : Nat) (s : RegState)
     exact (trialStep_bits _ _ hA3le hA4le).1
 
 #print axioms sqfPrefix_spec
+
+
+/-! ## The observation equation -/
+
+set_option maxHeartbeats 1000000 in
+set_option maxRecDepth 8000 in
+theorem sqfBody_obs (cf : SqfCfg) (idx : Nat) (s : RegState)
+    (hadm : SqfAdmissible cf) (hs : ∀ j, s j < M)
+    (h0 : s 0 ≤ 1) (h3 : s 3 ≤ 1) (h4 : s 4 ≤ 1)
+    (hidx : idx < cf.base.len * cf.base.rounds) :
+    obs (srun idx s (sqfBody cf))
+      = gstepB cf.base (sqfFail cf) (sqfAccOf cf) idx (obs s) := by
+  have hR : 0 < cf.base.rounds := hadm.baseAdm.roundsPos
+  have hRM : cf.base.rounds < M := by have := hadm.baseAdm.divLt; omega
+  have hdivlt : idx / cf.base.rounds < cf.base.len :=
+    Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm]; exact hidx)
+  -- the prefix
+  have hp := sqfPrefix_spec cf idx s hadm.baseAdm hs h3 h4 hidx
+  -- the accumulator stage
+  have hc := sqfC1_spec cf idx (srun idx s (sqfPrefix cf)) hp.1 hRM
+    hadm.dLtM hadm.aLtM hp.2.2.2.2.2.2.2.2
+  have hclt : ∀ j, srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf) j < M :=
+    srun_lt idx _ (fun i hi => List.all_eq_true.mp (sqfC1_noDiv cf) i hi) _ hp.1
+  have hc22 : srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf) 22
+      = (if idx % cf.base.rounds = cf.base.rounds - 1 then 1 else 0) := by
+    rw [hc.2.2.2.2.2.2.1, hp.2.2.2.1]
+  have hc9 : srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf) 9
+      = cf.base.lo + idx / cf.base.rounds := by
+    rw [hc.2.2.2.2.2.1, hp.2.2.2.2.1]
+  have hc0 : srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf) 0 = s 0 := by
+    rw [hc.1, hp.2.1]
+  have hc1 : srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf) 1
+      = sqfAccOf cf (if idx % cf.base.rounds = cf.base.rounds - 1 then 1 else 0)
+          (s 1) (gB cf.base idx (gA cf.base idx (obs s))).t := by
+    rw [hc.2.2.2.2.2.2.2, hp.2.2.2.1, hp.2.2.1]
+    congr 1
+    refine Trial.eq_of ?_ ?_ ?_
+    · exact hp.2.2.2.2.2.1
+    · exact hp.2.2.2.2.2.2.1
+    · exact hp.2.2.2.2.2.2.2.1
+  -- the row block
+  have hrow := sqfRowG_spec cf idx _ hclt hadm.baseAdm.biasLt hadm.kLtM
+    hadm.wLtM (by rw [hc9]; have := hadm.wFit; omega)
+    (by
+      have hb := hadm.biasBig
+      have hv := hclt 1
+      have hM : (31 : Nat) < M := by decide
+      simp only [truncSub]
+      split <;> omega)
+    (by
+      rw [hc9]
+      have hw := hadm.wFit
+      have hM : (31 : Nat) < M := by decide
+      simp only [truncSub]
+      split <;> omega)
+  have hrlt : ∀ j, srun idx (srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf))
+      (sqfRowG cf) j < M :=
+    srun_lt idx _ (fun i hi => List.all_eq_true.mp (sqfRowG_noDiv cf) i hi) _ hclt
+  have hkeep : ∀ r : Nat, ¬ RowDest r →
+      srun idx (srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf)) (sqfRowG cf) r
+        = srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf) r :=
+    fun r hr => srun_untouched idx r _ (sqfRowG_dest cf r hr) _
+  -- the flag stage
+  have hflag := sqfFlagG_spec cf idx _ hrlt
+    (by rw [hkeep 0 (by simp [RowDest])]; rw [hc0]; exact h0)
+    (by rw [hkeep 22 (by simp [RowDest]), hc22]; split <;> omega)
+    (by rw [hrow, hkeep 9 (by simp [RowDest]), hkeep 1 (by simp [RowDest])])
+    hadm.baseAdm.lowerLt hadm.baseAdm.anchorXLt hadm.baseAdm.anchorMLt
+  have hfpres : ∀ r : Nat, r = 1 ∨ r = 2 ∨ r = 3 ∨ r = 4 →
+      srun idx (srun idx (srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf))
+        (sqfRowG cf)) (sqfFlagG cf) r
+      = srun idx (srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf)) (sqfRowG cf) r := by
+    intro r hr
+    refine srun_untouched idx r _ ?_ _
+    rcases hr with rfl|rfl|rfl|rfl <;>
+      exact sqfFlagG_dest cf _ (by decide) (by decide) (by decide) (by decide)
+        (by decide) (by decide) (by decide) (by decide) (by decide)
+  have hsplit : srun idx s (sqfBody cf)
+      = srun idx (srun idx (srun idx (srun idx s (sqfPrefix cf)) (sqfC1 cf))
+          (sqfRowG cf)) (sqfFlagG cf) := by
+    rw [sqfBody, sqfBodyC, srun_append, srun_append, srun_append]
+  refine Abs.eq_of ?_ ?_ (Trial.eq_of ?_ ?_ ?_)
+  · show (srun idx s (sqfBody cf)) 0 = _
+    rw [hsplit, hflag, hkeep 0 (by simp [RowDest]), hkeep 9 (by simp [RowDest]),
+      hkeep 1 (by simp [RowDest]), hkeep 22 (by simp [RowDest]),
+      hc0, hc9, hc22, hc1]
+    rfl
+  · show (srun idx s (sqfBody cf)) 1 = _
+    rw [hsplit, hfpres 1 (by simp), hkeep 1 (by simp [RowDest]), hc1]
+    rfl
+  · show (srun idx s (sqfBody cf)) 2 = _
+    rw [hsplit, hfpres 2 (by simp), hkeep 2 (by simp [RowDest]),
+      hc.2.1, hp.2.2.2.2.2.1]
+    rfl
+  · show (srun idx s (sqfBody cf)) 3 = _
+    rw [hsplit, hfpres 3 (by simp), hkeep 3 (by simp [RowDest]),
+      hc.2.2.1, hp.2.2.2.2.2.2.1]
+    rfl
+  · show (srun idx s (sqfBody cf)) 4 = _
+    rw [hsplit, hfpres 4 (by simp), hkeep 4 (by simp [RowDest]),
+      hc.2.2.2.1, hp.2.2.2.2.2.2.2.1]
+    rfl
+
+#print axioms sqfBody_obs
+
+
+/-! ## The program -/
+
+def sqfProgram (cf : SqfCfg) : Program :=
+  { regCount := sqfRegCount
+  , loopCount := cf.base.len * cf.base.rounds
+  , init := initBlock cf.base
+  , body := sqfBody cf
+  , epilogue := []
+  , output := 0 }
+
+def sqfStep (cf : SqfCfg) (idx : Nat) (s : RegState) : RegState :=
+  srun idx s (sqfBody cf)
+
+theorem sqfBody_defined (cf : SqfCfg) (idx : Nat) (s : RegState)
+    (hadm : Admissible cf.base) (hs : ∀ j, s j < M)
+    (hidx : idx < cf.base.len * cf.base.rounds) :
+    SAllDefined idx s (sqfBody cf) := by
+  have hRM : cf.base.rounds < M := by have := hadm.divLt; omega
+  have hne : ¬ (cf.base.rounds % M = 0) := by
+    rw [Nat.mod_eq_of_lt hRM]; have := hadm.roundsPos; omega
+  have hA := bodyA_spec cf.base idx s hadm hs hidx
+  have hd0 : ¬ ((srun idx s (bodyA cf.base)) 7 = 0) := by rw [hA.2.2.2.1]; omega
+  rw [show sqfBody cf = bodyA cf.base ++ (bodyB ++ sqfBodyC cf) from by
+      simp only [sqfBody, sqfPrefix, List.append_assoc],
+    SAllDefined_append, SAllDefined_append]
+  exact ⟨bodyA_defined cf.base idx s hne, bodyB_defined idx _ hd0,
+    SAllDefined_of_noDiv idx _
+      (fun i hi => List.all_eq_true.mp (sqfBodyC_noDiv cf) i hi) _⟩
+
+theorem sqfBody_denote (cf : SqfCfg) (idx : Nat) (s : RegState)
+    (hadm : Admissible cf.base) (hs : ∀ j, s j < M)
+    (hidx : idx < cf.base.len * cf.base.rounds) :
+    denoteInstrs idx s (sqfBody cf) = some (sqfStep cf idx s) :=
+  denoteInstrs_eq_srun idx (sqfBody cf) s (sqfBody_defined cf idx s hadm hs hidx)
+
+set_option maxRecDepth 8000 in
+theorem sqfStep_inv (cf : SqfCfg) (idx : Nat) (s : RegState)
+    (hadm : SqfAdmissible cf) (hI : Inv s)
+    (hidx : idx < cf.base.len * cf.base.rounds) : Inv (sqfStep cf idx s) := by
+  obtain ⟨hs, h0, h3, h4⟩ := hI
+  have hobs := sqfBody_obs cf idx s hadm hs h0 h3 h4 hidx
+  have hb := gstepB_bits cf.base (sqfFail cf) (sqfAccOf cf) idx (obs s) h0 h3 h4
+  refine ⟨srun_lt_of_lt idx (sqfBody cf) s hs, ?_, ?_, ?_⟩
+  · show (obs (sqfStep cf idx s)).bad ≤ 1
+    rw [sqfStep, hobs]; exact hb.1
+  · show (obs (sqfStep cf idx s)).t.sq ≤ 1
+    rw [sqfStep, hobs]; exact hb.2.1
+  · show (obs (sqfStep cf idx s)).t.par ≤ 1
+    rw [sqfStep, hobs]; exact hb.2.2
+
+set_option maxHeartbeats 1000000 in
+/-- **The denotation theorem.** -/
+theorem sqfProgram_denote (cf : SqfCfg) (hadm : SqfAdmissible cf) :
+    (sqfProgram cf).denote
+      = some (valueB cf.base (sqfFail cf) (sqfAccOf cf)) := by
+  have hLoop : (sqfProgram cf).loopCount = cf.base.len * cf.base.rounds := rfl
+  refine FoldBridge.Program.denote_eq_obs_foldl_mem (sqfProgram cf) Inv
+    (sqfStep cf) obs (gstepB cf.base (sqfFail cf) (sqfAccOf cf)) Abs.bad
+    (entry cf.base) (entry_init cf.base) (entry_inv cf.base) ?_ ?_ ?_ ?_
+  · intro index s hidx hI
+    exact sqfBody_denote cf index s hadm.baseAdm hI.1 (hLoop ▸ hidx)
+  · intro index s hidx hI
+    exact sqfStep_inv cf index s hadm hI (hLoop ▸ hidx)
+  · intro index s hidx hI
+    exact sqfBody_obs cf index s hadm hI.1 hI.2.1 hI.2.2.1 hI.2.2.2 (hLoop ▸ hidx)
+  · intro s _
+    rfl
+
+#print axioms sqfProgram_denote
+
+/-! ### Well-formedness -/
+
+theorem sqfCore_wf : ∀ i ∈ sqfCore, i.WF sqfRegCount := by decide
+
+theorem sqfC1_wf (cf : SqfCfg) : ∀ i ∈ sqfC1 cf, i.WF sqfRegCount := by
+  intro i hi
+  simp only [sqfC1, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with h|h|h|h|h|h|h <;> rw [h] <;>
+    simp +decide [Instr.WF, Operand.WF, sqfRegCount]
+
+theorem sqfPre1_wf (cf : SqfCfg) : ∀ i ∈ sqfPre1 cf, i.WF sqfRegCount := by
+  intro i hi
+  simp only [sqfPre1, tsubG, List.mem_cons, List.not_mem_nil, or_false,
+    List.mem_append] at hi
+  rcases hi with (h|h)|(h|h|h) <;> rw [h] <;>
+    simp +decide [Instr.WF, Operand.WF, sqfRegCount]
+
+theorem sqfPre2_wf (cf : SqfCfg) : ∀ i ∈ sqfPre2 cf, i.WF sqfRegCount := by
+  intro i hi
+  simp only [sqfPre2, tsubG, List.mem_cons, List.not_mem_nil, or_false,
+    List.mem_append] at hi
+  rcases hi with (h|h|h)|(h|h|h) <;> rw [h] <;>
+    simp +decide [Instr.WF, Operand.WF, sqfRegCount]
+
+theorem sqfFlagG_wf (cf : SqfCfg) : ∀ i ∈ sqfFlagG cf, i.WF sqfRegCount := by
+  intro i hi
+  simp only [sqfFlagG, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with h|h|h|h|h|h|h|h|h <;> rw [h] <;>
+    simp +decide [Instr.WF, Operand.WF, sqfRegCount]
+
+theorem sqfRowG_wf (cf : SqfCfg) : ∀ i ∈ sqfRowG cf, i.WF sqfRegCount := by
+  intro i hi
+  simp only [sqfRowG, sqfPart1, sqfPart2, List.mem_append, List.mem_cons,
+    List.not_mem_nil, or_false] at hi
+  rcases hi with ((h|h)|h)|h
+  · rcases h with h | h
+    · exact sqfPre1_wf cf i h
+    · exact sqfCore_wf i h
+  · rw [h]; simp +decide [Instr.WF, Operand.WF, sqfRegCount]
+  · rcases h with h | h
+    · exact sqfPre2_wf cf i h
+    · exact sqfCore_wf i h
+  · rw [h]; simp +decide [Instr.WF, Operand.WF, sqfRegCount]
+
+theorem sqfBody_wf (cf : SqfCfg) : ∀ i ∈ sqfBody cf, i.WF sqfRegCount := by
+  have hmono : ∀ i : Instr, i.WF regCount → i.WF sqfRegCount :=
+    fun i h => Instr.WF_mono (by decide) h
+  intro i hi
+  rw [show sqfBody cf
+        = bodyA cf.base ++ (bodyB ++ (sqfC1 cf ++ (sqfRowG cf ++ sqfFlagG cf)))
+      from by simp only [sqfBody, sqfPrefix, sqfBodyC, List.append_assoc]] at hi
+  rcases List.mem_append.mp hi with h | h
+  · exact hmono i (bodyA_wf cf.base i h)
+  rcases List.mem_append.mp h with h | h
+  · exact hmono i (bodyB_wf i h)
+  rcases List.mem_append.mp h with h | h
+  · exact sqfC1_wf cf i h
+  rcases List.mem_append.mp h with h | h
+  · exact sqfRowG_wf cf i h
+  · exact sqfFlagG_wf cf i h
+
+theorem sqfProgram_wf (cf : SqfCfg) : (sqfProgram cf).WF :=
+  ⟨by show 0 < 78; omega,
+   fun i hi => Instr.WF_mono (m := regCount) (n := sqfRegCount) (by decide)
+     (initBlock_wf cf.base i hi),
+   sqfBody_wf cf,
+   (by intro i hi; cases hi)⟩
+
+#print axioms sqfProgram_wf
+
+/-! ## The certificate's meaning -/
+
+/--
+If the program denotes `0` then at every candidate of the shard both CDEM head
+inequalities hold, in their exact integer form, and the anchor holds.
+
+`accAt` is still the *program's* accumulator; identifying it with
+`bias + D·Q(X) − A·X` is the consumer's obligation, and
+`MathExtras.SquarefreeHeadScan` is what consumes it.
+-/
+theorem sqfValue_eq_zero_sound (cf : SqfCfg) (hadm : SqfAdmissible cf)
+    (hval : valueB cf.base (sqfFail cf) (sqfAccOf cf) = 0)
+    (n : Nat) (hn : n < cf.base.len) :
+    (cf.base.lower ≤ cf.base.lo + n →
+      up32 (truncSub (accAt cf.base (sqfAccOf cf) (n + 1)) cf.base.bias)
+          * up32 (truncSub (accAt cf.base (sqfAccOf cf) (n + 1)) cf.base.bias)
+        ≤ cf.K * (cf.base.lo + n)
+      ∧ up32 (truncSub (cf.W + (cf.base.lo + n))
+            (accAt cf.base (sqfAccOf cf) (n + 1)))
+          * up32 (truncSub (cf.W + (cf.base.lo + n))
+            (accAt cf.base (sqfAccOf cf) (n + 1)))
+        ≤ cf.K * (cf.base.lo + n))
+    ∧ (cf.base.lo + n = cf.base.anchorX →
+        accAt cf.base (sqfAccOf cf) (n + 1) = cf.base.anchorM) := by
+  have hfail := valueB_eq_zero_sound cf.base (sqfFail cf) (sqfAccOf cf)
+    (fun mo t h => sqfAccOf_zero cf mo t h) (fun l mo t => sqfAccOf_lt cf l mo t)
+    hadm.baseAdm.roundsPos hadm.baseAdm.m0Lt hval n hn
+  rw [sqfFail, Bool.or_eq_false_iff, Bool.and_eq_false_iff,
+    Bool.and_eq_false_iff] at hfail
+  constructor
+  · intro hlow
+    have h1 := hfail.1
+    have hpass : sqfPass cf (cf.base.lo + n) (accAt cf.base (sqfAccOf cf) (n + 1))
+        = true := by
+      rcases h1 with h | h
+      · exact absurd hlow (by simpa using h)
+      · simpa using h
+    rw [sqfPass, Bool.and_eq_true, decide_eq_true_eq, decide_eq_true_eq] at hpass
+    exact hpass
+  · intro hax
+    have h2 := hfail.2
+    rcases h2 with h | h
+    · exact absurd hax (by simpa using h)
+    · simpa using h
+
+#print axioms sqfValue_eq_zero_sound
+
+
+/-! ## Kernel sanity checks
+
+`X ∈ [1, 8]`, divisors `2, 3, 4` (and `5² = 25 > 8`).  The enclosure is
+`38/64 ≤ 6/π² ≤ 39/64` — true, since `6/π² = 0.60793…` and
+`38/64 = 0.59375`, `39/64 = 0.609375`.  Seeded at `bias = m0 = 1000`, so
+`acc(X) = 1000 + 64·Q(X) − 38·X`, and `W = bias + A + 1 = 1039`.
+
+The accumulator runs `1026, 1052, 1078, 1040, 1066, 1092, 1118, 1080` — the
+dips at `X = 4` and `X = 8` are the two non-squarefree candidates.  With
+`K = 16` every row passes; with `K = 1` the row at `X = 2` fails
+(`⌈52/32⌉² = 4 > 2`).  The last check is the one that matters: without it a
+sweep that never looked at the row would satisfy all the others. -/
+
+def tinySqfCfg (lower K anchorM : Nat) : SqfCfg :=
+  { base := { lo := 1, len := 8, rounds := 3, bias := 1000, m0 := 1000
+            , lower := lower, den := 1, slack := 0, cap := 100
+            , anchorX := 8, anchorM := anchorM }
+  , A := 38, D := 64, K := K, W := 1039 }
+
+set_option maxRecDepth 100000 in
+/-- Rows on, budget generous, anchor right: accepts. -/
+example : (sqfProgram (tinySqfCfg 1 16 1080)).denote = some 0 := by
+  decide +kernel
+
+set_option maxRecDepth 100000 in
+/-- … anchor wrong: rejects, so the accept is not vacuous. -/
+example : (sqfProgram (tinySqfCfg 1 16 1081)).denote = some 1 := by
+  decide +kernel
+
+set_option maxRecDepth 100000 in
+/-- Budget tightened to `K = 1`: the row at `X = 2` fails. -/
+example : (sqfProgram (tinySqfCfg 1 1 1080)).denote = some 1 := by
+  decide +kernel
+
+set_option maxRecDepth 100000 in
+/-- The same tight budget with the rows switched off accepts, which pins the
+previous rejection on the row test and not on anything else. -/
+example : (sqfProgram (tinySqfCfg 1000000 1 1080)).denote = some 0 := by
+  decide +kernel
 
 end LeanCompCert.Ports.SquarefreeHeadBlock
