@@ -57,6 +57,7 @@ import LeanCompCert.Verified.DyadicBisect
 import LeanCompCert.Verified.ExpFixed
 import LeanCompCert.Verified.TrigFixed
 import LeanCompCert.Verified.Prop1224Margin
+import LeanCompCert.Ports.AbsDiffBlock
 import LeanCompCert.Ports.ExpFixPort
 import LeanCompCert.Ports.TrigFixPort
 import LeanCompCert.Ports.SinFixPort
