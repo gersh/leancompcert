@@ -75,6 +75,15 @@ def PartialsInRange : List (Nat × Int) → Prop
       -(H : Int) ≤ tcVal p.1 + computedSum ps ∧
       tcVal p.1 + computedSum ps < (H : Int)
 
+/-- ★ `PartialsInRange` is **decidable**, which is what lets a certificate
+checker verify it by running rather than a proof supplying it. -/
+instance decidablePartialsInRange : ∀ ps : List (Nat × Int),
+    Decidable (PartialsInRange ps)
+  | [] => isTrue trivial
+  | p :: ps =>
+      have : Decidable (PartialsInRange ps) := decidablePartialsInRange ps
+      inferInstanceAs (Decidable (PartialsInRange ps ∧ _ ∧ _))
+
 /-- **The accumulation is exact.**  Every `.add` is the signed sum, so the
 machine loses nothing relative to the computed terms. -/
 theorem tcSum_val : ∀ ps : List (Nat × Int), (∀ p ∈ ps, p.1 < B64) →
