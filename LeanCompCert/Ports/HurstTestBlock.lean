@@ -6,6 +6,7 @@ Authors: Gershon Bialer
 import LeanCompCert.Ports.AbsDiffBlock
 import LeanCompCert.Ports.Section413G1Denote
 import LeanCompCert.Verified.ArrayScalarBlock
+import LeanCompCert.Ports.MertensCDEM
 
 /-!
 # Hurst's test, as an instruction block
@@ -485,6 +486,59 @@ theorem hurstRowG_not_rowFail (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
 
 #print axioms hurstRowG_iff
 #print axioms hurstRowG_not_rowFail
+
+
+/-! ### The substituted body
+
+`MertensCDEM.body = bodyA ++ bodyB ++ bodyC1 ++ bodyC2a ++ bodyC2b`.  Only the
+last stage is Hurst-specific, so the substituted body reuses the first four
+verbatim and replaces `bodyC2b` with the widening test followed by the same
+violation-flag algebra.
+
+The flag algebra is copied rather than shared because CDEM's version computes
+its row bit through the `cap` clamp; here the bit is `1 − reg 66` directly.
+Registers 60–77 are used by the test, so the program needs `regCount = 78`
+rather than CDEM's 54. -/
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- Hurst's replacement for `bodyC2b`: the widening row test, then the same
+merge into the violation flag. -/
+def hurstBodyC2b (c : Cfg) : List Instr :=
+  hurstRowG ++
+  [ Instr.binop 45 .sub (.lit 1) (.reg 66)
+  , Instr.binop 46 .ge (.reg 9) (.lit c.lower)
+  , Instr.binop 48 .mul (.reg 46) (.reg 45)
+  , Instr.binop 49 .eq (.reg 9) (.lit c.anchorX)
+  , Instr.binop 50 .ne (.reg 1) (.lit c.anchorM)
+  , Instr.binop 51 .mul (.reg 49) (.reg 50)
+  , Instr.binop 52 .bor (.reg 48) (.reg 51)
+  , Instr.binop 53 .mul (.reg 22) (.reg 52)
+  , Instr.binop 0 .bor (.reg 0) (.reg 53) ]
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The substituted body.  The first four stages are CDEM's, unmodified. -/
+def hurstBody (c : Cfg) : List Instr :=
+  bodyA c ++ bodyB ++ bodyC1 c ++ bodyC2a c ++ hurstBodyC2b c
+
+/-- The test needs registers up to 77. -/
+def hurstRegCount : Nat := 78
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBodyC2b_noDiv (c : Cfg) :
+    (hurstBodyC2b c).all NoDivI = true := by
+  simp only [hurstBodyC2b, List.all_append, hurstRowG_noDiv, Bool.true_and]
+  rfl
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstRowG_wf : ∀ i ∈ hurstRowG, i.WF hurstRegCount := by decide
+
+/-! Well-formedness of `hurstBodyC2b` at a concrete `Cfg` needs the same
+literal-width bounds `MertensCDEM.Admissible` already carries (`lower`,
+`anchorX`, `anchorM` below `2^64`), so it belongs with the admissibility
+record rather than here; `hurstRowG_wf` above is the config-independent half
+and discharges by `decide`. -/
+
+#print axioms hurstBodyC2b_noDiv
 
 #print axioms scaledAbsG_spec
 
