@@ -589,6 +589,45 @@ theorem hurstGstep_t_eq (c : Cfg) (idx : Nat) (a : Abs) :
 #print axioms absOfBias_eq_absOf
 #print axioms hurstGstep_mo_eq
 
+
+/-! ### What the substituted stage leaves alone
+
+The fold's observation is `⟨bad, mo, trial⟩` = registers `0, 1, 2, 3, 4`.  The
+substituted stage writes only the violation flag among those, so registers
+1–4 are untouched — which is half of what `hurstBody_obs` has to say, and the
+half that needs no arithmetic.
+
+The destination registers of `hurstBodyC2b` do not depend on the `Cfg` (only
+its literals do), so this is a frame fact about the code shape alone. -/
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBodyC2b_dest (c : Cfg) (r : Nat)
+    (hrow : ∀ i ∈ hurstRowG, sdest i ≠ r)
+    (h45 : r ≠ 45) (h46 : r ≠ 46) (h48 : r ≠ 48) (h49 : r ≠ 49)
+    (h50 : r ≠ 50) (h51 : r ≠ 51) (h52 : r ≠ 52) (h53 : r ≠ 53) (h0 : r ≠ 0) :
+    ∀ i ∈ hurstBodyC2b c, sdest i ≠ r := by
+  intro i hi
+  rw [hurstBodyC2b, List.mem_append] at hi
+  rcases hi with h | h
+  · exact hrow i h
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with h|h|h|h|h|h|h|h|h <;> subst h <;>
+      simp only [sdest] <;> exact Ne.symm ‹_›
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The accumulator and trial state survive the substituted stage. -/
+theorem hurstBodyC2b_pres (c : Cfg) (idx : Nat) (s : RegState) :
+    srun idx s (hurstBodyC2b c) 1 = s 1
+      ∧ srun idx s (hurstBodyC2b c) 2 = s 2
+      ∧ srun idx s (hurstBodyC2b c) 3 = s 3
+      ∧ srun idx s (hurstBodyC2b c) 4 = s 4 := by
+  refine ⟨?_, ?_, ?_, ?_⟩ <;>
+  · refine srun_untouched idx _ _ ?_ s
+    refine hurstBodyC2b_dest c _ (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+
+#print axioms hurstBodyC2b_pres
+
 #print axioms scaledAbsG_spec
 
 end LeanCompCert.Ports.HurstTestBlock
