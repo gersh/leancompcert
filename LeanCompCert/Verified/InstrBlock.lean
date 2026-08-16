@@ -206,6 +206,30 @@ theorem denoteInstrs_eq_srun (k : Nat) :
       rw [denoteInstr_eq_of_defined k s i h.1]
       exact ih _ h.2
 
+/-- A division-free instruction is defined in every state: `denoteOp` returns
+`none` only for `udiv`/`urem` by zero. -/
+theorem SDefined_of_noDiv (k : Nat) (s : RegState) (i : Instr)
+    (h : NoDivI i = true) : SDefined k s i := by
+  cases i with
+  | mov d src => trivial
+  | binop d op l r =>
+      simp only [NoDivI, Bool.and_eq_true, bne_iff_ne, ne_eq] at h
+      cases op <;> simp_all [SDefined, denoteOp]
+
+/-- Hence a division-free block is defined throughout, whatever it starts
+from.  This is the common case: only a block that actually divides has to
+justify its divisor. -/
+theorem SAllDefined_of_noDiv (k : Nat) :
+    ∀ (l : List Instr), (∀ i ∈ l, NoDivI i = true) →
+      ∀ s : RegState, SAllDefined k s l := by
+  intro l
+  induction l with
+  | nil => intro _ s; trivial
+  | cons i rest ih =>
+      intro h s
+      exact ⟨SDefined_of_noDiv k s i (h i (by simp)),
+        ih (fun j hj => h j (by simp [hj])) _⟩
+
 /-- Definedness splits along a block boundary, at the state the second block
 starts in.  A port that would otherwise pay a term quadratic in the block
 length cuts the body into named stages and pays for one stage at a time. -/

@@ -430,6 +430,9 @@ def cosFold (X : Nat) : Nat → RegState
   | 0 => cosState X
   | n + 1 => srun n (cosFold X n) cosStepG
 
+theorem cosFold_succ (X n : Nat) :
+    cosFold X (n + 1) = srun n (cosFold X n) cosStepG := rfl
+
 theorem cosFold_eq (X : Nat) : ∀ n,
     cosFold X n = (List.range n).foldl (fun st k => srun k st cosStepG) (cosState X)
   | 0 => rfl
@@ -475,6 +478,82 @@ theorem cosFold_spec (X : Nat) (hX : X ≤ B62) : ∀ n, 2 * n + 2 < 4294967296 
     · rw [show cosFold X (n + 1) = srun n (cosFold X n) cosStepG from rfl, s21, h21]
       show _ = oddSum X n + (if n % 2 = 0 then 0 else cosTerm X n)
       by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+
+
+/-! ### The program
+
+Only one instruction in the body can fail to denote — the `udiv` — and its
+divisor is `(2k+1)(2k+2)`, which `cFactorG_spec` already pins.  Everything
+else is division-free, so `SAllDefined_of_noDiv` covers it and the guard is
+paid once rather than across all 53 instructions. -/
+
+theorem cosPrefix_divisor (k : Nat) (s : RegState) (hk : k < M)
+    (hc : (2 * k + 1) * (2 * k + 2) < M) :
+    srun k s (cFactorG ++ mulAG ++ mulBG) 9 = (2 * k + 1) * (2 * k + 2) := by
+  rw [srun_append, srun_append]
+  rw [srun_untouched k 9 mulBG (by decide), srun_untouched k 9 mulAG (by decide)]
+  exact cFactorG_spec k s hk hc
+
+theorem accG_noDiv : accG.all NoDivI = true := rfl
+
+theorem cosPrefix_noDiv : (cFactorG ++ mulAG ++ mulBG).all NoDivI = true := rfl
+
+theorem cosStepG_defined (k : Nat) (s : RegState) (hk : k < M)
+    (hc : (2 * k + 1) * (2 * k + 2) < M) : SAllDefined k s cosStepG := by
+  have hcpos : 0 < (2 * k + 1) * (2 * k + 2) := Nat.mul_pos (by omega) (by omega)
+  rw [cosStepG, SAllDefined_append]
+  refine ⟨SAllDefined_of_noDiv k accG
+    (fun i hi => List.all_eq_true.mp accG_noDiv i hi) s, ?_⟩
+  rw [cosBodyG, SAllDefined_append]
+  refine ⟨SAllDefined_of_noDiv k (cFactorG ++ mulAG ++ mulBG)
+    (fun i hi => List.all_eq_true.mp cosPrefix_noDiv i hi) _, ?_⟩
+  refine ⟨?_, trivial⟩
+  show (denoteOp .udiv _ _).isSome = true
+  simp only [denoteOperand]
+  rw [cosPrefix_divisor k (srun k s accG) hk hc]
+  simp only [denoteOp]
+  rw [if_neg (Nat.ne_of_gt hcpos)]
+  rfl
+
+/-- The emitted program: seed the argument and the first term, run the body
+`n` times, read back one of the two parity sums. -/
+def cosProgram (X n out : Nat) : Program := {
+  regCount := 24
+  loopCount := n
+  init := [Instr.mov 1 (.lit X), Instr.mov 2 (.lit B62)]
+  body := cosStepG
+  epilogue := []
+  output := out
+}
+
+theorem cosProgram_init (X : Nat) (hX : X ≤ B62) :
+    srun 0 initialState [Instr.mov 1 (.lit X), Instr.mov 2 (.lit B62)] = cosState X := by
+  have hXM : X % M = X := Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt hX (by decide))
+  have hBM : B62 % M = B62 := Nat.mod_eq_of_lt (by decide)
+  funext j
+  simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, RegState.set,
+    hXM, hBM, cosState, initialState]
+  by_cases h2 : j = 2
+  · simp only [h2, if_pos rfl, show ¬((2 : Nat) = 1) by decide, if_false]
+  · by_cases h1 : j = 1
+    · simp only [h1, h2, if_pos rfl, if_false]
+      simp only [show ¬((1 : Nat) = 2) by decide, if_false, if_pos rfl]
+    · simp only [h1, h2, if_false]
+
+
+/-! ### What remains
+
+`cosProgram` is defined, its initialisation is proved, and `cosStepG_defined`
+shows the body never faults -- the only partial operation is the `udiv`, whose
+divisor `cFactorG_spec` pins as `(2k+1)(2k+2) > 0`.  The end-to-end
+`Program.denote` is *not* proved here.
+
+Threading `denoteInstrs_eq_srun` through `(List.range n).foldlM` by hand hits a
+kernel "deep recursion detected" -- with an unlimited stack, so it is genuine
+term blowup rather than a stack setting -- because the 53-instruction body
+unfolds inside the fold.  `Verified/Rolled.lean` and `Verified/FoldBridge.lean`
+exist for exactly this and keep the body opaque; the wrapper should go through
+them rather than re-deriving the fold. -/
 
 #print axioms cosFold_spec
 
