@@ -429,6 +429,63 @@ theorem hurstRowG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
 
 #print axioms hurstRowG_spec
 
+
+/-! ### The model-level row predicate
+
+`MertensCDEM` carries a `cap` field and an `Admissible.capSound` conjunct
+purely because its comparison `den·|M| + slack ≤ X` must fit a word, so `|M|`
+has to be clamped first.  **The widening comparison removes that need**: both
+sides of Hurst's test are limb pairs, so nothing is clamped and no soundness
+argument about the clamp is required.
+
+That is a real simplification, not bookkeeping — `capSound` exists to show a
+clamped comparison is unsatisfiable, and Hurst needs no such lemma. -/
+
+/-- `|M(X)|` from the biased accumulator, at the model level. -/
+def absOfBias (bias mo : Nat) : Nat :=
+  if bias ≤ mo then mo - bias else bias - mo
+
+/-- Hurst's row inequality failed at `X`.  No clamp appears. -/
+def HurstRowFail (lower X mo bias : Nat) : Prop :=
+  lower ≤ X ∧
+    ¬ ((1000 * absOfBias bias mo) * (1000 * absOfBias bias mo) ≤ 326041 * X)
+
+instance (lower X mo bias : Nat) : Decidable (HurstRowFail lower X mo bias) := by
+  unfold HurstRowFail; infer_instance
+
+/-- **The block decides the row inequality.**  Register 66 is the indicator of
+the inequality holding, so `1 - 66` is the row-failure bit the violation flag
+merges. -/
+theorem hurstRowG_iff (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
+    (hfit : 1000 * s 37 < M) :
+    srun k s hurstRowG 66 = 1
+      ↔ (1000 * s 37) * (1000 * s 37) ≤ 326041 * s 9 := by
+  rw [hurstRowG_spec k s hs hfit]
+  by_cases h : (1000 * s 37) * (1000 * s 37) ≤ 326041 * s 9
+  · rw [if_pos h]; exact ⟨fun _ => h, fun _ => rfl⟩
+  · rw [if_neg h]
+    exact ⟨fun hc => absurd hc (by decide), fun hc => absurd hc h⟩
+
+/-- With `|M|` supplied by the biased accumulator, the block's verdict is
+exactly the negation of `HurstRowFail` above the threshold. -/
+theorem hurstRowG_not_rowFail (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
+    (bias mo lower : Nat) (habs : s 37 = absOfBias bias mo)
+    (hlow : lower ≤ s 9) (hfit : 1000 * s 37 < M) :
+    srun k s hurstRowG 66 = 1 ↔ ¬ HurstRowFail lower (s 9) mo bias := by
+  rw [hurstRowG_iff k s hs hfit, habs]
+  unfold HurstRowFail
+  constructor
+  · rintro h ⟨-, hbad⟩
+    exact hbad h
+  · intro h
+    rcases Nat.lt_or_ge (326041 * s 9)
+      ((1000 * absOfBias bias mo) * (1000 * absOfBias bias mo)) with hc | hc
+    · exact absurd ⟨hlow, by omega⟩ h
+    · exact hc
+
+#print axioms hurstRowG_iff
+#print axioms hurstRowG_not_rowFail
+
 #print axioms scaledAbsG_spec
 
 end LeanCompCert.Ports.HurstTestBlock
