@@ -434,25 +434,129 @@ theorem hurstRowG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
 /-! ### The model-level row predicate
 
 `MertensCDEM` carries a `cap` field and an `Admissible.capSound` conjunct
-purely because its comparison `den·|M| + slack ≤ X` must fit a word, so `|M|`
-has to be clamped first.  **The widening comparison removes that need**: both
-sides of Hurst's test are limb pairs, so nothing is clamped and no soundness
-argument about the clamp is required.
+because its comparison `den·|M| + slack ≤ X` must fit a word, so `|M|` has to
+be clamped first.
 
-That is a real simplification, not bookkeeping — `capSound` exists to show a
-clamped comparison is unsatisfiable, and Hurst needs no such lemma. -/
+The widening comparison removes *half* of that need and no more.  The
+comparison itself is between limb pairs and cannot overflow whatever `|M|` is
+— but the row test first forms `1000·|M|` in a **single** word, and that
+product overflows for large `|M|` exactly as CDEM's does.  So Hurst needs the
+clamp too, and needs the same soundness argument for it.
+
+⚠ The earlier claim here — that the widening comparison made the clamp
+unnecessary — was wrong, and wrong in the dangerous direction: it left
+`1000 * s 37 < M` as an unmet hypothesis on the row spec, which no caller
+could have discharged.  `hurstCap_engaged_fails` below is the `capSound`
+analogue that makes clamping conservative: if the clamp engages at all, the
+row is reported as failing, so a run that reports no violation proves the
+clamp never engaged. -/
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- Clamp `|M|` at `c.cap` before the row test, so the single-word product
+`1000·|M|` cannot overflow.  Seven instructions: materialise the cap, take the
+minimum into a scratch register, move it back.  The minimum is taken into
+register 59 rather than in place because `minG` requires its destination to
+differ from both sources. -/
+def hurstClampG (c : Cfg) : List Instr :=
+  Instr.mov 58 (.lit c.cap) :: (minG 37 58 59 70 71 ++ [Instr.mov 37 (.reg 59)])
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstClampG_noDiv (c : Cfg) : (hurstClampG c).all NoDivI = true := rfl
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstClampG_spec (c : Cfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
+    (hcapM : c.cap < M) :
+    srun k s (hurstClampG c) 37 = min (s 37) c.cap
+      ∧ srun k s (hurstClampG c) 0 = s 0
+      ∧ srun k s (hurstClampG c) 1 = s 1
+      ∧ srun k s (hurstClampG c) 9 = s 9
+      ∧ srun k s (hurstClampG c) 22 = s 22 := by
+  have hcap : ∀ j, (RegState.set s 58 (c.cap % M)) j < M := by
+    intro j
+    by_cases h : j = 58
+    · subst h
+      simpa [RegState.set] using Nat.mod_lt _ (by have := ArrayFoldBridge.one_lt_M; omega)
+    · simpa [RegState.set, if_neg h] using hs j
+  have hstep : srun k s (hurstClampG c)
+      = srun k (srun k (RegState.set s 58 (c.cap % M)) (minG 37 58 59 70 71))
+          [Instr.mov 37 (.reg 59)] := by
+    simp only [hurstClampG, srun_cons, srun_append, sdest, sval, denoteOperand,
+      RegState.set, if_true]
+  have hmin := minG_spec k (RegState.set s 58 (c.cap % M)) 37 58 59 70 71 hcap
+    (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+    (by decide) (by decide) (by decide)
+  have hset37 : (RegState.set s 58 (c.cap % M)) 37 = s 37 := by
+    simp [RegState.set]
+  have hset58 : (RegState.set s 58 (c.cap % M)) 58 = c.cap := by
+    simp [RegState.set, Nat.mod_eq_of_lt hcapM]
+  rw [hset37, hset58] at hmin
+  have hmlt : ∀ j, srun k (RegState.set s 58 (c.cap % M)) (minG 37 58 59 70 71) j < M :=
+    srun_lt k _ (fun i hi => List.all_eq_true.mp (minG_noDiv 37 58 59 70 71) i hi) _ hcap
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · rw [hstep]
+    simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, RegState.set,
+      if_true]
+    exact hmin
+  all_goals
+    rw [hstep]
+    simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, RegState.set]
+    rw [if_neg (by decide)]
+    rw [srun_untouched k _ _ (by decide)]
+    simp [RegState.set]
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The clamp's frame: it writes only 58, 59, 70, 71 and 37. -/
+theorem hurstClampG_untouched (c : Cfg) (r : Nat)
+    (h58 : r ≠ 58) (h59 : r ≠ 59) (h70 : r ≠ 70) (h71 : r ≠ 71)
+    (h37 : r ≠ 37) :
+    ∀ i ∈ hurstClampG c, sdest i ≠ r := by
+  intro i hi
+  simp only [hurstClampG, minG, List.mem_cons, List.not_mem_nil, or_false,
+    List.mem_append] at hi
+  rcases hi with h|(h|h|h|h|h)|h <;> rw [h] <;> simp only [sdest] <;>
+    exact Ne.symm ‹_›
+
+#print axioms hurstClampG_spec
+
 
 /-- `|M(X)|` from the biased accumulator, at the model level. -/
 def absOfBias (bias mo : Nat) : Nat :=
   if bias ≤ mo then mo - bias else bias - mo
 
-/-- Hurst's row inequality failed at `X`.  No clamp appears. -/
-def HurstRowFail (lower X mo bias : Nat) : Prop :=
-  lower ≤ X ∧
-    ¬ ((1000 * absOfBias bias mo) * (1000 * absOfBias bias mo) ≤ 326041 * X)
+/-- `|M(X)|` as the row test actually sees it: clamped at `cap`, because the
+machine forms `1000·|M|` in a single word. -/
+def absClampedBias (cap bias mo : Nat) : Nat := min (absOfBias bias mo) cap
 
-instance (lower X mo bias : Nat) : Decidable (HurstRowFail lower X mo bias) := by
+/-- Hurst's row inequality failed at `X`. -/
+def HurstRowFail (lower cap X mo bias : Nat) : Prop :=
+  lower ≤ X ∧
+    ¬ ((1000 * absClampedBias cap bias mo) * (1000 * absClampedBias cap bias mo)
+        ≤ 326041 * X)
+
+instance (lower cap X mo bias : Nat) :
+    Decidable (HurstRowFail lower cap X mo bias) := by
   unfold HurstRowFail; infer_instance
+
+/-- **The clamp is conservative** — `MertensCDEM.Admissible.capSound`'s
+analogue.  If the clamp engages, the row is reported as failing, so a run that
+reports no violation proves the clamp never engaged and the comparison was
+made against the true `|M|`.
+
+The hypothesis is a statement about the *config*, checked once: at
+`cap = 10^15` the left side is `10^36` while `326041·X` at `X = 10^16` is
+about `3.3·10^21`, so it holds with thirteen orders of magnitude to spare —
+and `|M(x)|` itself is about `10^8` there, so the clamp is never approached in
+the first place. -/
+theorem hurstCap_engaged_fails (lower cap X mo bias : Nat)
+    (hX : 326041 * X < (1000 * cap) * (1000 * cap))
+    (hclamp : cap ≤ absOfBias bias mo) (hlow : lower ≤ X) :
+    HurstRowFail lower cap X mo bias := by
+  refine ⟨hlow, ?_⟩
+  have hmin : absClampedBias cap bias mo = cap := by
+    unfold absClampedBias
+    omega
+  rw [hmin]
+  omega
 
 /-- **The block decides the row inequality.**  Register 66 is the indicator of
 the inequality holding, so `1 - 66` is the row-failure bit the violation flag
@@ -470,9 +574,9 @@ theorem hurstRowG_iff (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
 /-- With `|M|` supplied by the biased accumulator, the block's verdict is
 exactly the negation of `HurstRowFail` above the threshold. -/
 theorem hurstRowG_not_rowFail (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
-    (bias mo lower : Nat) (habs : s 37 = absOfBias bias mo)
+    (bias mo lower cap : Nat) (habs : s 37 = absClampedBias cap bias mo)
     (hlow : lower ≤ s 9) (hfit : 1000 * s 37 < M) :
-    srun k s hurstRowG 66 = 1 ↔ ¬ HurstRowFail lower (s 9) mo bias := by
+    srun k s hurstRowG 66 = 1 ↔ ¬ HurstRowFail lower cap (s 9) mo bias := by
   rw [hurstRowG_iff k s hs hfit, habs]
   unfold HurstRowFail
   constructor
@@ -480,7 +584,7 @@ theorem hurstRowG_not_rowFail (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
     exact hbad h
   · intro h
     rcases Nat.lt_or_ge (326041 * s 9)
-      ((1000 * absOfBias bias mo) * (1000 * absOfBias bias mo)) with hc | hc
+      ((1000 * absClampedBias cap bias mo) * (1000 * absClampedBias cap bias mo)) with hc | hc
     · exact absurd ⟨hlow, by omega⟩ h
     · exact hc
 
@@ -503,7 +607,7 @@ rather than CDEM's 54. -/
 open LeanCompCert.Ports.MertensCDEM in
 /-- Hurst's replacement for `bodyC2b`: the widening row test, then the same
 merge into the violation flag. -/
-def hurstBodyC2b (c : Cfg) : List Instr :=
+def hurstTestFlagG (c : Cfg) : List Instr :=
   hurstRowG ++
   [ Instr.binop 45 .sub (.lit 1) (.reg 66)
   , Instr.binop 46 .ge (.reg 9) (.lit c.lower)
@@ -516,6 +620,13 @@ def hurstBodyC2b (c : Cfg) : List Instr :=
   , Instr.binop 0 .bor (.reg 0) (.reg 53) ]
 
 open LeanCompCert.Ports.MertensCDEM in
+/-- **Hurst's replacement for `MertensCDEM.bodyC2b`.**  Clamp `|M|`, run the
+widening row test, merge the verdict into the violation flag. -/
+def hurstBodyC2b (c : Cfg) : List Instr :=
+  hurstClampG c ++ hurstTestFlagG c
+
+
+open LeanCompCert.Ports.MertensCDEM in
 /-- The substituted body.  The first four stages are CDEM's, unmodified. -/
 def hurstBody (c : Cfg) : List Instr :=
   bodyA c ++ bodyB ++ bodyC1 c ++ bodyC2a c ++ hurstBodyC2b c
@@ -524,21 +635,21 @@ def hurstBody (c : Cfg) : List Instr :=
 def hurstRegCount : Nat := 78
 
 open LeanCompCert.Ports.MertensCDEM in
-theorem hurstBodyC2b_noDiv (c : Cfg) :
-    (hurstBodyC2b c).all NoDivI = true := by
-  simp only [hurstBodyC2b, List.all_append, hurstRowG_noDiv, Bool.true_and]
+theorem hurstTestFlagG_noDiv (c : Cfg) :
+    (hurstTestFlagG c).all NoDivI = true := by
+  simp only [hurstTestFlagG, List.all_append, hurstRowG_noDiv, Bool.true_and]
   rfl
 
 open LeanCompCert.Ports.MertensCDEM in
 theorem hurstRowG_wf : ∀ i ∈ hurstRowG, i.WF hurstRegCount := by decide
 
-/-! Well-formedness of `hurstBodyC2b` at a concrete `Cfg` needs the same
+/-! Well-formedness of `hurstTestFlagG` at a concrete `Cfg` needs the same
 literal-width bounds `MertensCDEM.Admissible` already carries (`lower`,
 `anchorX`, `anchorM` below `2^64`), so it belongs with the admissibility
 record rather than here; `hurstRowG_wf` above is the config-independent half
 and discharges by `decide`. -/
 
-#print axioms hurstBodyC2b_noDiv
+#print axioms hurstTestFlagG_noDiv
 
 
 /-! ### The model side of the substitution
@@ -560,7 +671,7 @@ open LeanCompCert.Ports.MertensCDEM in
 `MertensCDEM.badOf` except that `RowFail` is replaced by `HurstRowFail` —
 and note the latter has no clamp, so `c.cap` does not appear. -/
 def hurstBadOf (c : Cfg) (X last bad mo : Nat) : Nat :=
-  bad ||| (if HurstRowFail c.lower X mo c.bias ∨ AnchorFail c X mo
+  bad ||| (if HurstRowFail c.lower c.cap X mo c.bias ∨ AnchorFail c X mo
            then last else 0)
 
 open LeanCompCert.Ports.MertensCDEM in
@@ -597,17 +708,17 @@ substituted stage writes only the violation flag among those, so registers
 1–4 are untouched — which is half of what `hurstBody_obs` has to say, and the
 half that needs no arithmetic.
 
-The destination registers of `hurstBodyC2b` do not depend on the `Cfg` (only
+The destination registers of `hurstTestFlagG` do not depend on the `Cfg` (only
 its literals do), so this is a frame fact about the code shape alone. -/
 
 open LeanCompCert.Ports.MertensCDEM in
-theorem hurstBodyC2b_dest (c : Cfg) (r : Nat)
+theorem hurstTestFlagG_dest (c : Cfg) (r : Nat)
     (hrow : ∀ i ∈ hurstRowG, sdest i ≠ r)
     (h45 : r ≠ 45) (h46 : r ≠ 46) (h48 : r ≠ 48) (h49 : r ≠ 49)
     (h50 : r ≠ 50) (h51 : r ≠ 51) (h52 : r ≠ 52) (h53 : r ≠ 53) (h0 : r ≠ 0) :
-    ∀ i ∈ hurstBodyC2b c, sdest i ≠ r := by
+    ∀ i ∈ hurstTestFlagG c, sdest i ≠ r := by
   intro i hi
-  rw [hurstBodyC2b, List.mem_append] at hi
+  rw [hurstTestFlagG, List.mem_append] at hi
   rcases hi with h | h
   · exact hrow i h
   · simp only [List.mem_cons, List.not_mem_nil, or_false] at h
@@ -616,17 +727,17 @@ theorem hurstBodyC2b_dest (c : Cfg) (r : Nat)
 
 open LeanCompCert.Ports.MertensCDEM in
 /-- The accumulator and trial state survive the substituted stage. -/
-theorem hurstBodyC2b_pres (c : Cfg) (idx : Nat) (s : RegState) :
-    srun idx s (hurstBodyC2b c) 1 = s 1
-      ∧ srun idx s (hurstBodyC2b c) 2 = s 2
-      ∧ srun idx s (hurstBodyC2b c) 3 = s 3
-      ∧ srun idx s (hurstBodyC2b c) 4 = s 4 := by
+theorem hurstTestFlagG_pres (c : Cfg) (idx : Nat) (s : RegState) :
+    srun idx s (hurstTestFlagG c) 1 = s 1
+      ∧ srun idx s (hurstTestFlagG c) 2 = s 2
+      ∧ srun idx s (hurstTestFlagG c) 3 = s 3
+      ∧ srun idx s (hurstTestFlagG c) 4 = s 4 := by
   refine ⟨?_, ?_, ?_, ?_⟩ <;>
   · refine srun_untouched idx _ _ ?_ s
-    refine hurstBodyC2b_dest c _ (by decide) (by decide) (by decide) (by decide)
+    refine hurstTestFlagG_dest c _ (by decide) (by decide) (by decide) (by decide)
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
 
-#print axioms hurstBodyC2b_pres
+#print axioms hurstTestFlagG_pres
 
 
 /-! ### The flag algebra
@@ -640,13 +751,13 @@ sits under a binder in the unfolded `srun` chain and the motive does not
 typecheck. -/
 
 open LeanCompCert.Ports.MertensCDEM in
-theorem hurstBodyC2b_flag (c : Cfg) (idx : Nat) (s : RegState)
+theorem hurstTestFlagG_flag (c : Cfg) (idx : Nat) (s : RegState)
     (hs : ∀ j, s j < M) (h0 : s 0 ≤ 1) (h22 : s 22 ≤ 1)
-    (h37 : s 37 = absOfBias c.bias (s 1))
+    (h37 : s 37 = absClampedBias c.cap c.bias (s 1))
     (hlowM : c.lower < M) (haxM : c.anchorX < M) (hamM : c.anchorM < M)
     (hfit : 1000 * s 37 < M) :
-    srun idx s (hurstBodyC2b c) 0
-      = s 0 ||| (if HurstRowFail c.lower (s 9) (s 1) c.bias
+    srun idx s (hurstTestFlagG c) 0
+      = s 0 ||| (if HurstRowFail c.lower c.cap (s 9) (s 1) c.bias
                      ∨ AnchorFail c (s 9) (s 1)
                  then s 22 else 0) := by
   have hrow := hurstRowG_spec idx s hs hfit
@@ -694,9 +805,10 @@ theorem hurstBodyC2b_flag (c : Cfg) (idx : Nat) (s : RegState)
       decide
     · show ((1 : Nat) ||| 1) % M = 1
       decide
-  rw [hurstBodyC2b, srun_append]
+  rw [hurstTestFlagG, srun_append]
   unfold HurstRowFail AnchorFail
-  by_cases hineq : (1000 * absOfBias c.bias (s 1)) * (1000 * absOfBias c.bias (s 1))
+  by_cases hineq : (1000 * absClampedBias c.cap c.bias (s 1))
+        * (1000 * absClampedBias c.cap c.bias (s 1))
       ≤ 326041 * s 9
   · have h66 : srun idx s hurstRowG 66 = 1 := by rw [hrow, if_pos hineq]
     simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
@@ -725,6 +837,74 @@ theorem hurstBodyC2b_flag (c : Cfg) (idx : Nat) (s : RegState)
 
 #print axioms scaledAbsG_spec
 
+#print axioms hurstTestFlagG_flag
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBodyC2b_noDiv (c : Cfg) : (hurstBodyC2b c).all NoDivI = true := by
+  simp only [hurstBodyC2b, List.all_append, hurstClampG_noDiv,
+    hurstTestFlagG_noDiv, Bool.and_self]
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstBodyC2b_dest (c : Cfg) (r : Nat)
+    (hclamp : ∀ i ∈ hurstClampG c, sdest i ≠ r)
+    (hrow : ∀ i ∈ hurstRowG, sdest i ≠ r)
+    (h45 : r ≠ 45) (h46 : r ≠ 46) (h48 : r ≠ 48) (h49 : r ≠ 49)
+    (h50 : r ≠ 50) (h51 : r ≠ 51) (h52 : r ≠ 52) (h53 : r ≠ 53) (h0 : r ≠ 0) :
+    ∀ i ∈ hurstBodyC2b c, sdest i ≠ r := by
+  intro i hi
+  rw [hurstBodyC2b, List.mem_append] at hi
+  rcases hi with h | h
+  · exact hclamp i h
+  · exact hurstTestFlagG_dest c r hrow h45 h46 h48 h49 h50 h51 h52 h53 h0 i h
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The accumulator and trial state survive the substituted stage.  The clamp
+writes only registers 58, 59, 70, 71 and 37, and 37 is dead after the test. -/
+theorem hurstBodyC2b_pres (c : Cfg) (idx : Nat) (s : RegState) :
+    srun idx s (hurstBodyC2b c) 1 = s 1
+      ∧ srun idx s (hurstBodyC2b c) 2 = s 2
+      ∧ srun idx s (hurstBodyC2b c) 3 = s 3
+      ∧ srun idx s (hurstBodyC2b c) 4 = s 4 := by
+  have hf := hurstTestFlagG_pres c idx (srun idx s (hurstClampG c))
+  have hc : ∀ r : Nat, r = 1 ∨ r = 2 ∨ r = 3 ∨ r = 4 →
+      srun idx s (hurstClampG c) r = s r := by
+    intro r hr
+    refine srun_untouched idx _ _ ?_ s
+    rcases hr with rfl|rfl|rfl|rfl <;>
+      exact hurstClampG_untouched c _ (by decide) (by decide) (by decide)
+        (by decide) (by decide)
+  rw [hurstBodyC2b, srun_append]
+  exact ⟨hf.1.trans (hc 1 (by simp)), hf.2.1.trans (hc 2 (by simp)),
+    hf.2.2.1.trans (hc 3 (by simp)), hf.2.2.2.trans (hc 4 (by simp))⟩
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- **The violation flag after the full Hurst stage**, clamp included.  The
+incoming `|M|` is the unclamped one the accumulator produced; the clamp is
+applied inside, and `hurstCap_engaged_fails` says that is conservative. -/
+theorem hurstBodyC2b_flag (c : Cfg) (idx : Nat) (s : RegState)
+    (hs : ∀ j, s j < M) (h0 : s 0 ≤ 1) (h22 : s 22 ≤ 1)
+    (h37 : s 37 = absOfBias c.bias (s 1))
+    (hlowM : c.lower < M) (haxM : c.anchorX < M) (hamM : c.anchorM < M)
+    (hcapM : c.cap < M) (hcapFit : 1000 * c.cap < M) :
+    srun idx s (hurstBodyC2b c) 0
+      = s 0 ||| (if HurstRowFail c.lower c.cap (s 9) (s 1) c.bias
+                     ∨ AnchorFail c (s 9) (s 1)
+                 then s 22 else 0) := by
+  have hc := hurstClampG_spec c idx s hs hcapM
+  have hlt : ∀ j, srun idx s (hurstClampG c) j < M :=
+    srun_lt idx _ (fun i hi => List.all_eq_true.mp (hurstClampG_noDiv c) i hi) s hs
+  rw [hurstBodyC2b, srun_append,
+    hurstTestFlagG_flag c idx _ hlt (by rw [hc.2.1]; exact h0)
+      (by rw [hc.2.2.2.2]; exact h22)
+      (by rw [hc.1, hc.2.2.1, h37]; rfl)
+      hlowM haxM hamM
+      (by
+        rw [hc.1]
+        have hmin : min (s 37) c.cap ≤ c.cap := Nat.min_le_right _ _
+        omega),
+    hc.2.1, hc.2.2.1, hc.2.2.2.1, hc.2.2.2.2]
+
 #print axioms hurstBodyC2b_flag
+#print axioms hurstBodyC2b_pres
 
 end LeanCompCert.Ports.HurstTestBlock
