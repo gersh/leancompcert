@@ -628,6 +628,26 @@ theorem hurstBodyC2b_pres (c : Cfg) (idx : Nat) (s : RegState) :
 
 #print axioms hurstBodyC2b_pres
 
+
+/-! ### The flag algebra
+
+The remaining half of the stage spec — that register 0 becomes
+`hurstBadOf c (s 9) (s 22) (s 0) (s 1)` — is **not proved here**.
+
+It mirrors `MertensCDEM.bodyC2b_spec`, and is in fact simpler: there is no
+`cap`, so no case split on whether the clamp bites and no lemma that a
+clamped comparison stays inside a word.  What it needs is the same
+`0`/`1` mod-arithmetic over the flag registers, driven off
+`hurstRowG_spec`'s verdict in register 66 and the four preserved reads
+`p0`/`p1`/`p9`/`p22` that `hurstBodyC2b_dest` already licenses.
+
+⚠ The obstacle is mechanical rather than mathematical: rewriting the verdict
+into the goal has to avoid `rw ... at *`, which produces a
+motive-not-type-correct error because the verdict's `if` appears under a
+binder in the unfolded `srun` chain.  `MertensCDEM` handles the analogous
+step by pre-computing every mod identity as a named `have` and firing one
+large `simp only`; the same shape should work here. -/
+
 #print axioms scaledAbsG_spec
 
 end LeanCompCert.Ports.HurstTestBlock
