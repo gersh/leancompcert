@@ -59,6 +59,7 @@ import LeanCompCert.Verified.TrigFixed
 import LeanCompCert.Verified.Prop1224Margin
 import LeanCompCert.Ports.ExpFixPort
 import LeanCompCert.Ports.TrigFixPort
+import LeanCompCert.Ports.SinFixPort
 import LeanCompCert.Ports.A36Bisect
 import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Ports.R2SegSieve

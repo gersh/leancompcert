@@ -490,6 +490,47 @@ theorem oddSum_le_cosSum (X : Nat) (n : Nat) : oddSum X n ≤ cosSum X n := by
   have h := evenSum_add_oddSum X n
   omega
 
+
+/-! ### The same accounting for the sine terms -/
+
+def sinSum (X : Nat) : Nat → Nat
+  | 0 => 0
+  | n + 1 => sinSum X n + sinTerm X n
+
+theorem sinSum_bound (X : Nat) (hX : X ≤ B62) : ∀ n,
+    sinSum X n + 2 * sinTerm X n ≤ 2 * B62
+  | 0 => by
+    show 0 + 2 * X ≤ 2 * B62
+    omega
+  | n + 1 => by
+    have ih := sinSum_bound X hX n
+    have hhalf := sinTerm_succ_le_half X hX n
+    have h3 : 2 * (sinTerm X n / 2) ≤ sinTerm X n := by
+      have := Nat.div_add_mod (sinTerm X n) 2
+      omega
+    have h2 : 2 * sinTerm X (n + 1) ≤ 2 * (sinTerm X n / 2) :=
+      Nat.mul_le_mul (Nat.le_refl 2) hhalf
+    show sinSum X n + sinTerm X n + 2 * sinTerm X (n + 1) ≤ 2 * B62
+    omega
+
+def sinEvenSum (X : Nat) : Nat → Nat
+  | 0 => 0
+  | n + 1 => sinEvenSum X n + (if n % 2 = 0 then sinTerm X n else 0)
+
+def sinOddSum (X : Nat) : Nat → Nat
+  | 0 => 0
+  | n + 1 => sinOddSum X n + (if n % 2 = 0 then 0 else sinTerm X n)
+
+theorem sinEvenSum_add_sinOddSum (X : Nat) : ∀ n,
+    sinEvenSum X n + sinOddSum X n = sinSum X n
+  | 0 => rfl
+  | n + 1 => by
+    have ih := sinEvenSum_add_sinOddSum X n
+    show sinEvenSum X n + (if n % 2 = 0 then sinTerm X n else 0)
+      + (sinOddSum X n + (if n % 2 = 0 then 0 else sinTerm X n))
+      = sinSum X n + sinTerm X n
+    by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+
 #print axioms cosTerm_bracket
 #print axioms sinTerm_bracket
 #print axioms mul62_eq
