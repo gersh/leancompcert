@@ -5,6 +5,7 @@ Authors: Gershon Bialer
 -/
 import LeanCompCert.Verified.FixedMul
 import LeanCompCert.Ports.Section413G1Denote
+import LeanCompCert.Verified.BlockCompose
 
 /-!
 # The fixed-point multiply, as emitted code
@@ -52,6 +53,7 @@ open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Verified.FixedMul
 open LeanCompCert.Ports.Section413G1Denote
+open LeanCompCert.Verified.BlockCompose
 
 /-- The three instructions after the widening multiply. -/
 def fpMulTail (S dst rlo rhi t0 t1 : Nat) : List Instr :=
@@ -229,19 +231,13 @@ theorem sfpMulG_mag (k : Nat) (s : RegState)
     srun k s (sfpMulG S nsa msa nsb msb ndst mdst rlo rhi t0 t1
         s0 s1 s2 s3 s4 s5 s6 s7) mdst
       = fpMul S (s msa) (s msb) := by
-  have htail : srun k (srun k s (fpMulG S msa msb mdst rlo rhi t0 t1
-      s0 s1 s2 s3 s4 s5 s6 s7)) [Instr.binop ndst .bxor (.reg nsa) (.reg nsb)]
-      mdst = srun k s (fpMulG S msa msb mdst rlo rhi t0 t1
-      s0 s1 s2 s3 s4 s5 s6 s7) mdst := by
-    refine srun_untouched k mdst _ ?_ _
-    intro i hi
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
-    subst hi
-    simpa [sdest] using Ne.symm hnd
-  rw [sfpMulG, srun_append, htail]
-  exact fpMulG_spec k s S msa msb mdst rlo rhi t0 t1
-    s0 s1 s2 s3 s4 s5 s6 s7 hS hD hra hrb hrlo hrhi hlohi hs
-    ht01 ht0lo ht0hi ht1lo ht1hi hdt0 hdt1 hfit
+  -- ★ the hand-rolled frame argument, now one application of the primitive
+  rw [sfpMulG]
+  exact spec_append_of_preserves k s
+    (fpMulG_spec k s S msa msb mdst rlo rhi t0 t1
+      s0 s1 s2 s3 s4 s5 s6 s7 hS hD hra hrb hrlo hrhi hlohi hs
+      ht01 ht0lo ht0hi ht1lo ht1hi hdt0 hdt1 hfit)
+    (preserves_singleton (by simpa [sdest] using Ne.symm hnd))
 
 /-- **The sign output** is the `xor` of the two input signs.
 
