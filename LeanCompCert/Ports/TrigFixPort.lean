@@ -156,8 +156,149 @@ theorem mul62G_eq_mulFix (k : Nat) (s : RegState)
   exact mul62_eq _ _ (Nat.lt_of_le_of_lt ha B62_lt_B64)
     (Nat.lt_of_le_of_lt hb B62_lt_B64)
 
-#print axioms tail_spec
-#print axioms mul62G_spec
-#print axioms mul62G_eq_mulFix
+
+/-! ### The cosine loop body
+
+One iteration of the recurrence, at concrete registers so that every
+disjointness side condition is `decide`-able rather than a hypothesis:
+
+```
+  1  X          the argument, read-only
+  2  t          the running term  (in and out)
+  3  4          widening lo / hi
+  5  6          the two multiply results
+  7  8  9       2k+1, 2k+2, and their product
+ 10..17         multiplier scratch
+```
+
+The loop index supplies `k`, so the factorial factor is recomputed rather
+than stored -- four instructions, against a table the fragment's array model
+would otherwise have to carry. -/
+
+/-- `2k+1`, `2k+2`, and their product, from the loop index. -/
+def cFactorG : List Instr :=
+  [ Instr.binop 7 .mul .idx (.lit 2)
+  , Instr.binop 7 .add (.reg 7) (.lit 1)
+  , Instr.binop 8 .add (.reg 7) (.lit 1)
+  , Instr.binop 9 .mul (.reg 7) (.reg 8) ]
+
+/-- `t * X` at scale `B62`, into register 5. -/
+def mulAG : List Instr := mul62G 2 1 5 3 4 10 11 12 13 14 15 16 17
+
+/-- That result times `X` again, into register 6. -/
+def mulBG : List Instr := mul62G 5 1 6 3 4 10 11 12 13 14 15 16 17
+
+/-- The whole body. -/
+def cosBodyG : List Instr :=
+  cFactorG ++ mulAG ++ mulBG ++ [Instr.binop 2 .udiv (.reg 6) (.reg 9)]
+
+theorem cFactorG_spec (k : Nat) (s : RegState) (hk : k < M)
+    (hc : (2 * k + 1) * (2 * k + 2) < M) :
+    srun k s cFactorG 9 = (2 * k + 1) * (2 * k + 2) := by
+  have hMv : M = 18446744073709551616 := by decide
+  have hle : 2 * k + 2 ≤ (2 * k + 1) * (2 * k + 2) :=
+    Nat.le_mul_of_pos_left _ (by omega)
+  simp only [cFactorG, srun_cons, srun_nil, sdest, sval, denoteOperand,
+    denoteOp, Option.getD_some, RegState.set]
+  simp only [hMv] at hk hc hle ⊢
+  simp only [if_true, show ¬((7 : Nat) = 8) by decide, if_false]
+  have m1 : (2 : Nat) % 18446744073709551616 = 2 := by decide
+  have m2 : (1 : Nat) % 18446744073709551616 = 1 := by decide
+  have m0 : k % 18446744073709551616 = k := Nat.mod_eq_of_lt (by omega)
+  have h2 : k * 2 % 18446744073709551616 = k * 2 := Nat.mod_eq_of_lt (by omega)
+  have h3 : (k * 2 + 1) % 18446744073709551616 = k * 2 + 1 :=
+    Nat.mod_eq_of_lt (by omega)
+  have h4 : (k * 2 + 1 + 1) % 18446744073709551616 = k * 2 + 1 + 1 :=
+    Nat.mod_eq_of_lt (by omega)
+  have h5 : (k * 2 + 1) * (k * 2 + 1 + 1) = (2 * k + 1) * (2 * k + 2) := by
+    have hk2 : k * 2 = 2 * k := Nat.mul_comm k 2
+    rw [hk2]
+  rw [m1, m2, m0, h2, h3, h4, h5, Nat.mod_eq_of_lt hc]
+
+theorem cFactorG_pres (k : Nat) (s : RegState) (r : Nat)
+    (h : ∀ i ∈ cFactorG, sdest i ≠ r) : srun k s cFactorG r = s r :=
+  srun_untouched k r cFactorG h s
+
+theorem cFactorG_word (k : Nat) (s : RegState) (hs : ∀ j, s j < M) :
+    ∀ j, srun k s cFactorG j < M :=
+  srun_lt k cFactorG (by decide) s hs
+
+theorem mulAG_word (k : Nat) (s : RegState) (hs : ∀ j, s j < M) :
+    ∀ j, srun k s mulAG j < M :=
+  srun_lt k mulAG (by decide) s hs
+
+theorem mulBG_word (k : Nat) (s : RegState) (hs : ∀ j, s j < M) :
+    ∀ j, srun k s mulBG j < M :=
+  srun_lt k mulBG (by decide) s hs
+
+/-- **One iteration advances `cosTerm`.**  Register 2 holds the next series
+term exactly. -/
+theorem cosBodyG_spec (k : Nat) (s : RegState) (X : Nat)
+    (hs : ∀ j, s j < M) (hX : s 1 = X) (hXb : X ≤ B62)
+    (ht : s 2 = cosTerm X k) (hk : k < M)
+    (hc : (2 * k + 1) * (2 * k + 2) < M) :
+    srun k s cosBodyG 2 = cosTerm X (k + 1) := by
+  have hMv : M = 18446744073709551616 := by decide
+  have hB : B62 < M := by decide
+  -- state after the factorial factor
+  have e1 : srun k s cFactorG 9 = (2 * k + 1) * (2 * k + 2) :=
+    cFactorG_spec k s hk hc
+  have e1a : srun k s cFactorG 1 = X := by
+    rw [cFactorG_pres k s 1 (by decide)]; exact hX
+  have e1b : srun k s cFactorG 2 = cosTerm X k := by
+    rw [cFactorG_pres k s 2 (by decide)]; exact ht
+  have w1 := cFactorG_word k s hs
+  -- state after the first multiply
+  have e2 : srun k (srun k s cFactorG) mulAG 5
+      = cosTerm X k * X / B62 := by
+    have := mul62G_eq_mulFix k (srun k s cFactorG) 2 1 5 3 4
+      10 11 12 13 14 15 16 17 (by unfold Distinct8; decide)
+      (by unfold NotIn8; decide) (by unfold NotIn8; decide)
+      (by unfold NotIn8; decide) (by unfold NotIn8; decide) (by decide) w1 (by rw [e1b]; exact cosTerm_le X hXb k)
+      (by rw [e1a]; exact hXb)
+    rw [mulAG]
+    rw [this, e1a, e1b]
+  have e2a : srun k (srun k s cFactorG) mulAG 1 = X := by
+    rw [srun_untouched k 1 mulAG (by decide)]; exact e1a
+  have e2b : srun k (srun k s cFactorG) mulAG 9
+      = (2 * k + 1) * (2 * k + 2) := by
+    rw [srun_untouched k 9 mulAG (by decide)]; exact e1
+  have w2 := mulAG_word k (srun k s cFactorG) w1
+  have h5le : srun k (srun k s cFactorG) mulAG 5 ≤ B62 := by
+    rw [e2]
+    exact Nat.le_trans (mulFix_le _ hXb) (cosTerm_le X hXb k)
+  -- state after the second multiply
+  have e3 : srun k (srun k (srun k s cFactorG) mulAG) mulBG 6
+      = cosTerm X k * X / B62 * X / B62 := by
+    have := mul62G_eq_mulFix k (srun k (srun k s cFactorG) mulAG) 5 1 6 3 4
+      10 11 12 13 14 15 16 17 (by unfold Distinct8; decide)
+      (by unfold NotIn8; decide) (by unfold NotIn8; decide)
+      (by unfold NotIn8; decide) (by unfold NotIn8; decide) (by decide) w2 h5le (by rw [e2a]; exact hXb)
+    rw [mulBG, this, e2, e2a]
+  have e3b : srun k (srun k (srun k s cFactorG) mulAG) mulBG 9
+      = (2 * k + 1) * (2 * k + 2) := by
+    rw [srun_untouched k 9 mulBG (by decide)]; exact e2b
+  have w3 := mulBG_word k (srun k (srun k s cFactorG) mulAG) w2
+  -- the final division
+  have hcpos : 0 < (2 * k + 1) * (2 * k + 2) := Nat.mul_pos (by omega) (by omega)
+  have h1 : cosTerm X k * X / B62 * X / B62 ≤ B62 :=
+    Nat.le_trans (mulFix_le (cosTerm X k * X / B62) hXb)
+      (Nat.le_trans (mulFix_le (cosTerm X k) hXb) (cosTerm_le X hXb k))
+  have hres : cosTerm X k * X / B62 * X / B62 / ((2 * k + 1) * (2 * k + 2)) < M := by
+    have h2 : cosTerm X k * X / B62 * X / B62
+        / ((2 * k + 1) * (2 * k + 2)) ≤ cosTerm X k * X / B62 * X / B62 :=
+      Nat.div_le_self _ _
+    have hBM : B62 < M := by decide
+    omega
+  rw [cosBodyG, srun_append, srun_append, srun_append]
+  simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
+    RegState.set]
+  rw [e3, e3b]
+  simp only [Nat.ne_of_gt hcpos, if_true, if_false, Option.getD_some]
+  rw [Nat.mod_eq_of_lt hres]
+  rfl
+
+#print axioms cFactorG_spec
+#print axioms cosBodyG_spec
 
 end LeanCompCert.Ports.TrigFixPort
