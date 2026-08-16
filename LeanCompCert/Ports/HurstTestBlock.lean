@@ -540,6 +540,55 @@ and discharges by `decide`. -/
 
 #print axioms hurstBodyC2b_noDiv
 
+
+/-! ### The model side of the substitution
+
+`MertensCDEM`'s fold is `gstep = gC ∘ gB ∘ gA` over the observation
+`Abs = ⟨bad, mo, trial⟩`.  Only `gC` mentions the row test, so the Hurst fold
+replaces exactly that, and `gA`/`gB` are reused unchanged.
+
+`absOfBias_eq_absOf` is the small fact that makes the two layers line up: the
+`|M|` this file talks about and the one `MertensCDEM.bodyC2a` produces are the
+same function. -/
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem absOfBias_eq_absOf (c : Cfg) (mo : Nat) :
+    absOfBias c.bias mo = absOf c mo := rfl
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The violation flag after the Hurst row test.  Identical to
+`MertensCDEM.badOf` except that `RowFail` is replaced by `HurstRowFail` —
+and note the latter has no clamp, so `c.cap` does not appear. -/
+def hurstBadOf (c : Cfg) (X last bad mo : Nat) : Nat :=
+  bad ||| (if HurstRowFail c.lower X mo c.bias ∨ AnchorFail c X mo
+           then last else 0)
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The accumulate-and-check stage, with Hurst's row test. -/
+def hurstGC (c : Cfg) (idx : Nat) (a : Abs) : Abs :=
+  let X := c.lo + idx / c.rounds
+  let last := if idx % c.rounds = c.rounds - 1 then 1 else 0
+  let mo := moOf last a.mo a.t
+  ⟨hurstBadOf c X last a.bad mo, mo, a.t⟩
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The Hurst fold step.  `gA` and `gB` are CDEM's, unchanged. -/
+def hurstGstep (c : Cfg) (idx : Nat) (a : Abs) : Abs :=
+  hurstGC c idx (gB c idx (gA c idx a))
+
+open LeanCompCert.Ports.MertensCDEM in
+/-- The two folds agree away from the row test: the accumulator and the trial
+state advance identically, and only the violation flag can differ. -/
+theorem hurstGstep_mo_eq (c : Cfg) (idx : Nat) (a : Abs) :
+    (hurstGstep c idx a).mo = (gstep c idx a).mo := rfl
+
+open LeanCompCert.Ports.MertensCDEM in
+theorem hurstGstep_t_eq (c : Cfg) (idx : Nat) (a : Abs) :
+    (hurstGstep c idx a).t = (gstep c idx a).t := rfl
+
+#print axioms absOfBias_eq_absOf
+#print axioms hurstGstep_mo_eq
+
 #print axioms scaledAbsG_spec
 
 end LeanCompCert.Ports.HurstTestBlock
