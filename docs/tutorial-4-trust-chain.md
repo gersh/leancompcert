@@ -49,20 +49,25 @@ covers C-to-assembly. Around it, the acceptance suite runs four gates:
    `scripts/clight-correspond-coq.py` re-does the comparison *inside
    Coq*: the event extraction is a Coq `Fixpoint` over CompCert's actual
    AST, and equality is discharged by `vm` conversion at `Qed`.
-4. **Direct emission + semantics** (`Verified.ClightEmit`,
+4. **Proved scalar compilation + exact semantics**
+   (`Verified.ProgramClightEmit`, `scripts/coq/ClightDSLCompiler.v`,
    `scripts/coq/ClightFragmentSem.v`, `scripts/coq/ClightMemorySem.v`,
    `scripts/clight-direct-verify.py`)
-   — the Clight AST is generated *directly* from the proven statement
-   lists (no C printer, no clightgen parser in this path), and Coq's
-   kernel proves, via a fragment evaluator shown sound against
-   `ClightBigstep.exec_stmt`, that **CompCert's own bigstep semantics
-   computes the certified value** — for every global environment and
+   — Lean's proof-gated emitter serializes `Reflect.Program`, and the exact
+   Clight AST is defined by Coq's proved `compile_program` (no C printer or
+   clightgen parser in this path). `compile_program_correct` proves generically
+   that the DSL denotation is preserved.  An independent fragment evaluator,
+   proved sound against `ClightBigstep.exec_stmt`, checks again that
+   **CompCert's own bigstep semantics computes the certified value** — for
+   every global environment and
    every memory (`eval_funcall function_entry2 ge m (Internal f) nil E0
    m (Vlong value)`).  The once-and-for-all Coq endpoint also has proved
    fuelled-loop and CompCert-memory variants: a successful check of a rolled
    body, or of a pointer-parameter body with full-width dereference loads and
    stores, implies `exec_stmt` and `eval_funcall` for that same Clight AST.
    The regressions instantiate both variants with concrete Clight functions.
+   Neither the scalar compiler theorem nor the fixed-point instance uses
+   Lean's `native_decide`; its safety and denotation premises are kernel proved.
 
 ## What remains trusted, stated plainly
 

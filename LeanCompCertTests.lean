@@ -10,10 +10,11 @@ import LeanCompCert.Testing.RolledFixedPoint
 import LeanCompCert.Testing.PackedCoverageCertificate
 import LeanCompCert.Testing.AlgorithmProof
 import LeanCompCert.Testing.ArrayMobiusCertificate
-import LeanCompCert.Verified.ClightEmit
 import LeanCompCert.Attest.LedgerReport
 import LeanCompCertTests.Docs
 import LeanCompCertTests.Attest
+import LeanCompCertTests.ClightContractTest
+import LeanCompCertTests.ProgramClightEmitTest
 
 open LeanCompCert
 
@@ -312,16 +313,19 @@ private def testRolledEmission : IO Unit := do
         "rolled artifact lacks a loop"
 
 private def testDirectClight : IO Unit := do
-  match Verified.ClightEmit.emitClight "direct_FixedPoint_mulShiftSum"
-      Testing.FixedPointCertificate.computation.statements "v_1" with
-  | none => throw (IO.userError "direct Clight emission failed")
-  | some source => do
-      check (source.contains "Definition f_direct_FixedPoint_mulShiftSum")
-        "direct Clight emission lacks the function definition"
-      check (source.contains "Sreturn (Some (Etempvar _v_1 tulong))")
-        "direct Clight emission lacks the return"
-      check (!source.contains "goto" && !source.contains "Sgoto")
-        "direct Clight emission must be goto-free"
+  let source := Verified.ProgramClightEmit.emitProgram
+    "direct_FixedPoint_mulShiftSum"
+    Testing.FixedPointCertificate.program
+    Testing.FixedPointCertificate.expectedValue
+    Testing.FixedPointCertificate.program_compCertWF
+    Testing.FixedPointCertificate.program_denote
+  check (source.contains
+      "Definition f_direct_FixedPoint_mulShiftSum : function := compile_program")
+    "proved Clight emission does not use the verified compiler"
+  check (source.contains "source_direct_FixedPoint_mulShiftSum_denote")
+    "proved Clight emission lacks its closed denotation check"
+  check (source.contains "compile_program_correct")
+    "proved Clight emission lacks the CompCert semantics theorem"
 
 /-- The receipt tool's byte surgery and on-disk format, at run time.
 

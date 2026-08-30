@@ -6,7 +6,7 @@ import LeanCompCert.Testing.WideMertensCertificate
 import LeanCompCert.Testing.ReflectedCertificate
 import LeanCompCert.Testing.FixedPointCertificate
 import LeanCompCert.Testing.RolledFixedPoint
-import LeanCompCert.Verified.ClightEmit
+import LeanCompCert.Verified.ProgramClightEmit
 import LeanCompCert.Testing.SquarefreeMertensCertificate
 import LeanCompCert.Testing.ProthCertificate
 import LeanCompCert.Testing.ArrayMobiusCertificate
@@ -764,19 +764,18 @@ def main (args : List String) : IO UInt32 :=
   | "attest-keygen" :: rest => attestKeygen rest
   | "verify-receipt" :: rest => verifyReceipt rest
   | ["emit-clight-fixedpoint-v", file] =>
-      match Verified.ClightEmit.emitClight "direct_FixedPoint_mulShiftSum"
-          Testing.FixedPointCertificate.computation.statements
-          "v_1" with
-      | none => do
-          IO.eprintln "error: direct Clight emission failed"
-          pure 1
-      | some source => do
-          let path : System.FilePath := file
-          if let some parent := path.parent then
-            IO.FS.createDirAll parent
-          IO.FS.writeFile path source
-          IO.println s!"wrote {file}"
-          pure 0
+      let source := Verified.ProgramClightEmit.emitProgram
+        "direct_FixedPoint_mulShiftSum"
+        Testing.FixedPointCertificate.program
+        Testing.FixedPointCertificate.expectedValue
+        Testing.FixedPointCertificate.program_compCertWF
+        Testing.FixedPointCertificate.program_denote
+      let path : System.FilePath := file
+      if let some parent := path.parent then
+        IO.FS.createDirAll parent
+      IO.FS.writeFile path source
+      IO.println s!"wrote {file}"
+      pure 0
   | "mangle" :: names => do
       if names.isEmpty then
         IO.eprintln "error: mangle requires at least one Lean name"

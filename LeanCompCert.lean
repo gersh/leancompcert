@@ -185,6 +185,8 @@ import LeanCompCert.Ports.ArraySegMobiusPlattAuditCertificate
 import LeanCompCert.Ports.ArraySegMobiusPlattAuditTrace
 import LeanCompCert.Ports.ArraySegMobiusPlattAuditFold
 import LeanCompCert.Verified.ArrayFoldBridge
+import LeanCompCert.Verified.ClightContract
+import LeanCompCert.Verified.ProgramClightEmit
 import LeanCompCert.Ports.BlockedFold
 import LeanCompCert.Ports.RS62LadderEncoding
 import LeanCompCert.Ports.RS62LadderReceipt

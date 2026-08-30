@@ -51,9 +51,10 @@ identical ordered operator/dataflow event streams between the C and its
 Clight translation (mutation-tested — one flipped operator fails), and
 the same comparison is re-done inside Coq with the equality discharged
 at `Qed`. On the direct path the printer drops out entirely — the Clight
-AST is generated straight from the proven statement lists — currently
-for the straight-line fragment. The generic Coq theorem also has rolled and
-memory cases. For production arrays, the complete `clightgen` AST is now
+AST is defined by the proved scalar compiler in
+`scripts/coq/ClightDSLCompiler.v` from a serialized `Reflect.Program`, and
+`compile_program_correct` proves its `eval_funcall` semantics generically.
+For production arrays, the complete `clightgen` AST is now
 checked as an exact instance; Lean proves the counter-driven trace equivalent
 to the literal denotation trace; and Coq proves the flat-array/CompCert-block
 load/store invariant. The remaining condition on the exact-AST theorem is an
@@ -107,11 +108,14 @@ python3 scripts/clight-correspond.py artifact.c artifact.v
 python3 scripts/clight-correspond-coq.py artifact.c artifact.v workdir/
 ```
 
-For straight-line certificates, the production direct path additionally proves the
-CompCert-semantics theorem itself
-(`scripts/clight-direct-verify.py`, driven by a Clight AST emitted from
-the proven statements — see the `emit-clight-fixedpoint-v` command for
-the working model).  `ClightFragmentSemTest.v` and
+For scalar certificates, the production direct path additionally proves the
+CompCert-semantics theorem itself.  The proof-gated Lean emitter serializes the
+`Reflect.Program`; Coq's `compile_program` defines the exact Clight AST, and
+`compile_program_correct` proves it generically
+(`scripts/clight-direct-verify.py`; see `emit-clight-fixedpoint-v` for the
+working model).  The fixed-point instance proves `CompCertWF` with static
+kernel checks and its denotation with `decide +kernel`; `native_decide` is not
+required. `ClightFragmentSemTest.v` and
 `ClightMemorySemTest.v` separately kernel-check the generic rolled and
 pointer-memory theorem instances. `scripts/clight-array-verify.py` additionally
 checks that the complete production array function is in this fragment and

@@ -39,6 +39,7 @@ test failing or the file ceasing to compile.
 | `tutorial-5-loops-and-scale.md` | the rolled artifact is kilobyte-scale and contains a loop; `counterAugment` adds exactly one register and preserves the loop count | `testTutorial5` |
 | `use-case-1-verified-native-decide.md` | `check-native` caching: a second run must recompile nothing | `test-compcert.sh` change-tracking assertion |
 | `use-case-2-verified-artifact.md` | every certificate compiles under CompCert and runs to exit 0 | `check-native`, 14 certificates |
+| `compcert-well-formedness.md` | kernel-only `CompCertWF`, proof-gated DSL serialization, generic `compile_program_correct`, and exact fixed-point `eval_funcall` | `ClightContractTest`, `ProgramClightEmitTest`, and `clight-direct-verify.py --self-test` |
 
 ## 2. What skeptics say
 
@@ -63,6 +64,12 @@ which exactly **2** carry the admitted schema.
 
 *Mutation:* injecting a synthetic `Lean.ofReduceBool` line into the audit log
 makes the gate exit non-zero.
+
+The scalar Lean-to-Clight acceptance instance itself uses `decide` and
+`decide +kernel`, not `native_decide`.  Its Coq-side `vm_compute` creates a
+kernel-checked proof and is independently mutation-tested: changing the
+expected fixed-point result from `40234404` to `40234405` makes the generated
+Coq check fail.
 
 ### "A checker that can only pass is worthless."
 

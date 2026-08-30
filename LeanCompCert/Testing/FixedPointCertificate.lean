@@ -1,4 +1,5 @@
 import LeanCompCert.Verified.Package
+import LeanCompCert.Verified.ClightContract
 
 /-!
 # M2 acceptance: 128-bit products and dyadic division in a certificate
@@ -82,6 +83,15 @@ def program : Program := {
 }
 
 theorem program_wf : program.WF := by decide
+
+/-- The exact additional side condition required by CompCert operations. -/
+theorem program_compCertWF : program.CompCertWF := by
+  refine ⟨program_wf, ClightContract.programSafe_of_static program ?_ ?_ ?_⟩
+  all_goals decide
+
+/-- Closed Lean denotation consumed by the proof-gated Clight emitter. -/
+theorem program_denote : program.denote = some expectedValue := by
+  decide +kernel
 
 /-- M1 structural packaging — no trace-sized obligations. -/
 def computation : Computation :=

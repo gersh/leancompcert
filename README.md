@@ -83,6 +83,12 @@ implemented, with per-milestone evidence recorded there.
 **Looking for a rigorous paper on the architecture and trust model?**
 [Formal Paper: Verified Computation in Lean 4 via Machine-Checked Compilation to CompCert C](docs/formal-trust-model-paper.md) — a formal publication-style paper detailing the DSL, denotational semantics, machine-proved compilation theorems (`evalCC_compile`), Clight Coq integration, explicit TCB breakdown, axiom isolation policies, and Lean 4 usage walkthroughs.
 
+**Need the exact Lean-to-Clight contract?**
+[CompCert well-formedness and the proved scalar compiler](docs/compcert-well-formedness.md)
+defines `CompCertWF`, shows the kernel-only proof pattern (no
+`native_decide` required), states `compile_program_correct`, and identifies the
+remaining serialization and native-backend boundaries precisely.
+
 **New to any of this?** [The complete walkthrough](docs/trust-walkthrough.md)
 — no assumed vocabulary, two real examples traced from a mathematical claim to
 bytes, naming what you must trust at each link.

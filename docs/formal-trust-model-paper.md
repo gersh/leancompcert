@@ -1,7 +1,7 @@
 # Verified Computation in Lean 4 via Machine-Checked Compilation to CompCert C: Architecture, Proof Coverage, and Trust Model
 
 **Abstract**  
-Proof assistants such as Lean 4 excel at verifying mathematical logic but face fundamental performance limits when executing large-scale finite computations inside the kernel. The standard alternative, `native_decide`, bypasses the kernel by compiling computations to native code, but forces the proof to trust Lean's whole frontend, code generator, C compiler, and C runtime. This paper presents the architecture, formalization, and trust model of `lean-compcert`, a framework for verified computation in Lean 4. `lean-compcert` defines a restricted, first-order register machine domain-specific language ($\text{DSL}$) with formal denotational semantics (`Program.denote` and `AProgram.denote`). We prove in Lean 4 that any valid DSL program compiles to a restricted subset of C while preserving denotational semantics (`evalCC_compile`). We further connect this emission directly to CompCert’s Coq semantics via direct Clight AST emission (`Verified/ClightEmit.lean`), verified in Coq's kernel (`ClightFragmentSem.v`). We present a complete analysis of what is machine-proved versus what remains in the Trusted Computing Base (TCB), establish a zero-axiom policy for core verification modules, and provide a step-by-step guide for incorporating verified computations into Lean 4 proofs.
+Proof assistants such as Lean 4 excel at verifying mathematical logic but face fundamental performance limits when executing large-scale finite computations inside the kernel. The standard alternative, `native_decide`, bypasses the kernel by compiling computations to native code, but forces the proof to trust Lean's whole frontend, code generator, C compiler, and C runtime. This paper presents the architecture, formalization, and trust model of `lean-compcert`, a framework for verified computation in Lean 4. `lean-compcert` defines a restricted, first-order register machine domain-specific language ($\text{DSL}$) with formal denotational semantics (`Program.denote` and `AProgram.denote`). We prove in Lean 4 that valid DSL programs preserve their denotation through the restricted compiler model. For the scalar direct path, Lean serializes the first-order program and Coq's proved `compile_program` constructs the exact Clight AST; `compile_program_correct` proves its behavior using CompCert's actual Clight semantics. This correspondence requires no `native_decide`: the fixed-point acceptance artifact discharges both well-formedness and denotation by Lean kernel proofs, while Coq independently checks the serialized program. We present a complete analysis of what is machine-proved versus what remains in the Trusted Computing Base (TCB), establish an explicit axiom policy, and provide a step-by-step guide for incorporating verified computations into Lean 4 proofs.
 
 ---
 
@@ -142,11 +142,18 @@ theorem AProgram.evalCC_compile (p : AProgram) (hWF : p.WF) (base : Int)
 
 ### 3.2 Coq-Side Clight Semantics (The Clight Bridge - M6)
 
-To avoid relying on a custom Lean-side C semantics parser, `lean-compcert` includes direct Clight AST emission ([`LeanCompCert/Verified/ClightEmit.lean`](file:///home/gersh/leancompcert/LeanCompCert/Verified/ClightEmit.lean)).
+To avoid relying on a custom Lean-side C semantics parser, `lean-compcert`
+includes emission through a proved Clight compiler
+(`LeanCompCert/Verified/ProgramClightEmit.lean` and
+`scripts/coq/ClightDSLCompiler.v`).  Lean serializes only the first-order
+`Reflect.Program`; Coq defines the exact function as
+`compile_program source_program`.
 
-In Coq (`scripts/coq/ClightFragmentSem.v`), CompCert's formal `ClightBigstep.exec_stmt` semantics is evaluated over the emitted Clight AST:
-* A computable fragment evaluator is proved sound against CompCert's official Coq big-step operational semantics.
-* For each certificate, Coq’s kernel evaluates `eval_funcall` at `Qed` time, verifying that CompCert’s formal semantics yields the expected certified constant value.
+In Coq, `compile_program_correct` proves once and for all that the DSL
+denotation is preserved by the exact generated Clight AST, using CompCert's
+own `sem_binary_operation`, casts, and `ClightBigstep.eval_funcall` semantics.
+Each generated certificate also asks Coq’s kernel to compute the serialized
+program's denotation at `Qed` time.
 
 ---
 
@@ -162,8 +169,8 @@ To evaluate the mathematical validity of a claim certified via `lean-compcert`, 
 +---------------------------------------------------+-------------------------------+
 | 1. High-level math => Reflected algorithm.        | 1. Lean 4 Kernel              |
 | 2. Program.denote => Emitted C (evalCC_compile).  | 2. Coq Kernel                 |
-| 3. Emitted Clight => CompCert Clight semantics.   | 3. CompCert Proof (Coq)       |
-| 4. CompCert C => Target Assembly Text.            | 4. Assembler & Linker (as/ld) |
+| 3. Compiled Clight => CompCert Clight semantics.  | 3. CompCert Proof (Coq)       |
+| 4. CompCert's generic backend correctness theorem.| 4. Assembler & Linker (as/ld) |
 | 5. Zero-axiom core verification library.          | 5. Physical CPU & Hardware    |
 +---------------------------------------------------+-------------------------------+
 ```
@@ -171,8 +178,14 @@ To evaluate the mathematical validity of a claim certified via `lean-compcert`, 
 ### 4.1 What Is Formally Proved
 
 1. **Denotational Preservation:** Proved in Lean 4 that $p.\text{denote} = \text{some } n \implies \text{EmittedC}(p) \Downarrow n$.
-2. **Coq Clight Evaluation:** Proved in Coq that CompCert’s operational semantics assigns the exact certified value to the emitted Clight representation.
-3. **CompCert Middle-End Preservation:** Proved in Coq (by the CompCert development team) that Clight AST transformations down to target assembly text preserve program semantics.
+2. **Coq Clight Compilation:** Proved generically in Coq that CompCert’s
+   operational semantics assigns the DSL denotation to the exact
+   `compile_program` Clight representation.
+3. **CompCert Middle-End Preservation:** Proved generically in Coq (by the
+   CompCert development team) that successful compilation from Clight to
+   target assembly preserves program behavior.  A native-artifact claim still
+   has to instantiate that theorem with this exact AST; separately parsing
+   pretty-printed C does not do so definitionally.
 
 ### 4.2 What Is Outside the Formal Proof (The TCB)
 
@@ -181,6 +194,9 @@ To evaluate the mathematical validity of a claim certified via `lean-compcert`, 
    * *Mitigation:* `lean-compcert` uses **freestanding artifacts** (~1.3 kB) with zero unresolved dynamic library dependencies, drastically minimizing linker surface area.
 3. **Physical Silicon & Operating System:** No formal logic can prove that hardware execution matches theoretical ISA specifications without physical fault.
 4. **The Encoding Gap:** The theorem proving $p.\text{compile} \Downarrow n$ does not prove that $p.\text{denote}$ matches a high-level mathematical definition unless an explicit Lean equivalence proof is provided.
+5. **Cross-Kernel Serialization:** Lean and Coq cannot share proof terms.  The
+   direct path therefore trusts the small constructor/numeral serialization
+   of `Reflect.Program`; Coq independently recomputes the serialized value.
 
 ### 4.3 Axiom Policy & Opt-In Execution Admission
 

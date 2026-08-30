@@ -10,16 +10,18 @@ Ecast), an expected u64 return value, and a work directory.  It:
   2. compiles (with caching) the once-and-for-all development
      ClightFragmentSem.v (computable evaluator `run` + Qed-proved
      soundness against CompCert's ClightBigstep semantics),
-  3. compiles rolled-loop and pointer-memory regressions that instantiate
+  3. compiles ClightDefinedOps.v and ClightDSLCompiler.v, including the
+     generic DSL-to-exact-Clight `compile_program_correct` theorem,
+  4. compiles rolled-loop and pointer-memory regressions that instantiate
      the generic statement/function theorems for actual Clight functions,
-  4. compiles (with caching) DirectFP.v,
-  5. generates DirectFPCheck.v, which vm_computes the body under `run`
+  5. compiles (with caching) DirectFP.v,
+  6. generates DirectFPCheck.v, which vm_computes the body under `run`
      and derives, via the soundness theorems:
        - fp_bigstep : forall fe ge e m, exec_stmt ... E0 ... m
                         (Out_return (Some (Vlong (Int64.repr N), tulong)))
        - fp_funcall : forall ge m, eval_funcall function_entry2 ge m
                         (Internal f) nil E0 m (Vlong (Int64.repr N))
-  5. compiles it; exit 0 iff every file Qed-checks.
+  7. compiles it; exit 0 iff every file Qed-checks.
 
 A wrong expected value makes the vm_compute reflexivity check fail, so
 the script exits nonzero (see --self-test for a demonstration).
@@ -179,12 +181,18 @@ def run_pipeline(direct_v: Path, expected: int, workdir: Path, func,
     coq_src = Path(__file__).resolve().parent / "coq"
     frag_src = coq_src / "ClightFragmentSem.v"
     frag_test_src = coq_src / "ClightFragmentSemTest.v"
+    defined_ops_src = coq_src / "ClightDefinedOps.v"
+    dsl_compiler_src = coq_src / "ClightDSLCompiler.v"
     mem_src = coq_src / "ClightMemorySem.v"
     mem_test_src = coq_src / "ClightMemorySemTest.v"
     if not frag_src.exists():
         sys.exit(f"error: {frag_src} not found")
     if not frag_test_src.exists():
         sys.exit(f"error: {frag_test_src} not found")
+    if not defined_ops_src.exists():
+        sys.exit(f"error: {defined_ops_src} not found")
+    if not dsl_compiler_src.exists():
+        sys.exit(f"error: {dsl_compiler_src} not found")
     if not mem_src.exists():
         sys.exit(f"error: {mem_src} not found")
     if not mem_test_src.exists():
@@ -199,6 +207,15 @@ def run_pipeline(direct_v: Path, expected: int, workdir: Path, func,
             frag_test_src, workdir / "ClightFragmentSemTest.v",
             coqc, flags, workdir, "ClightFragmentSemTest (rolled loop)",
             dependencies=(frag_src,)):
+        return False
+    if not cached_copy_and_compile(
+            defined_ops_src, workdir / "ClightDefinedOps.v",
+            coqc, flags, workdir, "ClightDefinedOps (u64 safety contract)"):
+        return False
+    if not cached_copy_and_compile(
+            dsl_compiler_src, workdir / "ClightDSLCompiler.v",
+            coqc, flags, workdir, "ClightDSLCompiler (proved DSL compiler)",
+            dependencies=(frag_src, defined_ops_src)):
         return False
     if not cached_copy_and_compile(mem_src, workdir / "ClightMemorySem.v",
                                    coqc, flags, workdir, "ClightMemorySem"):
