@@ -77,16 +77,6 @@ private def consume
       executedSteps := state.executedSteps + 1
     }
 
-private def evalOperand (locals : Locals) : Operand → Except EvalError Value
-  | .local id =>
-      match lookupLocal? locals id with
-      | some value => .ok value
-      | none => .error { message := s!"unknown local {id}" }
-  | .global id => .error { message := s!"global @{id.name} is not a first-class value" }
-  | .uintLit type value => .ok (.scalar type (Int.ofNat value))
-  | .intLit type value => .ok (.scalar type value)
-  | .null type => .ok (.null type)
-
 private def modulus (type : CCType) : Option Int :=
   type.bitWidth.map fun bits => Int.ofNat (2 ^ bits)
 
@@ -106,6 +96,23 @@ private def normalize (type : CCType) (value : Int) : Except EvalError Int := do
     pure (if unsigned >= half then unsigned - modulus else unsigned)
   else
     pure unsigned
+
+/-- Evaluate an operand as a machine value. Integer literals are converted to
+their declared machine type at the point where they enter the interpreter.
+In the proved unsigned scalar fragment this agrees with both the proof
+semantics and emitted C: `.uintLit .u8 257` denotes `1`, not the
+unrepresentable mathematical integer `257`. -/
+private def evalOperand (locals : Locals) : Operand → Except EvalError Value
+  | .local id =>
+      match lookupLocal? locals id with
+      | some value => .ok value
+      | none => .error { message := s!"unknown local {id}" }
+  | .global id => .error { message := s!"global @{id.name} is not a first-class value" }
+  | .uintLit type value => do
+      pure (.scalar type (← normalize type (Int.ofNat value)))
+  | .intLit type value => do
+      pure (.scalar type (← normalize type value))
+  | .null type => .ok (.null type)
 
 private def scalarValue (value : Value) : Except EvalError (CCType × Int) :=
   match value with

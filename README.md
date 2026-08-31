@@ -89,6 +89,11 @@ defines `CompCertWF`, shows the kernel-only proof pattern (no
 `native_decide` required), states `compile_program_correct`, and identifies the
 remaining serialization and native-backend boundaries precisely.
 
+**Checking a separately emitted large rolled loop?**
+[Exact rolled C to CompCert Clight](docs/exact-rolled-c-clight.md) gives the
+reproducible C + symbolic-contract commands and the full-AST, kernel-checked
+per-emission bridge. The loop computation remains outside the proof kernel.
+
 **New to any of this?** [The complete walkthrough](docs/trust-walkthrough.md)
 — no assumed vocabulary, two real examples traced from a mathematical claim to
 bytes, naming what you must trust at each link.
@@ -454,7 +459,14 @@ Clight emission with a Coq-kernel theorem that CompCert's bigstep
 semantics (`ClightBigstep.eval_funcall`) computes the certified value
 for every global environment and memory.  Generic Coq soundness theorems now
 also cover fuelled rolled control flow and pointer-backed loads/stores
-(`scripts/coq/ClightMemorySem.v`) against CompCert's real memory model.
+(`scripts/coq/ClightMemorySem.v`) against CompCert's real memory model. The
+reusable `AProgram` endpoint goes further:
+`scripts/clight-exact-array.py` proves that the complete Clight function parsed
+from each separately emitted rolled C artifact is exactly
+`compile_array_emitted_rolled_program`, then applies the generic
+`compile_array_emitted_rolled_program_correct` mutable-memory theorem. Its
+contract and proof size are independent of the loop count; the checked
+regression uses one trillion iterations without executing them.
 Production arrays use pointer-typed indexed CCIR operations and lower to
 `base[index]`. `Verified.ArrayRolled` proves that their counter-driven rolled
 trace has the same CCIR-with-memory semantics as the literal-index trace used
@@ -874,10 +886,12 @@ confirm that test can actually fail, and states plainly what is *not* covered.
 ## Scope and honest self-description
 
 The roadmap's milestones are implemented (see [ROADMAP.md](ROADMAP.md)
-for per-milestone evidence and the precisely-stated boundaries: the
-production direct-Clight semantics check covers the straight-line temp-only
-fragment. Its generic Coq theorem also handles rolled loops and CompCert
-pointer loads/stores; the production array AST is checked as an exact instance,
+for per-milestone evidence and the precisely-stated boundaries).  The scalar
+direct path is proof-gated by kernel-checkable `CompCertWF` and denotation
+proofs, serializes `Reflect.Program`, and defines the exact Clight AST through
+the Coq-proved `compile_program`; it does not require `native_decide`.  Separate
+generic Coq theorems also handle rolled loops and CompCert pointer loads/stores;
+arbitrary restricted `AProgram` array ASTs can be checked as exact instances,
 the Lean rolled/literal traces are proved equivalent, and the flat-array/
 CompCert-block load/store invariant is proved. The remaining array seam is a
 per-artifact refinement from the fast production-step computation to the

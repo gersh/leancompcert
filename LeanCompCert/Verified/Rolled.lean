@@ -886,25 +886,34 @@ def rolledCFunction (p : Program) (name : String) : Option C.CFunction := do
     sourceDecl := some name
   }
 
-/-- Emit the rolled function as a checked translation unit. -/
-def emitRolled (p : Program) (name : String) : Except (Array String) String := do
+/-- The checked translation unit used by both flat and structured emission. -/
+def rolledTranslationUnit (fn : C.CFunction) : C.CTranslationUnit := {
+  -- No `lean_*` call is emitted, so `<lean/lean.h>` is omitted; see
+  -- the note in `LeanCompCert/Lower/Pure.lean`.
+  includes := #["stdint.h", "stddef.h"]
+  functions := #[fn]
+  externals := #[{
+    name := fn.name
+    params := #[]
+    result := .u64
+    trusted := true
+  }]
+}
+
+/-- Emit the rolled function as small checked text chunks.  Joining these
+chunks is definitionally the ordinary `emitRolled` output. -/
+def emitRolledChunks (p : Program) (name : String) :
+    Except (Array String) (List String) := do
   match rolledCFunction p name with
   | none => throw #["rolled lowering failed"]
   | some fn =>
-      match C.emitChecked .portable {
-        -- No `lean_*` call is emitted, so `<lean/lean.h>` is omitted; see
-        -- the note in `LeanCompCert/Lower/Pure.lean`.
-        includes := #["stdint.h", "stddef.h"]
-        functions := #[fn]
-        externals := #[{
-          name := fn.name
-          params := #[]
-          result := .u64
-          trusted := true
-        }]
-      } with
-      | .ok source => pure source
+      match C.emitCheckedChunks .portable (rolledTranslationUnit fn) with
+      | .ok chunks => pure chunks
       | .error errors => throw (errors.map fun e => e.pretty)
+
+/-- Emit the rolled function as a checked translation unit. -/
+def emitRolled (p : Program) (name : String) : Except (Array String) String := do
+  pure (C.joinChunks (← emitRolledChunks p name))
 
 /-! ## The proved C model of the rolled function
 

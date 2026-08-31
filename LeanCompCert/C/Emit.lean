@@ -2,6 +2,42 @@ import LeanCompCert.C.Validate
 
 namespace LeanCompCert.C
 
+/-! ## Structured text output
+
+Keep generated text as small chunks until the caller explicitly joins it.
+This is observationally the same emitter, but it lets attestation code compare
+each chunk with a consecutive packed-byte window instead of asking the kernel
+to normalize one enormous `String` equality. -/
+
+/-- Concatenate text chunks without routing through `String.join`'s `foldl`.
+The structural recursion is inexpensive for kernel proofs.  Large native
+emitters should stream `emitCheckedChunks` rather than flattening this view. -/
+def joinChunks : List String → String
+  | [] => ""
+  | chunk :: chunks => chunk ++ joinChunks chunks
+
+/-- Put a separator between chunks while keeping it as its own small chunk.
+
+This is intentionally structural.  Besides making kernel proofs simple, it
+lets a consumer inspect a bounded prefix without first allocating and
+reversing the entire emitted file.  Native callers that need a flat file
+should stream the resulting list rather than materialize a second reversed
+copy. -/
+def intersperseChunks (separator : String) : List String → List String
+  | [] => []
+  | [first] => [first]
+  | first :: second :: rest =>
+      first :: separator :: intersperseChunks separator (second :: rest)
+
+/-- Put a separator between already-structured sections.  Structural output
+preserves prefix laziness for bounded certificate windows. -/
+def intersperseChunkLists (separator : String) :
+    List (List String) → List String
+  | [] => []
+  | [first] => first
+  | first :: second :: rest =>
+      first ++ separator :: intersperseChunkLists separator (second :: rest)
+
 /-
 Type emission, structural rather than `partial`.
 
@@ -178,12 +214,11 @@ def emitStatement (statement : CStmt) (level : Nat) : List String :=
       [s!"{pad}/* {safe} */"]
 
 /-- Emit each statement of the list in turn, all at `level`. -/
-def emitStmtList (statements : List CStmt) (level : Nat)
-    (reversed : List String := []) : List String :=
+def emitStmtList (statements : List CStmt) (level : Nat) : List String :=
   match statements with
-  | [] => reversed.reverse
+  | [] => []
   | statement :: rest =>
-      emitStmtList rest level ((emitStatement statement level).reverse ++ reversed)
+      emitStatement statement level ++ emitStmtList rest level
 
 /-- Emit one `case` arm, label and `break` included. -/
 def emitCase (arm : CSwitchCase) (level : Nat) : List String :=
@@ -208,21 +243,30 @@ def emitStatements (statements : Array CStmt) (level : Nat) : List String :=
 def emitBlock (statements : Array CStmt) (level : Nat) : List String :=
   [s!"{indent level}\{"] ++ emitStatements statements (level + 1) ++ [s!"{indent level}}"]
 
-private theorem emitStmtList_acc (statements : List CStmt) (level : Nat)
-    (reversed : List String) :
-    emitStmtList statements level reversed =
-      reversed.reverse ++
-        statements.flatMap (fun statement => emitStatement statement level) := by
-  induction statements generalizing reversed with
-  | nil => simp [emitStmtList]
-  | cons statement rest ih =>
-      rw [emitStmtList, ih]
-      simp [List.reverse_append, List.append_assoc]
+/-- Concrete outer-function block spelling.  Exposing this small reduction
+keeps downstream certificate proofs independent of the private indentation
+helper. -/
+theorem emitBlock_zero (statements : Array CStmt) :
+    emitBlock statements 0 =
+      ["{"] ++ emitStatements statements 1 ++ ["}"] := by
+  rfl
+
+/-- Split a level-one loop into its two opening lines, body lines, and closing
+line.  Source-sharded artifact proofs use this to serialize the body without
+materializing unrelated statements. -/
+theorem emitStatement_whileLoop_one (condition : CExpr)
+    (body : Array CStmt) :
+    (emitStatement (.whileLoop condition body) 1).take 2 ++
+        emitStmtList body.toList 2 ++ ["    }"] =
+      emitStatement (.whileLoop condition body) 1 := by
+  rfl
 
 theorem emitStmtList_eq_flatMap (statements : List CStmt) (level : Nat) :
     emitStmtList statements level
       = statements.flatMap (fun statement => emitStatement statement level) := by
-  simpa using emitStmtList_acc statements level []
+  induction statements with
+  | nil => rfl
+  | cons _ _ ih => simp [emitStmtList, ih]
 
 theorem emitStatements_eq (statements : Array CStmt) (level : Nat) :
     emitStatements statements level
@@ -246,30 +290,65 @@ def CGlobal.emit (global : CGlobal) : String :=
     | .address symbol => s!"&{symbol}"
   s!"{storage}{qualifier}{emitDecl global.type global.name} = {init};"
 
-def CFunction.emit (fn : CFunction) : String :=
+/-- The first line of a function definition.  Keeping it public lets
+source-sharded certificate emitters reuse the exact ABI spelling without
+forcing the function body. -/
+def CFunction.emitHeader (fn : CFunction) : String :=
   let storage := if fn.internal then "static " else ""
   let params :=
     if fn.params.isEmpty then "void"
     else String.intercalate ", " (fn.params.toList.map fun param => emitDecl param.type param.name)
-  let header := s!"{storage}{fn.result.emit} {fn.name}({params})"
-  String.intercalate "\n" ([header] ++ emitBlock fn.body 0)
+  s!"{storage}{fn.result.emit} {fn.name}({params})"
 
-def CTranslationUnit.emit (unit : CTranslationUnit) : String :=
+/-- Structured spelling of a function.  Each statement line and newline is a
+separate chunk. -/
+def CFunction.emitChunks (fn : CFunction) : List String :=
+  intersperseChunks "\n" ([fn.emitHeader] ++ emitBlock fn.body 0)
+
+theorem CFunction.emitChunks_headD (fn : CFunction) :
+    fn.emitChunks.headD "" = fn.emitHeader := by
+  rfl
+
+/-- A nonempty function emission can be reconstructed from its lazily
+available header and its block lines. -/
+theorem CFunction.emitChunks_eq_head_cons_block (fn : CFunction) :
+    fn.emitChunks =
+      intersperseChunks "\n" (fn.emitChunks.headD "" :: emitBlock fn.body 0) := by
+  rfl
+
+/-- The historical flat function spelling, now defined by joining the
+structured spelling. -/
+def CFunction.emit (fn : CFunction) : String :=
+  joinChunks fn.emitChunks
+
+/-- Structured translation-unit spelling.  Its join is byte-for-byte the
+historical output: one newline inside sections, two between nonempty sections
+and functions, and one trailing newline. -/
+def CTranslationUnit.emitChunks (unit : CTranslationUnit) : List String :=
   let includes := unit.includes.toList.map fun header => s!"#include <{header}>"
   let externals := unit.externals.toList.map CExternal.emit
   let globals := unit.globals.toList.map CGlobal.emit
-  let functions := unit.functions.toList.map CFunction.emit
+  let functions := unit.functions.toList.map CFunction.emitChunks
   let sections := [
-    String.intercalate "\n" includes,
-    String.intercalate "\n" externals,
-    String.intercalate "\n" globals,
-    String.intercalate "\n\n" functions
-  ] |>.filter (fun content => !content.isEmpty)
-  String.intercalate "\n\n" sections ++ "\n"
+    intersperseChunks "\n" includes,
+    intersperseChunks "\n" externals,
+    intersperseChunks "\n" globals,
+    intersperseChunkLists "\n\n" functions
+  ] |>.filter (fun chunks => !chunks.isEmpty)
+  intersperseChunkLists "\n\n" sections ++ ["\n"]
+
+def CTranslationUnit.emit (unit : CTranslationUnit) : String :=
+  joinChunks unit.emitChunks
+
+def emitCheckedChunks (profile : Profile) (unit : CTranslationUnit) :
+    Except (Array ValidationError) (List String) :=
+  let errors := validateTranslationUnit profile unit
+  if errors.isEmpty then .ok unit.emitChunks else .error errors
 
 def emitChecked (profile : Profile) (unit : CTranslationUnit) :
     Except (Array ValidationError) String :=
-  let errors := validateTranslationUnit profile unit
-  if errors.isEmpty then .ok unit.emit else .error errors
+  match emitCheckedChunks profile unit with
+  | .ok chunks => .ok (joinChunks chunks)
+  | .error errors => .error errors
 
 end LeanCompCert.C

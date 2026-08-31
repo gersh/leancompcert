@@ -23,6 +23,24 @@ def addFunction : Function := {
   sourceDecl := some "Example.add"
 }
 
+/-- A literal wider than its declared type. This exercises conversion at the
+operand boundary: both C and the proved scalar model read `257 : uint8_t` as
+`1`. -/
+def wrappingLiteralFunction : Function := {
+  name := ⟨"Example.wrappingLiteral"⟩
+  params := #[]
+  result := .u8
+  entry := ⟨0⟩
+  blocks := #[{
+    id := ⟨0⟩
+    instructions := #[
+      .assign (mkLocal 0 .u8) (.uintLit .u8 257)
+    ]
+    terminator := .return (some (.local ⟨0⟩))
+  }]
+  sourceDecl := some "Example.wrappingLiteral"
+}
+
 /-- A loop-shaped CCIR function exercising bounded-stack tail recursion lowering. -/
 def sumToFunction : Function := {
   name := ⟨"Example.sumTo"⟩
@@ -57,7 +75,7 @@ def sumToFunction : Function := {
 }
 
 def pureProgram : Program := {
-  functions := #[addFunction, sumToFunction]
+  functions := #[addFunction, wrappingLiteralFunction, sumToFunction]
 }
 
 def demoMainC : String :=

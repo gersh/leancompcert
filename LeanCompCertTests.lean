@@ -1,4 +1,5 @@
 import LeanCompCert
+import LeanCompCert.Verified.InterpreterBridge
 import LeanCompCert.Testing.PureProgram
 import LeanCompCert.Testing.VerifiedDecide
 import LeanCompCert.Testing.MertensCertificate
@@ -38,6 +39,11 @@ private def testInterpreter : IO Unit := do
   | .error error => throw (IO.userError error.pretty)
   | .ok result =>
       check (result.value == .scalar .u64 42) "CCIR addition produced the wrong result"
+  match CCIR.evalPure Testing.pureProgram ⟨"Example.wrappingLiteral"⟩ #[] with
+  | .error error => throw (IO.userError error.pretty)
+  | .ok result =>
+      check (result.value == .scalar .u8 1)
+        "CCIR interpreter did not convert a wide literal to its declared type"
   match CCIR.evalPure Testing.pureProgram ⟨"Example.sumTo"⟩
       #[.scalar .u64 100, .scalar .u64 0] with
   | .error error => throw (IO.userError error.pretty)

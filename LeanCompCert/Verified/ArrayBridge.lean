@@ -926,13 +926,15 @@ def AProgram.rolledCFunction (p : AProgram) (name : String) : Option C.CFunction
     sourceDecl := some name
   }
 
-/-- Emit the rolled array program as a checked translation unit. -/
-def AProgram.emitRolled (p : AProgram) (name : String) :
-    Except (Array String) String := do
+/-- Emit the rolled array program as validated text chunks.  Keeping the
+chunks separate lets large certificate runners stream C to disk instead of
+building one large intermediate `String`. -/
+def AProgram.emitRolledChunks (p : AProgram) (name : String) :
+    Except (Array String) (List String) := do
   match p.rolledCFunction name with
   | none => throw #["rolled array lowering failed"]
   | some fn =>
-      match C.emitChecked .portable {
+      match C.emitCheckedChunks .portable {
         includes := #["stdint.h", "stddef.h"]
         externals := #[{
           name := fn.name
@@ -940,8 +942,13 @@ def AProgram.emitRolled (p : AProgram) (name : String) :
           result := fn.result
           trusted := true }]
         functions := #[fn] } with
-      | .ok source => pure source
+      | .ok chunks => pure chunks
       | .error errors => throw (errors.map C.ValidationError.pretty)
+
+/-- Emit the rolled array program as a checked translation unit. -/
+def AProgram.emitRolled (p : AProgram) (name : String) :
+    Except (Array String) String := do
+  pure (C.joinChunks (← p.emitRolledChunks name))
 
 
 end LeanCompCert.Verified.ArrayState

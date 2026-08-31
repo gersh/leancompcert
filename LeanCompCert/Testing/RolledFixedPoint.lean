@@ -1,4 +1,6 @@
 import LeanCompCert.Verified.Rolled
+import LeanCompCert.Verified.ClightContract
+import LeanCompCert.Verified.ProgramClightEmit
 import LeanCompCert.Testing.FixedPointCertificate
 
 /-!
@@ -31,6 +33,16 @@ def program : Program := {
 
 theorem program_wf : program.WF := by decide
 
+/-- The rolled artifact uses only operations whose CompCert definedness is
+established from their syntax.  This proof does not execute the 10^7-loop
+denotation. -/
+theorem program_compCertWF : program.CompCertWF := by
+  refine ⟨program_wf,
+    LeanCompCert.Verified.ClightContract.programSafe_of_static program ?_ ?_ ?_⟩
+  all_goals decide
+
+theorem loopCount_lt_modulus : program.loopCount < M := by decide
+
 def mainC : String :=
   "\nint main(void)\n" ++
   "{\n" ++
@@ -40,5 +52,13 @@ def mainC : String :=
 def emittedC : Except (Array String) String := do
   let source ← emitRolled program "FixedPoint.rolled10M"
   pure (source ++ mainC)
+
+/-- Compact Coq source/denotation contract consumed by
+`scripts/clight-exact-rolled.py`.  Its theorem is conditional on
+`dsl_denote source = Some w`, so emitting and checking it do not run the
+10^7-iteration computation. -/
+def emittedCoqContract : String :=
+  LeanCompCert.Verified.ProgramClightEmit.emitRolledProgramContract
+    "FixedPoint_rolled10M" program program_compCertWF loopCount_lt_modulus
 
 end LeanCompCert.Testing.RolledFixedPoint

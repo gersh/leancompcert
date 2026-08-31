@@ -130,6 +130,38 @@ if command -v clightgen >/dev/null 2>&1; then
     python3 scripts/clight-direct-verify.py "$direct_v" 40234404 \
       "$output/direct-verify" --self-test
     echo "direct Clight emission: CompCert bigstep semantics Qed at 40234404"
+    rolled_source_v="$output/rolled-10m-source.v"
+    lake env lean --run bench/RolledFixedPointExactEmit.lean \
+      "$rolled_10m_c" "$rolled_source_v"
+    rm -rf "$output/rolled-exact" "$output/rolled-exact-selftest"
+    python3 scripts/clight-exact-rolled.py \
+      --compcert "$compcert_coq_dir" \
+      "$rolled_10m_c" "$rolled_source_v" "$output/rolled-exact"
+    python3 scripts/clight-exact-rolled.py \
+      --compcert "$compcert_coq_dir" \
+      --self-test "$output/rolled-exact-selftest"
+    echo "rolled C exact Clight AST + generic semantics: Qed; mutant rejected"
+    array_exact_c="$output/array-exact.c"
+    array_exact_source_v="$output/array-exact-source.v"
+    lake env lean --run bench/ArrayExactEmit.lean \
+      "$array_exact_c" "$array_exact_source_v"
+    rm -rf "$output/array-exact" "$output/array-exact-mutant"
+    python3 scripts/clight-exact-array.py \
+      --compcert "$compcert_coq_dir" \
+      --proof-cache "$output/clight-array-proof-cache" \
+      "$array_exact_c" "$array_exact_source_v" "$output/array-exact"
+    array_exact_mutant="$output/array-exact-mutant.c"
+    sed 's/(v_3 + v_1)/(v_3 - v_1)/' \
+      "$array_exact_c" > "$array_exact_mutant"
+    if python3 scripts/clight-exact-array.py \
+        --compcert "$compcert_coq_dir" \
+        --proof-cache "$output/clight-array-proof-cache" \
+        "$array_exact_mutant" "$array_exact_source_v" \
+        "$output/array-exact-mutant"; then
+      echo "array exact checker accepted a mutated operator" >&2
+      exit 1
+    fi
+    echo "rolled AProgram C exact Clight AST + memory semantics: Qed; mutant rejected"
     array_c="$native_check_dir/mobius-array.c"
     clightgen -normalize "$array_c"
     python3 scripts/clight-array-verify.py "${array_c%.c}.v" \
