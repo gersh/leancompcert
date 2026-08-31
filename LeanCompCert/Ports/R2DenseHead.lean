@@ -148,6 +148,7 @@ private theorem all_splice_of_all {r : Nat} {l mid : List AInstr}
   all_append (all_append (all_take_of_all h a) hmid)
     (all_drop_of_all h b)
 
+set_option maxRecDepth 40000 in
 private theorem logBody_all (c : R2Cfg) :
     c.logBody.all (ainstrWFB regCount) = true := by rfl
 

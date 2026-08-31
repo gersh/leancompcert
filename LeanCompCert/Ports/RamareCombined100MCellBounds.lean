@@ -247,6 +247,20 @@ theorem markCell_productionBounds
     CellProductionBounds (RamareCombined100MSeg.markCell rows n) :=
   (markCell_divisorBounds rows n hn hpair).productionBounds hn hN
 
+/-- The first factor decoded by `finish` is either the candidate itself or
+the first factor stored in the bounded cell.  This source-level fact is the
+only factor bound needed for arithmetic table-address safety. -/
+theorem finish_p_le_100000000 (n : Nat)
+    (c : RamareCombined100MSeg.Cell) (hn : n ≤ 100000000)
+    (hc : CellProductionBounds c) :
+    (RamareCombined100MSeg.finish n c).p ≤ 100000000 := by
+  unfold RamareCombined100MSeg.finish
+  split
+  · exact hn
+  · split
+    · split <;> exact hc.p
+    · exact hc.p
+
 /-! ## Symbolic coprimality of the trial table -/
 
 theorem trialPrime_two_le {n : Nat} (hprime : trialPrime n = true) :

@@ -13,6 +13,8 @@ the round counter.  This file records that literal frame once.
 
 namespace LeanCompCert.Ports.R2SegSieve
 
+set_option maxRecDepth 10000
+
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Verified.ArrayRegFrame
@@ -27,7 +29,7 @@ theorem logBody_eq_live_round_suffix (c : R2Cfg) :
 /-- The scalar work after the live round and before the final stream-cursor
 commit. -/
 def logBeforeCursorAdvanceBody (c : R2Cfg) : List AInstr :=
-  (logAfterLiveRoundBody c).take 96
+  (logAfterLiveRoundBody c).take 103
 
 /-- The final production instruction advances the stream exactly when the
 current entry has completed. -/
@@ -163,8 +165,8 @@ theorem logAfterLiveRoundBody_nonfinal_frame (c : R2Cfg) (k : Nat)
     (arun_frame k 247 (logBeforeLowCommitBody c) (by rfl) sqrt).trans
       hsqrt.1
   have hblViol : beforeLow.regs rViol = s.regs rViol :=
-    (arun_frame k rViol (logBeforeLowCommitBody c) (by rfl) sqrt).trans
-      hsqrtViol
+    (logBeforeLowCommitBody_mark_viol c k sqrt hsqrt.1
+      (by rw [hsqrtViol]; exact hviol)).trans hsqrtViol
   let low := arun k beforeLow (logLowCommitBody c)
   have hlow := logLowCommitBody_mark_run c k beforeLow hbl247
     (by rw [hblViol]; exact hviol)

@@ -71,8 +71,26 @@ def checkCell (c : Cfg) (expected : Array Cell) (X : Nat) : List AInstr :=
   checkWord (tableLo c + X) (encodeZ expected[X]!.lo) ++
     checkWord (tableHi c + X) (encodeZ expected[X]!.hi)
 
+/-- Check the cells named by `xs` (each `i` refers to table entry `i + 1`).
+`checkTable` is the full sweep `xs = List.range c.cap`; a shard supplies a
+sub-range so that a single emitted artifact stays small. -/
+def checkTableOn (c : Cfg) (expected : Array Cell) (xs : List Nat) : List AInstr :=
+  xs.flatMap (fun i => checkCell c expected (i + 1))
+
 def checkTable (c : Cfg) (expected : Array Cell) : List AInstr :=
-  (List.range c.cap).flatMap (fun i => checkCell c expected (i + 1))
+  checkTableOn c expected (List.range c.cap)
+
+/-- Shard of `tableProgram` that verifies only the cells named by `xs`.
+The sweep is identical; only the epilogue is restricted, so a shard is a
+strictly smaller artifact and the shards' conjunction is the full check. -/
+def tableProgramOn (c : Cfg) (expected : Array Cell) (xs : List Nat) : AProgram := {
+  regCount := regCount
+  arrayLen := tableArrayLen c
+  loopCount := c.loopCount
+  init := c.init
+  body := c.body ++ tableStoreBody c
+  epilogue := checkTableOn c expected xs
+  output := rViol }
 
 def tableProgram (c : Cfg) (expected : Array Cell) : AProgram := {
   regCount := regCount
@@ -144,12 +162,16 @@ theorem checkCell_wf (c : Cfg) (expected : Array Cell) (X : Nat) :
   simp only [checkCell, List.mem_append] at hi
   exact hi.elim (checkWord_wf _ _ i) (checkWord_wf _ _ i)
 
-theorem checkTable_wf (c : Cfg) (expected : Array Cell) :
-    ∀ i ∈ checkTable c expected, i.WF regCount := by
+theorem checkTableOn_wf (c : Cfg) (expected : Array Cell) (xs : List Nat) :
+    ∀ i ∈ checkTableOn c expected xs, i.WF regCount := by
   intro i hi
-  simp only [checkTable, List.mem_flatMap] at hi
+  simp only [checkTableOn, List.mem_flatMap] at hi
   obtain ⟨x, -, hx⟩ := hi
   exact checkCell_wf c expected (x + 1) i hx
+
+theorem checkTable_wf (c : Cfg) (expected : Array Cell) :
+    ∀ i ∈ checkTable c expected, i.WF regCount :=
+  checkTableOn_wf c expected (List.range c.cap)
 
 theorem tableProgram_wf (c : Cfg) (expected : Array Cell) :
     (tableProgram c expected).WF := by
@@ -157,6 +179,14 @@ theorem tableProgram_wf (c : Cfg) (expected : Array Cell) :
     checkTable_wf c expected⟩
   intro i hi
   simp only [tableProgram, List.mem_append] at hi
+  exact hi.elim (base_body_wf c i) (tableStoreBody_wf c i)
+
+theorem tableProgramOn_wf (c : Cfg) (expected : Array Cell) (xs : List Nat) :
+    (tableProgramOn c expected xs).WF := by
+  refine ⟨show rViol < regCount by decide, base_init_wf c, ?_,
+    checkTableOn_wf c expected xs⟩
+  intro i hi
+  simp only [tableProgramOn, List.mem_append] at hi
   exact hi.elim (base_body_wf c i) (tableStoreBody_wf c i)
 
 theorem tableProgram_compiled (c : Cfg) (expected : Array Cell) (base : Int)
@@ -169,6 +199,18 @@ theorem tableProgram_compiled (c : Cfg) (expected : Array Cell) (base : Int)
         (fun m : Verified.MemFragment.MCCState =>
           m.env ⟨(tableProgram c expected).output + 1⟩) = some ((n : Nat) : Int) :=
   AProgram.evalCC_compile _ (tableProgram_wf c expected) base hBase n hDenote
+
+theorem tableProgramOn_compiled (c : Cfg) (expected : Array Cell)
+    (xs : List Nat) (base : Int)
+    (hBase : BaseOk (tableProgramOn c expected xs).arrayLen base)
+    (n : Nat) (hDenote : (tableProgramOn c expected xs).denote = some n) :
+    Option.bind
+        (Verified.MemFragment.evalMCCSequence
+          ((tableProgramOn c expected xs).initialMCC base)
+          (tableProgramOn c expected xs).compile)
+        (fun m : Verified.MemFragment.MCCState =>
+          m.env ⟨(tableProgramOn c expected xs).output + 1⟩) = some ((n : Nat) : Int) :=
+  AProgram.evalCC_compile _ (tableProgramOn_wf c expected xs) base hBase n hDenote
 
 /-! ## Raw denotation -/
 
@@ -256,10 +298,13 @@ def checkCellValue (c : Cfg) (expected : Array Cell) (arr : Nat → Nat)
       (arr ((tableLo c + X) % M) ≠ encodeZ expected[X]!.lo % M))
     (arr ((tableHi c + X) % M) ≠ encodeZ expected[X]!.hi % M)
 
+def checkTableValueOn (c : Cfg) (expected : Array Cell) (arr : Nat → Nat)
+    (v : Nat) (xs : List Nat) : Nat :=
+  xs.foldl (fun v i => checkCellValue c expected arr v (i + 1)) v
+
 def checkTableValue (c : Cfg) (expected : Array Cell) (arr : Nat → Nat)
     (v : Nat) : Nat :=
-  (List.range c.cap).foldl
-    (fun v i => checkCellValue c expected arr v (i + 1)) v
+  checkTableValueOn c expected arr v (List.range c.cap)
 
 theorem checkWord_run (address expected : Nat) (s : AState) :
     (arun 0 s (checkWord address expected)).regs rViol =
@@ -288,15 +333,30 @@ theorem checkCell_arr (c : Cfg) (expected : Array Cell) (X : Nat) (s : AState) :
     (arun 0 s (checkCell c expected X)).arr = s.arr := by
   rw [checkCell, arun_append, checkWord_arr, checkWord_arr]
 
-theorem checkTable_run (c : Cfg) (expected : Array Cell) (s : AState) :
-    (arun 0 s (checkTable c expected)).regs rViol =
-      checkTableValue c expected s.arr (s.regs rViol) := by
-  unfold checkTable checkTableValue
-  induction (List.range c.cap) generalizing s with
+theorem checkTableOn_run (c : Cfg) (expected : Array Cell) (xs : List Nat)
+    (s : AState) :
+    (arun 0 s (checkTableOn c expected xs)).regs rViol =
+      checkTableValueOn c expected s.arr (s.regs rViol) xs := by
+  unfold checkTableOn checkTableValueOn
+  induction xs generalizing s with
   | nil => rfl
   | cons X xs ih =>
       rw [List.flatMap_cons, arun_append, ih, checkCell_arr, checkCell_run]
       rfl
+
+theorem checkTableOn_arr (c : Cfg) (expected : Array Cell) (xs : List Nat)
+    (s : AState) :
+    (arun 0 s (checkTableOn c expected xs)).arr = s.arr := by
+  unfold checkTableOn
+  induction xs generalizing s with
+  | nil => rfl
+  | cons X xs ih =>
+      rw [List.flatMap_cons, arun_append, ih, checkCell_arr]
+
+theorem checkTable_run (c : Cfg) (expected : Array Cell) (s : AState) :
+    (arun 0 s (checkTable c expected)).regs rViol =
+      checkTableValue c expected s.arr (s.regs rViol) :=
+  checkTableOn_run c expected (List.range c.cap) s
 
 theorem checkWord_defined {len address expected : Nat} (s : AState)
     (haddr : address < len) (hlen : len < M) :
@@ -335,6 +395,11 @@ theorem checkCells_defined (c : Cfg) (expected : Array Cell)
       exact ih (arun 0 s (checkCell c expected (i + 1)))
         (fun j hj => hxs j (by simp [hj]))
 
+theorem checkTableOn_defined (c : Cfg) (expected : Array Cell) (xs : List Nat)
+    (s : AState) (hc : TableAdmissible c) (hxs : ∀ i ∈ xs, i < c.cap) :
+    AllDefined (tableArrayLen c) 0 s (checkTableOn c expected xs) :=
+  checkCells_defined c expected xs s hc hxs
+
 theorem checkTable_defined (c : Cfg) (expected : Array Cell) (s : AState)
     (hc : TableAdmissible c) :
     AllDefined (tableArrayLen c) 0 s (checkTable c expected) := by
@@ -353,6 +418,9 @@ def rawFinal (c : Cfg) : AState :=
 
 def rawValue (c : Cfg) (expected : Array Cell) : Nat :=
   checkTableValue c expected (rawFinal c).arr ((rawFinal c).regs rViol)
+
+def rawValueOn (c : Cfg) (expected : Array Cell) (xs : List Nat) : Nat :=
+  checkTableValueOn c expected (rawFinal c).arr ((rawFinal c).regs rViol) xs
 
 set_option maxRecDepth 20000 in
 set_option maxHeartbeats 2000000 in
@@ -420,5 +488,69 @@ theorem tableProgram_denote (c : Cfg) (expected : Array Cell)
     (hc : TableAdmissible c) :
     (tableProgram c expected).denote = some (rawValue c expected) :=
   (rawLoop c expected hc).denote_eq (rawLoop_value c expected hc)
+
+
+set_option maxRecDepth 20000 in
+set_option maxHeartbeats 2000000 in
+def rawLoopOn (c : Cfg) (expected : Array Cell) (xs : List Nat)
+    (hc : TableAdmissible c) (hxs : ∀ i ∈ xs, i < c.cap) :
+    LeanCompCert.Verified.Algorithm.ArrayLoop AState where
+  program := tableProgramOn c expected xs
+  inv := WordInv
+  step := rawStep c
+  obs := id
+  g := rawStep c
+  out := fun s => checkTableValueOn c expected s.arr (s.regs rViol) xs
+  entry := rawEntry c
+  init_reaches := by
+    apply denoteAInstrs_eq_arun
+    have hi := (LeanCompCert.Ports.Section413G1Denote.init_reaches_tInit c
+      (by simp [Cfg.arrayLen]; omega)).1
+    exact allDefined_mono_len (base_len_le_table_len c) c.init initialAState hi
+  inv_entry := by
+    refine ⟨LeanCompCert.Ports.Section413G1Denote.arun_regs_lt
+        0 c.init initialAState ?_ ?_,
+      LeanCompCert.Ports.Section413G1Denote.arun_arr_lt
+        0 c.init initialAState ?_ ?_⟩ <;>
+      simp [initialAState, initialState, M]
+  body_sim := by
+    intro idx s hidx hs
+    apply denoteAInstrs_eq_arun
+    exact extended_body_defined c hc idx hidx s hs
+  inv_step := by
+    intro idx s hidx hs
+    exact extended_body_wordInv c idx s hs
+  obs_step := by
+    intro index s hidx hs
+    show id (rawStep c index s) = rawStep c index (id s)
+    simp only [id_eq]
+  epilogue_reads := by
+    intro s hs
+    rw [show (tableProgramOn c expected xs).epilogue = checkTableOn c expected xs from rfl]
+    change Option.map (fun s' => s'.regs rViol)
+      (denoteAInstrs (tableArrayLen c) 0 s (checkTableOn c expected xs)) = _
+    rw [denoteAInstrs_eq_arun _ _ _ _ (checkTableOn_defined c expected xs s hc hxs)]
+    simp only [Option.map_some]
+    exact congrArg some (checkTableOn_run c expected xs s)
+
+set_option maxRecDepth 20000 in
+set_option maxHeartbeats 2000000 in
+theorem rawLoopOn_value (c : Cfg) (expected : Array Cell) (xs : List Nat)
+    (hc : TableAdmissible c) (hxs : ∀ i ∈ xs, i < c.cap) :
+    (rawLoopOn c expected xs hc hxs).value = rawValueOn c expected xs := by
+  change checkTableValueOn c expected
+      (List.foldl (fun acc index => rawStep c index acc) (rawEntry c)
+        (List.range (tableProgramOn c expected xs).loopCount)).arr
+      ((List.foldl (fun acc index => rawStep c index acc) (rawEntry c)
+        (List.range (tableProgramOn c expected xs).loopCount)).regs rViol) xs
+    = rawValueOn c expected xs
+  rw [show (tableProgramOn c expected xs).loopCount = c.loopCount from rfl]
+  rfl
+
+theorem tableProgramOn_denote (c : Cfg) (expected : Array Cell) (xs : List Nat)
+    (hc : TableAdmissible c) (hxs : ∀ i ∈ xs, i < c.cap) :
+    (tableProgramOn c expected xs).denote = some (rawValueOn c expected xs) :=
+  (rawLoopOn c expected xs hc hxs).denote_eq (rawLoopOn_value c expected xs hc hxs)
+
 
 end LeanCompCert.Ports.Section413G1TableProgram

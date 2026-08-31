@@ -272,15 +272,7 @@ theorem productionArithmeticPre_of_headroom
     sumL := hsumL
     sumU := hsumU
     addL := by omega
-    addU := by omega
-    outL := by
-      change (zL.advance (logged.regs 132) lamL).q < M
-      exact Nat.lt_of_le_of_lt
-        (PsiQR.advance_q_le_add (logged.regs 132) lamL zL) hpsiL'
-    outU := by
-      change (zU.advance (logged.regs 132) lamU).q < M
-      exact Nat.lt_of_le_of_lt
-        (PsiQR.advance_q_le_add (logged.regs 132) lamU zU) hpsiU' }
+    addU := by omega }
   · rw [hp]
     change s.regs LambdaPsiSweep.sRP +
       (certifiedProductionCursorCfg.arrayLen + 2) < M
@@ -292,5 +284,69 @@ theorem productionArithmeticPre_of_headroom
   · change certifiedProductionCursorCfg.arrayLen + 2 + logs.length +
       logs.length < M
     omega
+
+set_option maxRecDepth 100000 in
+/-- Construct the production arithmetic invariant from the six checks emitted
+after the arithmetic suffix.  Everything else is static layout or a
+single-candidate bound proved here; no cumulative sweep computation is
+performed by Lean. -/
+theorem productionArithmeticPre_of_post_checks
+    (logs : List LogCell) (k : Nat) (s : AState)
+    (hlogs : logs.length ≤ 10001)
+    (hregs : ∀ j, s.regs j < M) (harr : ∀ j, s.arr j < M)
+    (hgate : s.regs 11 = 1)
+    (hn2 : 2 ≤ s.regs 132) (hn100M : s.regs 132 ≤ 100000000)
+    (hshapeP : s.regs LambdaPsiSweep.sRP ≤ 100000000)
+    (hpost : LambdaPsiSweep.ArithmeticPostChecks
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg) k s) :
+    LambdaPsiSweep.ArithmeticPre
+      ({ shape := productionCursorCfg, logs } : LambdaPsiSweep.Cfg) k s := by
+  rw [productionCursorCfg_eq_certified] at hpost ⊢
+  let c : LambdaPsiSweep.Cfg := { shape := certifiedProductionCursorCfg, logs }
+  have htable : certifiedProductionCursorCfg.tableLen ≤ 10001 := by
+    rw [← congrArg Cfg.tableLen productionCursorCfg_eq_certified]
+    exact productionCursorCfg_tableLen_le_10001
+  have harray : certifiedProductionCursorCfg.arrayLen +
+      2 * 10001 + 2 < M := by
+    have hM : M = 18446744073709551616 := rfl
+    change (14 * 999900 + certifiedProductionCursorCfg.tableLen + 1 + 4) +
+      2 * 10001 + 2 < M
+    omega
+  have hincL : RS62.incLWord (s.regs 132) < M := by
+    have hle := RS62.incLWord_le (s.regs 132)
+    have hfp : RS62.fpD < M := by decide
+    omega
+  have hincU : RS62.incUWord (s.regs 132) < M := by
+    have hle := RS62.incUWord_le (s.regs 132)
+    have hfp : RS62.fpD + 100000000 < M := by decide
+    omega
+  have hn40 : s.regs 132 ≤ 2 ^ 40 := by
+    have hscale : 100000000 ≤ 2 ^ 40 := by decide
+    omega
+  have hp := LambdaPsiSweep.afterLogCandidate_shapeP_frame k s
+  apply LambdaPsiSweep.arithmeticPre_of_post_checks c k s hregs harr
+    (by simpa [hgate]) hn2 hn40 (by simpa [hgate] using hincL)
+    (by simpa [hgate] using hincU)
+  · change logs.length < M
+    omega
+  · rw [hp]
+    change s.regs LambdaPsiSweep.sRP +
+      (certifiedProductionCursorCfg.arrayLen + 2) < M
+    change s.regs LambdaPsiSweep.sRP +
+      ((14 * 999900 + certifiedProductionCursorCfg.tableLen + 1 + 4) + 2) < M
+    have hM : M = 18446744073709551616 := rfl
+    omega
+  · rw [hp]
+    change s.regs LambdaPsiSweep.sRP +
+      (certifiedProductionCursorCfg.arrayLen + 2 + logs.length) < M
+    change s.regs LambdaPsiSweep.sRP +
+      ((14 * 999900 + certifiedProductionCursorCfg.tableLen + 1 + 4) + 2 +
+        logs.length) < M
+    have hM : M = 18446744073709551616 := rfl
+    omega
+  · change certifiedProductionCursorCfg.arrayLen + 2 + logs.length +
+      logs.length < M
+    omega
+  · exact hpost
 
 end LeanCompCert.Ports.RamareCombined100M.ShapeSieve

@@ -473,15 +473,16 @@ trace has the same CCIR-with-memory semantics as the literal-index trace used
 by the Lean denotation proof. The Coq memory development proves the flat-array/
 CompCert-block load/store relation, including preservation across stores, and
 `scripts/clight-array-verify.py` specializes the generic theorem to the
-complete `clightgen` AST of the production Möbius array function. The remaining
-artifact-specific development now includes a sparse flat-array evaluator, a
-proved simulation of every supported flat execution into actual CompCert
-memory, and a theorem deriving its zero-array relation from CompCert's real
-`Init_space` global initialization.  A fast kernel computation also obtains
-`99952` for the specialized production step.  What remains is the refinement
-lemma identifying that specialized step with one iteration of the exact
-Clight body; until then the exact-AST function theorem remains conditional on
-a successful flat execution. The Coq-side gates need a
+complete `clightgen` AST of the production Möbius array function. The
+artifact-specific development includes a sparse flat-array evaluator, a proved
+simulation of every supported flat execution into actual CompCert memory, a
+theorem deriving its zero-array relation from CompCert's real `Init_space`
+global initialization, and — in `scripts/coq/ArrayMobiusStaged.v` — the staged
+refinement identifying the fast production step with one iteration of the
+exact Clight body.  The exact-AST function theorem is therefore unconditional:
+`production_end_to_end_99952` derives `ClightBigstep.eval_funcall` for the
+production Möbius function from `Genv.init_mem`, and the array gate compiles it
+last. The Coq-side gates need a
 CompCert Coq development (or `clightgen`) installed; a compiler-only
 `ccomp` installation still gets the Lean-side proof and the Python
 structural checker, and the acceptance suite skips the Coq gates
@@ -893,13 +894,17 @@ the Coq-proved `compile_program`; it does not require `native_decide`.  Separate
 generic Coq theorems also handle rolled loops and CompCert pointer loads/stores;
 arbitrary restricted `AProgram` array ASTs can be checked as exact instances,
 the Lean rolled/literal traces are proved equivalent, and the flat-array/
-CompCert-block load/store invariant is proved. The remaining array seam is a
-per-artifact refinement from the fast production-step computation to the
-exact Clight loop body (plus the Lean theorem that this 100000-case denotation
-is `99952`), so the final numeric array artifact does not yet have the same
-unconditional `eval_funcall` theorem as a straight-line
-certificate. The
-Lean- and Coq-side results are tied by shared certified constants). A
+CompCert-block load/store invariant is proved. For the production Möbius array the
+per-artifact refinement from the fast production step to the exact Clight loop
+body is proved (`scripts/coq/ArrayMobiusStaged.v`,
+`production_end_to_end_99952`), so that artifact has the same unconditional
+`eval_funcall` theorem as a straight-line certificate — reached through
+`clightgen`'s parse of the printed C rather than direct emission. What the Lean
+kernel does not prove is the value itself at `L = 100000`: `99952` is
+corroborated by the artifact, and the denotation is kernel-checked against the
+reference only at `L = 8, 16, 24`.  That array path retains its documented
+shared-result/parser boundary; the scalar direct path instead crosses kernels
+with serialized first-order program data that Coq independently evaluates. A
 complete CompCert-built runtime and strict standalone builds remain
 outside scope. Lean's elaborator and kernel, Coq's kernel, and
 CompCert's stated assumptions (assembler, linker, hardware) are trusted,

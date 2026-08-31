@@ -1,4 +1,6 @@
 import LeanCompCert.Ports.Prop1224CellMarginSemantics
+import LeanCompCert.Ports.ArraySegMobiusSignal
+import LeanCompCert.Verified.ArrayAudit
 import LeanCompCert.Verified.ArrayRegFrame
 import LeanCompCert.Verified.ArrayPipeline
 
@@ -18,6 +20,7 @@ namespace LeanCompCert.Ports.Prop1224Cell
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
+open LeanCompCert.Verified.ArrayAudit
 open LeanCompCert.Verified.ArrayRegFrame
 open LeanCompCert.Verified.InstrBlock
 open LeanCompCert.Ports.PsiSegSieve (storeLit storeLits seedRegs)
@@ -46,6 +49,20 @@ set_option maxHeartbeats 2000000
   | succ n ih =>
       simpa [cbrtStep, instrWrites, sdest, rVMargin, rT] using ih
 
+@[simp] theorem coprimeBody_margin_rCi_frame (ps : List Nat) :
+    writes rCi (coprimeBody ps) = false := by
+  induction ps with
+  | nil => rfl
+  | cons p ps ih =>
+      simpa [coprimeBody, instrWrites, sdest, rCi] using ih
+
+@[simp] theorem cbrtStep_margin_rCi_frame (n : Nat) :
+    writes rCi (cbrtStep n) = false := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+      simpa [cbrtStep, instrWrites, sdest, rCi, rT] using ih
+
 /-- The 106 instructions before the literal twelve-instruction comparison. -/
 def CellCfg.bodyBeforeMargin (c : CellCfg) : List AInstr :=
   c.markBody ++ c.accBody ++ c.logBody.take 106
@@ -70,6 +87,17 @@ theorem bodyBeforeMargin_vmargin_frame (c : CellCfg) :
     rFs, rJ, rViol, rVMark, rG, rEx, rTh, rVLog2, rXm, rAa, rT, rK,
     rVCbrt, rVCbrtHi, rCells, rMin, rCi] using
       (coprimeBody_vmargin_frame c.qPrimes)
+
+theorem bodyBeforeMargin_rCi_frame (c : CellCfg) :
+    writes rCi c.bodyBeforeMargin = false := by
+  simpa [CellCfg.bodyBeforeMargin, CellCfg.markBody, CellCfg.accBody,
+    CellCfg.logBody, cbrtAttempts, cbrtStep, instrWrites, sdest,
+    CellCfg.envelopeBlock,
+    rR, rW, rPi, rQp, rBp, rFs, rJ, rViol, rVMark, rG, rEx, rTh,
+    rVLog2, rXm, rAa, rT, rK, rVCbrt, rVCbrtHi, rVMargin, rCells, rMin,
+    rCi] using
+      And.intro (coprimeBody_margin_rCi_frame c.qPrimes)
+        (cbrtStep_margin_rCi_frame cbrtAttempts)
 
 theorem storeLits_vmargin_frame (l : List (Nat × Nat)) :
     writes rVMargin (storeLits l) = false := by
@@ -116,6 +144,58 @@ def marginGateAt (c : CellCfg) (idx : Nat) (s : AState) : Nat :=
   let pre := beforeMargin c idx s
   marginGate c (pre.regs 122) (pre.regs 161)
 
+theorem beforeMargin_rCi (c : CellCfg) (idx : Nat) (s : AState) :
+    (beforeMargin c idx s).regs rCi = s.regs rCi := by
+  exact arun_frame idx rCi c.bodyBeforeMargin
+    (bodyBeforeMargin_rCi_frame c) s
+
+/-- Nothing after the comparison prefix stores into the array.  Thus the
+words observed by the post-body sticky guard are the very array words read by
+the literal margin block. -/
+theorem body_arr_eq_beforeMargin (c : CellCfg) (idx : Nat) (s : AState) :
+    (arun idx s c.body).arr = (beforeMargin c idx s).arr := by
+  let pre := beforeMargin c idx s
+  let checked := arun idx pre c.marginCheckBlock
+  have hchecked : checked.arr = pre.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame idx
+      c.marginCheckBlock pre (by rfl)
+  have hafter : (arun idx checked c.bodyAfterMargin).arr = checked.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame idx
+      c.bodyAfterMargin checked (by rfl)
+  rw [body_eq_margin_decomp, arun_append, arun_append]
+  exact hafter.trans hchecked
+
+theorem body_reg217_eq_beforeMargin (c : CellCfg) (idx : Nat) (s : AState) :
+    (arun idx s c.body).regs 217 = (beforeMargin c idx s).regs 217 := by
+  let pre := beforeMargin c idx s
+  let checked := arun idx pre c.marginCheckBlock
+  have hchecked : checked.regs 217 = pre.regs 217 :=
+    arun_frame idx 217 c.marginCheckBlock (by rfl) pre
+  have hafter : (arun idx checked c.bodyAfterMargin).regs 217 =
+      checked.regs 217 :=
+    arun_frame idx 217 c.bodyAfterMargin (by rfl) checked
+  rw [body_eq_margin_decomp, arun_append, arun_append]
+  exact hafter.trans hchecked
+
+/-- The complete body retains the exact active-event gate computed by the
+literal comparison block. -/
+theorem body_margin_gate (c : CellCfg) (idx : Nat) (s : AState)
+    (hword : WordState s) (hkloM : c.kLo < M) (hkhiM : c.kHi < M) :
+    (arun idx s c.body).regs 223 = marginGateAt c idx s := by
+  let pre := beforeMargin c idx s
+  let checked := arun idx pre c.marginCheckBlock
+  have hpreWord : WordState pre :=
+    arun_word idx c.bodyBeforeMargin s hword.1 hword.2
+  have hcheckedGate := marginCheckBlock_gate c idx pre
+    (pre.regs 122) (pre.regs 161) rfl rfl (hpreWord.1 161) hkloM hkhiM
+  have hafter : (arun idx checked c.bodyAfterMargin).regs 223 =
+      checked.regs 223 :=
+    arun_frame idx 223 c.bodyAfterMargin (by rfl) checked
+  rw [body_eq_margin_decomp, arun_append, arun_append]
+  change (arun idx checked c.bodyAfterMargin).regs 223 = _
+  rw [hafter]
+  simpa only [marginGateAt, pre] using hcheckedGate
+
 /-- Fixed-width obligations for one complete emitted body. -/
 structure MarginStepReady (c : CellCfg) (idx : Nat) (s : AState) : Prop where
   last_le_one : (beforeMargin c idx s).regs 161 ≤ 1
@@ -132,6 +212,43 @@ structure MarginStepReady (c : CellCfg) (idx : Nat) (s : AState) : Prop where
     (beforeMargin c idx s).regs rVMargin + marginFailureAt c idx s < M
   cells_room :
     (beforeMargin c idx s).regs rCells + marginGateAt c idx s < M
+
+/-- The strictly local word-safety obligations needed to interpret register
+`226`, the failure signal computed before the historical additive counters.
+Unlike `MarginStepReady`, this record contains no counter-room hypotheses and
+is therefore suitable for a sticky, fail-closed signed program. -/
+structure MarginSignalStepReady
+    (c : CellCfg) (idx : Nat) (s : AState) : Prop where
+  last_le_one : (beforeMargin c idx s).regs 161 ≤ 1
+  address_lt : (beforeMargin c idx s).regs rCi + 3 * c.segLen < M
+  klo_lt : c.kLo < M
+  khi_lt : c.kHi < M
+  sum_lt :
+    (beforeMargin c idx s).arr
+        ((beforeMargin c idx s).regs rCi + 3 * c.segLen) +
+      (beforeMargin c idx s).regs 217 < M
+
+/-- Register `226` in the complete literal body is exactly the gated source
+failure bit.  The proof stops using the additive diagnostic counters: their
+tail frames the already-computed signal, as does the remainder of the body. -/
+theorem body_margin_failure_signal (c : CellCfg) (idx : Nat) (s : AState)
+    (h : MarginSignalStepReady c idx s) :
+    (arun idx s c.body).regs 226 = marginFailureAt c idx s := by
+  let pre := beforeMargin c idx s
+  let checked := arun idx pre c.marginCheckBlock
+  have hblock := marginCheckBlock_failure_signal c idx pre
+    (pre.regs rCi) (pre.regs 122) (pre.regs 161) (pre.regs 212)
+    (pre.arr (pre.regs rCi + 3 * c.segLen)) (pre.regs 217)
+    rfl rfl rfl rfl rfl rfl h.last_le_one h.address_lt h.klo_lt h.khi_lt
+    h.sum_lt
+  have hafter : (arun idx checked c.bodyAfterMargin).regs 226 =
+      checked.regs 226 :=
+    arun_frame idx 226 c.bodyAfterMargin (by rfl) checked
+  rw [body_eq_margin_decomp, arun_append, arun_append]
+  change (arun idx checked c.bodyAfterMargin).regs 226 = _
+  rw [hafter]
+  change checked.regs 226 = _
+  simpa only [marginFailureAt, pre] using hblock
 
 /-- The complete emitted body increments `rVMargin` by exactly its local
 gated failure bit. -/

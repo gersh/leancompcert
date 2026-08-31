@@ -130,7 +130,7 @@ def logClauseTwoBody (S : Nat) : List AInstr :=
   lift (logClauseTwoInstrs S)
 
 theorem logClauseTwoBody_eq_slice (c : R2Cfg) :
-    (c.logBody.drop 148).take 6 = logClauseTwoBody c.sc := by
+    (c.logBody.drop 155).take 6 = logClauseTwoBody c.sc := by
   rfl
 
 def clauseTwoFailure (S d err thr fin : Nat) : Nat :=
@@ -276,10 +276,10 @@ theorem body_vup_increment_nonfinal (c : R2Cfg) (k : Nat) (s : AState)
   exact hsuffix.trans hguard
 
 def bodyBeforeClauseTwo (c : R2Cfg) : List AInstr :=
-  c.markBody ++ c.classBody ++ c.logBody.take 148
+  c.markBody ++ c.classBody ++ c.logBody.take 155
 
 def bodyAfterClauseTwo (c : R2Cfg) : List AInstr :=
-  c.logBody.drop 154 ++ c.tailBody
+  c.logBody.drop 161 ++ c.tailBody
 
 theorem body_eq_clauseTwo_stages (c : R2Cfg) :
     c.body = bodyBeforeClauseTwo c ++ logClauseTwoBody c.sc ++
@@ -684,8 +684,8 @@ theorem runtimeProduction_verified_no_clause_failure :
   rcases runtimeProduction_verified_failure_classes_zero with ⟨_hv, hs⟩
   have hup := hs 0 (by decide)
   have hlo := hs 1 (by decide)
-  have hgetUp : violRegs.get ⟨0, by decide⟩ = rVUp := by rfl
-  have hgetLo : violRegs.get ⟨1, by decide⟩ = rVLo := by rfl
+  have hgetUp : legacyViolReg 0 (by decide) = rVUp := by rfl
+  have hgetLo : legacyViolReg 1 (by decide) = rVLo := by rfl
   rw [hgetUp] at hup
   rw [hgetLo] at hlo
   have frame (r : Nat)

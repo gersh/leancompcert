@@ -298,5 +298,21 @@ theorem commitScalarBody_run (k : Nat) (s : AState)
     exact ⟨rfl, rfl, rfl, rfl⟩
   simpa only [commitScalarBody, lift_append, arun_append] using hout
 
+/-- Raw word semantics of the two cumulative log additions.  Unlike
+`commitScalarBody_run`, this theorem does not assume that either carried
+endpoint addition is exact; it exposes the machine reductions so a later
+fail-closed carry check can prove exactness. -/
+theorem commitScalarBody_run_mod (k : Nat) (s : AState) :
+    let out := arun k s (lift commitScalarBody)
+    out.regs rLogL =
+        (s.regs rLogL + s.regs 11 * s.regs rIL) % M ∧
+      out.regs rLogU =
+        (s.regs rLogU + s.regs 11 * s.regs rIU) % M ∧
+      out.regs 132 = s.regs 132 ∧ out.arr = s.arr := by
+  rw [arun_lift]
+  simp [commitScalarBody, commitLowerMulBody, commitLowerAddBody,
+    commitUpperMulBody, commitUpperAddBody, srun, sdest, sval,
+    denoteOperand, denoteOp, RegState.set, rA, rB, rIL, rIU, rLogL, rLogU]
+
 
 end LeanCompCert.Ports.RamareCombined100M.LogSweep

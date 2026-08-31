@@ -57,10 +57,16 @@ AST is defined by the proved scalar compiler in
 For production arrays, the complete `clightgen` AST is now
 checked as an exact instance; Lean proves the counter-driven trace equivalent
 to the literal denotation trace; and Coq proves the flat-array/CompCert-block
-load/store invariant. The remaining condition on the exact-AST theorem is an
-artifact-specific refinement between the fast, kernel-checked production step
-and one iteration of the exact Clight body. The flat-to-CompCert simulation
-and concrete zero-global initialization theorem are proved. This package never claims verified
+load/store invariant. The flat-to-CompCert simulation and the concrete zero-global
+initialization theorem are proved, and for the production Möbius array
+`scripts/coq/ArrayMobiusStaged.v` supplies the artifact-specific refinement
+from the fast production step to the exact Clight loop body, ending in the
+unconditional `production_end_to_end_99952` (`eval_funcall` for the exact AST,
+from `Genv.init_mem`). On that path the AST is still `clightgen`'s parse of the
+printed C, so the printer is validated by the gates rather than removed; and
+the Lean kernel proves the denotation against its reference at `L = 8, 16,
+24`, while the `L = 100000` value `99952` is corroborated by the artifact.
+This package never claims verified
 compilation of general Lean code; the claim is scoped to certificates
 authored in the fragment, and that scope is exactly what the gates
 check.
@@ -121,9 +127,10 @@ pointer-memory theorem instances. `scripts/clight-array-verify.py` additionally
 checks that the complete production array function is in this fragment and
 specializes the endpoint to that exact AST. The memory test kernel-checks the
 pointer-indexed store and subsequent load and derives
-`ClightBigstep.eval_funcall` for that concrete function. Closing the final
-numeric array claim requires the artifact-specific step-refinement certificate
-described above.
+`ClightBigstep.eval_funcall` for that concrete function. The array gate ends by
+compiling `ArrayMobiusStaged.v`, which closes the final numeric array claim for
+the production function (`production_end_to_end_99952`); a wrong constant or a
+drifted AST fails at `Qed`.
 
 ## Why you should trust this method
 

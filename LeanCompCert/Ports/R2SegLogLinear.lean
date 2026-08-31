@@ -211,7 +211,8 @@ theorem logJumpThroughCommitBody_linear_run
     let charge := ((e + 1) * ln2Up c.sc) / 2 ^ (c.sc - 4) + 2
     let out := arun k s
       (logJumpErrorBody c.sc (ln2Up c.sc) ++
-        logBetweenJumpAndCommitBody c ++ logAccumulatorCommitBody)
+        logBetweenJumpAndCommitBody c ++ logUnderflowAuditBody ++
+          logAccumulatorCommitBody)
     out.regs rD = (if positive then linear + term else linear - term) ∧
       out.regs rErr = err + charge ∧ out.regs rTerms = terms + 1 ∧
       out.arr = s.arr := by

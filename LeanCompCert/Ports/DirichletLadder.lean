@@ -336,17 +336,30 @@ def Cfg.arrayLen (c : Cfg) : Nat := recW * c.records + 256
 
 /-! ## Program text -/
 
-private abbrev I := AInstr
+abbrev I := AInstr
 
-private def bo (d : Nat) (o : Op) (a b : Operand) : I := .scalar (.binop d o a b)
-private def mvl (d v : Nat) : I := .scalar (.mov d (.lit v))
-private def mvr (d s : Nat) : I := .scalar (.mov d (.reg s))
+def bo (d : Nat) (o : Op) (a b : Operand) : I := .scalar (.binop d o a b)
+def mvl (d v : Nat) : I := .scalar (.mov d (.lit v))
+def mvr (d s : Nat) : I := .scalar (.mov d (.reg s))
 
-/-- Write the 256-entry byte weight table, and seed the stream state. -/
+/-! Keep the digest instructions as lightweight named program constants.  In
+particular, denotation proofs can expose the fixed multiplier without reducing
+the entire 250-instruction `bodyBlock` at the same time. -/
+def digestMulInstr : I := bo 159 .mul (.reg rPrevDig) (.lit digMul)
+def digestAddInstr : I := bo 159 .add (.reg 159) (.reg 26)
+def digestCompareInstr : I := bo 160 .ne (.reg 158) (.reg 159)
+def digestBumpInstr : I := bo rViol .add (.reg rViol) (.reg 160)
+
+/-- Write the 256-entry byte-weight lookup table. -/
+def Cfg.tableEntryBlock (c : Cfg) (v : Nat) : List I :=
+  [mvl 20 (c.tblBase + v), mvl 21 (tblEntry v), AInstr.store 20 21]
+
+def Cfg.tableBlock (c : Cfg) : List I :=
+  (List.range 256).flatMap c.tableEntryBlock
+
+/-- Write the byte table, and seed the stream state. -/
 def Cfg.initBlock (c : Cfg) : List I :=
-  ((List.range 256).flatMap fun v =>
-    [ mvl 20 (c.tblBase + v), mvl 21 (tblEntry v), AInstr.store 20 21 ]) ++
-  [ mvl rPrevLast 1 ]
+  c.tableBlock ++ [mvl rPrevLast 1]
 
 /--
 One record.  Straight-line, data-independent: every test runs on every record
@@ -611,10 +624,10 @@ def Cfg.bodyBlock (c : Cfg) : List I :=
     -- the bitmap digest chain: each record commits to the exact 64 sign
     -- samples, so the accepted object is one bitmap sequence rather than an
     -- equivalence class of them
-  , bo 159 .mul (.reg rPrevDig) (.lit digMul)
-  , bo 159 .add (.reg 159) (.reg 26)
-  , bo 160 .ne (.reg 158) (.reg 159)
-  , bo rViol .add (.reg rViol) (.reg 160)
+  , digestMulInstr
+  , digestAddInstr
+  , digestCompareInstr
+  , digestBumpInstr
 
     -- ---- state update.  Every mux reads its keep operand before writing. ----
   , bo 140 .mul (.reg 33) (.reg rTrI1)
@@ -634,6 +647,22 @@ def Cfg.bodyBlock (c : Cfg) : List I :=
   , mvr rPrevConj 32
   , mvr rPrevDig 158
   ]
+
+/-! Lightweight projections used by denotation proofs.  Keeping these
+reductions next to `bodyBlock` prevents downstream modules from re-elaborating
+the whole record checker merely to expose the digest instructions. -/
+theorem Cfg.bodyBlock_digestMul (c : Cfg) :
+    (c.bodyBlock.drop 230).take 1 = [digestMulInstr] := by rfl
+
+theorem Cfg.bodyBlock_digestAdd (c : Cfg) :
+    (c.bodyBlock.drop 231).take 1 = [digestAddInstr] := by rfl
+
+theorem Cfg.bodyBlock_digestFlag (c : Cfg) :
+    (c.bodyBlock.drop 232).take 2 = [digestCompareInstr, digestBumpInstr] := by rfl
+
+theorem Cfg.bodyBlock_digest (c : Cfg) :
+    (c.bodyBlock.drop 230).take 4 =
+      [digestMulInstr, digestAddInstr, digestCompareInstr, digestBumpInstr] := by rfl
 
 /-- The stream must end on a closing block, and on the declared digest. -/
 def Cfg.epilogueBlock (c : Cfg) : List I :=
@@ -766,7 +795,8 @@ theorem bodyBlock_wf (c : Cfg) : ∀ a ∈ c.bodyBlock, a.WF regCount :=
   forall_wf_of_all (by rfl)
 
 theorem initBlock_all (c : Cfg) : c.initBlock.all (ainstrWFB regCount) = true := by
-  simp only [Cfg.initBlock, List.all_append, List.all_flatMap, Bool.and_eq_true]
+  simp only [Cfg.initBlock, Cfg.tableBlock, Cfg.tableEntryBlock,
+    List.all_append, List.all_flatMap, Bool.and_eq_true]
   exact ⟨List.all_eq_true.mpr (fun v _ => rfl), rfl⟩
 
 theorem seedBlock_all (words : List Nat) :
@@ -838,7 +868,12 @@ structure RefState where
 
 def refInit : RefState := ⟨0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0⟩
 
-private def bump (c : Bool) (n : Nat) : Nat := if c then n + 1 else n
+def bump (c : Bool) (n : Nat) : Nat := if c then n + 1 else n
+
+/-- Accumulate a finite list of reference-check failures.  Keeping the flags
+as a list exposes the exact per-record no-wrap budget to symbolic proofs. -/
+def bumps (conditions : List Bool) (n : Nat) : Nat :=
+  conditions.foldl (fun total condition => bump condition total) n
 
 /-- One record of the reference checker. -/
 def refStep (c : Cfg) (s : List Nat) (st : RefState) (idx : Nat) : RefState :=
@@ -878,32 +913,32 @@ def refStep (c : Cfg) (s : List Nat) (st : RefState) (idx : Nat) : RefState :=
   let tq := if c.hFloor ≤ alt then alt else c.hFloor
   let addr := recW * cj + 11
   let inR := addr < recW * c.records
-  let v := st.viol
-  let v := bump (tag < st.prevTag) v
-  let v := bump (!same && st.prevLast != 1) v
-  let v := bump (same && st.prevLast == 1) v
-  let v := bump (blk != (if same then st.prevBlk + 1 else 0)) v
-  let v := bump (lower != (if same then st.prevUpper else 0)) v
-  let v := bump (upper != lower + slots) v
-  let v := bump (isL > 1) v
-  let v := bump (stat > maxStat) v
-  let v := bump (slots != derived) v
-  let v := bump (isLastB && blk < winW - 1) v
-  let v := bump (isLastB && henc != hExpect) v
-  let v := bump (isLastB && !stairOk) v
-  let v := bump (isLastB && !uOk) v
-  let v := bump (isLastB && !(uEnc < (upper + 1) * henc)) v
-  let v := bump (isLastB && uEnc < upper * henc) v
-  let v := bump (dig != (st.prevDig * digMul + bits) % 18446744073709551616) v
-  let v := bump (isLastB && ((st.firstBit == lb) != (upper % 2 == 0))) v
-  let v := bump (tqNum != tq) v
-  let v := bump (isLastB && 5 * (blk + 1) * q < tq) v
-  let v := bump (isLastB && tq ≤ 5 * blk * q) v
-  let v := bump (same && cj != st.prevConj) v
-  let v := bump (!isLastB && uElem != 0) v
-  let v := bump (!isLastB && henc != 0) v
-  let v := bump (!same && !inR) v
-  let v := bump (!same && inR && W addr != idx) v
+  let v := bumps
+    [ tag < st.prevTag
+    , !same && st.prevLast != 1
+    , same && st.prevLast == 1
+    , blk != (if same then st.prevBlk + 1 else 0)
+    , lower != (if same then st.prevUpper else 0)
+    , upper != lower + slots
+    , isL > 1
+    , stat > maxStat
+    , slots != derived
+    , isLastB && blk < winW - 1
+    , isLastB && henc != hExpect
+    , isLastB && !stairOk
+    , isLastB && !uOk
+    , isLastB && !(uEnc < (upper + 1) * henc)
+    , isLastB && uEnc < upper * henc
+    , dig != (st.prevDig * digMul + bits) % 18446744073709551616
+    , isLastB && ((st.firstBit == lb) != (upper % 2 == 0))
+    , tqNum != tq
+    , isLastB && 5 * (blk + 1) * q < tq
+    , isLastB && tq ≤ 5 * blk * q
+    , same && cj != st.prevConj
+    , !isLastB && uElem != 0
+    , !isLastB && henc != 0
+    , !same && !inR
+    , !same && inR && W addr != idx ] st.viol
   { viol := v, prevTag := tag, prevBlk := blk, prevUpper := upper,
     prevBit := lb, firstBit := if same then st.firstBit else fb,
     trI0 := if same then st.trI1 else 0, sj0 := if same then st.sj1 else 0,

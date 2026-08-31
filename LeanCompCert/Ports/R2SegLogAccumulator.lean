@@ -137,17 +137,58 @@ def logAccumulatorCommitInstrs : List Instr :=
 def logAccumulatorCommitBody : List AInstr :=
   lift logAccumulatorCommitInstrs
 
+/-- The seven-instruction negative-underflow audit inserted immediately before
+the signed accumulator commit.  It compares the already-computed jump with
+the post-linear accumulator, gates the bit by both the negative-event and
+finish bits, then increments the aggregate and dedicated counters. -/
+def logUnderflowAuditInstrs : List Instr :=
+  [ .binop 327 .gt (.reg 281) (.reg rD)
+  , .binop 328 .eq (.reg 266) (.lit 0)
+  , .binop 329 .mul (.reg 327) (.reg 328)
+  , .binop 346 .eq (.reg 247) (.lit 1)
+  , .binop 329 .mul (.reg 329) (.reg 346)
+  , .binop rViol .add (.reg rViol) (.reg 329)
+  , .binop rVSub .add (.reg rVSub) (.reg 329) ]
+
+def logUnderflowAuditBody : List AInstr :=
+  lift logUnderflowAuditInstrs
+
+/-- The audit is the exact strengthened-production slice. -/
+theorem logUnderflowAuditBody_eq_slice (c : R2Cfg) :
+    (c.logBody.drop 139).take 7 = logUnderflowAuditBody := by
+  rfl
+
+/-- The audit does not alter the event arithmetic or the sieve array. -/
+theorem logUnderflowAuditBody_frame (k : Nat) (s : AState) :
+    let out := arun k s logUnderflowAuditBody
+    out.regs rD = s.regs rD ∧ out.regs rErr = s.regs rErr ∧
+      out.regs rTerms = s.regs rTerms ∧ out.regs 247 = s.regs 247 ∧
+      out.regs 266 = s.regs 266 ∧ out.regs 281 = s.regs 281 ∧
+      out.regs 285 = s.regs 285 ∧ out.arr = s.arr := by
+  dsimp only
+  exact
+    ⟨arun_frame k rD logUnderflowAuditBody (by rfl) s,
+     arun_frame k rErr logUnderflowAuditBody (by rfl) s,
+     arun_frame k rTerms logUnderflowAuditBody (by rfl) s,
+     arun_frame k 247 logUnderflowAuditBody (by rfl) s,
+     arun_frame k 266 logUnderflowAuditBody (by rfl) s,
+     arun_frame k 281 logUnderflowAuditBody (by rfl) s,
+     arun_frame k 285 logUnderflowAuditBody (by rfl) s,
+     LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+       k logUnderflowAuditBody s (by rfl)⟩
+
 /-- The three pieces form the exact production interval from instruction 279
 through the term-counter commit. -/
 theorem logJumpThroughCommitBody_eq_slice (c : R2Cfg) :
-    (c.logBody.drop 90).take 58 =
+    (c.logBody.drop 90).take 65 =
       logJumpErrorBody c.sc (ln2Up c.sc) ++
-        logBetweenJumpAndCommitBody c ++ logAccumulatorCommitBody := by
+        logBetweenJumpAndCommitBody c ++ logUnderflowAuditBody ++
+          logAccumulatorCommitBody := by
   rfl
 
 /-- This helper is also the exact production slice. -/
 theorem logAccumulatorCommitBody_eq_slice (c : R2Cfg) :
-    (c.logBody.drop 139).take 9 = logAccumulatorCommitBody := by
+    (c.logBody.drop 146).take 9 = logAccumulatorCommitBody := by
   rfl
 
 /-- On a finished event, the commit island performs the selected signed jump,
@@ -251,7 +292,8 @@ theorem logJumpThroughCommitBody_run (c : R2Cfg) (k : Nat) (s : AState)
     let charge := ((e + 1) * ln2Up c.sc) / 2 ^ (c.sc - 4) + 2
     let out := arun k s
       (logJumpErrorBody c.sc (ln2Up c.sc) ++
-        logBetweenJumpAndCommitBody c ++ logAccumulatorCommitBody)
+        logBetweenJumpAndCommitBody c ++ logUnderflowAuditBody ++
+          logAccumulatorCommitBody)
     out.regs rD = (if positive then d + term else d - term) ∧
       out.regs rErr = err + charge ∧ out.regs rTerms = terms + 1 ∧
       out.arr = s.arr := by
@@ -260,31 +302,43 @@ theorem logJumpThroughCommitBody_run (c : R2Cfg) (k : Nat) (s : AState)
   let term := ((u * v) <<< bit) / 2 ^ c.sc
   let charge := ((e + 1) * ln2Up c.sc) / 2 ^ (c.sc - 4) + 2
   let afterJump := arun k s (logJumpErrorBody c.sc (ln2Up c.sc))
-  let beforeCommit := arun k afterJump (logBetweenJumpAndCommitBody c)
+  let beforeAudit := arun k afterJump (logBetweenJumpAndCommitBody c)
+  let beforeCommit := arun k beforeAudit logUnderflowAuditBody
   have hjump := logJumpErrorBody_run k s c.sc (ln2Up c.sc) u v bit e
     hu hv hpositive he hS hSm4 hl2 huv hshift he1 henum hcharge
   dsimp only at hjump
   have hframe := logBetweenJumpAndCommitBody_frame c k afterJump
   dsimp only at hframe
+  have haudit := logUnderflowAuditBody_frame k beforeAudit
+  dsimp only at haudit
   have hchargeM : charge < M := by
     simpa only [charge] using hcharge
   have hcommit := logAccumulatorCommitBody_run k beforeCommit positive
     d err terms term charge
-    (hframe.2.1.trans (hjump.2.2.2.1.trans hfin))
-    (hframe.1.trans (hjump.2.2.1.trans hpositive)) hd
-    (hframe.2.2.2.2.1.trans (hjump.2.2.2.2.1.trans herr))
-    (hframe.2.2.2.2.2.1.trans (hjump.2.2.2.2.2.1.trans hterms))
-    (hframe.2.2.1.trans hjump.1) (hframe.2.2.2.1.trans hjump.2.1)
+    (haudit.2.2.2.1.trans (hframe.2.1.trans (hjump.2.2.2.1.trans hfin)))
+    (haudit.2.2.2.2.1.trans (hframe.1.trans
+      (hjump.2.2.1.trans hpositive)))
+    (haudit.1.trans hd)
+    (haudit.2.1.trans
+      (hframe.2.2.2.2.1.trans (hjump.2.2.2.2.1.trans herr)))
+    (haudit.2.2.1.trans
+      (hframe.2.2.2.2.2.1.trans (hjump.2.2.2.2.2.1.trans hterms)))
+    (haudit.2.2.2.2.2.1.trans (hframe.2.2.1.trans hjump.1))
+    (haudit.2.2.2.2.2.2.1.trans (hframe.2.2.2.1.trans hjump.2.1))
     hsub hdadd hdM htermM hchargeM
     herradd htermsadd
   dsimp only at hcommit
-  rw [arun_append, arun_append]
+  rw [arun_append, arun_append, arun_append]
   exact ⟨hcommit.1, hcommit.2.1, hcommit.2.2.1,
-    hcommit.2.2.2.trans (hframe.2.2.2.2.2.2.trans hjump.2.2.2.2.2.2)⟩
+    hcommit.2.2.2.trans
+      (haudit.2.2.2.2.2.2.2.trans
+        (hframe.2.2.2.2.2.2.trans hjump.2.2.2.2.2.2))⟩
 
 #print axioms logJumpErrorInstrs_run
 #print axioms logJumpErrorBody_run
 #print axioms logBetweenJumpAndCommitBody_frame
+#print axioms logUnderflowAuditBody_eq_slice
+#print axioms logUnderflowAuditBody_frame
 #print axioms logJumpThroughCommitBody_eq_slice
 #print axioms logAccumulatorCommitInstrs_run
 #print axioms logAccumulatorCommitBody_run

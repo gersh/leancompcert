@@ -19,15 +19,17 @@ open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
 open LeanCompCert.Verified.ArrayRegFrame
 
-/-- Instructions 263--324, the complete payload-to-accumulator event. -/
+/-- Instructions 263--324 together with the strengthened negative-underflow
+audit, the complete payload-to-accumulator event. -/
 def logFinalEventBody (c : R2Cfg) : List AInstr :=
-  (c.logBody.drop 74).take 74
+  (c.logBody.drop 74).take 81
 
 theorem logFinalEventBody_eq_stages (c : R2Cfg) :
     logFinalEventBody c =
       (logPayloadDecodeBody ++ logFactorBody) ++
         (logJumpErrorBody c.sc (ln2Up c.sc) ++
-          logBetweenJumpAndCommitBody c ++ logAccumulatorCommitBody) := by
+          logBetweenJumpAndCommitBody c ++ logUnderflowAuditBody ++
+            logAccumulatorCommitBody) := by
   rfl
 
 /-- Exact composition of a finished source event through the literal

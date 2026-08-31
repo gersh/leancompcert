@@ -67,7 +67,10 @@ def PsiRuntimeMeta.markBase (m : PsiRuntimeMeta) : Nat :=
 def PsiRuntimeMeta.markSink (m : PsiRuntimeMeta) : Nat :=
   m.markBase + m.root + 1
 
-def PsiRuntimeMeta.arrayLen (m : PsiRuntimeMeta) : Nat := m.markSink + 1
+/-- Shared-array size for the runtime setup.  The prime-power generator writes
+an inactive `(q,p)` pair at `markSink` and `markSink + 1`, so both cells must
+be resident.  Earlier setup stages use only the first sink cell. -/
+def PsiRuntimeMeta.arrayLen (m : PsiRuntimeMeta) : Nat := m.markSink + 2
 
 /-! ## Stage one: compiled composite marking -/
 

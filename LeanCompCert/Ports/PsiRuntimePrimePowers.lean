@@ -108,7 +108,7 @@ def psiPPSortBody (m : PsiRuntimeMeta) : List AInstr :=
   , .scalar (.binop 21 .gt (.reg 17) (.lit 0))
   , .scalar (.binop 22 .mul (.reg 20) (.reg 21))
   , .scalar (.binop 23 .gt (.reg 13) (.reg 17))
-  , .scalar (.binop 24 .gt (.reg 13) (.lit 0))
+  , .scalar (.binop 24 .gt (.reg 17) (.lit 0))
   , .scalar (.binop 25 .mul (.reg 23) (.reg 24))
   , .scalar (.binop 26 .add (.reg 22) (.reg 25))
   , .scalar (.binop 27 .sub (.lit 1) (.reg 26))

@@ -42,7 +42,16 @@ private theorem logExponentInstrs_run_core (k : Nat) (s : RegState)
     (hv : s rViol = viol) (hvl : s rVLog2 = vlog)
     (h208 : s 208 = start) (hstart : start = 0 ∨ start = 1)
     (heM : e + 1 < M) (hthM : th + th < M)
-    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    (hvM :
+      let bump := if th ≤ n then start else 0
+      let th' := th + bump * th
+      let bad := if th' ≤ n then start else 0
+      viol + bad < M)
+    (hvlM :
+      let bump := if th ≤ n then start else 0
+      let th' := th + bump * th
+      let bad := if th' ≤ n then start else 0
+      vlog + bad < M) :
     let bump := if th ≤ n then start else 0
     let e' := e + bump
     let th' := th + bump * th
@@ -61,12 +70,15 @@ private theorem logExponentInstrs_run_core (k : Nat) (s : RegState)
   have hvl0M : vlog < M := by omega
   rcases hstart with rfl | rfl
   · by_cases hn : th ≤ n <;>
+      simp only [hn, if_pos, if_neg, Nat.zero_mul, Nat.add_zero] at hvM hvlM <;>
       simp [logExponentInstrs, srun, RegState.set, sdest, sval,
         denoteOperand, denoteOp, hne', he', hth', hv', hvl', h208, hn,
         Nat.mod_eq_of_lt he0M, Nat.mod_eq_of_lt hth0M,
         Nat.mod_eq_of_lt hv0M, Nat.mod_eq_of_lt hvl0M,
         rNe, rEx, rTh, rViol, rVLog2]
   · by_cases hn : th ≤ n <;> by_cases hn' : th + th ≤ n <;>
+      simp only [hn, hn', if_pos, if_neg, Nat.one_mul, Nat.zero_mul,
+        Nat.add_zero] at hvM hvlM <;>
       simp [logExponentInstrs, srun, RegState.set, sdest, sval,
         denoteOperand, denoteOp, hne', he', hth', hv', hvl', h208, hn, hn',
         Nat.mod_eq_of_lt heM, Nat.mod_eq_of_lt hthM,
@@ -90,7 +102,8 @@ theorem logExponentBody_continue_run (k : Nat) (s : AState)
       out.arr = s.arr := by
   rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   have h := logExponentInstrs_run_core k s.regs n e th viol vlog 0
-    hne he hth hv hvl h208 (Or.inl rfl) heM hthM hvM hvlM
+    hne he hth hv hvl h208 (Or.inl rfl) heM hthM (by simp; omega)
+      (by simp; omega)
   simp only [ite_self, Nat.add_zero, Nat.zero_mul] at h
   exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
 
@@ -109,7 +122,11 @@ theorem logExponentBody_start_no_bump_run (k : Nat) (s : AState)
       out.arr = s.arr := by
   rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   have h := logExponentInstrs_run_core k s.regs n e th viol vlog 1
-    hne he hth hv hvl h208 (Or.inr rfl) heM hthM hvM hvlM
+    hne he hth hv hvl h208 (Or.inr rfl) heM hthM
+      (by simp only [if_neg (by omega : ¬th ≤ n), Nat.zero_mul,
+        Nat.add_zero]; omega)
+      (by simp only [if_neg (by omega : ¬th ≤ n), Nat.zero_mul,
+        Nat.add_zero]; omega)
   simp only [if_neg (by omega : ¬th ≤ n), Nat.add_zero,
     Nat.zero_mul] at h
   exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
@@ -130,7 +147,79 @@ theorem logExponentBody_start_bump_run (k : Nat) (s : AState)
       out.arr = s.arr := by
   rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   have h := logExponentInstrs_run_core k s.regs n e th viol vlog 1
-    hne he hth hv hvl h208 (Or.inr rfl) heM hthM hvM hvlM
+    hne he hth hv hvl h208 (Or.inr rfl) heM hthM
+      (by simp only [if_pos hnlo, Nat.one_mul,
+        if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero]; omega)
+      (by simp only [if_pos hnlo, Nat.one_mul,
+        if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero]; omega)
+  simp only [if_pos hnlo, Nat.one_mul,
+    if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero] at h
+  exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
+
+/-! The three public branches above all prove that the emitted `bad` bit is
+zero.  The following word-state variants expose the exact machine margin:
+the two counters merely have to be words.  This avoids requiring a fictional
+spare counter slot at a source boundary where the literal branch cannot add
+anything. -/
+
+theorem logExponentBody_continue_run_of_word (k : Nat) (s : AState)
+    (n e th viol vlog : Nat)
+    (hne : s.regs rNe = n) (he : s.regs rEx = e)
+    (hth : s.regs rTh = th) (hv : s.regs rViol = viol)
+    (hvl : s.regs rVLog2 = vlog) (h208 : s.regs 208 = 0)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol < M) (hvlM : vlog < M) :
+    let out := arun k s logExponentBody
+    out.regs rEx = e ∧ out.regs rTh = th ∧
+      out.regs rViol = viol ∧ out.regs rVLog2 = vlog ∧
+      out.arr = s.arr := by
+  rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  have h := logExponentInstrs_run_core k s.regs n e th viol vlog 0
+    hne he hth hv hvl h208 (Or.inl rfl) heM hthM (by simpa) (by simpa)
+  simp only [ite_self, Nat.add_zero, Nat.zero_mul] at h
+  exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
+
+theorem logExponentBody_start_no_bump_run_of_word (k : Nat) (s : AState)
+    (n e th viol vlog : Nat)
+    (hne : s.regs rNe = n) (he : s.regs rEx = e)
+    (hth : s.regs rTh = th) (hv : s.regs rViol = viol)
+    (hvl : s.regs rVLog2 = vlog) (h208 : s.regs 208 = 1)
+    (hn : n < th) (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol < M) (hvlM : vlog < M) :
+    let out := arun k s logExponentBody
+    out.regs rEx = e ∧ out.regs rTh = th ∧
+      out.regs rViol = viol ∧ out.regs rVLog2 = vlog ∧
+      out.arr = s.arr := by
+  rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  have h := logExponentInstrs_run_core k s.regs n e th viol vlog 1
+    hne he hth hv hvl h208 (Or.inr rfl) heM hthM
+      (by simp only [if_neg (by omega : ¬ th ≤ n), Nat.zero_mul,
+        Nat.add_zero]; exact hvM)
+      (by simp only [if_neg (by omega : ¬ th ≤ n), Nat.zero_mul,
+        Nat.add_zero]; exact hvlM)
+  simp only [if_neg (by omega : ¬ th ≤ n), Nat.add_zero,
+    Nat.zero_mul] at h
+  exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
+
+theorem logExponentBody_start_bump_run_of_word (k : Nat) (s : AState)
+    (n e th viol vlog : Nat)
+    (hne : s.regs rNe = n) (he : s.regs rEx = e)
+    (hth : s.regs rTh = th) (hv : s.regs rViol = viol)
+    (hvl : s.regs rVLog2 = vlog) (h208 : s.regs 208 = 1)
+    (hnlo : th ≤ n) (hnhi : n < th + th)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol < M) (hvlM : vlog < M) :
+    let out := arun k s logExponentBody
+    out.regs rEx = e + 1 ∧ out.regs rTh = th + th ∧
+      out.regs rViol = viol ∧ out.regs rVLog2 = vlog ∧
+      out.arr = s.arr := by
+  rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
+  have h := logExponentInstrs_run_core k s.regs n e th viol vlog 1
+    hne he hth hv hvl h208 (Or.inr rfl) heM hthM
+      (by simp only [if_pos hnlo, Nat.one_mul,
+        if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero]; exact hvM)
+      (by simp only [if_pos hnlo, Nat.one_mul,
+        if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero]; exact hvlM)
   simp only [if_pos hnlo, Nat.one_mul,
     if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero] at h
   exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
@@ -139,5 +228,8 @@ theorem logExponentBody_start_bump_run (k : Nat) (s : AState)
 #print axioms logExponentBody_continue_run
 #print axioms logExponentBody_start_no_bump_run
 #print axioms logExponentBody_start_bump_run
+#print axioms logExponentBody_continue_run_of_word
+#print axioms logExponentBody_start_no_bump_run_of_word
+#print axioms logExponentBody_start_bump_run_of_word
 
 end LeanCompCert.Ports.R2SegSieve

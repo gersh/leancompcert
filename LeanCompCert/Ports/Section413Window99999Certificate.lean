@@ -49,7 +49,14 @@ private theorem g2Table_apply : (fun X => g2Table[X]!) = g2G := by
     simp [g2G, g2TableCfg, hxcap, czero]
     rfl
 
-theorem windowOK_999_99999 : windowOK 999 99999 = true := by
+/-- Axiom-free semantic endpoint: any exact causal producer/scanner pipeline
+receipt implies the production reference-window Boolean.  Keeping the
+receipt as an argument makes this theorem reusable by attestation providers;
+it performs none of the `99,999`-row computations in Lean. -/
+theorem windowOK_999_99999_of_receipt
+    (receipt :
+      LeanCompCert.Ports.Section413Window99999PipelineReceipt.Receipt) :
+    windowOK 999 99999 = true := by
   apply windowOK_of_tables 999 33 99999 g1Table g2Table
   · simp [g1Table]
   · rw [show g1Table[0]! = g1G 0 from congrFun g1Table_apply 0]
@@ -68,11 +75,16 @@ theorem windowOK_999_99999 : windowOK 999 99999 = true := by
   · unfold windowTableOK
     rw [g1Table_apply, g2Table_apply,
       LeanCompCert.Ports.Section413Window99999ReferenceFold.g1_kRun_ok
-        section413Window99999_compcert_run,
+        receipt,
       LeanCompCert.Ports.Section413Window99999ReferenceFold.g2_kRun_ok
-        section413Window99999_compcert_run]
+        receipt]
     rfl
 
+/-- Compatibility theorem using the historical named run admission. -/
+theorem windowOK_999_99999 : windowOK 999 99999 = true :=
+  windowOK_999_99999_of_receipt section413Window99999_compcert_run
+
+#print axioms windowOK_999_99999_of_receipt
 #print axioms windowOK_999_99999
 
 end LeanCompCert.Ports.Section413Window99999Certificate

@@ -77,10 +77,10 @@ theorem denseHeadFinalCarry_eq_runtimeProductionSeed :
     denseHeadFinalCarry = runtimeProductionSeed := by
   rfl
 
-theorem denseHeadFirst_arrayLen : denseHeadFirstCfg.arrayLen = 7434 := by
+theorem denseHeadFirst_arrayLen : denseHeadFirstCfg.arrayLen = 7435 := by
   rfl
 
-theorem denseHeadSecond_arrayLen : denseHeadSecondCfg.arrayLen = 1008348 := by
+theorem denseHeadSecond_arrayLen : denseHeadSecondCfg.arrayLen = 1008349 := by
   rfl
 
 end LeanCompCert.Ports.R2SegSieve

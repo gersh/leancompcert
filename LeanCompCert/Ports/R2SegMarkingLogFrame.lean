@@ -4,6 +4,8 @@ import LeanCompCert.Ports.R2SegMarkingClassFrame
 
 namespace LeanCompCert.Ports.R2SegSieve
 
+set_option maxRecDepth 10000
+
 open LeanCompCert.Verified.Reflect
 open LeanCompCert.Verified.ArrayState
 open LeanCompCert.Verified.ArrayFoldBridge
@@ -44,14 +46,32 @@ def logBeforeSqrtCommitBody (c : R2Cfg) : List AInstr :=
 def logSqrtCommitBody (c : R2Cfg) : List AInstr :=
   (c.logBody.drop 124).take 2
 def logBeforeLowCommitBody (c : R2Cfg) : List AInstr :=
-  (c.logBody.drop 126).take 25
+  (c.logBody.drop 126).take 32
 def logLowCommitBody (c : R2Cfg) : List AInstr :=
-  (c.logBody.drop 151).take 2
-def logAfterLowCommitBody (c : R2Cfg) : List AInstr := c.logBody.drop 153
+  (c.logBody.drop 158).take 2
+def logAfterLowCommitBody (c : R2Cfg) : List AInstr := c.logBody.drop 160
 def logAfterLowBeforeEcBody (c : R2Cfg) : List AInstr :=
   (logAfterLowCommitBody c).take 4
 def logEcCommitBody (c : R2Cfg) : List AInstr :=
   (logAfterLowCommitBody c).drop 4
+
+/-! The strengthened underflow audit lies inside `logBeforeLowCommitBody`.
+Split it out only for the disabled-log proof below; the arithmetic denotation
+module gives the source-event interpretation in the active phase. -/
+
+def logBeforeMarkUnderflowBody (c : R2Cfg) : List AInstr :=
+  (logBeforeLowCommitBody c).take 13
+
+def logMarkUnderflowAuditBody (c : R2Cfg) : List AInstr :=
+  ((logBeforeLowCommitBody c).drop 13).take 7
+
+def logAfterMarkUnderflowBody (c : R2Cfg) : List AInstr :=
+  (logBeforeLowCommitBody c).drop 20
+
+theorem logBeforeLowCommitBody_eq_underflow_stages (c : R2Cfg) :
+    logBeforeLowCommitBody c = logBeforeMarkUnderflowBody c ++
+      logMarkUnderflowAuditBody c ++ logAfterMarkUnderflowBody c := by
+  rfl
 
 theorem logBody_eq_mark_stages (c : R2Cfg) :
     c.logBody = logGateBody c ++ logFirstCommitBody c ++
@@ -187,6 +207,34 @@ theorem logSqrtCommitBody_mark_run (c : R2Cfg) (k : Nat) (s : AState)
     sdest, sval, denoteOperand, denoteOp, h247, rViol,
     Nat.mod_eq_of_lt hviol']
 
+/-- In a marking round the finish gate is zero, so the newly inserted
+underflow audit adds zero to the aggregate failure register. -/
+theorem logBeforeLowCommitBody_mark_viol
+    (c : R2Cfg) (k : Nat) (s : AState)
+    (h247 : s.regs 247 = 0) (hviol : s.regs rViol < M) :
+    (arun k s (logBeforeLowCommitBody c)).regs rViol = s.regs rViol := by
+  let before := arun k s (logBeforeMarkUnderflowBody c)
+  have hb247 : before.regs 247 = 0 :=
+    (arun_frame k 247 (logBeforeMarkUnderflowBody c) (by rfl) s).trans h247
+  have hbViol : before.regs rViol = s.regs rViol :=
+    arun_frame k rViol (logBeforeMarkUnderflowBody c) (by rfl) s
+  let audited := arun k before (logMarkUnderflowAuditBody c)
+  have hbViolM : before.regs rViol < M := by rw [hbViol]; exact hviol
+  have haViol : audited.regs rViol = before.regs rViol := by
+    have hbViol' : before.regs 190 < M := by
+      simpa only [rViol] using hbViolM
+    have hM1 : M ≠ 1 := by decide
+    simp [audited, logMarkUnderflowAuditBody, logBeforeLowCommitBody,
+      R2Cfg.logBody, arun, astep, AState.writeReg, sdest, sval,
+      denoteOperand, denoteOp, hb247, rViol, rVSub, hM1,
+      Nat.mod_eq_of_lt hbViol']
+  have hsuffix :
+      (arun k audited (logAfterMarkUnderflowBody c)).regs rViol =
+        audited.regs rViol :=
+    arun_frame k rViol (logAfterMarkUnderflowBody c) (by rfl) audited
+  rw [logBeforeLowCommitBody_eq_underflow_stages, arun_append, arun_append]
+  exact hsuffix.trans (haViol.trans hbViol)
+
 theorem logLowCommitBody_mark_run (c : R2Cfg) (k : Nat) (s : AState)
     (h247 : s.regs 247 = 0) (hviol : s.regs rViol < M) :
     let out := arun k s (logLowCommitBody c)
@@ -299,8 +347,8 @@ theorem logBody_mark_frame (c : R2Cfg) (k : Nat) (s : AState)
     (arun_frame k 247 (logBeforeLowCommitBody c) (by rfl) sqrt).trans
       hsqrt.1
   have hblViol : beforeLow.regs rViol = s.regs rViol :=
-    (arun_frame k rViol (logBeforeLowCommitBody c) (by rfl) sqrt).trans
-      hsqrtViol
+    (logBeforeLowCommitBody_mark_viol c k sqrt hsqrt.1
+      (by rw [hsqrtViol]; exact hviol)).trans hsqrtViol
   let low := arun k beforeLow (logLowCommitBody c)
   have hlow := logLowCommitBody_mark_run c k beforeLow hbl247
     (by rw [hblViol]; exact hviol)

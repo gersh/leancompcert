@@ -804,6 +804,86 @@ theorem rawValue_zero_table (c : Cfg) (expected : Array Cell)
   have hx := hs.2 (X - 1) hm
   simpa only [Nat.sub_add_cancel hX] using hx
 
+/-! ### Sharded table checks
+
+A shard verifies a sub-range of the table with an otherwise identical sweep, so
+each emitted artifact stays small.  `rawValueOn_zero_cells` extracts a shard's
+per-cell conclusions and `rawValue_zero_of_shards` recombines a covering family
+of shards into exactly the `rawValue c expected = 0` that the unsharded
+soundness chain already consumes -- so nothing downstream changes. -/
+
+theorem rawValueOn_zero_cells (c : Cfg) (expected : Array Cell) (xs : List Nat)
+    (hc : TableAdmissible c) (hzero : rawValueOn c expected xs = 0) :
+    (rawFinal c).regs rViol = 0 ∧ ∀ i ∈ xs,
+      (rawFinal c).arr ((tableLo c + (i + 1)) % M) = encodeZ expected[i + 1]!.lo % M ∧
+      (rawFinal c).arr ((tableHi c + (i + 1)) % M) = encodeZ expected[i + 1]!.hi % M := by
+  have hv : (rawFinal c).regs rViol < M := by
+    rw [rawFinal_eq_prefix]
+    exact (rawPrefix_wordInv c hc c.loopCount (Nat.le_refl _)).1 rViol
+  unfold rawValueOn checkTableValueOn at hzero
+  exact checkListValue_zero xs ((rawFinal c).regs rViol) hv hzero
+
+theorem checkTableValueOn_zero_of_cells {c : Cfg} {expected : Array Cell}
+    {arr : Nat → Nat} : ∀ (xs : List Nat),
+    (∀ i ∈ xs,
+      arr ((tableLo c + (i + 1)) % M) = encodeZ expected[i + 1]!.lo % M ∧
+      arr ((tableHi c + (i + 1)) % M) = encodeZ expected[i + 1]!.hi % M) →
+    checkTableValueOn c expected arr 0 xs = 0 := by
+  unfold checkTableValueOn
+  intro xs
+  induction xs with
+  | nil => intro _; rfl
+  | cons i rest ih =>
+      intro h
+      simp only [List.foldl_cons]
+      rw [(checkCellValue_eq_zero_iff (c := c) (expected := expected) (arr := arr)
+        (v := 0) (X := i + 1) (by decide)).mpr
+          ⟨rfl, (h i (by simp)).1, (h i (by simp)).2⟩]
+      exact ih (fun j hj => h j (by simp [hj]))
+
+theorem rawValue_zero_of_shards (c : Cfg) (expected : Array Cell)
+    (hc : TableAdmissible c) (shards : List (List Nat))
+    (hzero : ∀ xs ∈ shards, rawValueOn c expected xs = 0)
+    (xs0 : List Nat) (hxs0 : xs0 ∈ shards)
+    (hcover : ∀ i, i < c.cap → ∃ xs, xs ∈ shards ∧ i ∈ xs) :
+    rawValue c expected = 0 := by
+  have hflag : (rawFinal c).regs rViol = 0 :=
+    (rawValueOn_zero_cells c expected xs0 hc (hzero xs0 hxs0)).1
+  unfold rawValue checkTableValue
+  rw [hflag]
+  apply checkTableValueOn_zero_of_cells
+  intro i hi
+  obtain ⟨xs, hxs, hmem⟩ := hcover i (List.mem_range.mp hi)
+  exact (rawValueOn_zero_cells c expected xs hc (hzero xs hxs)).2 i hmem
+
+
+/-- The emitter's even split: `n` shards of `q` consecutive indices each.
+Discharges the coverage side condition of `rawValue_zero_of_shards` once, so a
+concrete run only has to supply the `n` artifact results. -/
+theorem rawValue_zero_of_even_shards (c : Cfg) (expected : Array Cell)
+    (hc : TableAdmissible c) (n q : Nat) (hn : 0 < n) (hq : 0 < q)
+    (hcap : c.cap = n * q)
+    (hz : ∀ k, k < n → rawValueOn c expected (List.range' (k * q) q) = 0) :
+    rawValue c expected = 0 := by
+  refine rawValue_zero_of_shards c expected hc
+    ((List.range n).map (fun k => List.range' (k * q) q)) ?_
+    (List.range' (0 * q) q) (List.mem_map.mpr ⟨0, List.mem_range.mpr hn, rfl⟩) ?_
+  · intro xs hxs
+    rcases List.mem_map.mp hxs with ⟨k, hk, rfl⟩
+    exact hz k (List.mem_range.mp hk)
+  · intro i hi
+    have hdm : (i / q) * q + i % q = i := by
+      rw [Nat.mul_comm]; exact Nat.div_add_mod i q
+    have hml := Nat.mod_lt i hq
+    refine ⟨List.range' ((i / q) * q) q,
+      List.mem_map.mpr ⟨i / q, List.mem_range.mpr ?_, rfl⟩, ?_⟩
+    · refine Nat.div_lt_of_lt_mul ?_
+      rw [Nat.mul_comm]
+      omega
+    · rw [List.mem_range'_1]
+      omega
+
+
 def ExpectedCanonical (c : Cfg) (expected : Array Cell) : Prop :=
   ∀ X, 1 ≤ X → X ≤ c.cap →
     LeanCompCert.Ports.Section413Cells.decodeZ (encodeZ expected[X]!.lo) =
@@ -907,5 +987,44 @@ theorem compiled_zero_expected_g1 (c : Cfg) (expected : Array Cell)
     (Option.some.inj hrun).symm
   have hz : rawValue c expected = 0 := by exact_mod_cast hzInt
   exact rawValue_zero_expected_g1 c expected hc hsound hcanonical hz
+
+
+/-- Sharded counterpart of `compiled_zero_expected_g1`: `n` artifacts, each
+verifying `q` consecutive cells with an identical sweep, together entail exactly
+what the single full-table artifact entails. -/
+theorem compiled_zero_expected_g1_even_shards (c : Cfg) (expected : Array Cell)
+    (hc : TableAdmissible c)
+    (hsound : LeanCompCert.Ports.Section413G1Sound.Admissible c)
+    (hcanonical : ExpectedCanonical c expected)
+    (n q : Nat) (hn : 0 < n) (hq : 0 < q) (hcap : c.cap = n * q)
+    (base : Int)
+    (hBase : ∀ k, k < n →
+      BaseOk (tableProgramOn c expected (List.range' (k * q) q)).arrayLen base)
+    (hzero : ∀ k, k < n →
+      Option.bind
+          (Verified.MemFragment.evalMCCSequence
+            ((tableProgramOn c expected (List.range' (k * q) q)).initialMCC base)
+            (tableProgramOn c expected (List.range' (k * q) q)).compile)
+          (fun m : Verified.MemFragment.MCCState =>
+            m.env ⟨(tableProgramOn c expected (List.range' (k * q) q)).output + 1⟩)
+        = some 0) :
+    c.tFlag = 0 ∧ ∀ X, 1 ≤ X → X ≤ c.cap →
+      expected[X]! =
+        (LeanCompCert.Ports.Section413G1Sound.g1Prefix
+          c.rounds c.checkLo c.cap X).g := by
+  refine rawValue_zero_expected_g1 c expected hc hsound hcanonical ?_
+  refine rawValue_zero_of_even_shards c expected hc n q hn hq hcap ?_
+  intro k hk
+  have hxs : ∀ i ∈ List.range' (k * q) q, i < c.cap := by
+    intro i hi
+    rw [List.mem_range'_1] at hi
+    have h1 : (k + 1) * q = k * q + q := Nat.succ_mul k q
+    have h2 : (k + 1) * q ≤ n * q := Nat.mul_le_mul_right q hk
+    omega
+  have hden := tableProgramOn_denote c expected (List.range' (k * q) q) hc hxs
+  have hrun := tableProgramOn_compiled c expected (List.range' (k * q) q) base
+    (hBase k hk) (rawValueOn c expected (List.range' (k * q) q)) hden
+  rw [hzero k hk] at hrun
+  exact_mod_cast (Option.some.inj hrun).symm
 
 end LeanCompCert.Ports.Section413G1TableSound

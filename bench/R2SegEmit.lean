@@ -23,7 +23,7 @@ slot6 ⌊log₂⌋  slot7 2^…    slot8 lnLo  slot9 thr    slot10 violations
 with `R₂*(hi) = (D − 2^(S+24))/2^S` up to the enclosure `err/2^S`, and
 
 ```
-slot11..19  the nine failure classes; they sum to slot10
+slot11..20  the ten failure classes; they sum to slot10
 ```
 
 ## The emitted `main` carries a verdict
@@ -34,20 +34,25 @@ class:
 | exit | class | meaning |
 | ---: | --- | --- |
 | `0` | — | accepted |
-| `1` | `INCONSISTENT` | the nine classes do not sum to the aggregate |
+| `1` | `INCONSISTENT` | the ten classes do not sum to the aggregate |
 | `2` | `budget_marktable` | the mark cursor had not finished |
 | `3` | `budget_streamcap` | a test point was pushed past `streamCap` |
 | `4` | `budget_drain` | the window turned over with the stream undrained |
 | `5` | `guard_gap` | a test-point gap did not fit `16` bits |
 | `6` | `guard_sqrt` | one `⌊√n⌋` increment did not suffice |
 | `7` | `guard_log2` | one `⌊log₂ n⌋` increment did not suffice |
-| `8` | `clause1_upper` | `R₂* ≤ 1.93·√n·log n` failed at a test point |
-| `9` | `clause2_lower` | `R₂* ≥ −1.93·√n·log n` failed at a test point |
-| `10` | `clause1_tail_at_hi` | clause 1 failed in the epilogue, at `hi` |
+| `8` | `guard_negative_sub` | a finished negative jump exceeded the post-linear accumulator |
+| `9` | `clause1_upper` | `R₂* ≤ 1.93·√n·log n` failed at a test point |
+| `10` | `clause2_lower` | `R₂* ≥ −1.93·√n·log n` failed at a test point |
+| `11` | `clause1_tail_at_hi` | clause 1 failed in the epilogue, at `hi` |
 
-The six budget/guard statuses come first: they do not say the family failed,
+The seven budget/guard statuses come first: they do not say the family failed,
 they say the run was not a test of it, because terms are missing or the
 arithmetic left the range in which it is exact.
+
+This is the strengthened future causal layout.  Historical artifacts with
+only nine individual failure cells do not certify `guard_negative_sub` and
+must not be accepted as runs of this emitted program.
 
 Emission only; no proof obligation is discharged here.
 -/
@@ -128,9 +133,9 @@ def exitDriver (name : String) (cells expected : Nat) : String :=
   "    return r == UINT64_C(0) ? 0 : 2;\n}\n"
 
 
-/-- The nine classes, in scan order: the six that retract the run first, then
+/-- The ten classes, in scan order: the seven that retract the run first, then
 the three that are a result.  Slot offsets are `Ports.R2SegSieve.violRegs`'
-order, which is `[Up, Lo, Tail, Mark, Cap, Drain, Gap, Sqrt, Log2]`. -/
+order, which is `[Up, Lo, Tail, Mark, Cap, Drain, Gap, Sqrt, Log2, Sub]`. -/
 def classes : List Class :=
   [ ("budget_marktable", 3, 2)
   , ("budget_streamcap", 4, 3)
@@ -138,9 +143,10 @@ def classes : List Class :=
   , ("guard_gap", 6, 5)
   , ("guard_sqrt", 7, 6)
   , ("guard_log2", 8, 7)
-  , ("clause1_upper", 0, 8)
-  , ("clause2_lower", 1, 9)
-  , ("clause1_tail_at_hi", 2, 10) ]
+  , ("guard_negative_sub", 9, 8)
+  , ("clause1_upper", 0, 9)
+  , ("clause2_lower", 1, 10)
+  , ("clause1_tail_at_hi", 2, 11) ]
 
 end Bench.R2SegEmit
 
@@ -213,7 +219,7 @@ def main (args : List String) : IO UInt32 := do
         match rest[1]?.bind String.toNat? with
         | some n => exitDriver name p.arrayLen n
         | none =>
-            verdictDriver name p.arrayLen (p.arrayLen - 20) 11 11 classes [] true
+            verdictDriver name p.arrayLen (p.arrayLen - 21) 21 11 classes [] true
       match p.emitRolled name with
       | .error errs => (for e in errs do IO.eprintln e); return 1
       | .ok src =>

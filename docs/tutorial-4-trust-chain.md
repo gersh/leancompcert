@@ -80,16 +80,28 @@ covers C-to-assembly. Around it, the acceptance suite runs four gates:
   control flow and CompCert memory loads/stores. For production arrays,
   `Verified.ArrayRolled` proves the counter-driven trace equal to the literal
   trace used by the denotation proof; the Coq development proves the flat-array/
-  CompCert-block load/store invariant; and `scripts/clight-array-verify.py`
-  binds the complete production `clightgen` AST to the generic theorem. What
-  The sparse Coq evaluator now simulates into real CompCert memory, and the
-  actual `Init_space` global is proved to establish its zero-array relation.
-  A fast specialized checker kernel-computes `99952`. What remains is the
-  refinement lemma equating that specialized step with one exact Clight loop
-  iteration. Until it is supplied, the final numeric array result does not
-  have an unconditional CompCert `eval_funcall` theorem.
-- The tie between the Lean-side and Coq-side results is the shared
-  certified constant, not a single cross-prover proof.
+  CompCert-block load/store invariant, simulates every supported flat execution
+  into real CompCert memory, and derives the zero-array relation from the actual
+  `Init_space` global; and `scripts/clight-array-verify.py` binds the complete
+  production `clightgen` AST to the generic theorem.  For the production Möbius
+  array function the chain is closed: `scripts/coq/ArrayMobiusStaged.v` refines
+  the fast specialized step to the exact Clight loop body, stage by stage, and
+  ends in `production_end_to_end_99952` — an unconditional
+  `ClightBigstep.eval_funcall` theorem for that exact AST, from
+  `Genv.init_mem`, `Qed`-checked as the last step of the array gate.  Two
+  things remain true on that path: the AST Coq reasons about is `clightgen`'s
+  parse of the printed C, so gates 1–3 carry the printer there rather than
+  removing it; and on the Lean side the value `99952` at `L = 100000` is
+  corroborated by the artifact, not kernel-proved — the kernel checks the
+  denotation against the trial-division reference at `L = 8, 16, 24`
+  (`Testing/ArrayMobiusCertificate.lean`).
+- Lean and Coq still cannot share a proof term.  On the proved scalar path,
+  however, the boundary is now the serialized first-order `Reflect.Program`,
+  not merely a shared result constant: Lean requires kernel-checkable
+  `CompCertWF` and denotation proofs, Coq independently computes that serialized
+  program, and `compile_program_correct` proves the exact generated Clight AST.
+  The classic pretty-printed-C and production-array paths retain their
+  separately documented parser/correspondence boundaries.
 - The native binary's exit status is **never** a theorem. That is a
   permanent design commitment: admitting it would reintroduce exactly
   the trust `native_decide` carries.

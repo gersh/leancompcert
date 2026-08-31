@@ -2,7 +2,15 @@ import LeanCompCert.Ports.R2DenseHeadProduction
 import LeanCompCert.Verified.ArrayAuditFromArray
 
 /-!
-# Physical CompCert receipts for the dense R2 head
+# Retired physical CompCert receipts for the pre-strengthening dense R2 head
+
+This module is historical provenance only.  Its observations use the former
+twenty-result-cell offset `arrayLen - 20`.  The strengthened program has
+twenty-one result cells, so these declarations do not instantiate the live
+`DenseHeadAcceptance` contract (`arrayLen - 21`) and this module is
+intentionally absent from `LeanCompCert.lean`.  A future causal campaign must
+re-run the current literal program; do not import these axioms into a live
+semantic route.
 
 The positive programs record the eleven carry words.  Independently emitted
 fail-safe audit programs certify that every partial source operation in both

@@ -3,10 +3,12 @@ import LeanCompCert.Ports.R2SegDenoteSegments
 /-!
 # Source observation semantics of the `R₂*` epilogue
 
-The production receipt records result cells.  This module proves what those
-cells mean at source level: slot 10 is the aggregate failure register and
-slots 11--19 are the nine individual failure registers after the final-tail
-test.  The proof is generic in the configuration and does not execute a loop.
+The causal production run records result cells.  This module proves what
+those cells mean at source level: slot 10 is the aggregate failure register
+and slots 11--20 are the ten individual failure registers after the
+final-tail test.  The proof is generic in the configuration and does not
+execute a loop.  Historical nine-counter receipts intentionally remain
+separate and do not certify this strengthened layout.
 -/
 
 namespace LeanCompCert.Ports.R2SegSieve
@@ -119,9 +121,10 @@ theorem epilogue_eq_observation_stages (c : R2Cfg) :
       storeResults c 11 violRegs := by
   rfl
 
-/-- Exact meaning of the ten zero cells retained by the production receipt. -/
+/-- Exact meaning of the eleven zero cells retained by a strengthened causal
+production run. -/
 theorem epilogue_failure_cells (c : R2Cfg) (s : AState)
-    (hbound : c.resultBase + 20 ≤ M) :
+    (hbound : c.resultBase + 21 ≤ M) :
     let tested := arun 0 s (epilogueTestPrefix c)
     let out := arun 0 s c.epilogue
     out.arr (c.resultBase + 10) = tested.regs rViol ∧

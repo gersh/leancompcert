@@ -156,7 +156,7 @@ theorem Cfg.markBody_class_plane_frame
   have hp := c.markPhaseBody_run k s hTM
   dsimp only at hp
   have hp10 : phased.regs 10 = 0 := by
-    rw [hp.1, if_neg (by omega : ¬s.regs rR < c.markSteps)]
+    rw [hp.1, if_neg (Nat.not_lt_of_ge hclass)]
   have hr10 : reset.regs 10 = 0 :=
     (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
   have ha := c.markAddressBody_inactive_run k reset hr10
@@ -264,6 +264,104 @@ theorem Cfg.markBody_class_plane_frame
     rw [hadvArr]
     exact (frameAt 6 (by omega)).trans
       (congrFun hprefixArr (i + 6 * c.segLen))
+
+/-- In a classification round the complete mark block can write only the
+seven sink planes below `tableBase`.  Hence every initialized table or
+later read-only cell is an exact frame. -/
+theorem Cfg.markBody_class_table_frame
+    (c : Cfg) (k : Nat) (s : AState) (q : Nat)
+    (hclass : c.markSteps ≤ s.regs rR) (hTM : c.markSteps < M)
+    (hLPos : 0 < c.segLen)
+    (h7 : 7 * c.segLen < M) (h8 : 8 * c.segLen < M)
+    (h9 : 9 * c.segLen < M) (h10 : 10 * c.segLen < M)
+    (h11 : 11 * c.segLen < M) (h12 : 12 * c.segLen < M)
+    (h13 : 13 * c.segLen < M)
+    (hq : c.tableBase ≤ q) :
+    (arun k s c.markBody).arr q = s.arr q := by
+  let phased := arun k s (lift c.markPhaseBody)
+  let reset := arun k phased c.markResetBody
+  let addressed := arun k reset c.markAddressBody
+  let loaded := arun k addressed Cfg.markLoadBody
+  let marked := arun k loaded Cfg.markCellBody
+  let advanced := arun k marked c.markAdvanceBody
+  have hp := c.markPhaseBody_run k s hTM
+  dsimp only at hp
+  have hp10 : phased.regs 10 = 0 := by
+    rw [hp.1, if_neg (Nat.not_lt_of_ge hclass)]
+  have hr10 : reset.regs 10 = 0 :=
+    (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
+  have ha := c.markAddressBody_inactive_run k reset hr10
+    h7 h8 h9 h10 h11 h12 h13
+  dsimp only at ha
+  rcases ha with ⟨ha30, ha31, ha32, ha33, ha34, ha35, ha36, _⟩
+  have loadFrame (r : Nat) (hw : writes r Cfg.markLoadBody = false) :
+      loaded.regs r = addressed.regs r :=
+    arun_frame k r Cfg.markLoadBody hw addressed
+  have h30 : loaded.regs 30 = 7 * c.segLen :=
+    (loadFrame 30 (by rfl)).trans ha30
+  have h31 : loaded.regs 31 = 8 * c.segLen :=
+    (loadFrame 31 (by rfl)).trans ha31
+  have h32 : loaded.regs 32 = 9 * c.segLen :=
+    (loadFrame 32 (by rfl)).trans ha32
+  have h33 : loaded.regs 33 = 10 * c.segLen :=
+    (loadFrame 33 (by rfl)).trans ha33
+  have h34 : loaded.regs 34 = 11 * c.segLen :=
+    (loadFrame 34 (by rfl)).trans ha34
+  have h35 : loaded.regs 35 = 12 * c.segLen :=
+    (loadFrame 35 (by rfl)).trans ha35
+  have h36 : loaded.regs 36 = 13 * c.segLen :=
+    (loadFrame 36 (by rfl)).trans ha36
+  have hq7 : q ≠ 7 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq8 : q ≠ 8 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq9 : q ≠ 9 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq10 : q ≠ 10 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq11 : q ≠ 11 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq12 : q ≠ 12 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hq13 : q ≠ 13 * c.segLen := by
+    unfold Cfg.tableBase at hq
+    omega
+  have hframe : marked.arr q = loaded.arr q := by
+    apply Cfg.markCellBody_arr_frame
+    · rw [h30]; exact hq7
+    · rw [h31]; exact hq8
+    · rw [h32]; exact hq9
+    · rw [h33]; exact hq10
+    · rw [h34]; exact hq11
+    · rw [h35]; exact hq12
+    · rw [h36]; exact hq13
+  have hpArr : phased.arr = s.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k (lift c.markPhaseBody) s (by rfl)
+  have hrArr : reset.arr = phased.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markResetBody phased (by rfl)
+  have haArr : addressed.arr = reset.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markAddressBody reset (by rfl)
+  have hlArr : loaded.arr = addressed.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k Cfg.markLoadBody addressed (by rfl)
+  have hadvArr : advanced.arr = marked.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.markAdvanceBody marked (by rfl)
+  have hrun : arun k s c.markBody = advanced := by
+    simp only [Cfg.markBody, Cfg.markCoreBody, Cfg.markAdvanceBody,
+      arun_append]
+    rfl
+  rw [hrun, congrFun hadvArr q, hframe, congrFun hlArr q,
+    congrFun haArr q, congrFun hrArr q, congrFun hpArr q]
 
 /-! ## Classification-phase plane framing -/
 
@@ -483,6 +581,54 @@ theorem Cfg.classBody_other_plane_frame
   · exact (frameAt 6).trans
       (congrFun hb.2.2.2.2.2.2.2 (i + 6 * c.segLen))
 
+/-- The active classifier writes only the current seven plane cells, all
+strictly below `tableBase`; every table or later read-only cell is framed. -/
+theorem Cfg.classBody_table_frame
+    (c : Cfg) (k : Nat) (s : AState) (q : Nat)
+    (hj : s.regs rR - c.markSteps < c.segLen)
+    (hphase : s.regs 10 = 0) (hclass : s.regs 11 = 1)
+    (hT : c.markSteps ≤ s.regs rR) (hR : s.regs rR < M)
+    (hsum : s.regs rR - c.markSteps + s.regs rW < M)
+    (h1 : s.regs rR - c.markSteps + c.segLen < M)
+    (h2 : s.regs rR - c.markSteps + 2 * c.segLen < M)
+    (h3 : s.regs rR - c.markSteps + 3 * c.segLen < M)
+    (h4 : s.regs rR - c.markSteps + 4 * c.segLen < M)
+    (h5 : s.regs rR - c.markSteps + 5 * c.segLen < M)
+    (h6 : s.regs rR - c.markSteps + 6 * c.segLen < M)
+    (hq : c.tableBase ≤ q) :
+    (arun k s c.classBody).arr q = s.arr q := by
+  let before := arun k s c.classBeforeClearBody
+  have hb := c.classBeforeClearBody_class_run k s hphase hclass hT hR hsum
+    h1 h2 h3 h4 h5 h6
+  dsimp only at hb
+  have hne (a : Nat) (ha : a ≤ 6) :
+      q ≠ s.regs rR - c.markSteps + a * c.segLen := by
+    have hsmall : s.regs rR - c.markSteps + a * c.segLen <
+        c.tableBase := by
+      change s.regs rR - c.markSteps + a * c.segLen < 14 * c.segLen
+      calc
+        s.regs rR - c.markSteps + a * c.segLen <
+            c.segLen + a * c.segLen := Nat.add_lt_add_right hj _
+        _ = (a + 1) * c.segLen := by
+          simp only [Nat.add_mul, Nat.one_mul]
+          exact Nat.add_comm _ _
+        _ ≤ 14 * c.segLen :=
+          Nat.mul_le_mul_right c.segLen
+            (Nat.succ_le_iff.mpr (Nat.lt_of_le_of_lt ha (by decide)))
+    intro heq
+    rw [← heq] at hsmall
+    exact (Nat.not_lt_of_ge hq) hsmall
+  have hc := Cfg.classClearBody_arr_frame k before q
+    (by rw [hb.1]; simpa using hne 0 (by omega))
+    (by rw [hb.2.1]; simpa using hne 1 (by omega))
+    (by rw [hb.2.2.1]; exact hne 2 (by omega))
+    (by rw [hb.2.2.2.1]; exact hne 3 (by omega))
+    (by rw [hb.2.2.2.2.1]; exact hne 4 (by omega))
+    (by rw [hb.2.2.2.2.2.1]; exact hne 5 (by omega))
+    (by rw [hb.2.2.2.2.2.2.1]; exact hne 6 (by omega))
+  rw [c.classBody_eq_beforeClear_append, arun_append]
+  exact hc.trans (congrFun hb.2.2.2.2.2.2.2 q)
+
 /-- Through the literal mark/class/tail/arithmetic instruction order, a live
 classification body preserves every plane cell other than the candidate it
 consumes.  The arithmetic invariant is irrelevant here because both the tail
@@ -550,6 +696,67 @@ theorem LambdaPsiSweep.body_class_other_plane_frame
   exact (c.shape.readPlaneCell_congr i out tailed harithArr).trans
     ((c.shape.readPlaneCell_congr i tailed classified htailArr).trans
       (hclassCell.trans hmarkCell))
+
+/-- Through the literal mark/class/tail/arithmetic instruction order, a live
+classification body preserves every initialized table and later read-only
+cell. -/
+theorem LambdaPsiSweep.body_class_table_frame
+    (c : LambdaPsiSweep.Cfg) (k : Nat) (s : AState) (q : Nat)
+    (hj : s.regs rR - c.shape.markSteps < c.shape.segLen)
+    (hclass : c.shape.markSteps ≤ s.regs rR)
+    (hTM : c.shape.markSteps < M) (hLPos : 0 < c.shape.segLen)
+    (hR : s.regs rR < M)
+    (hsum : s.regs rR - c.shape.markSteps + s.regs rW < M)
+    (h1 : s.regs rR - c.shape.markSteps + c.shape.segLen < M)
+    (h2 : s.regs rR - c.shape.markSteps + 2 * c.shape.segLen < M)
+    (h3 : s.regs rR - c.shape.markSteps + 3 * c.shape.segLen < M)
+    (h4 : s.regs rR - c.shape.markSteps + 4 * c.shape.segLen < M)
+    (h5 : s.regs rR - c.shape.markSteps + 5 * c.shape.segLen < M)
+    (h6 : s.regs rR - c.shape.markSteps + 6 * c.shape.segLen < M)
+    (h7 : 7 * c.shape.segLen < M) (h8 : 8 * c.shape.segLen < M)
+    (h9 : 9 * c.shape.segLen < M) (h10 : 10 * c.shape.segLen < M)
+    (h11 : 11 * c.shape.segLen < M) (h12 : 12 * c.shape.segLen < M)
+    (h13 : 13 * c.shape.segLen < M)
+    (hq : c.shape.tableBase ≤ q) :
+    (arun k s (LambdaPsiSweep.body c)).arr q = s.arr q := by
+  let marked := arun k s c.shape.markBody
+  let classified := arun k marked c.shape.classBody
+  let tailed := arun k classified c.shape.tailBody
+  let out := arun k tailed (LambdaPsiSweep.arithmeticBody c)
+  have hmark := c.shape.markBody_class_table_frame k s q hclass hTM hLPos
+    h7 h8 h9 h10 h11 h12 h13 hq
+  have hphase := c.shape.markBody_phase_run k s hTM
+  dsimp only at hphase
+  have hm10 : marked.regs 10 = 0 := by
+    rw [hphase.1, if_neg (Nat.not_lt_of_ge hclass)]
+  have hm11 : marked.regs 11 = 1 := by
+    rw [hphase.2, if_pos hclass]
+  have hmR : marked.regs rR = s.regs rR :=
+    arun_frame k rR c.shape.markBody (by rfl) s
+  have hmW : marked.regs rW = s.regs rW :=
+    arun_frame k rW c.shape.markBody (by rfl) s
+  have hclassified := c.shape.classBody_table_frame k marked q
+    (by simpa only [hmR] using hj) hm10 hm11
+    (by simpa only [hmR] using hclass)
+    (by simpa only [hmR] using hR)
+    (by simpa only [hmR, hmW] using hsum)
+    (by simpa only [hmR] using h1)
+    (by simpa only [hmR] using h2)
+    (by simpa only [hmR] using h3)
+    (by simpa only [hmR] using h4)
+    (by simpa only [hmR] using h5)
+    (by simpa only [hmR] using h6) hq
+  have htailArr : tailed.arr = classified.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k c.shape.tailBody classified (by rfl)
+  have harithArr : out.arr = tailed.arr :=
+    LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
+      k (LambdaPsiSweep.arithmeticBody c) tailed (by rfl)
+  have hbody : arun k s (LambdaPsiSweep.body c) = out := by
+    rw [BodyRefinement.body_eq_mark_class_tail_arithmetic c]
+    simp only [arun_append]
+    rfl
+  rw [hbody, congrFun harithArr q, congrFun htailArr q, hclassified, hmark]
 
 /-- Starting from the seven selected live-plane addresses, the actual loads
 and scalar decoder preserve both violation counters and advance `seen` once.

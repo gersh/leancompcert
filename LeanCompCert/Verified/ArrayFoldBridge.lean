@@ -144,6 +144,24 @@ theorem arun_arr_word (k : Nat) (l : List AInstr) (s : AState)
     (hr : ∀ j, s.regs j < M) (ha : ∀ j, s.arr j < M) :
     ∀ j, (arun k s l).arr j < M := (arun_word k l s hr ha).2
 
+/-- Machine-word bounds telescope through an arbitrary symbolic list of
+array-program body invocations.  This is deliberately independent of the
+list length, so clients never need to unfold a production loop. -/
+theorem foldl_arun_word (body : List AInstr) :
+    ∀ (indices : List Nat) (s : AState),
+      (∀ j, s.regs j < M) → (∀ j, s.arr j < M) →
+      let out := indices.foldl (fun st idx => arun idx st body) s
+      (∀ j, out.regs j < M) ∧ (∀ j, out.arr j < M) := by
+  intro indices
+  induction indices with
+  | nil =>
+      intro s hr ha
+      exact ⟨hr, ha⟩
+  | cons idx rest ih =>
+      intro s hr ha
+      have hstep := arun_word idx body s hr ha
+      exact ih (arun idx s body) hstep.1 hstep.2
+
 /-- "This instruction is defined in this state": the divisor of a `udiv` or
 `urem` is nonzero, and an array access is in bounds. -/
 def ADefined (len k : Nat) (s : AState) : AInstr → Prop
@@ -287,6 +305,51 @@ theorem eq_arun_of_denoteAInstrs_eq_some (len k : Nat) :
           rw [arun_cons, ← hmid]
           exact ih mid out h
 
+/-- Successful partial execution also exposes the exact dynamic guards of
+every instruction in the block.  This converse to
+`denoteAInstrs_eq_arun` lets a successful compiled run supply array bounds
+and nonzero-divisor facts causally, instead of duplicating them as static
+readiness hypotheses. -/
+theorem allDefined_of_denoteAInstrs_eq_some (len k : Nat) :
+    ∀ (l : List AInstr) (s out : AState),
+      denoteAInstrs len k s l = some out → AllDefined len k s l := by
+  intro l
+  induction l with
+  | nil =>
+      intro s out h
+      trivial
+  | cons i rest ih =>
+      intro s out h
+      cases hi : denoteAInstr len k s i with
+      | none => simp [denoteAInstrs, hi] at h
+      | some mid =>
+          have hstep : mid = astep k s i :=
+            eq_astep_of_denoteAInstr_eq_some hi
+          have hdefined : ADefined len k s i := by
+            cases i with
+            | scalar instr =>
+                cases instr with
+                | mov d src => trivial
+                | binop d op lhs rhs =>
+                    simp only [denoteAInstr, denoteInstr] at hi
+                    cases hop : denoteOp op (denoteOperand k s.regs lhs)
+                        (denoteOperand k s.regs rhs) with
+                    | none => simp [hop] at hi
+                    | some value => simp [ADefined, hop]
+            | load dest idxReg =>
+                by_cases hidx : s.regs idxReg < len
+                · exact hidx
+                · simp [denoteAInstr, hidx] at hi
+            | store idxReg srcReg =>
+                by_cases hidx : s.regs idxReg < len
+                · exact hidx
+                · simp [denoteAInstr, hidx] at hi
+          have hrestDenote : denoteAInstrs len k mid rest = some out := by
+            simpa [denoteAInstrs, hi] using h
+          refine ⟨hdefined, ?_⟩
+          rw [← hstep]
+          exact ih mid out hrestDenote
+
 /-- Successful monadic iteration of an array block has the same terminal
 state as the pure fold of `arun` at those changing indices. -/
 theorem eq_foldl_arun_of_foldlM_denote_eq_some
@@ -415,6 +478,18 @@ theorem AProgram.body_denotes_at_total_prefix (p : AProgram) {n j : Nat}
                       (List.range j) entry mid hpref
                   rw [hmid, hentry] at hstep
                   exact ⟨next, hstep⟩
+
+/-- A successful whole-program denotation supplies the recursive dynamic
+definedness predicate for any selected body invocation.  In particular,
+clients may project the bounds of literal loads/stores and the nonzero guards
+of division instructions directly from the signed result. -/
+theorem AProgram.body_allDefined_at_total_prefix (p : AProgram) {n j : Nat}
+    (h : p.denote = some n) (hj : j < p.loopCount) :
+    AllDefined p.arrayLen j
+      ((List.range j).foldl (fun s index => arun index s p.body)
+        (arun 0 initialAState p.init)) p.body := by
+  obtain ⟨out, hout⟩ := body_denotes_at_total_prefix p h hj
+  exact allDefined_of_denoteAInstrs_eq_some p.arrayLen j p.body _ out hout
 
 /-- If a successful program body is an appended pair of blocks, then both
 blocks denote successfully at every total-state loop prefix.  The statement

@@ -76,7 +76,10 @@ import LeanCompCert.Ports.A36Bisect
 import LeanCompCert.Ports.A36BisectProgram
 import LeanCompCert.Ports.R2SegSieve
 import LeanCompCert.Ports.R2DenseHeadProduction
-import LeanCompCert.Ports.R2DenseHeadReceipt
+/- `R2DenseHeadReceipt` is a retired pre-strengthening artifact module whose
+   observations use the historical twenty-cell result offset.  It is kept for
+   provenance but intentionally excluded from the umbrella: live consumers
+   use the corrected twenty-one-cell source contract and future receipts. -/
 import LeanCompCert.Ports.PsiSegSieveChecks
 import LeanCompCert.Ports.R2SegSieveChecks
 import LeanCompCert.Ports.R2SegClassification
@@ -140,6 +143,7 @@ import LeanCompCert.Proof.PureSemantics
 import LeanCompCert.Verified.Decide
 import LeanCompCert.NativeCheck
 import LeanCompCert.Ports.DirichletLadder
+import LeanCompCert.Ports.DirichletLadderExternalSafetyReferenceSignedRun
 import LeanCompCert.Testing.DirichletLadderCertificate
 import LeanCompCert.Ports.MobiusResidueModel
 import LeanCompCert.Ports.MobiusResidueRealisation

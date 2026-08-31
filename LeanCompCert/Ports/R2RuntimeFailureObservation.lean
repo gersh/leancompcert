@@ -2,11 +2,14 @@ import LeanCompCert.Ports.R2SegEpilogueObservation
 import LeanCompCert.Ports.R2RuntimeProductionAuditReceipt
 
 /-!
-# Decoded zero failure classes from the compiled production receipt
+# Decoded legacy failure classes from the compiled production receipt
 
 The retained positive and fail-safe executions already recover one exact
-source run.  Here the generic epilogue theorem decodes its ten zero result
-cells back to the source registers immediately after the final-tail test.
+source run.  Here the generic epilogue theorem decodes the aggregate and nine
+per-class zero result cells present in that receipt back to the source
+registers immediately after the final-tail test.  The newer tenth (`rVSub`)
+cell is deliberately not claimed: establishing it requires a fresh run of the
+strengthened artifact.
 -/
 
 namespace LeanCompCert.Ports.R2SegSieve
@@ -39,13 +42,22 @@ def runtimeProductionTested : AState :=
   arun 0 runtimeProductionLoopOut
     (epilogueTestPrefix runtimeProductionCfg)
 
-/-- All nine named failure classes, and their aggregate, are zero in the
-source state observed by the production epilogue.  Lean only projects the
-retained cells; it does not replay the production loop. -/
+/-- Index one of the nine failure counters present in the retained production
+receipt. The current `violRegs` has a tenth entry, which this accessor cannot
+name. -/
+def legacyViolReg (i : Nat) (hi : i < 9) : Nat :=
+  violRegs.get ⟨i, by
+    have hi' : i < 10 := by omega
+    simpa [violRegs] using hi'⟩
+
+/-- The nine legacy failure classes, and their aggregate, are zero in the
+source state observed by the production epilogue. Lean only projects the
+retained cells; it does not replay the production loop. The current tenth
+entry of `violRegs` is outside the retained receipt's slot range. -/
 theorem runtimeProduction_verified_failure_classes_zero :
     runtimeProductionTested.regs rViol = 0 ∧
-      ∀ i (hi : i < violRegs.length),
-        runtimeProductionTested.regs (violRegs.get ⟨i, hi⟩) = 0 := by
+      ∀ i (hi : i < 9),
+        runtimeProductionTested.regs (legacyViolReg i hi) = 0 := by
   rcases runtimeProduction_verified_source_observation with
     ⟨packed, out, hRun, _hpacked, _hreceipt, hobs⟩
   have hpackedExact : packed = rootPackedState runtimeProductionCfg
@@ -73,10 +85,19 @@ theorem runtimeProduction_verified_failure_classes_zero :
     exact hcells.1.symm.trans hz
   refine ⟨hzAgg, ?_⟩
   intro i hi
-  have hi9 : i < 9 := by simpa [violRegs] using hi
+  have hi10 : i < violRegs.length := by
+    have hi' : i < 10 := by omega
+    simpa [violRegs] using hi'
   have hz := hobs.2.2.2.2.2.2.2.2.2.2.2 (11 + i) (by omega) (by omega)
-  exact (hcells.2 i hi).symm.trans (by
-    simpa only [Nat.add_assoc] using hz)
+  have hzero :
+      runtimeProductionTested.regs (violRegs.get ⟨i, hi10⟩) = 0 :=
+    (hcells.2 i hi10).symm.trans (by
+      simpa only [Nat.add_assoc] using hz)
+  have hget : violRegs.get ⟨i, hi10⟩ = legacyViolReg i hi := by
+    apply congrArg violRegs.get
+    apply Fin.ext
+    rfl
+  rwa [hget] at hzero
 
 /-- Named projections used by the marking and stream telescopes. -/
 theorem runtimeProduction_verified_no_mark_or_drain_failure :
@@ -87,9 +108,9 @@ theorem runtimeProduction_verified_no_mark_or_drain_failure :
   have hmark := hs 3 (by decide)
   have hcap := hs 4 (by decide)
   have hdrain := hs 5 (by decide)
-  have hgetMark : violRegs.get ⟨3, by decide⟩ = rVMark := by rfl
-  have hgetCap : violRegs.get ⟨4, by decide⟩ = rVCap := by rfl
-  have hgetDrain : violRegs.get ⟨5, by decide⟩ = rVDrain := by rfl
+  have hgetMark : legacyViolReg 3 (by decide) = rVMark := by rfl
+  have hgetCap : legacyViolReg 4 (by decide) = rVCap := by rfl
+  have hgetDrain : legacyViolReg 5 (by decide) = rVDrain := by rfl
   rw [hgetMark] at hmark
   rw [hgetCap] at hcap
   rw [hgetDrain] at hdrain

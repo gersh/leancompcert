@@ -29,7 +29,8 @@ theorem logLiveRoundBody_eq_slice (c : R2Cfg) :
 
 /-- A resident logarithmic entry at nonzero round `j` advances the complete
 literal live prefix to recurrence round `j+1`. -/
-theorem logLiveRoundBody_continue_run (c : R2Cfg) (k : Nat) (s : AState)
+theorem logLiveRoundBody_continue_run_of_word
+    (c : R2Cfg) (k : Nat) (s : AState)
     (ec wc n payload mode e th viol vlog x0 j : Nat)
     (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
     (hk : s.regs rK = j) (hj0 : j ≠ 0) (hphase : s.regs 15 = 1)
@@ -46,7 +47,7 @@ theorem logLiveRoundBody_continue_run (c : R2Cfg) (k : Nat) (s : AState)
     (hxlo : B62 ≤ x0) (hxhi : x0 < B63)
     (hj : j < c.sc) (hS62 : c.sc ≤ 62) (hSM : c.sc < M)
     (heM : e + 1 < M) (hthM : th + th < M)
-    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    (hvM : viol < M) (hvlM : vlog < M) :
     let out := arun k s (logLiveRoundBody c)
     out.regs rXm = (logIter x0 (j + 1)).1 ∧
       out.regs rAa = (logIter x0 (j + 1)).2 ∧
@@ -69,7 +70,7 @@ theorem logLiveRoundBody_continue_run (c : R2Cfg) (k : Nat) (s : AState)
   have frameL (r : Nat) (hw : writes r logEntryLatchBody = false) :
       latched.regs r = gated.regs r := arun_frame k r logEntryLatchBody hw gated
   let exponented := arun k latched logExponentBody
-  have hecRun := logExponentBody_continue_run k latched n e th viol vlog
+  have hecRun := logExponentBody_continue_run_of_word k latched n e th viol vlog
     hl.2.1 ((frameL rEx (by rfl)).trans ((frameG rEx (by rfl)).trans he))
     ((frameL rTh (by rfl)).trans ((frameG rTh (by rfl)).trans hth))
     ((frameL rViol (by rfl)).trans ((frameG rViol (by rfl)).trans hv))
@@ -152,7 +153,8 @@ theorem logLiveRoundBody_continue_mode_run (c : R2Cfg) (k : Nat) (s : AState)
 /-- Besides advancing the recurrence, a continuation prefix preserves the
 latched entry and its incremental exponent invariant.  This state form is the
 induction interface for consecutive production bodies. -/
-theorem logLiveRoundBody_continue_state_run (c : R2Cfg) (k : Nat) (s : AState)
+theorem logLiveRoundBody_continue_state_run_of_word
+    (c : R2Cfg) (k : Nat) (s : AState)
     (ec wc n payload e th viol vlog j : Nat)
     (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
     (hk : s.regs rK = j) (hj0 : j ≠ 0) (hphase : s.regs 15 = 1)
@@ -163,7 +165,7 @@ theorem logLiveRoundBody_continue_state_run (c : R2Cfg) (k : Nat) (s : AState)
     (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
     (hnM : n < M) (hpM : payload < M)
     (heM : e + 1 < M) (hthM : th + th < M)
-    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    (hvM : viol < M) (hvlM : vlog < M) :
     let out := arun k s (logLiveRoundBody c)
     out.regs rNe = n ∧ out.regs rPl = payload ∧
       out.regs rEx = e ∧ out.regs rTh = th ∧
@@ -185,7 +187,7 @@ theorem logLiveRoundBody_continue_state_run (c : R2Cfg) (k : Nat) (s : AState)
   have frameL (r : Nat) (hw : writes r logEntryLatchBody = false) :
       latched.regs r = gated.regs r := arun_frame k r logEntryLatchBody hw gated
   let exponented := arun k latched logExponentBody
-  have hecRun := logExponentBody_continue_run k latched n e th viol vlog
+  have hecRun := logExponentBody_continue_run_of_word k latched n e th viol vlog
     hl.2.1 ((frameL rEx (by rfl)).trans ((frameG rEx (by rfl)).trans he))
     ((frameL rTh (by rfl)).trans ((frameG rTh (by rfl)).trans hth))
     ((frameL rViol (by rfl)).trans ((frameG rViol (by rfl)).trans hv))
@@ -216,7 +218,8 @@ theorem logLiveRoundBody_continue_state_run (c : R2Cfg) (k : Nat) (s : AState)
 /-- A new entry whose existing power-of-two threshold already exceeds the
 test point is latched and executes recurrence round one without changing the
 incremental exponent. -/
-theorem logLiveRoundBody_start_no_bump_run (c : R2Cfg) (k : Nat) (s : AState)
+theorem logLiveRoundBody_start_no_bump_run_of_word
+    (c : R2Cfg) (k : Nat) (s : AState)
     (ec wc n payload mode e th viol vlog : Nat)
     (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
     (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
@@ -233,7 +236,7 @@ theorem logLiveRoundBody_start_no_bump_run (c : R2Cfg) (k : Nat) (s : AState)
     (hnormHi : n <<< (62 - e) < B63)
     (hSpos : 0 < c.sc) (hSM : c.sc < M)
     (heM : e + 1 < M) (hthM : th + th < M)
-    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    (hvM : viol < M) (hvlM : vlog < M) :
     let x0 := n <<< (62 - e)
     let out := arun k s (logLiveRoundBody c)
     out.regs rXm = (logIter x0 1).1 ∧
@@ -257,7 +260,8 @@ theorem logLiveRoundBody_start_no_bump_run (c : R2Cfg) (k : Nat) (s : AState)
   have frameL (r : Nat) (hw : writes r logEntryLatchBody = false) :
       latched.regs r = gated.regs r := arun_frame k r logEntryLatchBody hw gated
   let exponented := arun k latched logExponentBody
-  have hecRun := logExponentBody_start_no_bump_run k latched n e th viol vlog
+  have hecRun := logExponentBody_start_no_bump_run_of_word k latched n e th
+    viol vlog
     hl.2.1 ((frameL rEx (by rfl)).trans ((frameG rEx (by rfl)).trans he))
     ((frameL rTh (by rfl)).trans ((frameG rTh (by rfl)).trans hth))
     ((frameL rViol (by rfl)).trans ((frameG rViol (by rfl)).trans hv))
@@ -284,7 +288,8 @@ theorem logLiveRoundBody_start_no_bump_run (c : R2Cfg) (k : Nat) (s : AState)
       (hl.2.2.2.trans hg.2.2.2.2.2))⟩
 
 /-- Full induction state after the no-threshold-crossing first round. -/
-theorem logLiveRoundBody_start_no_bump_state_run (c : R2Cfg) (k : Nat)
+theorem logLiveRoundBody_start_no_bump_state_run_of_word
+    (c : R2Cfg) (k : Nat)
     (s : AState) (ec wc n payload e th viol vlog : Nat)
     (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
     (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
@@ -296,7 +301,7 @@ theorem logLiveRoundBody_start_no_bump_state_run (c : R2Cfg) (k : Nat)
     (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
     (hnth : n < th) (hnM : n < M) (hpM : payload < M)
     (heM : e + 1 < M) (hthM : th + th < M)
-    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    (hvM : viol < M) (hvlM : vlog < M) :
     let out := arun k s (logLiveRoundBody c)
     out.regs rNe = n ∧ out.regs rPl = payload ∧
       out.regs rEx = e ∧ out.regs rTh = th ∧
@@ -318,7 +323,8 @@ theorem logLiveRoundBody_start_no_bump_state_run (c : R2Cfg) (k : Nat)
   have frameL (r : Nat) (hw : writes r logEntryLatchBody = false) :
       latched.regs r = gated.regs r := arun_frame k r logEntryLatchBody hw gated
   let exponented := arun k latched logExponentBody
-  have hecRun := logExponentBody_start_no_bump_run k latched n e th viol vlog
+  have hecRun := logExponentBody_start_no_bump_run_of_word k latched n e th
+    viol vlog
     hl.2.1 ((frameL rEx (by rfl)).trans ((frameG rEx (by rfl)).trans he))
     ((frameL rTh (by rfl)).trans ((frameG rTh (by rfl)).trans hth))
     ((frameL rViol (by rfl)).trans ((frameG rViol (by rfl)).trans hv))
@@ -348,7 +354,8 @@ theorem logLiveRoundBody_start_no_bump_state_run (c : R2Cfg) (k : Nat)
 
 /-- The other valid new-entry case crosses the old threshold exactly once;
 the exponent and threshold advance before the normalized mantissa is loaded. -/
-theorem logLiveRoundBody_start_bump_run (c : R2Cfg) (k : Nat) (s : AState)
+theorem logLiveRoundBody_start_bump_run_of_word
+    (c : R2Cfg) (k : Nat) (s : AState)
     (ec wc n payload mode e th viol vlog : Nat)
     (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
     (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
@@ -366,7 +373,7 @@ theorem logLiveRoundBody_start_bump_run (c : R2Cfg) (k : Nat) (s : AState)
     (hnormHi : n <<< (62 - (e + 1)) < B63)
     (hSpos : 0 < c.sc) (hSM : c.sc < M)
     (heM : e + 1 < M) (hthM : th + th < M)
-    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    (hvM : viol < M) (hvlM : vlog < M) :
     let x0 := n <<< (62 - (e + 1))
     let out := arun k s (logLiveRoundBody c)
     out.regs rXm = (logIter x0 1).1 ∧
@@ -390,7 +397,8 @@ theorem logLiveRoundBody_start_bump_run (c : R2Cfg) (k : Nat) (s : AState)
   have frameL (r : Nat) (hw : writes r logEntryLatchBody = false) :
       latched.regs r = gated.regs r := arun_frame k r logEntryLatchBody hw gated
   let exponented := arun k latched logExponentBody
-  have hecRun := logExponentBody_start_bump_run k latched n e th viol vlog
+  have hecRun := logExponentBody_start_bump_run_of_word k latched n e th
+    viol vlog
     hl.2.1 ((frameL rEx (by rfl)).trans ((frameG rEx (by rfl)).trans he))
     ((frameL rTh (by rfl)).trans ((frameG rTh (by rfl)).trans hth))
     ((frameL rViol (by rfl)).trans ((frameG rViol (by rfl)).trans hv))
@@ -417,7 +425,8 @@ theorem logLiveRoundBody_start_bump_run (c : R2Cfg) (k : Nat) (s : AState)
       (hl.2.2.2.trans hg.2.2.2.2.2))⟩
 
 /-- Full induction state after the one-threshold-crossing first round. -/
-theorem logLiveRoundBody_start_bump_state_run (c : R2Cfg) (k : Nat)
+theorem logLiveRoundBody_start_bump_state_run_of_word
+    (c : R2Cfg) (k : Nat)
     (s : AState) (ec wc n payload e th viol vlog : Nat)
     (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
     (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
@@ -430,7 +439,7 @@ theorem logLiveRoundBody_start_bump_state_run (c : R2Cfg) (k : Nat)
     (hnlo : th ≤ n) (hnhi : n < th + th)
     (hnM : n < M) (hpM : payload < M)
     (heM : e + 1 < M) (hthM : th + th < M)
-    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    (hvM : viol < M) (hvlM : vlog < M) :
     let out := arun k s (logLiveRoundBody c)
     out.regs rNe = n ∧ out.regs rPl = payload ∧
       out.regs rEx = e + 1 ∧ out.regs rTh = th + th ∧
@@ -452,7 +461,8 @@ theorem logLiveRoundBody_start_bump_state_run (c : R2Cfg) (k : Nat)
   have frameL (r : Nat) (hw : writes r logEntryLatchBody = false) :
       latched.regs r = gated.regs r := arun_frame k r logEntryLatchBody hw gated
   let exponented := arun k latched logExponentBody
-  have hecRun := logExponentBody_start_bump_run k latched n e th viol vlog
+  have hecRun := logExponentBody_start_bump_run_of_word k latched n e th
+    viol vlog
     hl.2.1 ((frameL rEx (by rfl)).trans ((frameG rEx (by rfl)).trans he))
     ((frameL rTh (by rfl)).trans ((frameG rTh (by rfl)).trans hth))
     ((frameL rViol (by rfl)).trans ((frameG rViol (by rfl)).trans hv))
@@ -480,13 +490,183 @@ theorem logLiveRoundBody_start_bump_state_run (c : R2Cfg) (k : Nat)
     harrStep.trans (hecRun.2.2.2.2.trans
       (hl.2.2.2.trans hg.2.2.2.2.2))⟩
 
+/-! Compatibility wrappers retain the original one-spare-word interfaces.
+The literal zero-`bad` branches above are the stronger causal interfaces. -/
+
+theorem logLiveRoundBody_continue_run (c : R2Cfg) (k : Nat) (s : AState)
+    (ec wc n payload mode e th viol vlog x0 j : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = j) (hj0 : j ≠ 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hne : s.regs rNe = n) (hpl : s.regs rPl = payload)
+    (hmode : payload >>> 57 = mode) (hmodeLt : mode < 2)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hx : s.regs rXm = (logIter x0 j).1)
+    (ha : s.regs rAa = (logIter x0 j).2)
+    (hnM : n < M) (hpM : payload < M)
+    (he62 : e ≤ 62) (hnormM : n <<< (62 - e) < M)
+    (hxlo : B62 ≤ x0) (hxhi : x0 < B63)
+    (hj : j < c.sc) (hS62 : c.sc ≤ 62) (hSM : c.sc < M)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    let out := arun k s (logLiveRoundBody c)
+    out.regs rXm = (logIter x0 (j + 1)).1 ∧
+      out.regs rAa = (logIter x0 (j + 1)).2 ∧
+      out.regs 247 = (if j + 1 = c.sc then 1 else 0) ∧
+      out.regs rK = (if j + 1 = c.sc then 0 else j + 1) ∧
+      out.arr = s.arr := by
+  exact logLiveRoundBody_continue_run_of_word c k s ec wc n payload mode e
+    th viol vlog x0 j hec hwc hk hj0 hphase hlive hbase haddr hne hpl hmode
+    hmodeLt he hth hv hvl hx ha hnM hpM he62 hnormM hxlo hxhi hj hS62 hSM
+    heM hthM (by omega) (by omega)
+
+theorem logLiveRoundBody_continue_state_run
+    (c : R2Cfg) (k : Nat) (s : AState)
+    (ec wc n payload e th viol vlog j : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = j) (hj0 : j ≠ 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hne : s.regs rNe = n) (hpl : s.regs rPl = payload)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hnM : n < M) (hpM : payload < M)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    let out := arun k s (logLiveRoundBody c)
+    out.regs rNe = n ∧ out.regs rPl = payload ∧
+      out.regs rEx = e ∧ out.regs rTh = th ∧
+      out.regs rViol = viol ∧ out.regs rVLog2 = vlog ∧
+      out.arr = s.arr := by
+  exact logLiveRoundBody_continue_state_run_of_word c k s ec wc n payload e
+    th viol vlog j hec hwc hk hj0 hphase hlive hbase haddr hne hpl he hth hv
+    hvl hnM hpM heM hthM (by omega) (by omega)
+
+theorem logLiveRoundBody_start_no_bump_run
+    (c : R2Cfg) (k : Nat) (s : AState)
+    (ec wc n payload mode e th viol vlog : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hcell0 : s.arr ((ec <<< 1) + c.streamBase) = n)
+    (hcell1 : s.arr ((ec <<< 1) + c.streamBase + 1) = payload)
+    (hmode : payload >>> 57 = mode) (hmodeLt : mode < 2)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hnth : n < th) (hnM : n < M) (hpM : payload < M)
+    (he62 : e ≤ 62)
+    (hnormLo : B62 ≤ n <<< (62 - e))
+    (hnormHi : n <<< (62 - e) < B63)
+    (hSpos : 0 < c.sc) (hSM : c.sc < M)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    let x0 := n <<< (62 - e)
+    let out := arun k s (logLiveRoundBody c)
+    out.regs rXm = (logIter x0 1).1 ∧
+      out.regs rAa = (logIter x0 1).2 ∧
+      out.regs 247 = (if 1 = c.sc then 1 else 0) ∧
+      out.regs rK = (if 1 = c.sc then 0 else 1) ∧
+      out.arr = s.arr := by
+  exact logLiveRoundBody_start_no_bump_run_of_word c k s ec wc n payload
+    mode e th viol vlog hec hwc hk hphase hlive hbase haddr hcell0 hcell1
+    hmode hmodeLt he hth hv hvl hnth hnM hpM he62 hnormLo hnormHi hSpos hSM
+    heM hthM (by omega) (by omega)
+
+theorem logLiveRoundBody_start_no_bump_state_run
+    (c : R2Cfg) (k : Nat) (s : AState)
+    (ec wc n payload e th viol vlog : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hcell0 : s.arr ((ec <<< 1) + c.streamBase) = n)
+    (hcell1 : s.arr ((ec <<< 1) + c.streamBase + 1) = payload)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hnth : n < th) (hnM : n < M) (hpM : payload < M)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    let out := arun k s (logLiveRoundBody c)
+    out.regs rNe = n ∧ out.regs rPl = payload ∧
+      out.regs rEx = e ∧ out.regs rTh = th ∧
+      out.regs rViol = viol ∧ out.regs rVLog2 = vlog ∧
+      out.arr = s.arr := by
+  exact logLiveRoundBody_start_no_bump_state_run_of_word c k s ec wc n
+    payload e th viol vlog hec hwc hk hphase hlive hbase haddr hcell0 hcell1
+    he hth hv hvl hnth hnM hpM heM hthM (by omega) (by omega)
+
+theorem logLiveRoundBody_start_bump_run
+    (c : R2Cfg) (k : Nat) (s : AState)
+    (ec wc n payload mode e th viol vlog : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hcell0 : s.arr ((ec <<< 1) + c.streamBase) = n)
+    (hcell1 : s.arr ((ec <<< 1) + c.streamBase + 1) = payload)
+    (hmode : payload >>> 57 = mode) (hmodeLt : mode < 2)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hnlo : th ≤ n) (hnhi : n < th + th)
+    (hnM : n < M) (hpM : payload < M)
+    (he62 : e + 1 ≤ 62)
+    (hnormLo : B62 ≤ n <<< (62 - (e + 1)))
+    (hnormHi : n <<< (62 - (e + 1)) < B63)
+    (hSpos : 0 < c.sc) (hSM : c.sc < M)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    let x0 := n <<< (62 - (e + 1))
+    let out := arun k s (logLiveRoundBody c)
+    out.regs rXm = (logIter x0 1).1 ∧
+      out.regs rAa = (logIter x0 1).2 ∧
+      out.regs 247 = (if 1 = c.sc then 1 else 0) ∧
+      out.regs rK = (if 1 = c.sc then 0 else 1) ∧
+      out.arr = s.arr := by
+  exact logLiveRoundBody_start_bump_run_of_word c k s ec wc n payload mode e
+    th viol vlog hec hwc hk hphase hlive hbase haddr hcell0 hcell1 hmode
+    hmodeLt he hth hv hvl hnlo hnhi hnM hpM he62 hnormLo hnormHi hSpos hSM
+    heM hthM (by omega) (by omega)
+
+theorem logLiveRoundBody_start_bump_state_run
+    (c : R2Cfg) (k : Nat) (s : AState)
+    (ec wc n payload e th viol vlog : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hcell0 : s.arr ((ec <<< 1) + c.streamBase) = n)
+    (hcell1 : s.arr ((ec <<< 1) + c.streamBase + 1) = payload)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hnlo : th ≤ n) (hnhi : n < th + th)
+    (hnM : n < M) (hpM : payload < M)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M) :
+    let out := arun k s (logLiveRoundBody c)
+    out.regs rNe = n ∧ out.regs rPl = payload ∧
+      out.regs rEx = e + 1 ∧ out.regs rTh = th + th ∧
+      out.regs rViol = viol ∧ out.regs rVLog2 = vlog ∧
+      out.arr = s.arr := by
+  exact logLiveRoundBody_start_bump_state_run_of_word c k s ec wc n payload
+    e th viol vlog hec hwc hk hphase hlive hbase haddr hcell0 hcell1 he hth
+    hv hvl hnlo hnhi hnM hpM heM hthM (by omega) (by omega)
+
 #print axioms logLiveRoundBody_eq_slice
+#print axioms logLiveRoundBody_continue_run_of_word
 #print axioms logLiveRoundBody_continue_run
 #print axioms logLiveRoundBody_continue_mode_run
+#print axioms logLiveRoundBody_continue_state_run_of_word
 #print axioms logLiveRoundBody_continue_state_run
+#print axioms logLiveRoundBody_start_no_bump_run_of_word
 #print axioms logLiveRoundBody_start_no_bump_run
+#print axioms logLiveRoundBody_start_no_bump_state_run_of_word
 #print axioms logLiveRoundBody_start_no_bump_state_run
+#print axioms logLiveRoundBody_start_bump_run_of_word
 #print axioms logLiveRoundBody_start_bump_run
+#print axioms logLiveRoundBody_start_bump_state_run_of_word
 #print axioms logLiveRoundBody_start_bump_state_run
 
 end LeanCompCert.Ports.R2SegSieve

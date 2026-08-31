@@ -12,6 +12,9 @@ without normalizing the complete 158-instruction body.
 
 namespace LeanCompCert.Ports.R2SegSieve
 
+set_option maxRecDepth 10000
+set_option maxHeartbeats 1000000
+
 set_option maxHeartbeats 500000
 
 open LeanCompCert
@@ -235,7 +238,8 @@ theorem logFinalEventBody_nonfinal_carry_run
       out.regs 247 = 0 ∧ out.regs 314 = 1 ∧ out.arr = s.arr := by
   let decoded := arun k s (logPayloadDecodeBody ++ logFactorBody)
   let afterJump := arun k decoded (logJumpErrorBody c.sc (ln2Up c.sc))
-  let beforeCommit := arun k afterJump (logBetweenJumpAndCommitBody c)
+  let beforeAudit := arun k afterJump (logBetweenJumpAndCommitBody c)
+  let beforeCommit := arun k beforeAudit logUnderflowAuditBody
   have frameDecoded (r : Nat)
       (hw : writes r (logPayloadDecodeBody ++ logFactorBody) = false) :
       decoded.regs r = s.regs r :=
@@ -259,38 +263,48 @@ theorem logFinalEventBody_nonfinal_carry_run
     carryToJump rTerms terms hterms (by rfl) (by rfl)
   have hjPrev : afterJump.regs rPrev = prev :=
     carryToJump rPrev prev hprev (by rfl) (by rfl)
-  have hbD : beforeCommit.regs rD = d :=
+  have hbD : beforeAudit.regs rD = d :=
     logBetweenJumpAndCommitBody_zero_run c k afterJump d hjD hjFin hdM
-  have hb314 : beforeCommit.regs 314 = 1 :=
+  have hb314 : beforeAudit.regs 314 = 1 :=
     logBetweenJumpAndCommitBody_zero_select_run c k afterJump hjFin
-  have hbFin : beforeCommit.regs 247 = 0 :=
+  have hbFin : beforeAudit.regs 247 = 0 :=
     (arun_frame k 247 (logBetweenJumpAndCommitBody c) (by rfl)
       afterJump).trans hjFin
-  have hbErr : beforeCommit.regs rErr = err :=
+  have hbErr : beforeAudit.regs rErr = err :=
     (arun_frame k rErr (logBetweenJumpAndCommitBody c) (by rfl)
       afterJump).trans hjErr
-  have hbTerms : beforeCommit.regs rTerms = terms :=
+  have hbTerms : beforeAudit.regs rTerms = terms :=
     (arun_frame k rTerms (logBetweenJumpAndCommitBody c) (by rfl)
       afterJump).trans hjTerms
-  have hbPrev : beforeCommit.regs rPrev = prev :=
+  have hbPrev : beforeAudit.regs rPrev = prev :=
     (arun_frame k rPrev (logBetweenJumpAndCommitBody c) (by rfl)
       afterJump).trans hjPrev
+  have ha := logUnderflowAuditBody_frame k beforeAudit
+  dsimp only at ha
+  have haPrev : beforeCommit.regs rPrev = prev :=
+    (arun_frame k rPrev logUnderflowAuditBody (by rfl) beforeAudit).trans
+      hbPrev
+  have ha314 : beforeCommit.regs 314 = 1 :=
+    (arun_frame k 314 logUnderflowAuditBody (by rfl) beforeAudit).trans
+      hb314
   have hc := logAccumulatorCommitBody_zero_run k beforeCommit d err terms
-    hbFin hbD hbErr hbTerms hdM herrM htermsM
+    (ha.2.2.2.1.trans hbFin) (ha.1.trans hbD) (ha.2.1.trans hbErr)
+    (ha.2.2.1.trans hbTerms) hdM herrM htermsM
   dsimp only at hc ⊢
   have hcPrev :
       (arun k beforeCommit logAccumulatorCommitBody).regs rPrev = prev :=
     (arun_frame k rPrev logAccumulatorCommitBody (by rfl)
-      beforeCommit).trans hbPrev
+      beforeCommit).trans haPrev
   have hcFin :
       (arun k beforeCommit logAccumulatorCommitBody).regs 247 = 0 :=
     (arun_frame k 247 logAccumulatorCommitBody (by rfl)
-      beforeCommit).trans hbFin
+      beforeCommit).trans (ha.2.2.2.1.trans hbFin)
   have hc314 :
       (arun k beforeCommit logAccumulatorCommitBody).regs 314 = 1 :=
     (arun_frame k 314 logAccumulatorCommitBody (by rfl)
-      beforeCommit).trans hb314
-  rw [logFinalEventBody_eq_stages, arun_append, arun_append, arun_append]
+      beforeCommit).trans ha314
+  rw [logFinalEventBody_eq_stages, arun_append, arun_append, arun_append,
+    arun_append]
   exact ⟨hc.1, hc.2.1, hc.2.2, hcPrev, hcFin, hc314,
     LeanCompCert.Ports.ArraySegMobiusSignal.arun_arr_frame
       k (logFinalEventBody c) s (by rfl)⟩
@@ -363,7 +377,7 @@ theorem logAfterLiveRoundBody_eq_nonfinal_carry_stages (c : R2Cfg) :
 
 /-- The full scalar suffix carries the source accumulators and previous-event
 word across a nonfinal logarithm round.  This theorem deliberately keeps the
-158-instruction production body symbolic: it composes three already verified
+165-instruction production body symbolic: it composes three already verified
 constant-size slices and never reduces a concrete event schedule. -/
 theorem logAfterLiveRoundBody_nonfinal_accumulator_carry_run
     (c : R2Cfg) (k : Nat) (s : AState)

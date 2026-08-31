@@ -19,7 +19,7 @@ open LeanCompCert.Verified.ArrayRegFrame
 open LeanCompCert.Verified.LogFixed
 
 def logAfterFinalEventBody (c : R2Cfg) : List AInstr :=
-  c.logBody.drop 148
+  c.logBody.drop 155
 
 theorem logBody_eq_final_stages (c : R2Cfg) :
     c.logBody = logBeforeFinalEventBody c ++ logFinalEventBody c ++

@@ -565,7 +565,7 @@ def PsiCfg.compactBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 225 .eq (.reg 222) (.reg 65))
   , .scalar (.binop 226 .mul (.reg 225) (.reg 133))      -- isPrimePower
   , .scalar (.binop 227 .mul (.reg 67) (.reg 133))       -- isPrime
-  , .scalar (.binop 228 .add (.reg 227) (.reg 226))      -- push
+  , .scalar (.binop 228 .bor (.reg 227) (.reg 226))      -- merged-event push
   , .scalar (.binop 229 .mul (.reg 226) (.reg 224))      -- payload
     -- clamp to the sink when the budget is exhausted, and record it
   , .scalar (.binop 230 .lt (.reg rWcur) (.lit c.streamCap))
@@ -761,7 +761,9 @@ def PsiCfg.logBody (c : PsiCfg) : List AInstr :=
   , .scalar (.binop 333 .add (.reg 331) (.reg 332))
   , .scalar (.binop 334 .mul (.reg rTerms) (.lit ulp))
   , .scalar (.binop 335 .lshr (.reg 334) (.lit cmpShift))
-  , .scalar (.binop 336 .add (.reg 335) (.lit 1))
+    -- Two outward shift units cover the independent low-limb and term-budget
+    -- remainders uniformly, including before `rTerms` reaches `2^16`.
+  , .scalar (.binop 336 .add (.reg 335) (.lit 2))
   , .scalar (.binop 337 .add (.reg 333) (.reg 336))
     -- the discarded `⌊√n⌋` form, kept only to be reported: it is strictly
     -- stronger than the clause and false at the clause's extremal point

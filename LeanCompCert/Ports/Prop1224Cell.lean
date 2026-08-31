@@ -252,10 +252,12 @@ def CellCfg.markBody (c : CellCfg) : List AInstr :=
   , .scalar (.binop 45 .bor (.reg 44) (.reg 39))
   , .store 32 45
     -- the multiples ran past the window: bump to the next power of the same
-    -- prime if it still fits under `hi`, and only then step the cursor
+    -- prime if it still fits under `hi`, and only then step the cursor.  Test
+    -- `q * p ≤ hi` as `q ≤ hi / p`: the rejected trial product can exceed a
+    -- word even though every accepted power is at most `hi`.
   , .scalar (.binop 46 .mul (.reg 10) (.reg 27))            -- advance
-  , .scalar (.binop 47 .mul (.reg rQp) (.reg rBp))          -- p^{j+1}
-  , .scalar (.binop 48 .le (.reg 47) (.lit c.hi))
+  , .scalar (.binop 47 .udiv (.lit c.hi) (.reg rBp))        -- ⌊hi / p⌋
+  , .scalar (.binop 48 .le (.reg rQp) (.reg 47))
   , .scalar (.binop 49 .mul (.reg 46) (.reg 48))            -- bump
   , .scalar (.binop 50 .sub (.reg 46) (.reg 49))            -- step
   , .scalar (.binop 51 .add (.reg rPi) (.reg 50))
@@ -268,15 +270,15 @@ def CellCfg.markBody (c : CellCfg) : List AInstr :=
   , .load 57 56
   , .scalar (.binop 58 .sub (.lit 1) (.reg 46))             -- keep
   , .scalar (.binop 59 .add (.reg rJ) (.reg rQp))           -- next multiple
-  , .scalar (.binop 60 .mul (.reg 49) (.reg 47))
-  , .scalar (.binop 61 .mul (.reg 50) (.reg 57))
-  , .scalar (.binop 62 .mul (.reg 58) (.reg rQp))
-  , .scalar (.binop 63 .add (.reg 60) (.reg 61))
-  , .scalar (.binop rQp .add (.reg 63) (.reg 62))
-  , .scalar (.binop 64 .sub (.lit 1) (.reg 50))
-  , .scalar (.binop 65 .mul (.reg 50) (.reg 57))
-  , .scalar (.binop 66 .mul (.reg 64) (.reg rBp))
-  , .scalar (.binop rBp .add (.reg 65) (.reg 66))
+  , .scalar (.binop 60 .mul (.reg rQp) (.reg rBp))          -- used iff bump
+  , .scalar (.binop 61 .mul (.reg 49) (.reg 60))
+  , .scalar (.binop 62 .mul (.reg 50) (.reg 57))
+  , .scalar (.binop 63 .add (.reg 61) (.reg 62))
+  , .scalar (.binop 64 .mul (.reg 58) (.reg rQp))
+  , .scalar (.binop rQp .add (.reg 63) (.reg 64))
+  , .scalar (.binop 65 .sub (.reg 57) (.reg rBp))
+  , .scalar (.binop 66 .mul (.reg 50) (.reg 65))
+  , .scalar (.binop rBp .add (.reg rBp) (.reg 66))
   , .scalar (.binop 67 .mul (.reg 58) (.reg rFs))           -- `j = 1` is a step
   , .scalar (.binop rFs .add (.reg 50) (.reg 67))
   , .scalar (.binop 68 .urem (.reg rW) (.reg rQp))

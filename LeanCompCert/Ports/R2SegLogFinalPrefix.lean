@@ -29,7 +29,7 @@ theorem logBeforeFinalEventBody_eq_stages (c : R2Cfg) :
 /-- A resident logarithmic entry on its last scheduled round reaches the
 event boundary with the source payload, exact source `lnFix`, mode words,
 finish bit, and carried accumulators all synchronized. -/
-theorem logBeforeFinalEventBody_continue_run
+theorem logBeforeFinalEventBody_continue_run_of_word
     (c : R2Cfg) (k : Nat) (s : AState)
     (ec wc n payload mode e th viol vlog j err terms : Nat)
     (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
@@ -52,7 +52,7 @@ theorem logBeforeFinalEventBody_continue_run
     (hj : j < c.sc) (hjfin : j + 1 = c.sc) (hS62 : c.sc ≤ 62)
     (hSM : c.sc < M) (helog : e = Nat.log2 n)
     (heM : e + 1 < M) (hthM : th + th < M)
-    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M)
+    (hvM : viol < M) (hvlM : vlog < M)
     (hsmall : logFix c.sc n < 2 ^ 30) :
     let out := arun k s (logBeforeFinalEventBody c)
     out.regs rNe = n ∧ out.regs rPl = payload ∧
@@ -63,13 +63,15 @@ theorem logBeforeFinalEventBody_continue_run
       out.regs rTerms = terms ∧ out.arr = s.arr := by
   let normalized := n <<< (62 - Nat.log2 n)
   let rounded := arun k s (logLiveRoundBody c)
-  have hp := logLiveRoundBody_continue_run c k s ec wc n payload mode e th
+  have hp := logLiveRoundBody_continue_run_of_word c k s ec wc n payload
+    mode e th
     viol vlog normalized j hec hwc hk hj0 hphase hlive hbase haddr hne hpl
     hmode hmodeLt he hth hv hvl hx ha hnM hpM he62
     (by simpa only [normalized, helog] using hnormM) hxlo hxhi hj hS62 hSM
     heM hthM hvM hvlM
   dsimp only at hp
-  have hstate := logLiveRoundBody_continue_state_run c k s ec wc n payload e
+  have hstate := logLiveRoundBody_continue_state_run_of_word c k s ec wc n
+    payload e
     th viol vlog j hec hwc hk hj0 hphase hlive hbase haddr hne hpl he hth hv
     hvl hnM hpM heM hthM hvM hvlM
   dsimp only at hstate
@@ -108,7 +110,48 @@ theorem logBeforeFinalEventBody_continue_run
        ((frameLive rTerms (by rfl)).trans hterms),
      hln.2.trans hmodeRun.2.2⟩
 
+/-- Compatibility form retaining the historical one-spare-word counter
+premises. -/
+theorem logBeforeFinalEventBody_continue_run
+    (c : R2Cfg) (k : Nat) (s : AState)
+    (ec wc n payload mode e th viol vlog j err terms : Nat)
+    (hec : s.regs rEc = ec) (hwc : s.regs rWc = wc)
+    (hk : s.regs rK = j) (hj0 : j ≠ 0) (hphase : s.regs 15 = 1)
+    (hlive : ec < wc) (hbase : c.streamBase < M)
+    (haddr : (ec <<< 1) + c.streamBase + 1 < M)
+    (hne : s.regs rNe = n) (hpl : s.regs rPl = payload)
+    (hmode : payload >>> 57 = mode) (hmodeLt : mode < 2)
+    (he : s.regs rEx = e) (hth : s.regs rTh = th)
+    (hv : s.regs rViol = viol) (hvl : s.regs rVLog2 = vlog)
+    (hx : s.regs rXm =
+      (logIter (n <<< (62 - Nat.log2 n)) j).1)
+    (ha : s.regs rAa =
+      (logIter (n <<< (62 - Nat.log2 n)) j).2)
+    (herr : s.regs rErr = err) (hterms : s.regs rTerms = terms)
+    (hnM : n < M) (hpM : payload < M)
+    (he62 : e ≤ 62) (hnormM : n <<< (62 - e) < M)
+    (hxlo : B62 ≤ n <<< (62 - Nat.log2 n))
+    (hxhi : n <<< (62 - Nat.log2 n) < B63)
+    (hj : j < c.sc) (hjfin : j + 1 = c.sc) (hS62 : c.sc ≤ 62)
+    (hSM : c.sc < M) (helog : e = Nat.log2 n)
+    (heM : e + 1 < M) (hthM : th + th < M)
+    (hvM : viol + 1 < M) (hvlM : vlog + 1 < M)
+    (hsmall : logFix c.sc n < 2 ^ 30) :
+    let out := arun k s (logBeforeFinalEventBody c)
+    out.regs rNe = n ∧ out.regs rPl = payload ∧
+      out.regs rEx = Nat.log2 n ∧
+      out.regs 242 = mode ∧ out.regs 243 = 0 ∧
+      out.regs 262 = LeanCompCert.Ports.PsiSegSieve.lnFix c.sc n ∧
+      out.regs 247 = 1 ∧ out.regs rErr = err ∧
+      out.regs rTerms = terms ∧ out.arr = s.arr := by
+  exact logBeforeFinalEventBody_continue_run_of_word c k s ec wc n payload
+    mode e th viol vlog j err terms hec hwc hk hj0 hphase hlive hbase haddr
+    hne hpl hmode hmodeLt he hth hv hvl hx ha herr hterms hnM hpM he62
+    hnormM hxlo hxhi hj hjfin hS62 hSM helog heM hthM (by omega) (by omega)
+    hsmall
+
 #print axioms logBeforeFinalEventBody_eq_stages
+#print axioms logBeforeFinalEventBody_continue_run_of_word
 #print axioms logBeforeFinalEventBody_continue_run
 
 end LeanCompCert.Ports.R2SegSieve

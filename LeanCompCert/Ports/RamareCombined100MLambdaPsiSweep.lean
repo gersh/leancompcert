@@ -112,11 +112,55 @@ theorem init_all (c : Cfg) (s : Seed) :
   rfl
 
 set_option maxRecDepth 50000 in
-theorem body_all (c : Cfg) : (body c).all (ainstrWFB regCount) = true := by rfl
+theorem candidateBody_all (c : Cfg) :
+    (candidateBody c).all (ainstrWFB regCount) = true := by rfl
 
 set_option maxRecDepth 50000 in
+theorem logSweepBody_all (c : Cfg) :
+    (LogSweep.body c.shape).all (ainstrWFB regCount) = true := by rfl
+
+/-- Structural, not one monolithic kernel `rfl` over the whole body.
+
+`body` is `LogSweep.body ++ candidateBody`, and each half now carries its own
+`all` fact, so this composes with `List.all_append` instead of normalising the
+concatenation.  That matters because the body is due to grow: retiring
+`placeholder_productionArithmeticProgram_denote_pendingWholeWindow` means
+emitting the seam, anchor, `shapeOK`, `qSubOK` and `rowAt` checks into it (see
+`docs/RAMARE_COMBINED100M_EMITTER_WORKLIST.md`), and a single `rfl` over the
+widened list is precisely the kernel blowup this project keeps hitting.
+
+`LogSweep.body_all` is not reusable here: it is stated at `LogSweep.regCount`,
+which is not this module's `regCount`. -/
+theorem body_all (c : Cfg) : (body c).all (ainstrWFB regCount) = true := by
+  rw [body, List.all_append, logSweepBody_all, candidateBody_all]
+  rfl
+
+set_option maxRecDepth 50000 in
+theorem logSweepEpilogue_all (c : Cfg) :
+    (LogSweep.epilogue c.shape).all (ainstrWFB regCount) = true := by rfl
+
+/-- One `storeResult` slot is well formed whenever the register it stores is.
+
+Generic in the slot and the register, so widening the epilogue with the
+`weightedAbs`, `rLo`, `rHi` and verdict outputs costs one `by decide` each
+rather than re-normalising the whole list. -/
+theorem storeResult_all (c : Cfg) (slot reg : Nat) (hreg : reg < regCount) :
+    (storeResult c slot reg).all (ainstrWFB regCount) = true := by
+  simp [storeResult, ainstrWFB, instrWFB, hreg]
+  exact ⟨⟨by decide, rfl⟩, by decide⟩
+
+/-- Structural, for the same reason as `body_all`. -/
 theorem epilogue_all (c : Cfg) :
-    (epilogue c).all (ainstrWFB regCount) = true := by rfl
+    (epilogue c).all (ainstrWFB regCount) = true := by
+  rw [epilogue]
+  simp only [List.all_append, logSweepEpilogue_all,
+    storeResult_all c _ _ (by decide : rSumL < regCount),
+    storeResult_all c _ _ (by decide : rSumU < regCount),
+    storeResult_all c _ _ (by decide : rPsiLQ < regCount),
+    storeResult_all c _ _ (by decide : rPsiLR < regCount),
+    storeResult_all c _ _ (by decide : rPsiUQ < regCount),
+    storeResult_all c _ _ (by decide : rPsiUR < regCount),
+    Bool.and_self]
 
 theorem program_wf (c : Cfg) (s : Seed) : (program c s).WF :=
   ⟨show shapeOutputReg < regCount by decide,

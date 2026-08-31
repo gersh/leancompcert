@@ -246,12 +246,20 @@ theorem psiHeadFoldProgram_wf (m : PsiRuntimeMeta) :
 def loadHeadResult (c : PsiCfg) (slot reg : Nat) : List AInstr :=
   [ .scalar (.mov 90 (.lit (c.resultBase + slot))), .load reg 90 ]
 
+/-- Reconstruct the successor-square cursor from the carried integer square
+root.  Keeping this derived word out of the carry cells prevents a second,
+independently signed representation of the same state. -/
+def psiHeadSquareReload : List AInstr :=
+  [ .scalar (.binop 92 .add (.reg rSq) (.lit 1))
+  , .scalar (.binop 93 .mul (.reg 92) (.reg 92))
+  , .scalar (.mov rSq2 (.reg 93)) ]
+
 def psiHeadLoadInit (c : PsiCfg) : List AInstr :=
   seedRegs [(rW, 1), (rWrite, c.primeBase + c.bootCount)] ++
   loadHeadResult c 0 rDlo ++ loadHeadResult c 1 rDhi ++
   loadHeadResult c 2 rPrev ++ loadHeadResult c 3 rTerms ++
   loadHeadResult c 4 rSq ++ loadHeadResult c 5 rEx ++
-  loadHeadResult c 6 rTh
+  loadHeadResult c 6 rTh ++ psiHeadSquareReload
 
 def psiRuntimeProgramFromHead (m : PsiRuntimeMeta) : AProgram :=
   { regCount := regCount
@@ -281,6 +289,7 @@ theorem psiHeadLoadInit_all (c : PsiCfg) :
     loadHeadResult_all c 4 rSq (by decide),
     loadHeadResult_all c 5 rEx (by decide),
     loadHeadResult_all c 6 rTh (by decide)]
+  decide
 
 theorem psiRuntimeProgramFromHead_wf (m : PsiRuntimeMeta) :
     (psiRuntimeProgramFromHead m).WF :=

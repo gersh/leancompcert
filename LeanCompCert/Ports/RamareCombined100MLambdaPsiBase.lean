@@ -365,6 +365,30 @@ theorem sumBody_run (k : Nat) (s : AState)
     apply Nat.mod_eq_of_lt
     simpa [rSumU, rLamU] using hsumU
 
+/-- Raw word semantics of the two cumulative quotient sums.  The additions
+remain explicitly reduced modulo `M`; this is the denotation consumed by the
+post-run carry checks. -/
+theorem sumBody_run_mod (k : Nat) (s : AState)
+    (hn0 : 0 < s.regs 132) (hnM : s.regs 132 < M) :
+    let out := arun k s sumBody
+    out.regs rSumL =
+        (s.regs rSumL + s.regs rLamL / s.regs 132) % M ∧
+      out.regs rSumU =
+        (s.regs rSumU + ceilDiv (s.regs rLamU) (s.regs 132)) % M := by
+  have hnNe0 : s.regs 132 ≠ 0 := Nat.ne_of_gt hn0
+  have hremM : s.regs rLamU % s.regs 132 < M :=
+    Nat.lt_trans (Nat.mod_lt _ hn0) hnM
+  have hremEq : s.regs rLamU % s.regs 132 % M =
+      s.regs rLamU % s.regs 132 := Nat.mod_eq_of_lt hremM
+  have hceilEq := ceilDiv_eq_div_add_modBit
+    (s.regs rLamU) (s.regs 132) hn0
+  simp only [rLamU] at hremEq hceilEq
+  rw [sumBody, arun_lift]
+  simp [sumScalarBody, rT0, rT1, rSumL, rSumU, rLamL, rLamU,
+    srun, sdest, sval, denoteOperand, denoteOp, RegState.set, hnNe0]
+  rw [hremEq, hceilEq]
+  rfl
+
 /-- The sum stage preserves both lambda inputs, the candidate, and the array. -/
 theorem sumBody_inputs (k : Nat) (s : AState) :
     let out := arun k s sumBody

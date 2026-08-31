@@ -442,9 +442,11 @@ def R2Cfg.tableBase (c : R2Cfg) : Nat := 5 * c.segLen + 1
 def R2Cfg.streamBase (c : R2Cfg) : Nat := c.tableBase + c.tableLen + 1
 def R2Cfg.streamSink (c : R2Cfg) : Nat := c.streamBase + 2 * c.streamCap
 def R2Cfg.resultBase (c : R2Cfg) : Nat := c.streamSink + 2
-/-- Twenty result cells: the eleven-word carry (including `sq2`), then the
-nine per-class violation counters that sum to carry slot `10`. -/
-def R2Cfg.arrayLen (c : R2Cfg) : Nat := c.resultBase + 20
+/-- Twenty-one result cells: the eleven-word carry (including `sq2`), then
+the ten per-class violation counters that sum to carry slot `10`.  The final
+cell is the negative-jump underflow counter used by the strengthened causal
+production route. -/
+def R2Cfg.arrayLen (c : R2Cfg) : Nat := c.resultBase + 21
 
 /-! ## Register allocation
 
@@ -482,13 +484,13 @@ def rPl : Nat := 195    -- latched payload
 def rXm : Nat := 196    -- mantissa
 def rAa : Nat := 197    -- log bits so far
 
-/-! ### The nine failure classes, counted apart
+/-! ### The ten failure classes, counted apart
 
 `rViol` is the aggregate and stays the program's output.  Alongside it the loop
 keeps one counter per way the run can fail, because a reader given only their
 sum cannot tell a **result** from a **retracted run**.  Three are the
 mathematics — clause 1 at each test point, clause 2 at each test point, and
-clause 1 once more in the epilogue at `hi`.  The other six say the arithmetic
+clause 1 once more in the epilogue at `hi`.  The other seven say the arithmetic
 left the range in which it is exact, or that terms are missing, so on that
 window neither clause was tested at all. -/
 
@@ -501,11 +503,14 @@ def rVDrain : Nat := 355   -- the window turned over with the stream undrained
 def rVGap : Nat := 356     -- the test-point gap did not fit 16 bits
 def rVSqrt : Nat := 357    -- one `⌊√n⌋` increment did not suffice
 def rVLog2 : Nat := 358    -- one `⌊log₂ n⌋` increment did not suffice
+def rVSub : Nat := 359     -- a finished negative jump exceeded the accumulator
 
-/-- The per-class counters in the order they occupy result slots `10 … 18`.
-They sum to `rViol`.  `bench/R2SegEmit.lean` labels them in this order. -/
+/-- The per-class counters in the order they occupy result slots `11 … 20`.
+They sum to `rViol`.  `bench/R2SegEmit.lean` labels them in this order.  Runs
+for the strengthened causal route must use this ten-counter layout; older
+nine-counter receipts do not certify `rVSub`. -/
 def violRegs : List Nat :=
-  [rVUp, rVLo, rVTail, rVMark, rVCap, rVDrain, rVGap, rVSqrt, rVLog2]
+  [rVUp, rVLo, rVTail, rVMark, rVCap, rVDrain, rVGap, rVSqrt, rVLog2, rVSub]
 
 def regCount : Nat := 400
 def outputReg : Nat := 190      -- `rViol`
@@ -872,6 +877,17 @@ def R2Cfg.logBody (c : R2Cfg) : List AInstr :=
   , .scalar (.binop 314 .sub (.lit 1) (.reg 247))
   , .scalar (.binop 315 .mul (.reg 314) (.reg rThr))
   , .scalar (.binop rThr .add (.reg 313) (.reg 315))
+    -- A finished negative jump is only exact when it does not exceed the
+    -- post-linear accumulator.  Record that comparison before the modular
+    -- subtraction: the dedicated counter is part of the future causal-run
+    -- output layout, so terminal zero proves the required natural inequality.
+  , .scalar (.binop 327 .gt (.reg 281) (.reg rD))
+  , .scalar (.binop 328 .eq (.reg 266) (.lit 0))
+  , .scalar (.binop 329 .mul (.reg 327) (.reg 328))
+  , .scalar (.binop 346 .eq (.reg 247) (.lit 1))
+  , .scalar (.binop 329 .mul (.reg 329) (.reg 346))
+  , .scalar (.binop rViol .add (.reg rViol) (.reg 329))
+  , .scalar (.binop rVSub .add (.reg rVSub) (.reg 329))
     -- the jump
   , .scalar (.binop 316 .mul (.reg 266) (.reg 247))
   , .scalar (.binop 317 .mul (.reg 316) (.reg 281))
