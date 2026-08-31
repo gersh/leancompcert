@@ -763,7 +763,7 @@ def main (args : List String) : IO UInt32 :=
   | "describe" :: rest => Attest.Ledger.describeVerb registry rest
   | "attest-keygen" :: rest => attestKeygen rest
   | "verify-receipt" :: rest => verifyReceipt rest
-  | ["emit-clight-fixedpoint-v", file] =>
+  | ["emit-clight-fixedpoint-v", file] => do
       let source := Verified.ProgramClightEmit.emitProgram
         "direct_FixedPoint_mulShiftSum"
         Testing.FixedPointCertificate.program

@@ -6,6 +6,8 @@ __pycache__/
 *.ilean
 *.o
 *.out
+.lia.cache
+.nia.cache
 build/
 dist/
 

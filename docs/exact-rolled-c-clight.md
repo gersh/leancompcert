@@ -92,6 +92,30 @@ scripts/clight-exact-array.py \
   /tmp/array.c /tmp/array-source.v /tmp/array-check
 ```
 
+The bounded release gate runs the scalar positive/mutation controls, the
+trillion-count array control, and both retained production R2 dense-head
+shards without executing any long loop:
+
+```console
+COMPCERT_DIR=/path/to/CompCert-3.17 \
+  scripts/test-exact-clight.sh /tmp/exact-clight-gate
+```
+
+To check one production artifact directly:
+
+```console
+lake env lean --run bench/R2DenseHeadExactEmit.lean \
+  first /tmp/r2-first.c /tmp/r2-first-source.v
+scripts/clight-exact-array.py \
+  --compcert /path/to/CompCert-3.17 \
+  --proof-cache /tmp/array-generic-proof-cache \
+  /tmp/r2-first.c /tmp/r2-first-source.v /tmp/r2-first-check
+```
+
+Replace `first` by `second` for the second retained shard. The generated Coq
+contract proves structural well-formedness with reflected, count-free
+checkers; it does not evaluate the shard denotation.
+
 For a sharded campaign, pass the same `--proof-cache` directory to every
 invocation. The cache key includes the generic proof sources, Coq version,
 CompCert tree, and check mode; a file lock makes parallel population safe.
@@ -99,7 +123,9 @@ Thus the relatively memory-intensive flat-memory library is checked once,
 while each shard only checks its compact source contract, clightgen AST, and
 exact equality theorem. The array checker defaults to a 2-GiB per-process cap;
 after the cache is populated, the trillion-iteration regression passes under
-a 1-GiB cap (about 572 MiB measured resident memory).
+a 1-GiB cap (about 572 MiB measured resident memory). The two current R2
+production checks also pass under the default cap (about 854 MiB peak on a
+cache hit).
 
 For another `p : Verified.ArrayState.AProgram`, prove the structural `p.WF`,
 `p.loopCount < Verified.Reflect.M`, and `8 * p.arrayLen ≤
