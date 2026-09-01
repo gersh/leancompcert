@@ -336,6 +336,8 @@ import LeanCompCert.Ports.R2RuntimeProductionAuditReceipt
 import LeanCompCert.Ports.R2DenseProductPlaneScanner
 import LeanCompCert.Ports.R2DenseProductPlaneProduction
 import LeanCompCert.Ports.R2DenseProductAudit
+import LeanCompCert.Ports.ArrayConstantUpperBoundScanner
+import LeanCompCert.Ports.R2DenseLsumPlaneProduction
 import LeanCompCert.Ports.R2RuntimeFailureObservation
 import LeanCompCert.Ports.R2SegClauseFailureTelescope
 import LeanCompCert.Ports.R2SegMarkFailureTelescope

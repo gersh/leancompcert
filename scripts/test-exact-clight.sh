@@ -96,4 +96,16 @@ for scanner_name in first-scanner second-scanner-0 second-scanner-1; do
     "$scanner_c" "$scanner_source" "$scanner_check"
 done
 
+for lsum_name in first second-0 second-1; do
+  lsum_c="$output/r2-lsum-$lsum_name.c"
+  lsum_source="$output/r2-lsum-$lsum_name-source.v"
+  lsum_check="$output/r2-lsum-$lsum_name-check"
+  lake env lean --run bench/R2DenseLsumPlaneExactEmit.lean \
+    "$lsum_name" "$lsum_c" "$lsum_source"
+  rm -rf "$lsum_check"
+  python3 scripts/clight-exact-array.py \
+    --compcert "$compcert_coq_dir" --proof-cache "$array_cache" \
+    "$lsum_c" "$lsum_source" "$lsum_check"
+done
+
 echo "exact rolled, production R2/audits, and literal scanner Clight gates: PASS"
