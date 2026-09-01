@@ -281,6 +281,69 @@ def R2MarkCursor.run (fuel : Nat) (c : R2Cfg) (windowBase : Nat)
     (tableWord : Nat → Nat) (cur : R2MarkCursor) : R2MarkCursor :=
   Nat.rec cur (fun _ q => q.step c windowBase tableWord) fuel
 
+/-- Once the clamped table cursor has reached the sentinel and is outside the
+live segment, one source transition cannot return it to the resident plane.
+This uses only the literal sentinel-selection branch of `step`; it does not
+execute or summarize a production marking fold. -/
+theorem R2MarkCursor.step_terminal_nonresident
+    {c : R2Cfg} {windowBase : Nat} {tableWord : Nat → Nat}
+    {cur : R2MarkCursor} (hpi : cur.pi = c.tableLen)
+    (hoff : c.segLen ≤ cur.offset) :
+    (cur.step c windowBase tableWord).pi = c.tableLen ∧
+      c.segLen ≤ (cur.step c windowBase tableWord).offset := by
+  have hnresident : ¬ cur.offset < c.segLen := by omega
+  by_cases hfit : cur.power * cur.base ≤ c.hi
+  · simp [R2MarkCursor.step, hnresident, hfit, hpi,
+      R2Cfg.selectedOffset]
+  · simp [R2MarkCursor.step, hnresident, hfit, hpi,
+      R2Cfg.selectedOffset]
+
+/-- Terminal/nonresident cursor status persists for every later symbolic
+prefix.  This is the scheduling fact needed to turn a named terminal endpoint
+into `resident_before_terminal`. -/
+theorem R2MarkCursor.run_terminal_nonresident
+    {c : R2Cfg} {windowBase : Nat} {tableWord : Nat → Nat}
+    {cur : R2MarkCursor} (hpi : cur.pi = c.tableLen)
+    (hoff : c.segLen ≤ cur.offset) (fuel : Nat) :
+    (cur.run fuel c windowBase tableWord).pi = c.tableLen ∧
+      c.segLen ≤ (cur.run fuel c windowBase tableWord).offset := by
+  induction fuel with
+  | zero => exact ⟨hpi, hoff⟩
+  | succ fuel ih =>
+      exact R2MarkCursor.step_terminal_nonresident ih.1 ih.2
+
+theorem R2MarkCursor.run_add (a b : Nat) (c : R2Cfg)
+    (windowBase : Nat) (tableWord : Nat → Nat) (cur : R2MarkCursor) :
+    cur.run (a + b) c windowBase tableWord =
+      (cur.run a c windowBase tableWord).run b c windowBase tableWord := by
+  induction b with
+  | zero => rw [Nat.add_zero]; rfl
+  | succ b ih =>
+      rw [Nat.add_succ]
+      change (cur.run (a + b) c windowBase tableWord).step c windowBase tableWord =
+        ((cur.run a c windowBase tableWord).run b c windowBase tableWord).step
+          c windowBase tableWord
+      rw [ih]
+
+/-- If the named `total` prefix is already the nonresident terminal cursor,
+then every resident prefix is strictly earlier than `total`. -/
+theorem R2MarkCursor.resident_before_of_terminal_at
+    {c : R2Cfg} {windowBase total : Nat} {tableWord : Nat → Nat}
+    {cur : R2MarkCursor}
+    (hpi : (cur.run total c windowBase tableWord).pi = c.tableLen)
+    (hoff : c.segLen ≤
+      (cur.run total c windowBase tableWord).offset) :
+    ∀ fuel, (cur.run fuel c windowBase tableWord).offset < c.segLen →
+      fuel < total := by
+  intro fuel hresident
+  apply Nat.lt_of_not_ge
+  intro hle
+  obtain ⟨rest, rfl⟩ := Nat.exists_eq_add_of_le hle
+  rw [R2MarkCursor.run_add] at hresident
+  have hpersist := R2MarkCursor.run_terminal_nonresident
+    (windowBase := windowBase) (tableWord := tableWord) hpi hoff rest
+  exact (Nat.not_lt_of_ge hpersist.2) hresident
+
 theorem R2MarkCursor.run_bounds (fuel : Nat) {c : R2Cfg}
     {windowBase : Nat} {tableWord : Nat → Nat} {cur : R2MarkCursor}
     (h : cur.Bounds c) (htable : R2MarkTableBounds c tableWord)

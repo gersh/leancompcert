@@ -19,9 +19,9 @@ def driver (name : String) (p : AProgram) (expected : R2Seed)
   else
     String.join ((List.range 11).map fun i =>
       "  printf(\"slot" ++ toString i ++ " %llu\\n\", " ++
-        "(unsigned long long)cells[" ++ toString (p.arrayLen - 20 + i) ++ "]);\n") ++
+        "(unsigned long long)cells[" ++ toString (p.arrayLen - 21 + i) ++ "]);\n") ++
     String.join ((List.range 11).map fun i =>
-      "  if (cells[" ++ toString (p.arrayLen - 20 + i) ++
+      "  if (cells[" ++ toString (p.arrayLen - 21 + i) ++
         "] != UINT64_C(" ++ toString (expected.words[i]!) ++
         ")) return " ++ toString (10 + i) ++ ";\n") ++
     "  return out == UINT64_C(0) ? 0 : 2;\n") ++
