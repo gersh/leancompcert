@@ -1,3 +1,4 @@
+import LeanCompCert.ABI.Symbols
 import LeanCompCert.C.Profile
 
 namespace LeanCompCert.C
@@ -66,6 +67,27 @@ def isValidIdentifier (name : String) : Bool :=
         && rest.all isIdentRest
         && !(keywords.contains name)
 
+/-- Compiler-generated scalar local names are C identifiers at every index. -/
+theorem isValidIdentifier_localName (id : Nat) :
+    isValidIdentifier (ABI.localName id) = true := by
+  change isValidIdentifier ("v_" ++ id.repr) = true
+  simp [isValidIdentifier, isIdentStart, isIdentRest, Nat.toList_repr]
+  constructor
+  · intro character hCharacter
+    right
+    exact Nat.isDigit_of_mem_toDigits
+      (b := 10) (n := id) (c := character)
+      (by decide) (by decide) hCharacter
+  · intro hKeyword
+    have hKeywords : ∀ keyword ∈ keywords,
+        keyword.startsWith "v_" = false := by
+      decide +kernel
+    have hFalse := hKeywords ("v_" ++ id.repr) hKeyword
+    have hTrue : ("v_" ++ id.repr).startsWith "v_" = true := by
+      simp
+    rw [hTrue] at hFalse
+    contradiction
+
 private def error
     (rule : ValidationRule)
     (message : String)
@@ -110,6 +132,14 @@ def validateTypes
   | [] => #[]
   | type :: rest => validateType profile type fn ++ validateTypes profile rest fn
 end
+
+@[simp] theorem validateType_portable_u8 (fn : Option String := none) :
+    validateType .portable .u8 fn = #[] := by
+  rfl
+
+@[simp] theorem validateType_portable_u64 (fn : Option String := none) :
+    validateType .portable .u64 fn = #[] := by
+  rfl
 
 /-- Errors in an expression.  Structural: every recursive call is on a direct
 subexpression, so the kernel unfolds it. -/
@@ -156,6 +186,48 @@ def validateExpr
       errors := errors ++ validateExpr profile array fn path
       errors := errors ++ validateExpr profile index fn path
   return errors
+
+theorem validateExpr_var_eq_empty
+    (profile : Profile) (type : CType) (name : String)
+    (fn : Option String) (path : Array Nat)
+    (hType : validateType profile type fn = #[])
+    (hName : isValidIdentifier name = true) :
+    validateExpr profile (.var name type) fn path = #[] := by
+  simp [validateExpr, CExpr.type, hType, hName]
+
+theorem validateExpr_uintLit_eq_empty
+    (profile : Profile) (type : CType) (value : Nat)
+    (fn : Option String) (path : Array Nat)
+    (hType : validateType profile type fn = #[])
+    (hUnsigned : type.isUnsigned = true) :
+    validateExpr profile (.uintLit type value) fn path = #[] := by
+  simp [validateExpr, CExpr.type, hType, hUnsigned]
+
+theorem validateExpr_binary_eq_empty
+    (profile : Profile) (type : CType) (op : CBinaryOp)
+    (lhs rhs : CExpr) (fn : Option String) (path : Array Nat)
+    (hType : validateType profile type fn = #[])
+    (hLhs : validateExpr profile lhs fn path = #[])
+    (hRhs : validateExpr profile rhs fn path = #[])
+    (hSigned :
+      ((op == .add || op == .sub || op == .mul) && lhs.type.isSigned) = false)
+    (hPointer :
+      ((op == .add || op == .sub) &&
+        (lhs.type.isPointer || rhs.type.isPointer)) = false) :
+    validateExpr profile (.binary type op lhs rhs) fn path = #[] := by
+  unfold CExpr.type at hSigned hPointer
+  unfold validateExpr
+  simp only [CExpr.type, hType, hLhs, hRhs, Array.empty_append]
+  rw [hSigned, hPointer]
+  rfl
+
+theorem validateExpr_cast_eq_empty
+    (profile : Profile) (type : CType) (value : CExpr)
+    (fn : Option String) (path : Array Nat)
+    (hType : validateType profile type fn = #[])
+    (hValue : validateExpr profile value fn path = #[]) :
+    validateExpr profile (.cast type value) fn path = #[] := by
+  simp [validateExpr, CExpr.type, hType, hValue]
 
 /-
 Label collection, structural and stack-safe.
@@ -439,5 +511,212 @@ def validateTranslationUnit
     symbols := symbols.push fn.name
     errors := errors ++ validateFunction profile fn
   return errors
+
+/-! ## Compositional validation certificates
+
+Large generated functions should not have to reduce the complete diagnostic
+validator in one kernel term.  The predicates below expose the compositional
+fact used by `validateStmtList`: if every statement contributes no errors for
+any diagnostic path, the complete list contributes no errors.  Consumers can
+prove the per-statement facts in small shards and assemble them without
+re-running the underlying computation.
+-/
+
+/-- A statement is validation-clean independently of its diagnostic path and
+the ambient label table.  The latter quantification is convenient for the
+label-free statement subset emitted by the verified rolled compiler. -/
+def StatementValid
+    (profile : Profile)
+    (fn : CFunction)
+    (statement : CStmt) : Prop :=
+  ∀ labels path, validateStatement profile fn statement labels path = #[]
+
+/-- Every statement in a list carries a compositional validation proof. -/
+def StatementListValid
+    (profile : Profile)
+    (fn : CFunction)
+    (statements : List CStmt) : Prop :=
+  ∀ statement ∈ statements, StatementValid profile fn statement
+
+/-- Indexed form of `StatementListValid`, convenient for generated proof
+shards whose statement positions are known statically. -/
+def StatementListIndexedValid
+    (profile : Profile)
+    (fn : CFunction)
+    (statements : List CStmt) : Prop :=
+  ∀ index : Fin statements.length,
+    StatementValid profile fn (statements.get index)
+
+theorem StatementListValid.nil
+    (profile : Profile)
+    (fn : CFunction) :
+    StatementListValid profile fn [] := by
+  simp [StatementListValid]
+
+theorem StatementListValid.cons
+    (profile : Profile)
+    (fn : CFunction)
+    (statement : CStmt)
+    (statements : List CStmt)
+    (hHead : StatementValid profile fn statement)
+    (hTail : StatementListValid profile fn statements) :
+    StatementListValid profile fn (statement :: statements) := by
+  intro member hMember
+  rcases List.mem_cons.mp hMember with rfl | hRest
+  · exact hHead
+  · exact hTail member hRest
+
+theorem StatementListValid.append
+    (profile : Profile)
+    (fn : CFunction)
+    (left right : List CStmt)
+    (hLeft : StatementListValid profile fn left)
+    (hRight : StatementListValid profile fn right) :
+    StatementListValid profile fn (left ++ right) := by
+  intro statement hStatement
+  rcases List.mem_append.mp hStatement with hStatement | hStatement
+  · exact hLeft statement hStatement
+  · exact hRight statement hStatement
+
+/-- Indexed per-statement certificates cover the ordinary membership-based
+list predicate. -/
+theorem statementListValid_of_indexed
+    (profile : Profile)
+    (fn : CFunction)
+    (statements : List CStmt)
+    (hValid : StatementListIndexedValid profile fn statements) :
+    StatementListValid profile fn statements := by
+  induction statements with
+  | nil => simp [StatementListValid]
+  | cons head tail ih =>
+      intro statement hStatement
+      rcases List.mem_cons.mp hStatement with rfl | hTail
+      · exact hValid ⟨0, by simp⟩
+      · apply ih
+        · intro index
+          exact hValid index.succ
+        · exact hTail
+
+/-- A validation-clean statement list leaves the diagnostic accumulator
+unchanged.  In particular, it can be used as one independently checked shard
+of a much larger generated function. -/
+theorem validateStmtList_eq_acc_of_statementListValid
+    (profile : Profile)
+    (fn : CFunction)
+    (statements : List CStmt)
+    (labels : Array String)
+    (path : Array Nat)
+    (index : Nat)
+    (errors : Array ValidationError)
+    (hValid : StatementListValid profile fn statements) :
+    validateStmtList profile fn statements labels path index errors = errors := by
+  induction statements generalizing index errors with
+  | nil => rfl
+  | cons statement rest ih =>
+      rw [validateStmtList]
+      rw [hValid statement (by simp) labels (path.push index)]
+      simp only [Array.append_empty]
+      apply ih
+      intro member hMember
+      exact hValid member (by simp [hMember])
+
+/-- The public block validator is empty when all of its statements have
+compositional validation certificates. -/
+theorem validateStatements_eq_empty_of_statementListValid
+    (profile : Profile)
+    (fn : CFunction)
+    (statements : Array CStmt)
+    (labels : Array String)
+    (path : Array Nat := #[])
+    (hValid : StatementListValid profile fn statements.toList) :
+    validateStatements profile fn statements labels path = #[] := by
+  exact validateStmtList_eq_acc_of_statementListValid
+    profile fn statements.toList labels path 0 #[] hValid
+
+/-- A while statement validates compositionally from its condition and body.
+This is the nested-block step needed by rolled generated functions. -/
+theorem StatementValid.whileLoop
+    (profile : Profile)
+    (fn : CFunction)
+    (condition : CExpr)
+    (body : Array CStmt)
+    (hCondition :
+      ∀ path, validateExpr profile condition (some fn.name) path = #[])
+    (hInteger : condition.type.isInteger = true)
+    (hBody : StatementListValid profile fn body.toList) :
+  StatementValid profile fn (.whileLoop condition body) := by
+  intro labels path
+  simp only [validateStatement]
+  rw [hCondition path]
+  simp only [Array.empty_append, hInteger, Bool.not_true]
+  exact validateStmtList_eq_acc_of_statementListValid
+    profile fn body.toList labels path 0 #[] hBody
+
+theorem StatementValid.declNone
+    (profile : Profile)
+    (fn : CFunction)
+    (type : CType)
+    (name : String)
+    (hType : validateType profile type (some fn.name) = #[])
+    (hName : isValidIdentifier name = true) :
+  StatementValid profile fn (.decl type name none) := by
+  intro labels path
+  simp [validateStatement, hType, hName]
+
+theorem StatementValid.declSome
+    (profile : Profile)
+    (fn : CFunction)
+    (type : CType)
+    (name : String)
+    (value : CExpr)
+    (hType : validateType profile type (some fn.name) = #[])
+    (hName : isValidIdentifier name = true)
+    (hValue : ∀ path,
+      validateExpr profile value (some fn.name) path = #[])
+    (hValueType : (value.type != type) = false) :
+  StatementValid profile fn (.decl type name (some value)) := by
+  intro labels path
+  simp [validateStatement, hType, hName, hValue path, hValueType]
+
+theorem StatementValid.assign
+    (profile : Profile)
+    (fn : CFunction)
+    (target value : CExpr)
+    (hTarget : ∀ path,
+      validateExpr profile target (some fn.name) path = #[])
+    (hValue : ∀ path,
+      validateExpr profile value (some fn.name) path = #[])
+    (hTypes : (target.type != value.type) = false) :
+  StatementValid profile fn (.assign target value) := by
+  intro labels path
+  simp [validateStatement, hTarget path, hValue path, hTypes]
+
+theorem StatementValid.returnSome
+    (profile : Profile)
+    (fn : CFunction)
+    (value : CExpr)
+    (hValue : ∀ path,
+      validateExpr profile value (some fn.name) path = #[])
+    (hType : (value.type != fn.result) = false) :
+  StatementValid profile fn (.return (some value)) := by
+  intro labels path
+  simp [validateStatement, hValue path, hType]
+
+/-- A parameter-free generated function validates from its result/name checks
+and compositional body certificate. -/
+theorem validateFunction_eq_empty_of_noParams
+    (profile : Profile)
+    (fn : CFunction)
+    (hParams : fn.params = #[])
+    (hResult : validateType profile fn.result (some fn.name) = #[])
+    (hName : isValidIdentifier fn.name = true)
+    (hBody : StatementListValid profile fn fn.body.toList) :
+    validateFunction profile fn = #[] := by
+  unfold validateFunction
+  rw [hResult]
+  simp only [hName, Bool.not_true, hParams]
+  rw [validateStatements_eq_empty_of_statementListValid
+    profile fn fn.body (collectLabels fn.body) #[] hBody]
+  rfl
 
 end LeanCompCert.C

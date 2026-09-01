@@ -1,4 +1,5 @@
 import LeanCompCert.Verified.Reflect
+import LeanCompCert.C.Validate
 
 /-!
 # M1 — Scale-free certificate packaging
@@ -398,6 +399,116 @@ def compiledStmt : StraightInstruction → C.CStmt
       .assign (Lower.localExpr dest)
         (.cast (Lower.lowerType dest.type) (.var (ABI.localName 0) .u8))
 
+/-! ## Structural validation of emitted statements
+
+These lemmas prove once, over the finite `Shape` grammar, that lowering emits
+statements accepted by the checked-C validator.  A generated computation only
+has to supply its existing `Shape` proof; it never has to normalize or import
+the concrete emitted statement list to establish C validity.
+-/
+
+theorem srcExpr_type_of_srcOp
+    {regCount : Nat} {operand : CCIR.Operand}
+    (hSrc : SrcOp regCount operand) : (srcExpr operand).type = .u64 := by
+  cases hSrc <;> rfl
+
+theorem validate_srcExpr_of_srcOp
+    {regCount : Nat} {operand : CCIR.Operand}
+    (hSrc : SrcOp regCount operand) (fn : C.CFunction) (path : Array Nat) :
+    C.validateExpr .portable (srcExpr operand) (some fn.name) path = #[] := by
+  cases hSrc with
+  | reg i hi =>
+      exact C.validateExpr_var_eq_empty .portable .u64
+        (ABI.localName (i + 1)) (some fn.name) path
+        (C.validateType_portable_u64 _) (C.isValidIdentifier_localName _)
+  | lit value =>
+      exact C.validateExpr_uintLit_eq_empty .portable .u64 value
+        (some fn.name) path (C.validateType_portable_u64 _) rfl
+
+/-- Every statement emitted from an instruction in the compiler's restricted
+shape grammar is accepted by the portable checked-C validator. -/
+theorem compiledStmt_statementValid_of_shape
+    {regCount : Nat} (fn : C.CFunction) {instruction : StraightInstruction}
+    (hShape : Shape regCount instruction) :
+    C.StatementValid .portable fn (compiledStmt instruction) := by
+  cases hShape with
+  | scratchInit =>
+      apply C.StatementValid.assign
+      · intro path
+        exact C.validateExpr_var_eq_empty .portable .u8
+          (ABI.localName 0) (some fn.name) path
+          (C.validateType_portable_u8 _) (C.isValidIdentifier_localName _)
+      · intro path
+        exact C.validateExpr_uintLit_eq_empty .portable .u8 0
+          (some fn.name) path (C.validateType_portable_u8 _) rfl
+      · rfl
+  | assignReg dest src hSrc =>
+      apply C.StatementValid.assign
+      · intro path
+        exact C.validateExpr_var_eq_empty .portable .u64
+          (ABI.localName (dest + 1)) (some fn.name) path
+          (C.validateType_portable_u64 _) (C.isValidIdentifier_localName _)
+      · exact validate_srcExpr_of_srcOp hSrc fn
+      · rw [srcExpr_type_of_srcOp hSrc]
+        rfl
+  | binary dest op lhs rhs hLhs hRhs =>
+      apply C.StatementValid.assign
+      · intro path
+        exact C.validateExpr_var_eq_empty .portable .u64
+          (ABI.localName (dest + 1)) (some fn.name) path
+          (C.validateType_portable_u64 _) (C.isValidIdentifier_localName _)
+      · intro path
+        apply C.validateExpr_binary_eq_empty
+        · exact C.validateType_portable_u64 _
+        · exact validate_srcExpr_of_srcOp hLhs fn path
+        · exact validate_srcExpr_of_srcOp hRhs fn path
+        · rw [srcExpr_type_of_srcOp hLhs]
+          cases op <;> decide
+        · rw [srcExpr_type_of_srcOp hLhs, srcExpr_type_of_srcOp hRhs]
+          cases op <;> decide
+      · rfl
+  | compare cmp lhs rhs hLhs hRhs =>
+      apply C.StatementValid.assign
+      · intro path
+        exact C.validateExpr_var_eq_empty .portable .u8
+          (ABI.localName 0) (some fn.name) path
+          (C.validateType_portable_u8 _) (C.isValidIdentifier_localName _)
+      · intro path
+        apply C.validateExpr_binary_eq_empty
+        · exact C.validateType_portable_u8 _
+        · exact validate_srcExpr_of_srcOp hLhs fn path
+        · exact validate_srcExpr_of_srcOp hRhs fn path
+        · rw [srcExpr_type_of_srcOp hLhs]
+          cases cmp <;> decide
+        · rw [srcExpr_type_of_srcOp hLhs, srcExpr_type_of_srcOp hRhs]
+          cases cmp <;> decide
+      · rfl
+  | cast dest =>
+      apply C.StatementValid.assign
+      · intro path
+        exact C.validateExpr_var_eq_empty .portable .u64
+          (ABI.localName (dest + 1)) (some fn.name) path
+          (C.validateType_portable_u64 _) (C.isValidIdentifier_localName _)
+      · intro path
+        exact C.validateExpr_cast_eq_empty .portable .u64
+          (.var (ABI.localName 0) .u8) (some fn.name) path
+          (C.validateType_portable_u64 _)
+          (C.validateExpr_var_eq_empty .portable .u8
+            (ABI.localName 0) (some fn.name) path
+            (C.validateType_portable_u8 _) (C.isValidIdentifier_localName _))
+      · rfl
+
+/-- Pointwise shape evidence validates the mapped emitted statement list.
+The theorem is independent of list length and is therefore scale-free. -/
+theorem mappedCompiledStmt_statementListValid
+    {regCount : Nat} (fn : C.CFunction) (instructions : List StraightInstruction)
+    (hShapes : ∀ instruction ∈ instructions, Shape regCount instruction) :
+    C.StatementListValid .portable fn (instructions.map compiledStmt) := by
+  intro statement hStatement
+  obtain ⟨instruction, hInstruction, rfl⟩ := List.mem_map.mp hStatement
+  exact compiledStmt_statementValid_of_shape fn
+    (hShapes instruction hInstruction)
+
 theorem lowerStraight_shape (p : Program) (name : String)
     (hWF : p.WF) {si : StraightInstruction}
     (hShape : Shape p.regCount si) :
@@ -516,4 +627,3 @@ theorem toComputation_returns (p : Program) (name : String) (hWF : p.WF)
   returns_iff_denote p hWF (p.toComputation name hWF) rfl rfl n
 
 end LeanCompCert.Verified.Reflect
-

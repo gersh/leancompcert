@@ -1659,4 +1659,194 @@ theorem counterAugment_sourceResult (p : Program) (hWF : p.WF)
   sourceResult_eq_denote (p.counterAugment) (counterAugment_WF p hWF)
     computation hInstructions hOutput
 
+/-! ### Scale-free validation of rolled checked-C emission
+
+The following theorem chain validates the emitted function from the generic
+instruction-shape proofs above.  Its cost is independent of the number of
+concrete statements in a certificate program: consumers supply `Program.WF`
+and a small identifier check, rather than normalizing the generated C body.
+-/
+
+def rolledEmittedFunction (p : Program) (name : String) : C.CFunction := {
+  name := ABI.mangle name
+  params := #[]
+  result := .u64
+  body := (rolledDecls p ++
+    ((rolledPrologue p).map compiledStmt).toArray ++
+    #[C.CStmt.whileLoop (rolledGuard p)
+      ((rolledBlock p).map compiledStmt).toArray] ++
+    ((rolledEpilogue p).map compiledStmt).toArray).push
+      (C.CStmt.return (some
+        (C.CExpr.var (ABI.localName (p.output + 1)) .u64)))
+  sourceDecl := some name
+}
+
+theorem rolledCFunction_eq_emitted (p : Program) (name : String) (hWF : p.WF) :
+    rolledCFunction p name = some (rolledEmittedFunction p name) := by
+  unfold rolledCFunction
+  rw [rolledFunctionBody_eq p name hWF]
+  rfl
+
+theorem rolledDecls_toList_eq (p : Program) :
+    (rolledDecls p).toList =
+      [.decl .u8 (ABI.localName 0) none] ++
+      ((List.range p.regCount).map fun index =>
+        C.CStmt.decl .u64 (ABI.localName (index + 1)) none) ++
+      [.decl .u64 (ABI.localName (counterReg p + 1))
+        (some (.uintLit .u64 0))] := by
+  simp [rolledDecls]
+
+theorem rolledDecls_statementListValid (p : Program) (fn : C.CFunction) :
+    C.StatementListValid .portable fn (rolledDecls p).toList := by
+  rw [rolledDecls_toList_eq]
+  have hFirst : C.StatementListValid .portable fn
+      [.decl .u8 (ABI.localName 0) none] := by
+    apply C.StatementListValid.cons
+    · apply C.StatementValid.declNone
+      · exact C.validateType_portable_u8 _
+      · exact C.isValidIdentifier_localName _
+    · exact C.StatementListValid.nil _ _
+  have hRegisters : C.StatementListValid .portable fn
+      ((List.range p.regCount).map fun index =>
+        C.CStmt.decl .u64 (ABI.localName (index + 1)) none) := by
+    intro statement hStatement
+    obtain ⟨index, hIndex, rfl⟩ := List.mem_map.mp hStatement
+    apply C.StatementValid.declNone
+    · exact C.validateType_portable_u64 _
+    · exact C.isValidIdentifier_localName _
+  have hCounter : C.StatementListValid .portable fn
+      [.decl .u64 (ABI.localName (counterReg p + 1))
+        (some (.uintLit .u64 0))] := by
+    apply C.StatementListValid.cons
+    · apply C.StatementValid.declSome
+      · exact C.validateType_portable_u64 _
+      · exact C.isValidIdentifier_localName _
+      · intro path
+        exact C.validateExpr_uintLit_eq_empty .portable .u64 0
+          (some fn.name) path (C.validateType_portable_u64 _) rfl
+      · rfl
+    · exact C.StatementListValid.nil _ _
+  exact C.StatementListValid.append .portable fn _ _
+    (C.StatementListValid.append .portable fn _ _ hFirst hRegisters) hCounter
+
+theorem validate_rolledGuard (p : Program) (fn : C.CFunction) (path : Array Nat) :
+    C.validateExpr .portable (rolledGuard p) (some fn.name) path = #[] := by
+  unfold rolledGuard counterExpr
+  apply C.validateExpr_binary_eq_empty
+  · exact C.validateType_portable_u8 _
+  · exact C.validateExpr_var_eq_empty .portable .u64
+      (ABI.localName (counterReg p + 1)) (some fn.name) path
+      (C.validateType_portable_u64 _) (C.isValidIdentifier_localName _)
+  · exact C.validateExpr_uintLit_eq_empty .portable .u64 p.loopCount
+      (some fn.name) path (C.validateType_portable_u64 _) rfl
+  · rfl
+  · rfl
+
+theorem rolledEmittedFunction_bodyValid (p : Program) (name : String)
+    (hWF : p.WF) :
+    C.StatementListValid .portable (rolledEmittedFunction p name)
+      (rolledEmittedFunction p name).body.toList := by
+  let fn := rolledEmittedFunction p name
+  have hDecls : C.StatementListValid .portable fn (rolledDecls p).toList :=
+    rolledDecls_statementListValid p fn
+  have hPrologue : C.StatementListValid .portable fn
+      ((rolledPrologue p).map compiledStmt) :=
+    mappedCompiledStmt_statementListValid fn (rolledPrologue p)
+      (shape_rolledPrologue p hWF)
+  have hBlock : C.StatementListValid .portable fn
+      ((rolledBlock p).map compiledStmt) :=
+    mappedCompiledStmt_statementListValid fn (rolledBlock p)
+      (shape_rolledBlock p hWF)
+  have hEpilogue : C.StatementListValid .portable fn
+      ((rolledEpilogue p).map compiledStmt) :=
+    mappedCompiledStmt_statementListValid fn (rolledEpilogue p)
+      (shape_rolledEpilogue p hWF)
+  have hWhile : C.StatementValid .portable fn
+      (.whileLoop (rolledGuard p) ((rolledBlock p).map compiledStmt).toArray) := by
+    apply C.StatementValid.whileLoop
+    · exact validate_rolledGuard p fn
+    · rfl
+    · simpa using hBlock
+  have hReturn : C.StatementValid .portable fn
+      (.return (some (.var (ABI.localName (p.output + 1)) .u64))) := by
+    apply C.StatementValid.returnSome
+    · intro path
+      exact C.validateExpr_var_eq_empty .portable .u64
+        (ABI.localName (p.output + 1)) (some fn.name) path
+        (C.validateType_portable_u64 _) (C.isValidIdentifier_localName _)
+    · rfl
+  have hReturnList : C.StatementListValid .portable fn
+      [.return (some (.var (ABI.localName (p.output + 1)) .u64))] :=
+    C.StatementListValid.cons .portable fn _ [] hReturn
+      (C.StatementListValid.nil _ _)
+  have hEpilogueReturn : C.StatementListValid .portable fn
+      ((rolledEpilogue p).map compiledStmt ++
+        [.return (some (.var (ABI.localName (p.output + 1)) .u64))]) :=
+    C.StatementListValid.append .portable fn _ _ hEpilogue hReturnList
+  have hWhileRest : C.StatementListValid .portable fn
+      (.whileLoop (rolledGuard p) ((rolledBlock p).map compiledStmt).toArray ::
+        ((rolledEpilogue p).map compiledStmt ++
+          [.return (some (.var (ABI.localName (p.output + 1)) .u64))])) :=
+    C.StatementListValid.cons .portable fn _ _ hWhile hEpilogueReturn
+  have hPrologueRest : C.StatementListValid .portable fn
+      ((rolledPrologue p).map compiledStmt ++
+        (.whileLoop (rolledGuard p) ((rolledBlock p).map compiledStmt).toArray ::
+          ((rolledEpilogue p).map compiledStmt ++
+            [.return (some (.var (ABI.localName (p.output + 1)) .u64))]))) :=
+    C.StatementListValid.append .portable fn _ _ hPrologue hWhileRest
+  change C.StatementListValid .portable fn _
+  simpa [fn, rolledEmittedFunction] using
+    C.StatementListValid.append .portable fn _ _ hDecls hPrologueRest
+
+theorem validate_rolledEmittedFunction (p : Program) (name : String)
+    (hWF : p.WF) (hName : C.isValidIdentifier (ABI.mangle name) = true) :
+    C.validateFunction .portable (rolledEmittedFunction p name) = #[] := by
+  apply C.validateFunction_eq_empty_of_noParams
+  · rfl
+  · exact C.validateType_portable_u64 _
+  · exact hName
+  · exact rolledEmittedFunction_bodyValid p name hWF
+
+theorem validate_rolledTranslationUnit_eq_empty (fn : C.CFunction)
+    (hFunction : C.validateFunction .portable fn = #[])
+    (hName : C.isValidIdentifier fn.name = true)
+    (hParams : fn.params = #[])
+    (hResult : fn.result = .u64) :
+    C.validateTranslationUnit .portable (rolledTranslationUnit fn) = #[] := by
+  have hEmptyParams : ((#[] : Array C.CType) != fn.params.map C.CParam.type) = false := by
+    have hParamTypes : fn.params.map C.CParam.type = #[] := by
+      rw [hParams]
+      exact Array.map_empty
+    rw [hParamTypes]
+    decide
+  have hU64Result : (C.CType.u64 != fn.result) = false := by
+    rw [hResult]
+    decide
+  have hU64Type : C.validateType .portable .u64 = #[] :=
+    C.validateType_portable_u64 none
+  simp [C.validateTranslationUnit, rolledTranslationUnit, hName, hFunction,
+    hEmptyParams, hU64Result, hU64Type]
+
+theorem validate_rolledTranslationUnit_isEmpty (p : Program) (name : String)
+    (hWF : p.WF) (hName : C.isValidIdentifier (ABI.mangle name) = true) :
+    (C.validateTranslationUnit .portable
+      (rolledTranslationUnit (rolledEmittedFunction p name))).isEmpty = true := by
+  have hUnit := validate_rolledTranslationUnit_eq_empty
+    (rolledEmittedFunction p name)
+    (validate_rolledEmittedFunction p name hWF hName) hName rfl rfl
+  rw [hUnit]
+  rfl
+
+/-- Checked rolled emission follows from source well-formedness without
+normalizing the concrete emitted statement list. -/
+theorem emitRolledChunks_eq_emittedChunks (p : Program) (name : String)
+    (hWF : p.WF) (hName : C.isValidIdentifier (ABI.mangle name) = true) :
+    emitRolledChunks p name =
+      .ok (rolledTranslationUnit (rolledEmittedFunction p name)).emitChunks := by
+  unfold emitRolledChunks C.emitCheckedChunks
+  rw [rolledCFunction_eq_emitted p name hWF]
+  simp only [validate_rolledTranslationUnit_isEmpty p name hWF hName,
+    ↓reduceIte]
+  rfl
+
 end LeanCompCert.Verified.Reflect
