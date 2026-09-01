@@ -9,12 +9,11 @@ This is observationally the same emitter, but it lets attestation code compare
 each chunk with a consecutive packed-byte window instead of asking the kernel
 to normalize one enormous `String` equality. -/
 
-/-- Concatenate text chunks without routing through `String.join`'s `foldl`.
-The structural recursion is inexpensive for kernel proofs.  Large native
-emitters should stream `emitCheckedChunks` rather than flattening this view. -/
-def joinChunks : List String → String
-  | [] => ""
-  | chunk :: chunks => chunk ++ joinChunks chunks
+/-- Concatenate text chunks with a tail-recursive native fold.  This has the
+same left-to-right text as structural concatenation, while avoiding an
+interpreter stack frame per emitted statement for large rolled programs. -/
+def joinChunks (chunks : List String) : String :=
+  chunks.foldl (fun out chunk => out ++ chunk) ""
 
 /-- Put a separator between chunks while keeping it as its own small chunk.
 
