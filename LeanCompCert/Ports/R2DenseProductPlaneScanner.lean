@@ -96,6 +96,27 @@ theorem body_arr (c : Cfg) (k : Nat) (s : AState) :
     (arun k s (body c)).arr = s.arr := by
   simp [body, arun, astep, AState.writeReg, sdest, sval, denoteOperand]
 
+/-- A successful scanner call is physically read-only: its returned array is
+the caller-provided producer array, not merely an extensionally related
+reconstruction.  This lets sequential scanner receipts share one retained
+producer plane. -/
+theorem runFromArray_array_eq (c : Cfg) (arr : Nat → Nat) (out : AState)
+    (hRun : (program c).runFromArray arr = some out) : out.arr = arr := by
+  have hout := runFromArray_eq_symbolicFinal c arr out hRun
+  rw [hout]
+  unfold symbolicFinal
+  have hfold : ∀ (xs : List Nat) (s : AState), s.arr = arr →
+      (xs.foldl (fun q k => arun k q (body c)) s).arr = arr := by
+    intro xs
+    induction xs with
+    | nil => intro s hs; exact hs
+    | cons k ks ih =>
+        intro s hs
+        apply ih
+        exact (body_arr c k s).trans hs
+  apply hfold
+  simp [program, arun, initialAStateWithArray]
+
 theorem body_bad (c : Cfg) (arr : Nat → Nat) (k : Nat) (s : AState)
     (hsarr : s.arr = arr) (hk : k < c.count)
     (hready : Ready c arr) :

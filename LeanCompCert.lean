@@ -334,6 +334,7 @@ import LeanCompCert.Ports.R2RuntimeProductionSeed
 import LeanCompCert.Ports.R2RuntimeProductionReceipt
 import LeanCompCert.Ports.R2RuntimeProductionAuditReceipt
 import LeanCompCert.Ports.R2DenseProductPlaneScanner
+import LeanCompCert.Ports.R2DenseProductPlaneProduction
 import LeanCompCert.Ports.R2DenseProductAudit
 import LeanCompCert.Ports.R2RuntimeFailureObservation
 import LeanCompCert.Ports.R2SegClauseFailureTelescope
