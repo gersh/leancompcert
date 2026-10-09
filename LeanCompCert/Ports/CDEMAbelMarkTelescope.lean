@@ -124,10 +124,10 @@ theorem body_markState_step (c : Cfg) (idx : Nat) (st : AState)
             simp only [MarkState.step, hcell, ↓reduceIte]
             by_cases ha : j = model.multiple + c.winBase
             · subst j
-              rw [if_pos rfl, if_pos rfl, hrep.live _ (by
+              rw [ite_eq_left rfl, ite_eq_left rfl, hrep.live _ (by
                 unfold Cfg.sink
                 omega)]
-            · rw [if_neg ha, if_neg ha, hrep.live j hj]
+            · rw [ite_eq_right ha, ite_eq_right ha, hrep.live j hj]
           divisor := by simpa [MarkState.step, hcell] using hs.divisor
           sign := by simpa [MarkState.step, hcell] using hs.sign
           multiple := by simpa [MarkState.step, hcell] using hs.multiple

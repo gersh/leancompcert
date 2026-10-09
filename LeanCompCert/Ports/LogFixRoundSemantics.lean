@@ -101,7 +101,7 @@ private theorem carryInstrs_run (k : Nat) (s : RegState) (ml cl : Nat)
       4611686018427387904 := by decide
   simp [carryInstrs, logRoundBody, srun, RegState.set, sdest, sval,
     denoteOperand, denoteOp, h8, h10, h33, hB62,
-    Nat.mod_eq_of_lt hshift, Nat.mod_eq_of_lt hsum, B62]
+    Nat.mod_eq_of_lt hshift, Nat.mod_eq_of_lt hsum, B62.eq_def]
 
 private theorem combineInstrs_run (k : Nat) (s : RegState)
     (hi mh ch carry : Nat)
@@ -132,8 +132,8 @@ private theorem emitInstrs_run (k : Nat) (s : RegState) (y a bit : Nat)
   by_cases hb : B63 ≤ y
   · have hbN : (9223372036854775808 : Nat) ≤ y := by
       simpa only [B63] using hb
-    have hrenorm1 : y >>> 1 < M := by simpa only [hb, if_true] using hrenorm
-    have hout1 : (a <<< 1) + 1 < M := by simpa only [hb, if_true] using hout
+    have hrenorm1 : y >>> 1 < M := by simpa only [hb, ite_true] using hrenorm
+    have hout1 : (a <<< 1) + 1 < M := by simpa only [hb, ite_true] using hout
     simp [emitInstrs, logRoundBody, srun, RegState.set, sdest, sval,
       denoteOperand, denoteOp, rX, rA, h17, ha', hB63, h1, B63, hbN,
       Nat.mod_eq_of_lt hrenorm1, Nat.mod_eq_of_lt ha2,

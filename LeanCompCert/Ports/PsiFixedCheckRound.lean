@@ -396,12 +396,12 @@ private theorem divStep_lt (dest : Nat) (op : Op) (a b : Nat) (s : RegState)
   by_cases h : i = dest
   · subst h
     show (if i = i then (denoteOp op (s a) (s b)).getD 0 else s i) < M
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     cases hd : denoteOp op (s a) (s b) with
     | none => exact M_pos
     | some r => exact denoteOp_lt op _ _ r hd
   · show (if i = dest then (denoteOp op (s a) (s b)).getD 0 else s i) < M
-    rw [if_neg h]
+    rw [ite_eq_right h]
     exact hs i
 
 private theorem divLitStep_lt (dest : Nat) (op : Op) (a c : Nat) (s : RegState)
@@ -410,12 +410,12 @@ private theorem divLitStep_lt (dest : Nat) (op : Op) (a c : Nat) (s : RegState)
   by_cases h : i = dest
   · subst h
     show (if i = i then (denoteOp op (s a) (c % M)).getD 0 else s i) < M
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     cases hd : denoteOp op (s a) (c % M) with
     | none => exact M_pos
     | some r => exact denoteOp_lt op _ _ r hd
   · show (if i = dest then (denoteOp op (s a) (c % M)).getD 0 else s i) < M
-    rw [if_neg h]
+    rw [ite_eq_right h]
     exact hs i
 
 private theorem idxStep_lt (R k : Nat) (s : RegState) (hs : ∀ i, s i < M) :
@@ -424,17 +424,17 @@ private theorem idxStep_lt (R k : Nat) (s : RegState) (hs : ∀ i, s i < M) :
   show (if i = 13 then (denoteOp .udiv (k % M) (R % M)).getD 0
     else (if i = 12 then (denoteOp .urem (k % M) (R % M)).getD 0 else s i)) < M
   by_cases h13 : i = 13
-  · rw [if_pos h13]
+  · rw [ite_eq_left h13]
     cases hd : denoteOp Op.udiv (k % M) (R % M) with
     | none => exact M_pos
     | some r => exact denoteOp_lt _ _ _ r hd
-  · rw [if_neg h13]
+  · rw [ite_eq_right h13]
     by_cases h12 : i = 12
-    · rw [if_pos h12]
+    · rw [ite_eq_left h12]
       cases hd : denoteOp Op.urem (k % M) (R % M) with
       | none => exact M_pos
       | some r => exact denoteOp_lt _ _ _ r hd
-    · rw [if_neg h12]
+    · rw [ite_eq_right h12]
       exact hs i
 
 theorem psRun_lt (P : Params) (k : Nat) (s : RegState) (hs : ∀ i, s i < M) :
@@ -831,7 +831,7 @@ theorem psRun_spec (hP : P.Sane) (hk : k < P.fuel * P.R) (hs : PSInv P s) :
   have hdne : ¬ d = 0 := by omega
   have c25 : st3 P k s 25 = n % d := by
     show divStep 25 .urem 14 15 (st2 P k s) 25 = n % d
-    simp [divStep, RegState.set, denoteOp, b14, b15, if_neg hdne,
+    simp [divStep, RegState.set, denoteOp, b14, b15, ite_eq_right hdne,
       Nat.mod_eq_of_lt hndM]
   have cOther : ∀ j, j ≠ 25 → st3 P k s j = st2 P k s j := by
     intro j hj
@@ -902,7 +902,7 @@ theorem psRun_spec (hP : P.Sane) (hk : k < P.fuel * P.R) (hs : PSInv P s) :
   have hprM0 : pr < M := by rw [epr]; omega
   have f31 : st5 P k s 31 = pr := by
     show divStep 31 .urem 30 14 (st4 P k s) 31 = pr
-    simp [divStep, RegState.set, denoteOp, e30', e14, if_neg hnne, ← epr,
+    simp [divStep, RegState.set, denoteOp, e30', e14, ite_eq_right hnne, ← epr,
       Nat.mod_eq_of_lt hprM0]
   have fOther : ∀ j, j ≠ 31 → st5 P k s j = st4 P k s j := by
     intro j hj
@@ -966,7 +966,7 @@ theorem psRun_spec (hP : P.Sane) (hk : k < P.fuel * P.R) (hs : PSInv P s) :
     omega
   have l34 : st7 P k s 34 = xq := by
     show divStep 34 .udiv 33 24 (st6 P k s) 34 = xq
-    simp [divStep, RegState.set, denoteOp, k33, k24, if_neg hpbne, ← exq,
+    simp [divStep, RegState.set, denoteOp, k33, k24, ite_eq_right hpbne, ← exq,
       Nat.mod_eq_of_lt hxqM]
   have lOther : ∀ j, j ≠ 34 → st7 P k s j = st6 P k s j := by
     intro j hj
@@ -1046,7 +1046,7 @@ theorem psRun_spec (hP : P.Sane) (hk : k < P.fuel * P.R) (hs : PSInv P s) :
   have hSCne : ¬ SC = 0 := by decide
   have p38 : st9 P k s 38 = tq := by
     show divLitStep 38 .udiv 37 SC (st8 P k s) 38 = tq
-    simp [divLitStep, RegState.set, denoteOp, n37, litSC, if_neg hSCne,
+    simp [divLitStep, RegState.set, denoteOp, n37, litSC, ite_eq_right hSCne,
       ← etq, Nat.mod_eq_of_lt htqM]
   have pOther : ∀ j, j ≠ 38 → st9 P k s j = st8 P k s j := by
     intro j hj
@@ -1115,7 +1115,7 @@ theorem psRun_spec (hP : P.Sane) (hk : k < P.fuel * P.R) (hs : PSInv P s) :
   have htermM : term < M := by omega
   have s41 : st11 P k s 41 = term := by
     show divStep 41 .udiv 40 39 (st10 P k s) 41 = term
-    simp [divStep, RegState.set, denoteOp, r40, r39, if_neg hdvne,
+    simp [divStep, RegState.set, denoteOp, r40, r39, ite_eq_right hdvne,
       ← eterm, Nat.mod_eq_of_lt htermM]
   have sOther : ∀ j, j ≠ 41 → st11 P k s j = st10 P k s j := by
     intro j hj
@@ -1470,14 +1470,14 @@ theorem psRun_spec (hP : P.Sane) (hk : k < P.fuel * P.R) (hs : PSInv P s) :
     rcases hhitb with h | h <;> omega
   · rw [v6, v5, epw1]
     rcases hcEb with hc | hc
-    · rw [if_neg (by omega), hpw0pow, ee1, hc, Nat.add_zero]
-    · rw [if_pos hc, etw2, hpw0pow, ee1, hc,
+    · rw [ite_eq_right (by omega), hpw0pow, ee1, hc, Nat.add_zero]
+    · rw [ite_eq_left hc, etw2, hpw0pow, ee1, hc,
         show 2 ^ e0 * 2 = 2 ^ (e0 + 1) from (Nat.pow_succ 2 e0).symm]
   · rw [v6, epw1]
     rcases hcEb with hc | hc
-    · rw [if_neg (by omega)]
+    · rw [ite_eq_right (by omega)]
       exact hpw0T
-    · rw [if_pos hc]
+    · rw [ite_eq_left hc]
       have htwpb : tw2 ≤ pb := by
         rw [ecE] at hc
         rcases hisEb with h | h

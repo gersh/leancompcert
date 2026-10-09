@@ -29,7 +29,7 @@ theorem historicalFlag21_machine_bounds
   have hg : s.regs 33 < M := by omega
   simp [historicalFlag21Prefix, historicalFlag21_eq_source,
     bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg]
   repeat' first | split | simp [Nat.mod_eq_of_lt hg]
   all_goals omega
@@ -50,13 +50,13 @@ theorem historicalFlag22_machine_bounds
   rcases (by omega : s.regs 48 = 0 ∨ s.regs 48 = 1) with hval | hval
   · simp [historicalFlag22Prefix, historicalFlag22_eq_source,
       bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-      LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+      LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
       AState.writeReg, hval, hM1, Nat.add_mod_right,
       Nat.mod_eq_of_lt one_lt_M]
     split <;> simp [Nat.mod_eq_of_lt one_lt_M]
   · simp [historicalFlag22Prefix, historicalFlag22_eq_source,
       bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-      LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+      LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
       AState.writeReg, hval, hM1, Nat.add_mod_right,
       Nat.mod_eq_of_lt one_lt_M]
 
@@ -73,7 +73,7 @@ theorem historicalFlag23_machine_bounds
   have hg : s.regs 155 < M := by omega
   simp [historicalFlag23Prefix, historicalFlag23_eq_source,
     bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg]
   repeat' first | split | simp [Nat.mod_eq_of_lt hg]
   all_goals omega
@@ -92,7 +92,7 @@ theorem historicalFlag24_machine_bounds
   have hgmod : s.regs 34 % M = s.regs 34 := Nat.mod_eq_of_lt hg
   simp [historicalFlag24Prefix, historicalFlag24_eq_source,
     bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg]
   repeat' first | split | simp [hgmod]
   all_goals omega
@@ -116,13 +116,13 @@ theorem historicalFlag25_machine_bounds
   rcases (by omega : s.regs 34 = 0 ∨ s.regs 34 = 1) with hval | hval
   · simp [historicalFlag25Prefix, historicalFlag25_eq_source,
       bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-      LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+      LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
       AState.writeReg, hval]
     repeat' first | split | simp [hamod]
     all_goals omega
   · simp [historicalFlag25Prefix, historicalFlag25_eq_source,
       bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-      LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+      LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
       AState.writeReg, hval]
     repeat' first | split | simp [hamod]
     all_goals omega

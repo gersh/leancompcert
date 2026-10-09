@@ -854,8 +854,8 @@ theorem aOf_eq_log2 {n : Nat} (h2 : 2 ≤ n) (h17 : n < 2 ^ 17) :
     intro v i hv
     subst hv
     by_cases h : 2 ^ i ≤ n
-    · rw [if_pos h, if_pos ((Nat.le_log2 hn0).mpr h)]
-    · rw [if_neg h, if_neg (fun hc => h ((Nat.le_log2 hn0).mp hc))]
+    · rw [ite_eq_left h, ite_eq_left ((Nat.le_log2 hn0).mpr h)]
+    · rw [ite_eq_right h, ite_eq_right (fun hc => h ((Nat.le_log2 hn0).mp hc))]
   unfold aOf ind
   rw [g 2 1 (by decide), g 4 2 (by decide), g 8 3 (by decide),
     g 16 4 (by decide), g 32 5 (by decide), g 64 6 (by decide),
@@ -1282,14 +1282,14 @@ theorem blkBa2_spec (k : Nat) (t : RegState) (m0 phi0 q d fl : Nat)
     run k t blkBa2 2 = (if m0 % d = 0 then phi0 * (d - 1) else phi0) := by
   have hm0dM : m0 / d < M := Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hm0M
   by_cases hdvd : m0 % d = 0
-  · rw [if_pos hdvd] at efl
+  · rw [ite_eq_left hdvd] at efl
     subst efl
     refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
       simp [run, blkBa2, evalExpr, denoteOp, RegState.set, sel,
         h1, h2, h7, h10, h12, hd1, hdvd, lit0, lit1,
         Nat.mod_eq_of_lt hm0M, Nat.mod_eq_of_lt hm0dM,
         Nat.mod_eq_of_lt hphi0M, Nat.mod_eq_of_lt hphi1M]
-  · rw [if_neg hdvd] at efl
+  · rw [ite_eq_right hdvd] at efl
     subst efl
     refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
       simp [run, blkBa2, evalExpr, denoteOp, RegState.set, sel,
@@ -1320,7 +1320,7 @@ theorem blkBb_spec (k : Nat) (t : RegState) (m1 phi1 phiF : Nat)
   have hs1 := subExact m1 1 hm1pos hm1M
   have hs2 := subExact (2 ^ 44 + phiF) 1 (by omega) hsumM
   by_cases hgt : 1 < m1
-  · have ephiF' : phiF = phi1 * (m1 - 1) := by rw [ephiF, if_pos hgt]
+  · have ephiF' : phiF = phi1 * (m1 - 1) := by rw [ephiF, ite_eq_left hgt]
     rw [ephiF'] at hs2 hsumM hphiFM'
     refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
       ?_, ?_⟩ <;>
@@ -1329,7 +1329,7 @@ theorem blkBb_spec (k : Nat) (t : RegState) (m1 phi1 phiF : Nat)
         Nat.mod_eq_of_lt hm1M, Nat.mod_eq_of_lt hphi1M,
         Nat.mod_eq_of_lt hphiFM, Nat.mod_eq_of_lt hphiFM',
         Nat.mod_eq_of_lt hsumM, ge_iff_le]
-  · have ephiF' : phiF = phi1 := by rw [ephiF, if_neg hgt]
+  · have ephiF' : phiF = phi1 := by rw [ephiF, ite_eq_right hgt]
     rw [ephiF'] at hs2 hsumM hphiFM'
     refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
       ?_, ?_⟩ <;>
@@ -1687,11 +1687,11 @@ private theorem blkCa3x_val30 (k : Nat) (t : RegState) (x2 : Nat)
         omega)]
       exact blkCa3w1_val54 k t x2 h28 hg hx2lt
     have h29b : run k (run k t blkCa3w1) blkCa3w2 29 = 1 := by
-      rw [w2f29, if_pos hg]
+      rw [w2f29, ite_eq_left hg]
     have hval := blkCa3x1_val30 k (run k (run k t blkCa3w1) blkCa3w2)
       ((x2 - 2 ^ 63) * 2) (run k (run k t blkCa3w1) blkCa3w2 55) 1
       V54 rfl h29b (by omega) (by omega) (hword2 55)
-    rw [hval, if_pos rfl, if_pos hg]
+    rw [hval, ite_eq_left rfl, ite_eq_left hg]
   · have hlt63 : x2 < 2 ^ 63 := by omega
     have V55 : run k (run k t blkCa3w1) blkCa3w2 55 = (x2 - 2 ^ 62) * 4 :=
       blkCa3w2_val55 k (run k t blkCa3w1) x2
@@ -1706,11 +1706,11 @@ private theorem blkCa3x_val30 (k : Nat) (t : RegState) (x2 : Nat)
           exact h28)
         hx2ge hlt63
     have h29b : run k (run k t blkCa3w1) blkCa3w2 29 = 0 := by
-      rw [w2f29, if_neg hg]
+      rw [w2f29, ite_eq_right hg]
     have hval := blkCa3x1_val30 k (run k (run k t blkCa3w1) blkCa3w2)
       (run k (run k t blkCa3w1) blkCa3w2 54) ((x2 - 2 ^ 62) * 4) 0
       rfl V55 h29b (by omega) (hword2 54) (by omega)
-    rw [hval, if_neg (by omega), if_neg hg]
+    rw [hval, ite_eq_right (by omega), ite_eq_right hg]
 
 private theorem blkCa3x2_val31 (k : Nat) (u : RegState) (n a : Nat)
     (h8 : u 8 = n) (h16 : u 16 = 2 ^ a) (h15 : u 15 = a)

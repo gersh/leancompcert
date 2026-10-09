@@ -129,15 +129,15 @@ theorem wrapCheckBody_run (k new old : Nat) (s : AState)
       out.arr = s.arr := by
   rw [wrapCheckBody, arun_lift]
   simp only [srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-    Option.getD_some, rWrap, rBad, M, Nat.reduceEqDiff, if_true, if_false]
+    Option.getD_some, rWrap, rBad, M, Nat.reduceEqDiff, ite_true, ite_false]
   by_cases h : s.regs new < s.regs old
-  · simp only [h, if_true]
+  · simp only [h, ite_true]
     constructor
     · apply Nat.mod_eq_of_lt
       simpa only [rBad, M] using
         (Section413G1Denote.lor_lt_M (hword rBad) (by decide : 1 < M))
     · trivial
-  · simp only [h, if_false, Nat.or_zero]
+  · simp only [h, ite_false, Nat.or_zero]
     constructor
     · apply Nat.mod_eq_of_lt
       simpa only [rBad, M] using hword rBad
@@ -195,9 +195,9 @@ theorem productDivBody_run (k : Nat) (s : AState)
     out.regs rQ = s.regs rQ / s.regs 237 ∧
       out.arr = s.arr := by
   rw [productDivBody, arun_lift]
-  simp only [srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-    Option.getD_some, rQ, M, Nat.reduceEqDiff, if_true, if_false]
-  rw [if_neg hden]
+  simp only [srun, sdest, sval, denoteOperand, denoteOp.eq_def, RegState.set,
+    Option.getD_some, rQ, M, Nat.reduceEqDiff, ite_true, ite_false]
+  rw [ite_eq_right hden]
   exact ⟨Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _)
     hQ), trivial⟩
 
@@ -236,7 +236,7 @@ theorem productCommitBody_zero_sound (k : Nat) (s : AState)
     rw [productCommitAddBody, arun_lift]
     simp only [srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
       Option.getD_some, rPNext, rP, rBad, M, Nat.reduceEqDiff,
-      if_true, if_false]
+      ite_true, ite_false]
     have hmP : m.regs 211 = s.regs 211 := by simpa only [rP] using hm.2.1
     have hmPN : m.regs 213 = s.regs rGate * s.regs rQ := by
       simpa only [rPNext] using hm.1
@@ -334,7 +334,7 @@ theorem rootCeilBody_run (k : Nat) (s : AState)
     simpa only [rSqrt] using hsq
   simp only [srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
     Option.getD_some, rSq, rSqrt, rBump, rCeilRoot, rBad,
-    Nat.reduceEqDiff, if_true, if_false, hnr, hsqM]
+    Nat.reduceEqDiff, ite_true, ite_false, hnr, hsqM]
   by_cases h : s.regs 214 * s.regs 214 < s.regs RS62PrimeMaskLadder.rN
   · have hs1M : (s.regs 214 + 1) % M = s.regs 214 + 1 := by
       apply Nat.mod_eq_of_lt
@@ -1624,7 +1624,7 @@ theorem machineFold_word (arr : Nat → Nat)
 theorem sqrtNext_sqrt (n : Nat) : sqrtNext n (Nat.sqrt n) = Nat.sqrt (n + 1) := by
   unfold sqrtNext
   by_cases h : (Nat.sqrt n + 1) * (Nat.sqrt n + 1) ≤ n + 1
-  · simp only [h, if_true]
+  · simp only [h, ite_true]
     apply LeanCompCert.Verified.SqrtEquiv.sqrt_unique
     · exact h
     · have hs : n < (Nat.sqrt n + 1) * (Nat.sqrt n + 1) :=
@@ -1637,7 +1637,7 @@ theorem sqrtNext_sqrt (n : Nat) : sqrtNext n (Nat.sqrt n) = Nat.sqrt (n + 1) := 
       have heq : Nat.sqrt n + 2 = Nat.sqrt n + 1 + 1 := by omega
       rw [← heq]
       exact hres
-  · simp only [h, if_false, Nat.add_zero]
+  · simp only [h, ite_false, Nat.add_zero]
     apply LeanCompCert.Verified.SqrtEquiv.sqrt_unique
     · exact Nat.le_trans (Nat.sqrt_le n) (by omega)
     · omega
@@ -1860,7 +1860,7 @@ theorem machineFold_clean_observe (arr : Nat → Nat)
             simpa only [Nat.mul_comm] using hguard
           unfold guardStrong at hstrong
           simp only [hcell1, Nat.one_mul]
-          rw [if_pos hstrong, Nat.or_zero]
+          rw [ite_eq_left hstrong, Nat.or_zero]
       dsimp only
       rw [machineFoldState_succ, sourceFold_succ]
       refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩

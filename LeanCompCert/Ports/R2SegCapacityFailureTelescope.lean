@@ -121,8 +121,8 @@ theorem classCapPrep_bit_le_one (c : R2Cfg) (k : Nat) (s : AState)
   have hp : s.regs 116 = 0 ∨ s.regs 116 = 1 := by omega
   rcases hp with hp | hp <;>
     simp [classCapPrepBody, classCompactPrefixBody, R2Cfg.classBody,
-      arun, astep, AState.writeReg, sdest, sval, denoteOperand, denoteOp,
-      hp, rWc, rViol, M] <;>
+      arun, astep, AState.writeReg, sdest, sval, denoteOperand, denoteOp.eq_def,
+      hp, rWc.eq_def, rViol.eq_def, M.eq_def] <;>
     split <;> simp [M]
 
 /-- The literal capacity-failure value is Boolean for every state in which
@@ -296,14 +296,11 @@ theorem runtimeProduction_every_capacity_guard_passes :
   dsimp only at htailBounds
   have hloopZero := runtimeProduction_verified_no_mark_or_drain_failure.2.1
   rw [runtimeProductionLoopOut_eq_fold] at hloopZero
-  have hloopZero' :
-    ((List.range N).foldl (fun s index => arun index s c.body)
-      runtimeProductionEntry).regs rVCap = 0 := by
-    simpa only [N, c] using hloopZero
-  rw [hrange, List.foldl_append] at hloopZero'
+  rw [show List.range (runtimeProductionCfg.period * runtimeProductionCfg.segCount) =
+      List.range j ++ j :: tail from hrange, List.foldl_append] at hloopZero
   change
     (tail.foldl (fun s index => arun index s c.body) after).regs rVCap = 0
-      at hloopZero'
+      at hloopZero
   have hafterZero : after.regs rVCap = 0 := by omega
   change bit = 0
   omega

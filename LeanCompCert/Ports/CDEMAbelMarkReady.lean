@@ -83,7 +83,7 @@ theorem first_inv (c : Cfg) (st : AState)
         have hne : d + c.muBase ≠ c.winBase := by
           unfold Cfg.winBase Cfg.k1
           omega
-        rw [if_neg hne]
+        rw [ite_eq_right hne]
         exact htable d hd hdK
       divisorPos := by simp [MarkState.first]
       divisorBound := by simp [MarkState.first]; omega
@@ -109,7 +109,7 @@ theorem step_inv (c : Cfg) (w : Nat) (model : MarkState)
     have hne : d + c.muBase ≠ model.multiple + c.winBase := by
       unfold Cfg.winBase Cfg.k1
       omega
-    rw [if_neg hne]
+    rw [ite_eq_right hne]
     exact h.table d hd hdK
   · by_cases hdK : model.divisor < c.kBound
     · let code := model.arr (model.divisor + 1 + c.muBase)

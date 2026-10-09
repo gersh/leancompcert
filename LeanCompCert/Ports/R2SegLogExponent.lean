@@ -70,14 +70,14 @@ private theorem logExponentInstrs_run_core (k : Nat) (s : RegState)
   have hvl0M : vlog < M := by omega
   rcases hstart with rfl | rfl
   · by_cases hn : th ≤ n <;>
-      simp only [hn, if_pos, if_neg, Nat.zero_mul, Nat.add_zero] at hvM hvlM <;>
+      simp only [hn, ite_eq_left, ite_eq_right, Nat.zero_mul, Nat.add_zero] at hvM hvlM <;>
       simp [logExponentInstrs, srun, RegState.set, sdest, sval,
         denoteOperand, denoteOp, hne', he', hth', hv', hvl', h208, hn,
         Nat.mod_eq_of_lt he0M, Nat.mod_eq_of_lt hth0M,
         Nat.mod_eq_of_lt hv0M, Nat.mod_eq_of_lt hvl0M,
         rNe, rEx, rTh, rViol, rVLog2]
   · by_cases hn : th ≤ n <;> by_cases hn' : th + th ≤ n <;>
-      simp only [hn, hn', if_pos, if_neg, Nat.one_mul, Nat.zero_mul,
+      simp only [hn, hn', ite_eq_left, ite_eq_right, Nat.one_mul, Nat.zero_mul,
         Nat.add_zero] at hvM hvlM <;>
       simp [logExponentInstrs, srun, RegState.set, sdest, sval,
         denoteOperand, denoteOp, hne', he', hth', hv', hvl', h208, hn, hn',
@@ -123,11 +123,11 @@ theorem logExponentBody_start_no_bump_run (k : Nat) (s : AState)
   rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   have h := logExponentInstrs_run_core k s.regs n e th viol vlog 1
     hne he hth hv hvl h208 (Or.inr rfl) heM hthM
-      (by simp only [if_neg (by omega : ¬th ≤ n), Nat.zero_mul,
+      (by simp only [ite_eq_right (by omega : ¬th ≤ n), Nat.zero_mul,
         Nat.add_zero]; omega)
-      (by simp only [if_neg (by omega : ¬th ≤ n), Nat.zero_mul,
+      (by simp only [ite_eq_right (by omega : ¬th ≤ n), Nat.zero_mul,
         Nat.add_zero]; omega)
-  simp only [if_neg (by omega : ¬th ≤ n), Nat.add_zero,
+  simp only [ite_eq_right (by omega : ¬th ≤ n), Nat.add_zero,
     Nat.zero_mul] at h
   exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
 
@@ -148,12 +148,12 @@ theorem logExponentBody_start_bump_run (k : Nat) (s : AState)
   rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   have h := logExponentInstrs_run_core k s.regs n e th viol vlog 1
     hne he hth hv hvl h208 (Or.inr rfl) heM hthM
-      (by simp only [if_pos hnlo, Nat.one_mul,
-        if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero]; omega)
-      (by simp only [if_pos hnlo, Nat.one_mul,
-        if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero]; omega)
-  simp only [if_pos hnlo, Nat.one_mul,
-    if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero] at h
+      (by simp only [ite_eq_left hnlo, Nat.one_mul,
+        ite_eq_right (by omega : ¬ th + th ≤ n), Nat.add_zero]; omega)
+      (by simp only [ite_eq_left hnlo, Nat.one_mul,
+        ite_eq_right (by omega : ¬ th + th ≤ n), Nat.add_zero]; omega)
+  simp only [ite_eq_left hnlo, Nat.one_mul,
+    ite_eq_right (by omega : ¬ th + th ≤ n), Nat.add_zero] at h
   exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
 
 /-! The three public branches above all prove that the emitted `bad` bit is
@@ -193,11 +193,11 @@ theorem logExponentBody_start_no_bump_run_of_word (k : Nat) (s : AState)
   rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   have h := logExponentInstrs_run_core k s.regs n e th viol vlog 1
     hne he hth hv hvl h208 (Or.inr rfl) heM hthM
-      (by simp only [if_neg (by omega : ¬ th ≤ n), Nat.zero_mul,
+      (by simp only [ite_eq_right (by omega : ¬ th ≤ n), Nat.zero_mul,
         Nat.add_zero]; exact hvM)
-      (by simp only [if_neg (by omega : ¬ th ≤ n), Nat.zero_mul,
+      (by simp only [ite_eq_right (by omega : ¬ th ≤ n), Nat.zero_mul,
         Nat.add_zero]; exact hvlM)
-  simp only [if_neg (by omega : ¬ th ≤ n), Nat.add_zero,
+  simp only [ite_eq_right (by omega : ¬ th ≤ n), Nat.add_zero,
     Nat.zero_mul] at h
   exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
 
@@ -216,12 +216,12 @@ theorem logExponentBody_start_bump_run_of_word (k : Nat) (s : AState)
   rw [logExponentBody, LeanCompCert.Verified.ArrayScalarBlock.arun_lift]
   have h := logExponentInstrs_run_core k s.regs n e th viol vlog 1
     hne he hth hv hvl h208 (Or.inr rfl) heM hthM
-      (by simp only [if_pos hnlo, Nat.one_mul,
-        if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero]; exact hvM)
-      (by simp only [if_pos hnlo, Nat.one_mul,
-        if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero]; exact hvlM)
-  simp only [if_pos hnlo, Nat.one_mul,
-    if_neg (by omega : ¬ th + th ≤ n), Nat.add_zero] at h
+      (by simp only [ite_eq_left hnlo, Nat.one_mul,
+        ite_eq_right (by omega : ¬ th + th ≤ n), Nat.add_zero]; exact hvM)
+      (by simp only [ite_eq_left hnlo, Nat.one_mul,
+        ite_eq_right (by omega : ¬ th + th ≤ n), Nat.add_zero]; exact hvlM)
+  simp only [ite_eq_left hnlo, Nat.one_mul,
+    ite_eq_right (by omega : ¬ th + th ≤ n), Nat.add_zero] at h
   exact ⟨h.1, h.2.1, h.2.2.1, h.2.2.2, rfl⟩
 
 #print axioms logExponentBody_eq_slice

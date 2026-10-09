@@ -600,7 +600,7 @@ theorem correctedStage_rGU (k : Nat) (s : AState)
   have hlt : s.regs rLogUPre + s.regs rQ < M := by split at h <;> omega
   simp only [rLogUPre, rQ, rR] at h hlt
   by_cases hr : 0 < s.regs 205
-  · simp only [hr, if_true, gt_iff_lt] at h
+  · simp only [hr, ite_true, gt_iff_lt] at h
     simp [correctedStage, arun, astep, denoteAInstr, denoteInstr,
       LeanCompCert.Verified.InstrBlock.sdest,
       LeanCompCert.Verified.InstrBlock.sval,
@@ -608,7 +608,7 @@ theorem correctedStage_rGU (k : Nat) (s : AState)
       rIL, rIU, rGL, rGU, rT4, rQ, rR, sSumL, sSumU, sPsiLQ, rLogLPre, rLogUPre,
       hr, Nat.mod_eq_of_lt hlt, Nat.mod_eq_of_lt h]
   · have hr' : s.regs 205 = 0 := by omega
-    simp only [hr', Nat.lt_irrefl, if_false, gt_iff_lt] at h
+    simp only [hr', Nat.lt_irrefl, ite_false, gt_iff_lt] at h
     simp [correctedStage, arun, astep, denoteAInstr, denoteInstr,
       LeanCompCert.Verified.InstrBlock.sdest,
       LeanCompCert.Verified.InstrBlock.sval,
@@ -984,7 +984,7 @@ theorem signedAccumulate_run (k : Nat) (s : AState) (acc inc : Nat) (a b : Int)
     LeanCompCert.Verified.InstrBlock.sdest,
     LeanCompCert.Verified.InstrBlock.sval,
     denoteOperand, denoteOp, AState.writeReg, RegState.set,
-    List.foldl_cons, List.foldl_nil, if_pos rfl]
+    List.foldl_cons, List.foldl_nil, ite_eq_left rfl]
   rw [hacc, hinc, M_eq_B64]
   exact Section413Cells.encodeZ_add a b
 
@@ -1005,7 +1005,7 @@ theorem negateBlock_run (k : Nat) (s : AState) (dst src : Nat) (a : Int)
     LeanCompCert.Verified.InstrBlock.sdest,
     LeanCompCert.Verified.InstrBlock.sval,
     denoteOperand, denoteOp, AState.writeReg, RegState.set,
-    List.foldl_cons, List.foldl_nil, if_pos rfl,
+    List.foldl_cons, List.foldl_nil, ite_eq_left rfl,
     Nat.mod_eq_of_lt (show (0 : Nat) < M by decide), Nat.zero_add]
   rw [h, M_eq_B64]
   exact Section413Cells.encodeZ_neg a
@@ -1022,7 +1022,7 @@ theorem doubleBlock_run (k : Nat) (s : AState) (dst src : Nat) (a : Int)
     LeanCompCert.Verified.InstrBlock.sdest,
     LeanCompCert.Verified.InstrBlock.sval,
     denoteOperand, denoteOp, AState.writeReg, RegState.set,
-    List.foldl_cons, List.foldl_nil, if_pos rfl,
+    List.foldl_cons, List.foldl_nil, ite_eq_left rfl,
     Nat.mod_eq_of_lt (show (2 : Nat) < M by decide)]
   rw [h, M_eq_B64]
   exact Section413Cells.encodeZ_double a
@@ -1865,7 +1865,7 @@ theorem addConstBlock_run (k : Nat) (s : AState) (dst src c : Nat) (a : Int)
     LeanCompCert.Verified.InstrBlock.sdest,
     LeanCompCert.Verified.InstrBlock.sval,
     denoteOperand, denoteOp, AState.writeReg, RegState.set,
-    List.foldl_cons, List.foldl_nil, if_pos rfl, if_true, Option.getD_some,
+    List.foldl_cons, List.foldl_nil, ite_eq_left rfl, ite_true, Option.getD_some,
     h, Nat.mod_eq_of_lt hcM, M_eq_B64, Nat.mod_eq_of_lt hc]
   rw [show Section413Cells.encodeZ a + c
         = Section413Cells.encodeZ a + Section413Cells.encodeZ ((c : Nat) : Int)
@@ -2391,7 +2391,7 @@ theorem guardedSubBlock_run (k : Nat) (s : AState) (dst a b : Nat)
     LeanCompCert.Verified.InstrBlock.sdest,
     LeanCompCert.Verified.InstrBlock.sval,
     denoteOperand, denoteOp, AState.writeReg, RegState.set,
-    List.foldl_cons, List.foldl_nil, if_pos rfl]
+    List.foldl_cons, List.foldl_nil, ite_eq_left rfl]
   exact sub_mod_ge hle ha
 
 /-- When the guard FAILS the subtraction wraps, and this is what it wraps to —
@@ -2405,7 +2405,7 @@ theorem guardedSubBlock_run_wrapped (k : Nat) (s : AState) (dst a b : Nat)
     LeanCompCert.Verified.InstrBlock.sdest,
     LeanCompCert.Verified.InstrBlock.sval,
     denoteOperand, denoteOp, AState.writeReg, RegState.set,
-    List.foldl_cons, List.foldl_nil, if_pos rfl]
+    List.foldl_cons, List.foldl_nil, ite_eq_left rfl]
   exact sub_mod_lt hlt hb
 
 /-! ### The `s.q`-keyed table load

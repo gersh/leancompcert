@@ -110,9 +110,9 @@ theorem sfpMul_error (S : Nat) (x y : SFix) (hS : S ≤ 64)
   have hfalse : ¬(false = true) := by decide
   have hp' : ((x.mag * y.mag : Nat) : Int) = (p : Int) := by rw [hp]
   cases hs : (x.neg ^^ y.neg)
-  · rw [if_neg hfalse, if_neg hfalse, hp']
+  · rw [ite_eq_right hfalse, ite_eq_right hfalse, hp']
     exact hk.1
-  · rw [if_pos (rfl : true = true), if_pos (rfl : true = true), hp']
+  · rw [ite_eq_left (rfl : true = true), ite_eq_left (rfl : true = true), hp']
     exact hk.2
 
 /-! ## Checks

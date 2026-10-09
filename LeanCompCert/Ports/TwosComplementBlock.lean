@@ -62,7 +62,7 @@ theorem tcOfSignG_preserves {n m dst t0 t1 r : Nat}
 /-- **The block computes the conversion.** -/
 theorem tcOfSignG_spec (k : Nat) (s : RegState) (n m dst t0 t1 : Nat)
     (ht01 : t0 ≠ t1) (ht0n : t0 ≠ n) (ht0m : t0 ≠ m)
-    (ht1n : t1 ≠ n) (ht1m : t1 ≠ m)
+    (_ht1n : t1 ≠ n) (ht1m : t1 ≠ m)
     (hdt0 : dst ≠ t0) (hdt1 : dst ≠ t1)
     (hn : s n ≤ 1) (hm : s m < M) :
     srun k s (tcOfSignG n m dst t0 t1) dst = tcOfSign (s n) (s m) := by
@@ -70,18 +70,18 @@ theorem tcOfSignG_spec (k : Nat) (s : RegState) (n m dst t0 t1 : Nat)
   have hB : B64 = M := by decide
   simp only [tcOfSignG, srun_cons, srun_nil, sdest, sval, denoteOperand,
     denoteOp, Option.getD_some, RegState.set]
-  simp only [if_neg ht01, if_neg (Ne.symm ht01), if_neg ht0n, if_neg ht0m,
-    if_neg ht1n, if_neg ht1m, if_neg hdt0, if_neg hdt1,
-    if_neg (Ne.symm ht0n), if_neg (Ne.symm ht0m), if_neg (Ne.symm ht1n),
-    if_neg (Ne.symm ht1m), if_neg (Ne.symm hdt0), if_neg (Ne.symm hdt1),
-    if_pos rfl, if_true]
+  simp only [ite_eq_right ht01, ite_eq_right (Ne.symm ht01),
+    ite_eq_right hdt0, ite_eq_right hdt1,
+    ite_eq_right (Ne.symm ht0n), ite_eq_right (Ne.symm ht0m),
+    ite_eq_right (Ne.symm ht1m),
+    ite_true]
   unfold tcOfSign
   rcases (by omega : s n = 0 ∨ s n = 1) with h | h
-  · rw [h, if_neg (by decide : ¬((0 : Nat) = 1))]
+  · rw [h, ite_eq_right (by decide : ¬((0 : Nat) = 1))]
     simp only [Nat.mul_zero, Nat.zero_mod, Nat.zero_add, Nat.sub_zero,
       show (1 % M + M) % M = 1 by rw [hMv], Nat.mul_one,
       Nat.mod_eq_of_lt hm]
-  · rw [h, if_pos rfl, hB]
+  · rw [h, ite_eq_left rfl, hB]
     simp only [Nat.mul_one,
       show (1 % M + (M - 1)) % M = 0 by rw [hMv],
       Nat.mul_zero, Nat.zero_mod, Nat.add_zero, Nat.zero_add]
@@ -107,12 +107,12 @@ def tcSubG (a b dst : Nat) : List Instr :=
 theorem tcAddG_spec (k : Nat) (s : RegState) (a b dst : Nat) :
     srun k s (tcAddG a b dst) dst = (s a + s b) % M := by
   simp only [tcAddG, srun_cons, srun_nil, sdest, sval, denoteOperand,
-    denoteOp, Option.getD_some, RegState.set, if_pos rfl, if_true]
+    denoteOp, Option.getD_some, RegState.set, ite_true]
 
 theorem tcSubG_spec (k : Nat) (s : RegState) (a b dst : Nat) :
     srun k s (tcSubG a b dst) dst = (s a + (M - s b)) % M := by
   simp only [tcSubG, srun_cons, srun_nil, sdest, sval, denoteOperand,
-    denoteOp, Option.getD_some, RegState.set, if_pos rfl, if_true]
+    denoteOp, Option.getD_some, RegState.set, ite_true]
 
 theorem tcAddG_preserves {a b dst r : Nat} (h : dst ≠ r) :
     Preserves (tcAddG a b dst) r :=

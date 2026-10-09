@@ -80,9 +80,9 @@ theorem ceRound_quiet (c : Params) (idx : Nat) (v : Vals)
   have h9 : ¬ (idx % c.R = 9) := by omega
   have h10 : ¬ (idx % c.R = 10) := by omega
   have hact : ¬ (1 ≤ idx % c.R ∧ idx % c.R ≤ 8) := by omega
-  simp only [ceRound, if_neg h0, if_neg h9, if_neg h10, if_neg hact,
-    if_neg hlast, Nat.zero_mul, Nat.add_zero, Nat.mod_eq_of_lt hacc]
-  simp only [Nat.reduceEqDiff, reduceIte, if_pos hacc]
+  simp only [ceRound, ite_eq_right h0, ite_eq_right h9, ite_eq_right h10, ite_eq_right hact,
+    ite_eq_right hlast, Nat.zero_mul, Nat.add_zero, Nat.mod_eq_of_lt hacc]
+  simp only [Nat.reduceEqDiff, reduceIte, ite_eq_left hacc]
 
 set_option maxHeartbeats 1000000 in
 /-- **The quiet stretch.**  Rounds `a … a+m−1` of block `j`, with
@@ -136,14 +136,14 @@ theorem ceRound_zero (c : Params) (idx q : Nat) (v : Vals)
   have h10 : ¬ ((0 : Nat) = 10) := by decide
   have hact : ¬ ((1 : Nat) ≤ 0 ∧ (0 : Nat) ≤ 8) := by decide
   by_cases hb : v.pk * 2 ≤ c.lo + q
-  · simp only [ceRound, hq, hrr, if_neg hlast, if_neg h9, if_neg h10,
-      if_neg hact, if_pos hb, Nat.reduceEqDiff, reduceIte,
+  · simp only [ceRound, hq, hrr, ite_eq_right hlast, ite_eq_right h9, ite_eq_right h10,
+      ite_eq_right hact, ite_eq_left hb, Nat.reduceEqDiff, reduceIte,
       Nat.one_mul, Nat.zero_mul, Nat.add_zero, Nat.mod_eq_of_lt hacc,
-      if_pos hacc, Nat.zero_or]
-  · simp only [ceRound, hq, hrr, if_neg hlast, if_neg h9, if_neg h10,
-      if_neg hact, if_neg hb, Nat.reduceEqDiff, reduceIte,
+      ite_eq_left hacc, Nat.zero_or]
+  · simp only [ceRound, hq, hrr, ite_eq_right hlast, ite_eq_right h9, ite_eq_right h10,
+      ite_eq_right hact, ite_eq_right hb, Nat.reduceEqDiff, reduceIte,
       Nat.one_mul, Nat.zero_mul, Nat.add_zero, Nat.mod_eq_of_lt hacc,
-      if_pos hacc, Nat.zero_or]
+      ite_eq_left hacc, Nat.zero_or]
 
 
 set_option maxHeartbeats 1000000 in
@@ -164,9 +164,9 @@ theorem ceRound_sd (c : Params) (idx q rr : Nat) (v : Vals)
   have h10 : ¬ (rr = 10) := by omega
   have hlast : ¬ (rr = c.R - 1) := by omega
   have hact : (1 ≤ rr ∧ rr ≤ 8) := ⟨h1, h8⟩
-  simp only [ceRound, hq, hrr, if_neg h0, if_neg h9, if_neg h10, if_neg hlast,
-    if_pos hact, denAOf, denBOf, Nat.zero_mul, Nat.add_zero,
-    Nat.reduceEqDiff, reduceIte, Nat.mod_eq_of_lt hacc, if_pos hacc]
+  simp only [ceRound, hq, hrr, ite_eq_right h0, ite_eq_right h9, ite_eq_right h10, ite_eq_right hlast,
+    ite_eq_left hact, denAOf, denBOf, Nat.zero_mul, Nat.add_zero,
+    Nat.reduceEqDiff, reduceIte, Nat.mod_eq_of_lt hacc, ite_eq_left hacc]
 
 set_option maxHeartbeats 1000000 in
 theorem ceRound_q0 (c : Params) (idx q : Nat) (v : Vals)
@@ -183,9 +183,9 @@ theorem ceRound_q0 (c : Params) (idx q : Nat) (v : Vals)
   have h10 : ¬ ((9 : Nat) = 10) := by decide
   have hlast : ¬ ((9 : Nat) = c.R - 1) := by omega
   have hact : ¬ ((1 : Nat) ≤ 9 ∧ (9 : Nat) ≤ 8) := by decide
-  simp only [ceRound, hq, hrr, if_neg h0, if_pos rfl, if_neg h10, if_neg hlast,
-    if_neg hact, Nat.zero_mul, Nat.add_zero, Nat.reduceEqDiff, reduceIte,
-    Nat.mod_eq_of_lt hacc, if_pos hacc]
+  simp only [ceRound, hq, hrr, ite_eq_right h0, ite_eq_left rfl, ite_eq_right h10, ite_eq_right hlast,
+    ite_eq_right hact, Nat.zero_mul, Nat.add_zero, Nat.reduceEqDiff, reduceIte,
+    Nat.mod_eq_of_lt hacc, ite_eq_left hacc]
 
 set_option maxHeartbeats 1000000 in
 theorem ceRound_fin (c : Params) (idx q : Nat) (v : Vals)
@@ -210,9 +210,9 @@ theorem ceRound_fin (c : Params) (idx q : Nat) (v : Vals)
   have h9 : ¬ ((10 : Nat) = 9) := by decide
   have hlast : ¬ ((10 : Nat) = c.R - 1) := by omega
   have hact : ¬ ((1 : Nat) ≤ 10 ∧ (10 : Nat) ≤ 8) := by decide
-  simp only [ceRound, hq, hrr, if_neg h0, if_neg h9, if_pos rfl, if_neg hlast,
-    if_neg hact, Nat.zero_mul, Nat.add_zero, Nat.reduceEqDiff, reduceIte,
-    Nat.mod_eq_of_lt hacc, if_pos hacc]
+  simp only [ceRound, hq, hrr, ite_eq_right h0, ite_eq_right h9, ite_eq_left rfl, ite_eq_right hlast,
+    ite_eq_right hact, Nat.zero_mul, Nat.add_zero, Nat.reduceEqDiff, reduceIte,
+    Nat.mod_eq_of_lt hacc, ite_eq_left hacc]
 
 set_option maxHeartbeats 1000000 in
 theorem ceRound_acc (c : Params) (idx q rr : Nat) (v : Vals)
@@ -237,8 +237,8 @@ theorem ceRound_acc (c : Params) (idx q rr : Nat) (v : Vals)
   have h9 : ¬ (rr = 9) := by omega
   have h10 : ¬ (rr = 10) := by omega
   have hact : ¬ (1 ≤ rr ∧ rr ≤ 8) := by omega
-  simp only [ceRound, hq, hrr, if_neg h0, if_neg h9, if_neg h10, if_neg hact,
-    if_pos hlast, Nat.zero_mul, Nat.add_zero, Nat.one_mul,
+  simp only [ceRound, hq, hrr, ite_eq_right h0, ite_eq_right h9, ite_eq_right h10, ite_eq_right hact,
+    ite_eq_left hlast, Nat.zero_mul, Nat.add_zero, Nat.one_mul,
     Nat.reduceEqDiff, reduceIte]
 
 end LeanCompCert.Ports.CeDyadicBlock

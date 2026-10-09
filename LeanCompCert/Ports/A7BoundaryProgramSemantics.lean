@@ -53,7 +53,7 @@ theorem comparePrelude_run (r : EncodedRow) (k : Nat) (s : AState)
   rcases hlim with ⟨hl0, hl1, hl2, hl3⟩
   simp [comparePrelude, arun, astep, AState.writeReg, sdest, sval,
     denoteOperand, rX0, rX1, rX2, rY0, rY1, rY2, rY3,
-    rBorrow, rLt, rEq, rEqBorrow, EncodedRow.limit,
+    EncodedRow.limit,
     Nat.mod_eq_of_lt hn0, Nat.mod_eq_of_lt hn1, Nat.mod_eq_of_lt hn2,
     Nat.mod_eq_of_lt hl0, Nat.mod_eq_of_lt hl1,
     Nat.mod_eq_of_lt hl2, Nat.mod_eq_of_lt hl3]
@@ -177,12 +177,12 @@ private theorem finish_flag (p : Prop) [Decidable p] (viol : Nat)
       (viol + (1 + (M - (if p then 1 else 0) % M))) % M =
         viol + (1 - (if p then 1 else 0)) := by
   by_cases hp : p
-  · simp only [if_pos hp, Nat.sub_self, Nat.add_zero]
+  · simp only [ite_eq_left hp, Nat.sub_self, Nat.add_zero]
     constructor
     · exact Nat.mod_eq_of_lt (by decide)
     · rw [show 1 + (M - 1 % M) = M by decide]
       rw [Nat.add_mod_right, Nat.mod_eq_of_lt hViol]
-  · simp only [if_neg hp, Nat.zero_mod, Nat.sub_zero]
+  · simp only [ite_eq_right hp, Nat.zero_mod, Nat.sub_zero]
     constructor
     · trivial
     · rw [show viol + (1 + M) = (viol + 1) + M by omega]
@@ -275,7 +275,7 @@ theorem rowBit_eq_one_iff (r : EncodedRow)
         norm_pos_iff, zeta_pos_iff, and_assoc]
     · by_cases hnext :
           r.edge = currentEdge + 1 ∧ cursor = gridScale ∧ r.startGrid = 0
-      · simp [rowBit, EncodedRow.ValidAfter, bit, hlt, hsame, hnext,
+      · simp [rowBit, EncodedRow.ValidAfter, bit, hlt, hnext,
           norm_pos_iff, zeta_pos_iff, and_assoc]
       · simp [rowBit, EncodedRow.ValidAfter, bit, hlt, hsame, hnext,
           norm_pos_iff, zeta_pos_iff, and_assoc]
@@ -347,7 +347,7 @@ theorem guardBody_run (r : EncodedRow) (k currentEdge cursor compare viol : Nat)
   rcases Nat.le_one_iff_eq_zero_or_eq_one.mp hCompareLe with rfl | rfl
   all_goals
   simp [guardBody, gate, arun, astep, AState.writeReg, sdest, sval,
-    denoteOperand, denoteOp, rowBit, bit, hEdge', hCursor', hCompare', hViol',
+    denoteOperand, denoteOp.eq_def, rowBit.eq_def, bit.eq_def, hEdge', hCursor', hCompare', hViol',
     Nat.mod_eq_of_lt hREdgeM, Nat.mod_eq_of_lt hDepthM,
     Nat.mod_eq_of_lt hIndexM, Nat.mod_eq_of_lt hn0,
     Nat.mod_eq_of_lt hn1, Nat.mod_eq_of_lt hn2,
@@ -355,15 +355,13 @@ theorem guardBody_run (r : EncodedRow) (k currentEdge cursor compare viol : Nat)
     Nat.mod_eq_of_lt hz1, Nat.mod_eq_of_lt hz2,
     Nat.mod_eq_of_lt hZSM, Nat.mod_eq_of_lt hStartM,
     Nat.mod_eq_of_lt hFinishM, Nat.mod_eq_of_lt hPowM,
-    Nat.mod_eq_of_lt hEdgeM, Nat.mod_eq_of_lt hEdgeSuccM,
-    Nat.mod_eq_of_lt hCursorM,
-    Nat.mod_eq_of_lt hCompareM, Nat.mod_eq_of_lt hBadM,
-    Nat.mod_eq_of_lt hNewM, Nat.mod_eq_of_lt hViolM,
-    Nat.mod_eq_of_lt hViolOnlyM,
-    h4M, h17M, h178M, h182M, h196M, h198M, hGridM, h131072M,
-    rCurrentEdge, rCursor, rViol, rOK, rFlag, rA, rB, rC, rD,
-    rBorrow, rLt, rEq, rEqBorrow, gridDepth, gridScale,
-    and_assoc, or_assoc]
+    Nat.mod_eq_of_lt hEdgeSuccM,
+    Nat.mod_eq_of_lt hCompareM,
+    Nat.mod_eq_of_lt hViolM,
+    h4M, h17M, h178M, h182M, h196M, h198M, h131072M,
+    rCurrentEdge.eq_def, rCursor.eq_def, rViol.eq_def, rOK.eq_def, rFlag.eq_def, rA.eq_def, rB.eq_def, rC.eq_def, rD.eq_def,
+    rBorrow.eq_def, gridDepth.eq_def, gridScale.eq_def,
+    and_assoc]
   try exact finish_flag _ viol hViolOnlyM hViolM
 
 /-- One literal emitted row advances the source cursor and adds exactly one
@@ -530,7 +528,7 @@ theorem epilogueAt_run (k edge cursor viol finalEdge finalCursor : Nat)
     (hEdge : s.regs rCurrentEdge = edge)
     (hCursor : s.regs rCursor = cursor)
     (hViol : s.regs rViol = viol)
-    (hEdgeM : edge < M) (hCursorM : cursor < M)
+    (_hEdgeM : edge < M) (_hCursorM : cursor < M)
     (hFinalEdgeM : finalEdge < M) (hFinalCursorM : finalCursor < M)
     (hCapacity : viol + 2 < M) :
     (arun k s (epilogueAt finalEdge finalCursor)).regs rViol =
@@ -547,9 +545,8 @@ theorem epilogueAt_run (k edge cursor viol finalEdge finalCursor : Nat)
   all_goals
     simp [epilogueAt, endpointFailures, bit, arun, astep, AState.writeReg,
       sdest, sval, denoteOperand, denoteOp, hEdge', hCursor', hViol', he, hc,
-      Nat.mod_eq_of_lt hEdgeM, Nat.mod_eq_of_lt hCursorM,
       Nat.mod_eq_of_lt hFinalEdgeM, Nat.mod_eq_of_lt hFinalCursorM,
-      hFinalEdgeMod, hFinalCursorMod, Nat.mod_eq_of_lt hViolM,
+      Nat.mod_eq_of_lt hViolM,
       Nat.mod_eq_of_lt hViolOneM, Nat.mod_eq_of_lt hCapacity,
       rCurrentEdge, rCursor, rViol, rA]
   all_goals simp [hEdge', hCursor', hViol', he, hc, hFinalEdgeMod,

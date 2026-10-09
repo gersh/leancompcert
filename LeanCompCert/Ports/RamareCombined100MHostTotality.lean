@@ -104,7 +104,7 @@ theorem divRegI_shape (r : Nat) (i : Instr) (h : DivRegI r i = true) :
   | mov d src => left; rfl
   | binop d op a rhs =>
       by_cases hop : op = .udiv ∨ op = .urem
-      · simp only [DivRegI, if_pos hop, beq_iff_eq] at h
+      · simp only [DivRegI, ite_eq_left hop, beq_iff_eq] at h
         subst rhs
         exact ⟨d, op, a, rfl, hop⟩ |> Or.inr
       · left

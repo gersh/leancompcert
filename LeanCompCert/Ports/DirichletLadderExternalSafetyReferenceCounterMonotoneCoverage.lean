@@ -23,7 +23,7 @@ theorem historicalHeightFlag_machine_bounds
       hv (by rfl) ?_ hNoWrap
   simp [historicalHeightFlagPrefix, historicalHeightFlag_eq_source,
     bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg]
   split <;> simp
 
@@ -51,7 +51,7 @@ theorem historicalCoverageBlock_machine_bounds
     historicalCoverageFive_eq, historicalCoverageQ_eq,
     historicalCoverageCmp_eq, historicalCoverageGate_eq,
     bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg]
   repeat' first | split | simp [hgateMod]
   all_goals omega
@@ -79,7 +79,7 @@ theorem historicalOvershootBlock_machine_bounds
     historicalOvershootQ_eq, historicalOvershootCmp_eq,
     historicalOvershootGate_eq, bo, arun, astep,
     LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg]
   repeat' first | split | simp [hgateMod]
   all_goals omega

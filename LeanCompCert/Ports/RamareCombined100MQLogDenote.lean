@@ -105,7 +105,7 @@ theorem qLogDerivedLower_run (k : Nat) (s : AState)
       sShapePE, rPHi, rLogLPre, hpMul, hlogDiv, hle,
       Nat.mod_eq_of_lt hpMul, Nat.mod_eq_of_lt hlogDiv,
       sub_mod_ge, h16, hpow, hpMulMod, hlogMod]
-    rw [if_pos (by simpa only [sShapePE, rPHi, rLogLPre] using hle),
+    rw [ite_eq_left (by simpa only [sShapePE, rPHi, rLogLPre] using hle),
       Nat.mul_one]
     exact sub_mod_ge
       (by simpa only [sShapePE, rPHi, rLogLPre] using hle)
@@ -122,7 +122,7 @@ theorem qLogDerivedLower_run (k : Nat) (s : AState)
       sShapePE, rPHi, rLogLPre, hpMul, hlogDiv, hle, hlt,
       Nat.mod_eq_of_lt hpMul, Nat.mod_eq_of_lt hlogDiv,
       h16, hpow, hpMulMod, hlogMod, hsub]
-    rw [if_neg (by
+    rw [ite_eq_right (by
       simpa only [sShapePE, rPHi, rLogLPre] using Nat.not_le_of_lt hlt)]
     have hsub' : s.regs 316 / 65536 - s.regs 101 * s.regs 326 = 0 := by
       simpa only [sShapePE, rPHi, rLogLPre] using hsub
@@ -163,7 +163,7 @@ theorem qLogDerivedUpper_run (k : Nat) (s : AState)
       Nat.mod_eq_of_lt hlogAdd, Nat.mod_eq_of_lt hpMul,
       Nat.mod_eq_of_lt hlogDiv, sub_mod_ge, h16, hpow,
       hlogAddMod, hpMulMod, hlogMod]
-    rw [if_pos (by simpa only [sShapePE, rPLo, rLogUPre] using hle),
+    rw [ite_eq_left (by simpa only [sShapePE, rPLo, rLogUPre] using hle),
       Nat.mul_one]
     exact sub_mod_ge
       (by simpa only [sShapePE, rPLo, rLogUPre] using hle)
@@ -182,7 +182,7 @@ theorem qLogDerivedUpper_run (k : Nat) (s : AState)
       Nat.mod_eq_of_lt hlogAdd, Nat.mod_eq_of_lt hpMul,
       Nat.mod_eq_of_lt hlogDiv, h16, hpow, hlogAddMod, hpMulMod,
       hlogMod, hsub]
-    rw [if_neg (by
+    rw [ite_eq_right (by
       simpa only [sShapePE, rPLo, rLogUPre] using Nat.not_le_of_lt hlt)]
     have hsub' : (s.regs 317 + 65535) / 65536 -
         s.regs 101 * s.regs 325 = 0 := by

@@ -167,7 +167,7 @@ theorem sqfC1_spec (cf : SqfCfg) (idx : Nat) (s : RegState)
       rw [this, Nat.mod_self]
   simp only [sqfC1, srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, reduceIte, reduceCtorEq, Nat.reduceEqDiff,
-    if_true, hRm, hDm, hAm, h1M, hsub]
+    ite_true, hRm, hDm, hAm, h1M, hsub]
   refine ⟨by trivial, by trivial, by trivial, by trivial, by trivial, by trivial,
     by trivial, ?_⟩
   simp only [sqfAccOf]
@@ -175,8 +175,8 @@ theorem sqfC1_spec (cf : SqfCfg) (idx : Nat) (s : RegState)
     refine Nat.mod_eq_of_lt ?_
     rcases (by omega : s 3 = 0 ∨ s 3 = 1) with h | h <;> rw [h] <;> omega
   by_cases hl : s 6 = cf.base.rounds - 1
-  · simp only [if_pos hl, Nat.one_mul, e1, hAm]
-  · simp only [if_neg hl, Nat.zero_mul, Nat.zero_mod, Nat.add_zero,
+  · simp only [ite_eq_left hl, Nat.one_mul, e1, hAm]
+  · simp only [ite_eq_right hl, Nat.zero_mul, Nat.zero_mod, Nat.add_zero,
       Nat.sub_zero]
 
 #print axioms sqfC1_spec
@@ -248,7 +248,7 @@ theorem sqfCore_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
   have eA : srun k s coreA 42 = up32 (s 40) := by
     simp only [coreA, srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
       Option.getD_some, RegState.set, reduceIte, reduceCtorEq,
-      Nat.reduceEqDiff, if_true]
+      Nat.reduceEqDiff, ite_true]
     rw [show (31 : Nat) % M = 31 by decide, Nat.mod_eq_of_lt hfit,
       show (5 : Nat) % M = 5 by decide, up32]
     exact Nat.mod_eq_of_lt (by have := shiftr_le (s 40 + 31) 5; omega)
@@ -357,13 +357,13 @@ theorem sqfPre1_spec (cf : SqfCfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M
     by_cases h1 : j = 31
     · subst h1; simpa [RegState.set] using Nat.mod_lt _ M_pos
     · by_cases h0 : j = 30
-      · subst h0; simpa [RegState.set, if_neg h1] using Nat.mod_lt _ M_pos
-      · simpa [RegState.set, if_neg h1, if_neg h0] using hs j
+      · subst h0; simpa [RegState.set, ite_eq_right h1] using Nat.mod_lt _ M_pos
+      · simpa [RegState.set, ite_eq_right h1, ite_eq_right h0] using hs j
   have hsplit : srun k s (sqfPre1 cf)
       = srun k ((s.set 30 (cf.base.bias % M)).set 31 (cf.K % M))
           (tsubG 1 30 40 68 69) := by
     simp only [sqfPre1, srun_cons, srun_nil, srun_append, sdest, sval,
-      denoteOperand, if_true]
+      denoteOperand, ite_true]
   have e1 : ((s.set 30 (cf.base.bias % M)).set 31 (cf.K % M)) 1 = s 1 := by
     simp [RegState.set]
   have e30 : ((s.set 30 (cf.base.bias % M)).set 31 (cf.K % M)) 30
@@ -395,17 +395,17 @@ theorem sqfPre2_spec (cf : SqfCfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M
     by_cases h1 : j = 31
     · subst h1; simpa [RegState.set] using Nat.mod_lt _ M_pos
     · by_cases h2 : j = 33
-      · subst h2; simpa [RegState.set, if_neg h1] using Nat.mod_lt _ M_pos
+      · subst h2; simpa [RegState.set, ite_eq_right h1] using Nat.mod_lt _ M_pos
       · by_cases h3 : j = 32
         · subst h3
-          simpa [RegState.set, if_neg h1, if_neg h2] using Nat.mod_lt _ M_pos
-        · simpa [RegState.set, if_neg h1, if_neg h2, if_neg h3] using hs j
+          simpa [RegState.set, ite_eq_right h1, ite_eq_right h2] using Nat.mod_lt _ M_pos
+        · simpa [RegState.set, ite_eq_right h1, ite_eq_right h2, ite_eq_right h3] using hs j
   have hsplit : srun k s (sqfPre2 cf)
       = srun k (((s.set 32 (cf.W % M)).set 33 ((s 9 + cf.W % M) % M)).set 31
           (cf.K % M)) (tsubG 33 1 40 68 69) := by
     simp only [sqfPre2, srun_cons, srun_nil, srun_append, sdest, sval,
       denoteOperand, denoteOp, Option.getD_some, reduceIte, reduceCtorEq,
-      Nat.reduceEqDiff, if_true]
+      Nat.reduceEqDiff, ite_true]
     rfl
   have e1 : (((s.set 32 (cf.W % M)).set 33 ((s 9 + cf.W % M) % M)).set 31
       (cf.K % M)) 1 = s 1 := by simp [RegState.set]
@@ -513,13 +513,13 @@ theorem sqfRowG_spec (cf : SqfCfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M
     intro j
     by_cases h : j = 48
     · subst h; simpa [RegState.set] using hAlt 47
-    · simpa [RegState.set, if_neg h] using hAlt j
+    · simpa [RegState.set, ite_eq_right h] using hAlt j
   have hB1 : ((srun k s (sqfPart1 cf)).set 48
       (srun k s (sqfPart1 cf) 47)) 1 = s 1 := by
-    simp only [RegState.set, if_neg (by decide : ¬ (1 = 48))]; exact hA1
+    simp only [RegState.set, ite_eq_right (by decide : ¬ (1 = 48))]; exact hA1
   have hB9 : ((srun k s (sqfPart1 cf)).set 48
       (srun k s (sqfPart1 cf) 47)) 9 = s 9 := by
-    simp only [RegState.set, if_neg (by decide : ¬ (9 = 48))]; exact hA9
+    simp only [RegState.set, ite_eq_right (by decide : ¬ (9 = 48))]; exact hA9
   have hB48 : ((srun k s (sqfPart1 cf)).set 48
       (srun k s (sqfPart1 cf) 47)) 48
       = srun k s (sqfPart1 cf) 47 := by simp [RegState.set]
@@ -549,7 +549,7 @@ theorem sqfRowG_spec (cf : SqfCfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M
       srun k t [ .binop 49 .mul (.reg 48) (.reg 47) ] 49 = (t 48 * t 47) % M := by
     intro t
     simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
-      Option.getD_some, RegState.set, reduceIte, if_true]
+      Option.getD_some, RegState.set, reduceIte, ite_true]
   rw [hsplit, hB, hfin, hC48, hc2, hc1, sqfPass, and_bit]
   simp only [decide_eq_true_eq]
   refine Nat.mod_eq_of_lt ?_
@@ -625,7 +625,7 @@ theorem sqfFlagG_spec (cf : SqfCfg) (idx : Nat) (s : RegState)
       decide
   unfold sqfFail
   simp only [sqfFlagG, srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
-    Option.getD_some, RegState.set, if_true, reduceIte, reduceCtorEq,
+    Option.getD_some, RegState.set, ite_true, reduceIte, reduceCtorEq,
     Nat.reduceEqDiff, h49, hlow', hax', ham', h1c, h0c, hb1, hb0]
   have e0 : s 0 = 0 ∨ s 0 = 1 := by omega
   have e22 : s 22 = 0 ∨ s 22 = 1 := by omega

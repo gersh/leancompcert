@@ -421,24 +421,24 @@ private theorem powerBlock_ok : powerBlock.all instrOK = true := by
   simp only [powerBlock, List.all_append, List.all_cons, List.all_nil,
     List.all_flatMap, Bool.and_eq_true]
   refine ⟨⟨?_, ?_, trivial⟩, ?_⟩
-  · simp +decide [instrOK, operandOK, wmRegCount, rM, rP]
-  · simp +decide [instrOK, operandOK, wmRegCount, rPow, rM, rN]
+  · simp +decide []
+  · simp +decide []
   · rw [List.all_eq_true]
     intro x _
-    simp +decide [powerRound, instrOK, operandOK, wmRegCount, rM, rP, rN,
-      rT1, rPow]
+    simp +decide [
+      ]
 
 theorem wmPre_ok (c : Cfg) : (wmPre c).all instrOK = true := by
   simp only [wmPre, List.all_append, Bool.and_eq_true]
   refine ⟨⟨⟨⟨?_, ?_⟩, ?_⟩, powerBlock_ok⟩, ?_⟩ <;>
-    simp +decide [decodeBlock, scanBlock, selectBlock, lambdaPre, instrOK,
-      operandOK, wmRegCount, rBad, rAcc, rL, rS, rN, rR, rD, rG, rT1, rT2,
-      rM, rP, rIsP, rPow, rLam, rC, rT3, rLow, rIU]
+    simp +decide [decodeBlock, selectBlock, instrOK,
+      operandOK, rS, rN, rR, rD, rT1, rT2,
+      rP, rIsP, rC]
 
 theorem wmPost_ok (c : Cfg) : (wmPost c).all instrOK = true := by
   simp +decide [wmPost, lambdaPost, accBlock, capBlock, rowBlock,
-    ladderBlock, resetBlock, List.all_append, instrOK, operandOK,
-    wmRegCount, rBad, rAcc, rL, rS, rN, rR, rD, rG, rT1, rT2, rM, rP,
+    ladderBlock, resetBlock, instrOK, operandOK,
+    rBad, rAcc, rL, rS, rN, rT1, rT2,
     rIsP, rPow, rLam, rC, rT3, rLow, rIU]
 
 theorem wmBody_wf (c : Cfg) : ∀ a ∈ wmBody c, a.WF wmRegCount := by
@@ -453,7 +453,7 @@ theorem wmInit_wf (c : Cfg) : ∀ a ∈ wmInit c, a.WF wmRegCount := by
   intro a ha
   rcases List.mem_append.mp ha with h | h
   · refine lift_wf ?_ a h
-    simp +decide [instrOK, operandOK, wmRegCount, rAcc, rL]
+    simp +decide [instrOK, operandOK, rAcc, rL]
   · obtain ⟨e, _, he⟩ := List.mem_flatMap.mp h
     simp only [List.mem_cons, List.not_mem_nil, or_false] at he
     rcases he with rfl | rfl | rfl
@@ -503,14 +503,14 @@ theorem lambdaPost_acc_cap_row_defined (c : Cfg) (len k : Nat) (s : AState) :
     AllDefined len k s
       (lift (lambdaPost ++ accBlock ++ capBlock c ++ rowBlock c)) := by
   refine allDefined_lift_of_noDiv len k _ s ?_
-  simp +decide [lambdaPost, accBlock, capBlock, rowBlock, List.all_append,
+  simp +decide [lambdaPost, accBlock, capBlock, rowBlock,
     InstrBlock.NoDivI]
 
 /-- **The reset stage is defined, unconditionally.** -/
 theorem resetBlock_defined (len k : Nat) (s : AState) :
     AllDefined len k s (lift resetBlock) := by
   refine allDefined_lift_of_noDiv len k _ s ?_
-  simp +decide [resetBlock, InstrBlock.NoDivI]
+  simp +decide []
 
 /-! ## The loop invariant
 
@@ -613,7 +613,7 @@ theorem decodeBlock_defined (c : Cfg) (k : Nat) (s : AState) (hBM : c.B < M)
   have hbne : ¬ (c.B % M = 0) := by rw [Nat.mod_eq_of_lt hBM]; omega
   rw [allDefined_lift]
   refine ⟨?_, ?_, ?_, ?_, trivial⟩ <;>
-    simp [decodeBlock, InstrBlock.SDefined, InstrBlock.sdest, InstrBlock.sval,
+    simp [InstrBlock.SDefined, InstrBlock.sdest, InstrBlock.sval,
       denoteOperand, denoteOp, hbne]
 
 /-! ### The other two partial stages
@@ -1006,12 +1006,12 @@ private theorem select_rP_of_ne (k : Nat) (u : RegState) (c : Cfg)
   have hisp2 : srun k u [sel0 c, sel1] rIsP = 0 := by
     rw [show ([sel0 c, sel1] : List Instr) = [sel0 c] ++ sel1 :: [] from rfl,
       srun_read_write k rIsP [sel0 c] sel1 [] rfl rfl, sel_isP_val k u c,
-      if_neg h0]
+      ite_eq_right h0]
   have hisp4 : srun k u [sel0 c, sel1, sel2, sel3] rIsP = 0 := by
     rw [show ([sel0 c, sel1, sel2, sel3] : List Instr)
         = [sel0 c] ++ sel1 :: [sel2, sel3] from rfl,
       srun_read_write k rIsP [sel0 c] sel1 [sel2, sel3] rfl rfl, sel_isP_val k u c,
-      if_neg h0]
+      ite_eq_right h0]
   have hsub : (denoteOp .sub 1 (0 : Nat)).getD 0 = 1 := by
     rw [denoteOp_sub_of_le (Nat.zero_le 1) hM1]
     rfl
@@ -1077,7 +1077,7 @@ theorem load_index_lt (c : Cfg) (k : Nat) (u : RegState) (hS : u rS < M)
   unfold lp0
   rw [sval_binop, denoteOperand_lit_of_lt _ _ hM1, denoteOperand_reg, hvIsP]
   by_cases h0 : u rS = 0
-  · rw [if_pos h0, hsub1,
+  · rw [ite_eq_left h0, hsub1,
       denoteOp_mul_of_lt (show 0 * srun k u (selectBlock c ++ powerBlock) rP < M by
         rw [Nat.zero_mul]; exact M_pos)]
     show 0 * srun k u (selectBlock c ++ powerBlock) rP < c.tableLen
@@ -1086,7 +1086,7 @@ theorem load_index_lt (c : Cfg) (k : Nat) (u : RegState) (hS : u rS < M)
   · have hvP : srun k u (selectBlock c ++ powerBlock) rP = u rS := by
       rw [srun_frame_append k rP (selectBlock c) powerBlock rfl]
       exact select_rP_of_ne k u c hS h0
-    rw [if_neg h0, hsub0, hvP, denoteOp_mul_of_lt (show 1 * u rS < M by omega)]
+    rw [ite_eq_right h0, hsub0, hvP, denoteOp_mul_of_lt (show 1 * u rS < M by omega)]
     show 1 * u rS < c.tableLen
     rw [Nat.one_mul]
     omega
@@ -1144,7 +1144,7 @@ theorem wmPost_sdefined (c : Cfg) (k : Nat) (w : RegState) (h2 : 2 ≤ w rN)
   refine sAllDefined_append (sAllDefined_append ?_ ?_) ?_
   · refine sAllDefined_of_noDiv k _ _ ?_
     simp +decide [wmPostHead, lambdaPost, accBlock, capBlock, rowBlock,
-      List.all_append, InstrBlock.NoDivI]
+      InstrBlock.NoDivI]
   · exact ladderBlock_defined k _ (by rw [hframe]; exact h2) (by rw [hframe]; exact hM)
   · exact sAllDefined_of_noDiv k _ _ (by decide)
 
@@ -1355,9 +1355,9 @@ private theorem denoteOp_mul_bit (p q : Prop) [Decidable p] [Decidable q] :
       = some (if p ∧ q then 1 else 0) := by
   by_cases hp : p
   · by_cases hq : q
-    · rw [if_pos hp, if_pos hq, if_pos (⟨hp, hq⟩ : p ∧ q)]; rfl
-    · rw [if_pos hp, if_neg hq, if_neg (show ¬(p ∧ q) from fun h => hq h.2)]; rfl
-  · rw [if_neg hp, if_neg (show ¬(p ∧ q) from fun h => hp h.1)]
+    · rw [ite_eq_left hp, ite_eq_left hq, ite_eq_left (⟨hp, hq⟩ : p ∧ q)]; rfl
+    · rw [ite_eq_left hp, ite_eq_right hq, ite_eq_right (show ¬(p ∧ q) from fun h => hq h.2)]; rfl
+  · rw [ite_eq_right hp, ite_eq_right (show ¬(p ∧ q) from fun h => hp h.1)]
     show some ((0 * _) % M) = _
     rw [Nat.zero_mul, Nat.zero_mod]
 
@@ -1365,27 +1365,27 @@ private theorem denoteOp_bor_bit (p q : Prop) [Decidable p] [Decidable q] :
     denoteOp .bor (if p then 1 else 0) (if q then 1 else 0)
       = some (if p ∨ q then 1 else 0) := by
   by_cases hp : p <;> by_cases hq : q
-  · rw [if_pos hp, if_pos hq, if_pos (Or.inl hp)]; rfl
-  · rw [if_pos hp, if_neg hq, if_pos (Or.inl hp)]; rfl
-  · rw [if_neg hp, if_pos hq, if_pos (Or.inr hq)]; rfl
-  · rw [if_neg hp, if_neg hq, if_neg (show ¬(p ∨ q) from fun h => h.elim hp hq)]; rfl
+  · rw [ite_eq_left hp, ite_eq_left hq, ite_eq_left (Or.inl hp)]; rfl
+  · rw [ite_eq_left hp, ite_eq_right hq, ite_eq_left (Or.inl hp)]; rfl
+  · rw [ite_eq_right hp, ite_eq_left hq, ite_eq_left (Or.inr hq)]; rfl
+  · rw [ite_eq_right hp, ite_eq_right hq, ite_eq_right (show ¬(p ∨ q) from fun h => h.elim hp hq)]; rfl
 
 /-- Flag negation, as the machine writes it (`1 − g`). -/
 private theorem denoteOp_sub_one_bit (p : Prop) [Decidable p] :
     denoteOp .sub 1 (if p then 1 else 0) = some (if p then 0 else 1) := by
   by_cases hp : p
-  · rw [if_pos hp, if_pos hp]
+  · rw [ite_eq_left hp, ite_eq_left hp]
     exact denoteOp_sub_of_le (Nat.le_refl 1) (by decide)
-  · rw [if_neg hp, if_neg hp]
+  · rw [ite_eq_right hp, ite_eq_right hp]
     exact denoteOp_sub_of_le (Nat.zero_le 1) (by decide)
 
 /-- Gating a word by a flag on the left. -/
 private theorem denoteOp_gate_left (p : Prop) [Decidable p] {x : Nat} (hx : x < M) :
     denoteOp .mul (if p then 1 else 0) x = some (if p then x else 0) := by
   by_cases hp : p
-  · rw [if_pos hp, if_pos hp, denoteOp_mul_of_lt (by rw [Nat.one_mul]; exact hx),
+  · rw [ite_eq_left hp, ite_eq_left hp, denoteOp_mul_of_lt (by rw [Nat.one_mul]; exact hx),
       Nat.one_mul]
-  · rw [if_neg hp, if_neg hp]
+  · rw [ite_eq_right hp, ite_eq_right hp]
     show some ((0 * x) % M) = _
     rw [Nat.zero_mul, Nat.zero_mod]
 
@@ -1393,9 +1393,9 @@ private theorem denoteOp_gate_left (p : Prop) [Decidable p] {x : Nat} (hx : x < 
 private theorem denoteOp_gate_right (p : Prop) [Decidable p] {x : Nat} (hx : x < M) :
     denoteOp .mul x (if p then 1 else 0) = some (if p then x else 0) := by
   by_cases hp : p
-  · rw [if_pos hp, if_pos hp, denoteOp_mul_of_lt (by rw [Nat.mul_one]; exact hx),
+  · rw [ite_eq_left hp, ite_eq_left hp, denoteOp_mul_of_lt (by rw [Nat.mul_one]; exact hx),
       Nat.mul_one]
-  · rw [if_neg hp, if_neg hp]
+  · rw [ite_eq_right hp, ite_eq_right hp]
     show some ((x * 0) % M) = _
     rw [Nat.mul_zero, Nat.zero_mod]
 
@@ -1510,7 +1510,7 @@ private theorem scan_rS_gate (k : Nat) (s : RegState) (hS : s rS < M)
     unfold sS
     rw [sval_binop, denoteOperand_reg, denoteOperand_reg]
   rcases gate_isBit k s with hg | hg
-  · rw [if_neg (by rw [hg]; exact fun h => absurd h (by decide))]
+  · rw [ite_eq_right (by rw [hg]; exact fun h => absurd h (by decide))]
     have h1 : (denoteOp .sub 1 (0 : Nat)).getD 0 = 1 := by
       rw [denoteOp_sub_of_le (Nat.zero_le 1) hM1]
       rfl
@@ -1526,7 +1526,7 @@ private theorem scan_rS_gate (k : Nat) (s : RegState) (hS : s rS < M)
     rw [hg, h1] at hT1c
     rw [hg, h3] at hT2R0
     rw [hfinal, hT1R0, hT1R1, hT1c, h2, hT2R0, h4]
-  · rw [if_pos hg]
+  · rw [ite_eq_left hg]
     have h1 : (denoteOp .sub 1 (1 : Nat)).getD 0 = 0 := by
       rw [denoteOp_sub_of_le (Nat.le_refl 1) hM1]
       rfl
@@ -1575,17 +1575,17 @@ theorem select_rP (k : Nat) (u : RegState) (c : Cfg) (hS : u rS < M)
     (hN : u rN < M) :
     srun k u (selectBlock c) rP = (if u rS = 0 then u rN else u rS) := by
   by_cases h0 : u rS = 0
-  · rw [if_pos h0]
+  · rw [ite_eq_left h0]
     have hM1 : (1 : Nat) < M := by decide
     have hisp2 : srun k u [sel0 c, sel1] rIsP = 1 := by
       rw [show ([sel0 c, sel1] : List Instr) = [sel0 c] ++ sel1 :: [] from rfl,
         srun_read_write k rIsP [sel0 c] sel1 [] rfl rfl, sel_isP_val k u c,
-        if_pos h0]
+        ite_eq_left h0]
     have hisp4 : srun k u [sel0 c, sel1, sel2, sel3] rIsP = 1 := by
       rw [show ([sel0 c, sel1, sel2, sel3] : List Instr)
           = [sel0 c] ++ sel1 :: [sel2, sel3] from rfl,
         srun_read_write k rIsP [sel0 c] sel1 [sel2, sel3] rfl rfl,
-        sel_isP_val k u c, if_pos h0]
+        sel_isP_val k u c, ite_eq_left h0]
     have hsub : (denoteOp .sub 1 (1 : Nat)).getD 0 = 0 := by
       rw [denoteOp_sub_of_le (Nat.le_refl 1) hM1]; rfl
     have ht1_3 : srun k u [sel0 c, sel1, sel2] rT1 = 0 := by
@@ -1624,7 +1624,7 @@ theorem select_rP (k : Nat) (u : RegState) (c : Cfg) (hS : u rS < M)
     rw [sval_binop, denoteOperand_reg, denoteOperand_reg, ht1_5, ht2_5,
       denoteOp_add_of_lt (show u rN + 0 < M by omega)]
     exact Nat.add_zero _
-  · rw [if_neg h0]
+  · rw [ite_eq_right h0]
     exact select_rP_of_ne k u c hS h0
 
 /-! ### The power chain
@@ -1784,10 +1784,10 @@ section Values3
 private theorem denoteOp_gate_left' (p : Prop) [Decidable p] {x : Nat} (hx : x < M) :
     denoteOp .mul (if p then 0 else 1) x = some (if p then 0 else x) := by
   by_cases hp : p
-  · rw [if_pos hp, if_pos hp]
+  · rw [ite_eq_left hp, ite_eq_left hp]
     show some ((0 * x) % M) = _
     rw [Nat.zero_mul, Nat.zero_mod]
-  · rw [if_neg hp, if_neg hp,
+  · rw [ite_eq_right hp, ite_eq_right hp,
       denoteOp_mul_of_lt (by rw [Nat.one_mul]; exact hx), Nat.one_mul]
 
 private theorem lambdaPre_rT1 (k : Nat) (u : RegState) (P : Prop) [Decidable P]
@@ -1964,12 +1964,12 @@ private theorem denoteOp_mul_bit' (p q : Prop) [Decidable p] [Decidable q] :
     denoteOp .mul (if p then 0 else 1) (if q then 1 else 0)
       = some (if ¬ p ∧ q then 1 else 0) := by
   by_cases hp : p
-  · rw [if_pos hp, if_neg (show ¬(¬ p ∧ q) from fun h => h.1 hp)]
+  · rw [ite_eq_left hp, ite_eq_right (show ¬(¬ p ∧ q) from fun h => h.1 hp)]
     show some ((0 * _) % M) = _
     rw [Nat.zero_mul, Nat.zero_mod]
   · by_cases hq : q
-    · rw [if_neg hp, if_pos hq, if_pos (⟨hp, hq⟩ : ¬ p ∧ q)]; rfl
-    · rw [if_neg hp, if_neg hq, if_neg (show ¬(¬ p ∧ q) from fun h => hq h.2)]; rfl
+    · rw [ite_eq_right hp, ite_eq_left hq, ite_eq_left (⟨hp, hq⟩ : ¬ p ∧ q)]; rfl
+    · rw [ite_eq_right hp, ite_eq_right hq, ite_eq_right (show ¬(¬ p ∧ q) from fun h => hq h.2)]; rfl
 
 /-! #### λ -/
 
@@ -2215,7 +2215,7 @@ theorem rowBlock_rBad (k : Nat) (z : RegState) (c : Cfg) (commit : Prop)
     unfold rwD
     rw [srun_read_last k rT2 rwC rw3 rfl, hDv]
     by_cases hx : z rAcc * 2500 % M < z rN * z rN % M * 20016 % M <;>
-      simp [hx] <;> omega
+      simp [] <;> omega
   have hE : srun k z (rwE c) rLow = (if c.lower ≤ z rN then 1 else 0) := by
     unfold rwE
     rw [srun_read_last k rLow rwD (rw4 c) rfl]
@@ -2261,7 +2261,7 @@ theorem rowBlock_rBad (k : Nat) (z : RegState) (c : Cfg) (commit : Prop)
     by_cases h1 : commit <;>
       by_cases h2 : c.lower ≤ z rN <;>
       by_cases h3 : (z rAcc * 2500 % M < z rN * z rN % M * 20016 % M) <;>
-      simp [h1, h2, h3]
+      simp [h1, h2]
   rw [rowBlock_eq, srun_read_last k rBad (rwG c) rw7 rfl]
   unfold rw7
   rw [sval_binop, denoteOperand_reg, denoteOperand_reg, hG,
@@ -2543,7 +2543,7 @@ theorem wmPost_vals (c : Cfg) (k : Nat) (w : RegState)
     (hlam : lam = if isP then L else (if pw then w rT3 else 0))
     (haddend : addend = ((((lam >>> 20) + 1) * n % M) >>> 24) + 1)
     (hacc' : acc' = (acc + (if commit then addend else 0)) % M)
-    (hLM : L < M) (hT3M : w rT3 < M) (hAccM : acc < M) (hSM : S < M)
+    (hLM : L < M) (hT3M : w rT3 < M) (_hAccM : acc < M) (hSM : S < M)
     (h2 : 2 ≤ n) (hn25 : n ≤ 2 ^ 25) (hcapM : c.capA < M) (hlowM : c.lower < M) :
     srun k w (wmPost c) rAcc = acc' ∧
     srun k w (wmPost c) rBad =
@@ -2731,12 +2731,12 @@ private theorem wmBody_arun (c : Cfg) (k : Nat) (s : AState) :
 private theorem set_ne {u : RegState} {v j : Nat} (h : j ≠ rT3) :
     RegState.set u rT3 v j = u j := by
   show (if j = rT3 then v else u j) = u j
-  rw [if_neg h]
+  rw [ite_eq_right h]
 
 private theorem set_self {u : RegState} {v : Nat} :
     RegState.set u rT3 v rT3 = v := by
   show (if rT3 = rT3 then v else u rT3) = v
-  rw [if_pos rfl]
+  rw [ite_eq_left rfl]
 
 /-- **The body computes `wmRound`.**  Every register of the 137 instructions is
 accounted for: the four that survive an iteration by their values, the other
@@ -2804,7 +2804,7 @@ theorem wmBody_obs (c : Cfg) (hok : wmOK c = true) (k : Nat)
              then seedAt c (if sOf c k (s.regs rS) = 0 then 0
                             else pOf c k (s.regs rS)) else 0)) := by
     unfold lamOf
-    by_cases h : sOf c k (s.regs rS) = 0 <;> simp [h, nOf]
+    by_cases h : sOf c k (s.regs rS) = 0 <;> simp [h, nOf] <;> rfl
   rw [wmBody_arun]
   have hwN : RegState.set (srun k s.regs (wmPre c)) rT3
       (s.arr (srun k s.regs (wmPre c) rT2)) rN = k / c.B + c.n0 := by
@@ -2918,7 +2918,7 @@ private theorem block_prefix (c : Cfg) (q bad acc L : Nat) (hB : 0 < c.B)
       rw [spfPart_succ]
       unfold wmRound wmAcc sOf dOf nOf
       rw [hmod, hdiv]
-      simp only [hne, false_and, if_false, Nat.add_zero,
+      simp only [hne, false_and, ite_false, Nat.add_zero,
         Nat.mod_eq_of_lt hbadM, Nat.mod_eq_of_lt haccM, Nat.mod_eq_of_lt hLM]
 
 /-- **One block of `B` rounds is one candidate.**  The statement mentions no
@@ -2951,8 +2951,8 @@ theorem block_eq_wmStep (c : Cfg) (q bad acc L : Nat) (hB : 0 < c.B)
       = spfIn c.B (c.n0 + q) := by
     rw [hspf0 (c.B - 1) (by omega), hnq]
   unfold wmRound wmAcc lamOf pOf sOf dOf nOf
-  rw [hmod, hdiv, if_pos rfl, hspf, hnq]
-  simp only [true_and, if_true]
+  rw [hmod, hdiv, ite_eq_left rfl, hspf, hnq]
+  simp only [true_and, ite_true]
   unfold wmStep addendOf
   simp only []
   have hb1 : ∀ (x y : Nat), x ≤ 1 → y ≤ 1 →
@@ -3108,8 +3108,8 @@ private theorem find?_snoc_none {α : Type _} {p : α → Bool} {a : α} :
       intro _
       show ([a] : List α).find? p = _
       by_cases ha : p a
-      · rw [List.find?_cons_of_pos ha, if_pos ha]
-      · rw [List.find?_cons_of_neg ha, if_neg ha]; rfl
+      · rw [List.find?_cons_of_pos ha, ite_eq_left ha]
+      · rw [List.find?_cons_of_neg ha, ite_eq_right ha]; rfl
   | cons b l ih =>
       intro h
       by_cases hb : p b
@@ -3153,7 +3153,7 @@ private theorem stores_arr (k : Nat) :
           rw [find?_snoc_none hfind]
           by_cases hi : e.1 = i
           · subst hi; simp
-          · rw [if_neg (fun h : i = e.1 => hi h.symm)]
+          · rw [ite_eq_right (fun h : i = e.1 => hi h.symm)]
             simp [hi]
 
 private theorem stores_regs (k : Nat) :
@@ -3165,7 +3165,7 @@ private theorem stores_regs (k : Nat) :
   | cons e l ih =>
       intro s j h1 h2
       show (arun k (arun k s (storeTriple e)) (l.flatMap storeTriple)).regs j = _
-      rw [ih _ j h1 h2, storeTriple_regs, if_neg h2, if_neg h1]
+      rw [ih _ j h1 h2, storeTriple_regs, ite_eq_right h2, ite_eq_right h1]
 
 private theorem stores_regs_lt (k : Nat) :
     ∀ (l : List (Nat × Nat)) (s : AState), (∀ j, s.regs j < M) →
@@ -3205,7 +3205,7 @@ private theorem stores_defined (c : Cfg) (k : Nat) :
           (.scalar (.mov rT2 (.lit e.2)))).regs rT1 < c.tableLen
         show (if rT1 = rT2 then e.2 % M else
           (if rT1 = rT1 then e.1 % M else s.regs rT1)) < c.tableLen
-        rw [if_neg (by decide), if_pos rfl, Nat.mod_eq_of_lt heM]
+        rw [ite_eq_right (by decide), ite_eq_left rfl, Nat.mod_eq_of_lt heM]
         exact he
       · exact ih _ (fun f hf => hall f (List.mem_cons_of_mem e hf)) hlen
 

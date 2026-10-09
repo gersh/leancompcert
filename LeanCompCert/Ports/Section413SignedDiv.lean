@@ -136,14 +136,14 @@ theorem signStage_outputs (k : Nat) (s : RegState) (hw : s rWord < M) :
     Option.getD_some, RegState.set, rSign, rNeg, rInv, rWord]
   simp only [show H63 % M = H63 by decide, show 0 % M = 0 by decide,
     show 1 % M = 1 by decide]
-  simp only [Nat.reduceEqDiff, if_false, if_true]
+  simp only [Nat.reduceEqDiff, ite_false, ite_true]
   unfold signBit
   by_cases h : H63 ≤ s 290
-  · simp only [h, if_true]
+  · simp only [h, ite_true]
     refine ⟨trivial, ?_, ?_⟩
     · simp only [Nat.zero_add]
     decide
-  · simp only [h, if_false]
+  · simp only [h, ite_false]
     refine ⟨trivial, ?_, ?_⟩
     · simp only [Nat.zero_add]
     decide
@@ -157,7 +157,7 @@ theorem magnitudeStage_output (k : Nat) (s : RegState)
   simp only [rSign, rNeg, rInv, rWord] at hsign hneg hinv hw
   simp only [magnitudeStage, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rSign, rNeg, rInv, rMag, rTmp, rWord]
-  simp only [Nat.reduceEqDiff, if_false, if_true]
+  simp only [Nat.reduceEqDiff, ite_false, ite_true]
   rw [hsign, hneg, hinv]
   unfold signBit magnitude
   by_cases h : H63 ≤ s 290
@@ -182,8 +182,8 @@ theorem quotientStage_outputs (k : Nat) (s : RegState)
   simp only [rDiv, rMag] at hd hdM hmag
   simp only [quotientStage, srun, sdest, sval, denoteOperand, denoteOp,
     RegState.set, rQ, rRem, rMag, rDiv]
-  simp only [Nat.reduceEqDiff, if_false, if_true]
-  rw [if_neg (Nat.ne_of_gt hd)]
+  simp only [Nat.reduceEqDiff, ite_false, ite_true]
+  rw [ite_eq_right (Nat.ne_of_gt hd)]
   simp only [Option.getD_some]
   have hq : s 303 / s 291 < M :=
     Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hmag
@@ -210,13 +210,13 @@ theorem ceilStage_outputs (k : Nat) (s : RegState)
   simp only [rQ, rRem] at hq hr hqc
   simp only [ceilStage, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rHasRem, rQC, rNegQ, rNegQC, rQ, rRem]
-  simp only [Nat.reduceEqDiff, if_false, if_true]
+  simp only [Nat.reduceEqDiff, ite_false, ite_true]
   simp only [show 0 % M = 0 by decide]
   by_cases hrem : s 305 = 0
   · simp [hrem, Nat.mod_eq_of_lt hq]
   · have hqc' : s 304 + 1 < M := by simpa [hrem] using hqc
-    simp only [hrem, if_false]
-    rw [if_pos hrem]
+    simp only [hrem, ite_false]
+    rw [ite_eq_left hrem]
     rw [Nat.mod_eq_of_lt hqc']
     simp only [Nat.zero_add]
     simp
@@ -248,18 +248,18 @@ private theorem ceilSelectStage_frame (k : Nat) (s : RegState) (j : Nat)
 theorem magnitude_lt (w : Nat) (hw : w < M) : magnitude w < M := by
   unfold magnitude
   by_cases h : H63 ≤ w
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     have hp : 0 < w := Nat.lt_of_lt_of_le (by decide : 0 < H63) h
     omega
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     exact hw
 
 private theorem div_add_modBit_le_self (m d : Nat) (hd : 0 < d) :
     m / d + (if m % d = 0 then 0 else 1) ≤ m := by
   by_cases hr : m % d = 0
-  · simp only [hr, if_true, Nat.add_zero]
+  · simp only [hr, ite_true, Nat.add_zero]
     exact Nat.div_le_self _ _
-  · rw [if_neg hr]
+  · rw [ite_eq_right hr]
     have hm : 0 < m := by
       cases m with
       | zero => exact absurd (Nat.zero_mod d) hr
@@ -308,10 +308,10 @@ theorem wordMagnitude_natAbs (w : Nat) (hw : w < M) :
     (decodeZ w).natAbs = magnitude w := by
   unfold decodeZ magnitude
   by_cases h : H63 ≤ w
-  · rw [if_pos h, if_neg (by omega : ¬w < H63)]
+  · rw [ite_eq_left h, ite_eq_right (by omega : ¬w < H63)]
     simp only [LeanCompCert.Verified.MulWide.B64, M] at hw ⊢
     omega
-  · rw [if_neg h, if_pos (by omega : w < H63)]
+  · rw [ite_eq_right h, ite_eq_left (by omega : w < H63)]
     simp
 
 theorem floorMag_eq_source (w d : Nat) (hw : w < M) (hd : 0 < d) :
@@ -320,14 +320,14 @@ theorem floorMag_eq_source (w d : Nat) (hw : w < M) (hd : 0 < d) :
   by_cases hsign : H63 ≤ w
   · have hneg : decodeZ w < 0 := by
       unfold decodeZ
-      rw [if_neg (by omega : ¬w < H63)]
+      rw [ite_eq_right (by omega : ¬w < H63)]
       simp only [LeanCompCert.Verified.MulWide.B64, M] at hw ⊢
       omega
     rw [zfloorDiv_neg (decodeZ w) d hneg hd, habs]
     have hadd : magnitude w + (d - 1) = magnitude w + d - 1 := by omega
     rw [hadd, ceilFormula _ d hd]
     unfold floorMag
-    rw [if_pos hsign]
+    rw [ite_eq_left hsign]
     have hceilM : magnitude w / d +
         (if magnitude w % d = 0 then 0 else 1) < M :=
       Nat.lt_of_le_of_lt (div_add_modBit_le_self _ d hd)
@@ -339,11 +339,11 @@ theorem floorMag_eq_source (w d : Nat) (hw : w < M) (hd : 0 < d) :
     rw [show LeanCompCert.Verified.MulWide.B64 = M by decide]
   · have hnonneg : 0 ≤ decodeZ w := by
       unfold decodeZ
-      rw [if_pos (by omega : w < H63)]
+      rw [ite_eq_left (by omega : w < H63)]
       omega
     rw [zfloorDiv_nonneg (decodeZ w) d hnonneg, habs]
     unfold floorMag
-    rw [if_neg hsign]
+    rw [ite_eq_right hsign]
     apply (encodeZ_natCast _ ?_).symm
     have hqM : magnitude w / d < M :=
       Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (magnitude_lt w hw)
@@ -355,12 +355,12 @@ theorem ceilMag_eq_source (w d : Nat) (hw : w < M) (hd : 0 < d) :
   by_cases hsign : H63 ≤ w
   · have hneg : decodeZ w < 0 := by
       unfold decodeZ
-      rw [if_neg (by omega : ¬w < H63)]
+      rw [ite_eq_right (by omega : ¬w < H63)]
       simp only [LeanCompCert.Verified.MulWide.B64, M] at hw ⊢
       omega
     rw [zceilDiv_neg (decodeZ w) d hneg, habs]
     unfold ceilMag
-    rw [if_pos hsign]
+    rw [ite_eq_left hsign]
     have hqM : magnitude w / d < M :=
       Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (magnitude_lt w hw)
     rw [← encodeZ_neg (((magnitude w / d : Nat) : Int))]
@@ -369,13 +369,13 @@ theorem ceilMag_eq_source (w d : Nat) (hw : w < M) (hd : 0 < d) :
     rw [show LeanCompCert.Verified.MulWide.B64 = M by decide]
   · have hnonneg : 0 ≤ decodeZ w := by
       unfold decodeZ
-      rw [if_pos (by omega : w < H63)]
+      rw [ite_eq_left (by omega : w < H63)]
       omega
     rw [zceilDiv_nonneg (decodeZ w) d hnonneg hd, habs]
     have hadd : magnitude w + (d - 1) = magnitude w + d - 1 := by omega
     rw [hadd, ceilFormula _ d hd]
     unfold ceilMag
-    rw [if_neg hsign]
+    rw [ite_eq_right hsign]
     apply (encodeZ_natCast _ ?_).symm
     have hceilM : magnitude w / d +
         (if magnitude w % d = 0 then 0 else 1) < M :=
@@ -392,10 +392,10 @@ theorem floorSource_range (w d : Nat) (hw : w < M) (hd : 0 < d) :
   have hmag : magnitude w ≤ H63 := by
     unfold magnitude
     by_cases hs : H63 ≤ w
-    · simp only [hs, if_true]
+    · simp only [hs, ite_true]
       rw [hM] at hw ⊢
       omega
-    · simp only [hs, if_false]
+    · simp only [hs, ite_false]
       omega
   by_cases ha : decodeZ w < 0
   · rw [zfloorDiv_neg (decodeZ w) d ha hd]
@@ -425,9 +425,9 @@ theorem floorSource_range (w d : Nat) (hw : w < M) (hd : 0 < d) :
     have hupper : decodeZ w < (H63 : Int) := by
       unfold decodeZ
       by_cases hs : w < H63
-      · rw [if_pos hs]
+      · rw [ite_eq_left hs]
         exact_mod_cast hs
-      · rw [if_neg hs, hB, hM]
+      · rw [ite_eq_right hs, hB, hM]
         rw [hM] at hw
         omega
     constructor
@@ -448,10 +448,10 @@ theorem ceilSource_range (w d : Nat) (hw : w < M) (hd : 0 < d) :
   have hmag : magnitude w ≤ H63 := by
     unfold magnitude
     by_cases hs : H63 ≤ w
-    · simp only [hs, if_true]
+    · simp only [hs, ite_true]
       rw [hM] at hw ⊢
       omega
-    · simp only [hs, if_false]
+    · simp only [hs, ite_false]
       omega
   by_cases ha : decodeZ w < 0
   · rw [zceilDiv_neg (decodeZ w) d ha]
@@ -482,9 +482,9 @@ theorem ceilSource_range (w d : Nat) (hw : w < M) (hd : 0 < d) :
     have hupper : decodeZ w < (H63 : Int) := by
       unfold decodeZ
       by_cases hs : w < H63
-      · rw [if_pos hs]
+      · rw [ite_eq_left hs]
         exact_mod_cast hs
-      · rw [if_neg hs, hB, hM]
+      · rw [ite_eq_right hs, hB, hM]
         rw [hM] at hw
         omega
     constructor
@@ -519,7 +519,7 @@ theorem floorSelectStage_output (k : Nat) (s : RegState)
   simp only [floorSelectStage, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rFloor, rSign, rNegQC, rTmp, rInv, rQ,
     rWord]
-  simp only [Nat.reduceEqDiff, if_false, if_true]
+  simp only [Nat.reduceEqDiff, ite_false, ite_true]
   rw [hsign, hinv]
   unfold signBit
   by_cases h : H63 ≤ s 290
@@ -536,7 +536,7 @@ theorem ceilSelectStage_output (k : Nat) (s : RegState)
   simp only [ceilSelectStage, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rCeil, rSign, rNegQ, rTmp, rInv, rQC,
     rWord]
-  simp only [Nat.reduceEqDiff, if_false, if_true]
+  simp only [Nat.reduceEqDiff, ite_false, ite_true]
   rw [hsign, hinv]
   unfold signBit
   by_cases h : H63 ≤ s 290
@@ -570,7 +570,7 @@ theorem body_defined (k : Nat) (s : RegState) (hd : 0 < s rDiv) :
     exact Nat.ne_of_gt hd2
   simp only [quotientStage, SAllDefined, SDefined, sdest, sval,
     denoteOperand, denoteOp, RegState.set]
-  simp only [rQ, rRem, rMag, rDiv, Nat.reduceEqDiff, if_false, if_true]
+  simp only [rQ, rRem, rMag, rDiv, Nat.reduceEqDiff, ite_false, ite_true]
   simp [hne]
 
 /-- The literal block computes the two branchless magnitude formulas. -/

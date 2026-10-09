@@ -40,7 +40,7 @@ private def Bdeci9 : Instr := .binop rT1 .sub (.lit 1) (.reg rZ)
 private def Bdeci10 : Instr := .binop rS .mul (.reg rS) (.reg rT1)
 private def Bdeci11 : Instr := .binop rAcc .mul (.reg rAcc) (.reg rT1)
 
-private def Bdecp0 (c : Cfg) : List Instr := []
+private def Bdecp0 (_c : Cfg) : List Instr := []
 private def Bdecp1 (c : Cfg) : List Instr := [Bdeci0 c]
 private def Bdecp2 (c : Cfg) : List Instr := [Bdeci0 c, Bdeci1 c]
 private def Bdecp3 (c : Cfg) : List Instr := [Bdeci0 c, Bdeci1 c, Bdeci2 c]
@@ -188,11 +188,11 @@ private def Bidxi4 (c : Cfg) : Instr := .binop rT1 .add (.lit (c.limit + 1)) (.r
 private def Bidxi5 : Instr := .binop rT1 .mul (.reg rC) (.reg rT1)
 private def Bidxi6 : Instr := .binop rI .add (.reg rI) (.reg rT1)
 
-private def Bidxp0 (c : Cfg) : List Instr := []
-private def Bidxp1 (c : Cfg) : List Instr := [Bidxi0]
-private def Bidxp2 (c : Cfg) : List Instr := [Bidxi0, Bidxi1]
-private def Bidxp3 (c : Cfg) : List Instr := [Bidxi0, Bidxi1, Bidxi2]
-private def Bidxp4 (c : Cfg) : List Instr := [Bidxi0, Bidxi1, Bidxi2, Bidxi3]
+private def Bidxp0 (_c : Cfg) : List Instr := []
+private def Bidxp1 (_c : Cfg) : List Instr := [Bidxi0]
+private def Bidxp2 (_c : Cfg) : List Instr := [Bidxi0, Bidxi1]
+private def Bidxp3 (_c : Cfg) : List Instr := [Bidxi0, Bidxi1, Bidxi2]
+private def Bidxp4 (_c : Cfg) : List Instr := [Bidxi0, Bidxi1, Bidxi2, Bidxi3]
 private def Bidxp5 (c : Cfg) : List Instr := [Bidxi0, Bidxi1, Bidxi2, Bidxi3, Bidxi4 c]
 private def Bidxp6 (c : Cfg) : List Instr := [Bidxi0, Bidxi1, Bidxi2, Bidxi3, Bidxi4 c, Bidxi5]
 private def Bidxp7 (c : Cfg) : List Instr := [Bidxi0, Bidxi1, Bidxi2, Bidxi3, Bidxi4 c, Bidxi5, Bidxi6]
@@ -484,7 +484,7 @@ theorem indexBlock_vals (k : Nat) (u : RegState) (hSq : u rSq ≠ 0) (hN : u rN 
   exact ⟨run_frameA ((Bidxfull c).trans (Bidxg1_7 c)) hQ1,
     run_frameA (Bidxfull c) hI7⟩
 
-theorem indexBlock_defined (k : Nat) (u : RegState) (hSq : u rSq ≠ 0) (hN : u rN < M) :
+theorem indexBlock_defined (k : Nat) (u : RegState) (hSq : u rSq ≠ 0) (_hN : u rN < M) :
     SAllDefined k u (indexBlock c) := by
   show SAllDefined k u (Bidxi0 :: [Bidxi1, Bidxi2, Bidxi3, Bidxi4 c, Bidxi5, Bidxi6])
   refine sAllDefined_cons (sDefined_udiv ?_) ?_

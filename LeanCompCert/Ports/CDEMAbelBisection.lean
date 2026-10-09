@@ -114,7 +114,7 @@ theorem step_contains (w k : Nat) (hk : 0 < k) (p : Bracket)
     (h : p.Contains (exactRoot w k)) :
     (step w k p).Contains (exactRoot w k) := by
   unfold Bracket.Contains at h ⊢
-  simp only [step, midpoint, Bracket.width]
+  simp only [step.eq_def, midpoint.eq_def, Bracket.width.eq_def]
   split
   · rename_i hp
     have hm := (pred_iff_exactRoot_le w k _ hk).mp hp
@@ -129,7 +129,7 @@ theorem step_contains (w k : Nat) (hk : 0 < k) (p : Bracket)
 
 theorem step_width (w k : Nat) (p : Bracket) :
     (step w k p).width ≤ p.width / 2 := by
-  simp only [step, midpoint, Bracket.width]
+  simp only [step.eq_def, midpoint.eq_def, Bracket.width.eq_def]
   split
   · change p.lo + (p.hi - p.lo) / 2 - p.lo ≤ (p.hi - p.lo) / 2
     simp

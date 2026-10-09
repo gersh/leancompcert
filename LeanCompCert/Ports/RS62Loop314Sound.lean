@@ -1119,25 +1119,25 @@ theorem body_zero_sound (n0 k : Nat) (s : AState)
   have hmarray : ∀ j, m.arr j < M := by simpa [hm.2.2] using harray
   have hmLogL : m.regs rLogL = s.regs rLogL :=
     frame k rLogL (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rLogL, RS62PrimeMaskLadder.rLogL,
         LeanCompCert.Ports.RamareCombined100M.LogSweep.rLogL] <;> decide)
   have hmLogU : m.regs rLogU = s.regs rLogU :=
     frame k rLogU (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rLogU, RS62PrimeMaskLadder.rLogU,
         LeanCompCert.Ports.RamareCombined100M.LogSweep.rLogU] <;> decide)
   have hmAccLo : m.regs rAccLo = s.regs rAccLo :=
     frame k rAccLo (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rAccLo] <;> decide)
   have hmAccHi : m.regs rAccHi = s.regs rAccHi :=
     frame k rAccHi (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rAccHi] <;> decide)
   have hmBad : m.regs rBad = s.regs rBad :=
     frame k rBad (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rBad] <;> decide)
   have hx := snapshotBody_spec k m
   change x.regs rOldL = m.regs rLogL ∧ x.regs rOldU = m.regs rLogU ∧
@@ -1282,21 +1282,21 @@ theorem finalBody_zero_sound (k nEnd : Nat) (s : AState)
   have hparray : ∀ j, p.arr j < M := by simpa [hp.2.2] using harray
   have hpLogU : p.regs rLogU = s.regs rLogU :=
     frame k rLogU (finalPrepBody nEnd) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, finalPrepBody,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, finalPrepBody,
         rLogU, RS62PrimeMaskLadder.rLogU,
         LeanCompCert.Ports.RamareCombined100M.LogSweep.rLogU] <;>
         decide)
   have hpAccLo : p.regs rAccLo = s.regs rAccLo :=
     frame k rAccLo (finalPrepBody nEnd) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, finalPrepBody,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, finalPrepBody,
         rAccLo] <;> decide)
   have hpAccHi : p.regs rAccHi = s.regs rAccHi :=
     frame k rAccHi (finalPrepBody nEnd) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, finalPrepBody,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, finalPrepBody,
         rAccHi] <;> decide)
   have hpBad : p.regs rBad = s.regs rBad :=
     frame k rBad (finalPrepBody nEnd) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, finalPrepBody,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, finalPrepBody,
         rBad] <;> decide)
   have hout : arun k s (finalBody nEnd) = g := by
     rw [RS62Loop314Program.finalBody, arun_append]
@@ -1446,12 +1446,12 @@ theorem body_bad_le (n0 k : Nat) (s : AState)
   have hmarray : ∀ j, m.arr j < M := by simpa [hm.2.2] using harray
   have hmLogU : m.regs rLogU = s.regs rLogU :=
     frame k rLogU (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rLogU, RS62PrimeMaskLadder.rLogU,
         LeanCompCert.Ports.RamareCombined100M.LogSweep.rLogU] <;> decide)
   have hmBad : m.regs rBad = s.regs rBad :=
     frame k rBad (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rBad] <;> decide)
   have hxword : ∀ j, x.regs j < M :=
     arun_regs_word k snapshotBody m hmword hmarray
@@ -1626,21 +1626,21 @@ theorem body_value (n0 k : Nat) (s : AState)
   have hmarray : ∀ j, m.arr j < M := by simpa [hm.2.2] using harray
   have hmLogL : m.regs rLogL = s.regs rLogL :=
     frame k rLogL (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rLogL, RS62PrimeMaskLadder.rLogL,
         LeanCompCert.Ports.RamareCombined100M.LogSweep.rLogL] <;> decide)
   have hmLogU : m.regs rLogU = s.regs rLogU :=
     frame k rLogU (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rLogU, RS62PrimeMaskLadder.rLogU,
         LeanCompCert.Ports.RamareCombined100M.LogSweep.rLogU] <;> decide)
   have hmAccLo : m.regs rAccLo = s.regs rAccLo :=
     frame k rAccLo (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rAccLo] <;> decide)
   have hmAccHi : m.regs rAccHi = s.regs rAccHi :=
     frame k rAccHi (maskPrefix n0) s (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, maskPrefix,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, maskPrefix,
         rAccHi] <;> decide)
   have hx := snapshotBody_spec k m
   change x.regs rOldL = m.regs rLogL ∧ x.regs rOldU = m.regs rLogU ∧
@@ -1956,24 +1956,24 @@ theorem source_loop314_of_runFromArray (p : Nat → Bool)
       frame 0 r (finalPrepBody (n0 + f)) mid hPrep]
   have hfinLogL : fin.regs rLogL = mid.regs rLogL :=
     finalFrame rLogL (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, finalPrepBody,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, finalPrepBody,
         lift, rLogL, rGate, rN, RS62PrimeMaskLadder.rLogL,
         RS62PrimeMaskLadder.rGate, RS62PrimeMaskLadder.rN,
         LeanCompCert.Ports.RamareCombined100M.LogSweep.rLogL]) (by decide)
   have hfinLogU : fin.regs rLogU = mid.regs rLogU :=
     finalFrame rLogU (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, finalPrepBody,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, finalPrepBody,
         lift, rLogU, rGate, rN, RS62PrimeMaskLadder.rLogU,
         RS62PrimeMaskLadder.rGate, RS62PrimeMaskLadder.rN,
         LeanCompCert.Ports.RamareCombined100M.LogSweep.rLogU]) (by decide)
   have hfinAccLo : fin.regs rAccLo = mid.regs rAccLo :=
     finalFrame rAccLo (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, finalPrepBody,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, finalPrepBody,
         lift, rAccLo, rGate, rN, RS62PrimeMaskLadder.rGate,
         RS62PrimeMaskLadder.rN]) (by decide)
   have hfinAccHi : fin.regs rAccHi = mid.regs rAccHi :=
     finalFrame rAccHi (by
-      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, finalPrepBody,
+      simp [ArrayRegFrame.writes, ArrayRegFrame.instrWrites, sdest.eq_def, finalPrepBody,
         lift, rAccHi, rGate, rN, RS62PrimeMaskLadder.rGate,
         RS62PrimeMaskLadder.rN]) (by decide)
   rw [houtEq, hfinLogL, hfinLogU, hfinAccLo, hfinAccHi,

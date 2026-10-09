@@ -154,7 +154,7 @@ private theorem denoteInstr_frame {idx : Nat} {regs regs' : RegState}
   | mov d src =>
       cases h
       simp only [RegState.set, instrDest] at hj ⊢
-      exact if_neg hj
+      exact ite_eq_right hj
   | binop d op l r =>
       simp only [denoteInstr, Option.bind_eq_bind] at h
       cases hv : denoteOp op (denoteOperand idx regs l)
@@ -165,7 +165,7 @@ private theorem denoteInstr_frame {idx : Nat} {regs regs' : RegState}
           simp only [Option.bind_some, Option.pure_def, Option.some.injEq] at h
           subst h
           simp only [RegState.set, instrDest] at hj ⊢
-          exact if_neg hj
+          exact ite_eq_right hj
 
 /-- **Frame.**  A straight-line block of scalar instructions leaves every
 register outside its destination set untouched. -/
@@ -229,7 +229,7 @@ theorem blkA_wl (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0)
   map_elim (f := fun t => t.regs 160) h (by
     simp [blkA, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
       denoteOperand, RegState.set, hn, wPair]
-    try simp [Nat.add_mod, Nat.mul_mod])
+    try simp [Nat.add_mod])
 
 theorem blkA_wh (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0)
     {s' : AState} (h : denoteAInstrs len idx s (blkA k) = some s') :
@@ -237,7 +237,7 @@ theorem blkA_wh (k len idx : Nat) (s : AState) (hn : s.regs 65 ≠ 0)
   map_elim (f := fun t => t.regs 162) h (by
     simp [blkA, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
       denoteOperand, RegState.set, hn, wPair]
-    try simp [Nat.add_mod, Nat.mul_mod])
+    try simp [Nat.add_mod])
 
 
 theorem blkB_ok (len idx : Nat) (s : AState) :
@@ -258,22 +258,22 @@ theorem blkF_ok (k len idx : Nat) (s : AState) (hc : s.regs rCeil ≠ 0) :
   simp [blkF, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
     denoteOperand, RegState.set, rCeil, rMViol, hc]
 
-theorem blkB_tLo (k len idx : Nat) (s : AState) 
+theorem blkB_tLo (_k len idx : Nat) (s : AState)
     {s' : AState} (h : denoteAInstrs len idx s (blkB) = some s') :
     s'.regs 100 = (accStep (s.regs 79) (s.regs 80) (s.regs 160) (s.regs 162) (s.regs 100)
       (s.regs 101)).1 :=
   map_elim (f := fun t => t.regs 100) h (by
     simp [blkB, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
-      denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, accStep]
+      denoteOperand, RegState.set, rTLo, rTHi, accStep]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-theorem blkB_tHi (k len idx : Nat) (s : AState) 
+theorem blkB_tHi (_k len idx : Nat) (s : AState)
     {s' : AState} (h : denoteAInstrs len idx s (blkB) = some s') :
     s'.regs 101 = (accStep (s.regs 79) (s.regs 80) (s.regs 160) (s.regs 162) (s.regs 100)
       (s.regs 101)).2 :=
   map_elim (f := fun t => t.regs 101) h (by
     simp [blkB, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
-      denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, accStep]
+      denoteOperand, RegState.set, rTLo, rTHi, accStep]
     try simp [Nat.add_mod, Nat.mul_mod])
 
 theorem blkC_v (k len idx : Nat) (s : AState) 
@@ -281,31 +281,31 @@ theorem blkC_v (k len idx : Nat) (s : AState)
     s'.regs 152 = vBias k (s.regs 100) (s.regs 101) :=
   map_elim (f := fun t => t.regs 152) h (by
     simp [blkC, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
-      denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, vBias]
+      denoteOperand, RegState.set, rTLo, rTHi, vBias]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-theorem blkD_abs (k len idx : Nat) (s : AState) 
+theorem blkD_abs (_k len idx : Nat) (s : AState)
     {s' : AState} (h : denoteAInstrs len idx s (blkD) = some s') :
     s'.regs 159 = absBias (s.regs 152) :=
   map_elim (f := fun t => t.regs 159) h (by
     simp [blkD, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
-      denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, absBias]
+      denoteOperand, RegState.set, absBias]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-theorem blkE_cel (k len idx : Nat) (s : AState) 
+theorem blkE_cel (_k len idx : Nat) (s : AState)
     {s' : AState} (h : denoteAInstrs len idx s (blkE) = some s') :
     s'.regs 102 = (celStep (s.regs 65) (s.regs 103) (s.regs 102) (s.regs 133)).1 :=
   map_elim (f := fun t => t.regs 102) h (by
     simp [blkE, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
-      denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, celStep]
+      denoteOperand, RegState.set, rCeil, rCeilSq, celStep]
     try simp [Nat.add_mod, Nat.mul_mod])
 
-theorem blkE_celSq (k len idx : Nat) (s : AState) 
+theorem blkE_celSq (_k len idx : Nat) (s : AState)
     {s' : AState} (h : denoteAInstrs len idx s (blkE) = some s') :
     s'.regs 103 = (celStep (s.regs 65) (s.regs 103) (s.regs 102) (s.regs 133)).2 :=
   map_elim (f := fun t => t.regs 103) h (by
     simp [blkE, denoteAInstrs, denoteAInstr, denoteInstr, denoteOp,
-      denoteOperand, RegState.set, rTLo, rTHi, rCeil, rCeilSq, rMViol, celStep]
+      denoteOperand, RegState.set, rCeil, rCeilSq, celStep]
     try simp [Nat.add_mod, Nat.mul_mod])
 
 private theorem shiftRight_mod_self (x j : Nat) :

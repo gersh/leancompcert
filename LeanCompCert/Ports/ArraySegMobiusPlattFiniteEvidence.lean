@@ -253,12 +253,12 @@ theorem rootScanMixed_primeTable {boot : List Nat} {bootBound w fuel : Nat}
   | succ k ih =>
       rw [rootScanMixed_succ]
       by_cases hk : w + k ≤ bootBound
-      · rw [if_pos hk]
+      · rw [ite_eq_left hk]
         have hprev : max bootBound (w + k - 1) = bootBound := by omega
         have hnext : max bootBound (w + k) = bootBound := by omega
         rw [hprev] at ih
         simpa [hnext] using ih
-      · rw [if_neg hk]
+      · rw [ite_eq_right hk]
         have hprev : max bootBound (w + k - 1) = w + k - 1 := by omega
         have hnext : max bootBound (w + k) = w + k := by omega
         rw [hprev] at ih

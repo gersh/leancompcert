@@ -97,7 +97,7 @@ theorem coprimeBody_run_from (ps : List Nat) (k r a : Nat) (s : AState)
         simp [mid, head, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
           LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
           AState.writeReg, Option.getD_some, hr, ha]
-        rw [hpMod, if_neg (Nat.ne_of_gt hp), hrpMod, Option.getD_some,
+        rw [hpMod, ite_eq_right (Nat.ne_of_gt hp), hrpMod, Option.getD_some,
           hprodMod]
       have hmid85 : mid.regs 85 = r := by
         simp [mid, head, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,

@@ -166,15 +166,15 @@ private theorem sel_eq (q bound n v : Nat) :
       = (if q < bound then Sieve.spfStep n v q else v) := by
   unfold Sieve.spfStep
   by_cases h1 : q < bound
-  · rw [if_pos h1]
+  · rw [ite_eq_left h1]
     by_cases h2 : v = 0
     · by_cases h3 : (q + 2) * (q + 2) ≤ n
       · by_cases h4 : n % (q + 2) = 0
-        · rw [if_pos ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, if_pos ⟨h2, h3, h4⟩]
-        · rw [if_neg (fun h => h4 h.2), if_neg (fun h => h4 h.2.2)]
-      · rw [if_neg (fun h => h3 h.1.2), if_neg (fun h => h3 h.2.1)]
-    · rw [if_neg (fun h => h2 h.1.1.2), if_neg (fun h => h2 h.1)]
-  · rw [if_neg h1, if_neg (fun h => h1 h.1.1.1)]
+        · rw [ite_eq_left ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, ite_eq_left ⟨h2, h3, h4⟩]
+        · rw [ite_eq_right (fun h => h4 h.2), ite_eq_right (fun h => h4 h.2.2)]
+      · rw [ite_eq_right (fun h => h3 h.1.2), ite_eq_right (fun h => h3 h.2.1)]
+    · rw [ite_eq_right (fun h => h2 h.1.1.2), ite_eq_right (fun h => h2 h.1)]
+  · rw [ite_eq_right h1, ite_eq_right (fun h => h1 h.1.1.1)]
 
 set_option maxRecDepth 40000 in
 set_option maxHeartbeats 1000000 in
@@ -216,24 +216,24 @@ theorem body_spec (bound len t : Nat) (s : AState)
     Nat.mod_eq_of_lt hremlt
   have hvaM : s.arr (t % len) % M = s.arr (t % len) := Nat.mod_eq_of_lt hva
   refine ⟨?_, ?_, ?_⟩
-  · simp only [sieveBody, AllDefined, ADefined, arun, astep, InstrBlock.sdest,
+  · simp only [sieveBody, AllDefined, ADefined, astep, InstrBlock.sdest,
       InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg, AState.writeArr,
-      RegState.set, Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff,
-      if_true, hlmm, hlne, htM, hnM, hqM, hbM, h2M, h1M, h0M, hdM, hddM, hremM,
+      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff,
+      ite_true, hlmm, hlne, htM, hnM, hqM, hbM, h2M, h1M, h0M, hdM, hddM, hremM,
       hvaM, ite_mod, bit_mul_val, bit'_mul_val, ite_add_ite, one_sub_bit,
       ite_ite_and, ite_ite_and', ge_iff_le]
     simp [hnlt]
   · simp only [sieveBody, arun, astep, InstrBlock.sdest, InstrBlock.sval,
-      denoteOperand, denoteOp, AState.writeReg, AState.writeArr, RegState.set,
-      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true,
+      denoteOperand, denoteOp, AState.writeReg, AState.writeArr,
+      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true,
       hlmm, hlne, htM, hnM, hqM, hbM, h2M, h1M, h0M, hdM, hddM, hremM, hvaM,
       ite_mod, bit_mul_val, bit'_mul_val, ite_add_ite, one_sub_bit,
       ite_ite_and, ite_ite_and', ge_iff_le]
     funext c
     simp only [gstep, obs, sel_eq]
   · simp only [sieveBody, arun, astep, InstrBlock.sdest, InstrBlock.sval,
-      denoteOperand, denoteOp, AState.writeReg, AState.writeArr, RegState.set,
-      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true,
+      denoteOperand, denoteOp, AState.writeReg, AState.writeArr,
+      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true,
       hlmm, hlne, htM, hnM, hqM, hbM, h2M, h1M, h0M, hdM, hddM, hremM, hvaM,
       ite_mod, bit_mul_val, bit'_mul_val, ite_add_ite, one_sub_bit,
       ite_ite_and, ite_ite_and', ge_iff_le]
@@ -253,16 +253,16 @@ theorem body_closed (bound len t : Nat) (s : AState)
   rw [(body_spec bound len t s h0 hlm ht hq hB hP).2.1]
   simp only [gstep, obs]
   by_cases hc : c = t % len
-  · rw [if_pos hc]
+  · rw [ite_eq_left hc]
     by_cases hq' : t / len < bound
-    · rw [if_pos hq']
+    · rw [ite_eq_left hq']
       unfold Sieve.spfStep
       split
       · omega
       · exact hP _
-    · rw [if_neg hq']
+    · rw [ite_eq_right hq']
       exact hP _
-  · rw [if_neg hc]
+  · rw [ite_eq_right hc]
     exact hP c
 
 /-! ## From the flat index space to rounds
@@ -292,18 +292,18 @@ theorem markPass (bound len q : Nat) (hq : q < bound) (h0 : 0 < len)
           Nat.add_zero]
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
         ih (by omega)]
-      simp only [gstep, hmod, hdiv, if_pos hq, if_neg (Nat.lt_irrefl k),
+      simp only [gstep, hmod, hdiv, ite_eq_left hq, ite_eq_right (Nat.lt_irrefl k),
         Prod.mk.injEq]
       refine ⟨?_, ?_⟩
       · funext c
         by_cases hc : c = k
         · subst hc
-          rw [if_pos rfl, if_pos (Nat.lt_succ_self c)]
-        · rw [if_neg hc]
+          rw [ite_eq_left rfl, ite_eq_left (Nat.lt_succ_self c)]
+        · rw [ite_eq_right hc]
           by_cases hc2 : c < k
-          · rw [if_pos hc2, if_pos (by omega)]
-          · rw [if_neg hc2, if_neg (by omega)]
-      · rw [if_neg (fun hh => hh.1.1 hq), Nat.add_zero]
+          · rw [ite_eq_left hc2, ite_eq_left (by omega)]
+          · rw [ite_eq_right hc2, ite_eq_right (by omega)]
+      · rw [ite_eq_right (fun hh => hh.1.1 hq), Nat.add_zero]
         exact Nat.mod_eq_of_lt hacc
 
 /-- The accumulation block leaves the array alone and counts the cells that
@@ -327,21 +327,21 @@ theorem accPass (bound len : Nat) (h0 : 0 < len) (hlm : len < M)
           Nat.add_zero]
       rw [countP_range_succ, List.range_succ, List.foldl_append, List.foldl_cons,
         List.foldl_nil, ih (by omega)]
-      simp only [gstep, hmod, hdiv, if_neg (Nat.lt_irrefl bound), Prod.mk.injEq]
+      simp only [gstep, hmod, hdiv, ite_eq_right (Nat.lt_irrefl bound), Prod.mk.injEq]
       refine ⟨?_, ?_⟩
       · funext c
         by_cases hc : c = k
-        · rw [if_pos hc, hc]
-        · rw [if_neg hc]
+        · rw [ite_eq_left hc, hc]
+        · rw [ite_eq_right hc]
       · have hle : (List.range k).countP (fun n => decide (2 ≤ n ∧ A n = 0)) ≤ k :=
           countP_range_le _ k
         have hsel : (if (¬ (bound < bound) ∧ A k = 0) ∧ 2 ≤ k then (1:Nat) else 0)
             = (if decide (2 ≤ k ∧ A k = 0) = true then 1 else 0) := by
           by_cases h : 2 ≤ k ∧ A k = 0
-          · rw [if_pos ⟨⟨Nat.lt_irrefl bound, h.2⟩, h.1⟩,
-              if_pos (decide_eq_true h)]
-          · rw [if_neg (fun hh => h ⟨hh.2, hh.1.2⟩),
-              if_neg (fun hh => h (of_decide_eq_true hh))]
+          · rw [ite_eq_left ⟨⟨Nat.lt_irrefl bound, h.2⟩, h.1⟩,
+              ite_eq_left (decide_eq_true h)]
+          · rw [ite_eq_right (fun hh => h ⟨hh.2, hh.1.2⟩),
+              ite_eq_right (fun hh => h (of_decide_eq_true hh))]
         rw [hsel]
         refine Nat.mod_eq_of_lt ?_
         have hb : (if decide (2 ≤ k ∧ A k = 0) = true then (1:Nat) else 0) ≤ 1 := by
@@ -369,9 +369,9 @@ theorem markRounds (bound len : Nat) (h0 : 0 < len) (A : Nat → Nat) :
       refine ⟨?_, trivial⟩
       funext c
       by_cases hc : c < len
-      · rw [if_pos hc, if_pos hc, if_pos hc, List.foldl_append,
+      · rw [ite_eq_left hc, ite_eq_left hc, ite_eq_left hc, List.foldl_append,
           List.foldl_cons, List.foldl_nil]
-      · rw [if_neg hc, if_neg hc, if_neg hc]
+      · rw [ite_eq_right hc, ite_eq_right hc, ite_eq_right hc]
 
 /-! ## What the count is
 
@@ -390,7 +390,7 @@ theorem spfScan_eq_zero_iff (bound n : Nat) (hn : 2 ≤ n)
   · intro h
     rw [← hfix]
     unfold Sieve.spfFixed
-    rw [if_pos h]
+    rw [ite_eq_left h]
   · intro h
     rcases Sieve.spfScan_spec bound n with ⟨h0, -⟩ | ⟨hhit, -, -⟩
     · exact h0
@@ -398,7 +398,7 @@ theorem spfScan_eq_zero_iff (bound n : Nat) (hn : 2 ≤ n)
       have hne : Sieve.spfScan bound n ≠ 0 := by
         have h2 := hhit.1; omega
       have hfx : Sieve.spfFixed bound n = Sieve.spfScan bound n := by
-        unfold Sieve.spfFixed; rw [if_neg hne]
+        unfold Sieve.spfFixed; rw [ite_eq_right hne]
       rw [hfx, h] at hfix
       rw [hfix] at hhit
       have hsq := hhit.2.1
@@ -480,7 +480,7 @@ theorem sieveCountProgram_denote (bound len : Nat)
   refine congrArg some (List.countP_congr ?_)
   intro n hn
   have hnlt : n < len := List.mem_range.mp hn
-  simp only [decide_eq_true_eq, if_pos hnlt]
+  simp only [decide_eq_true_eq, ite_eq_left hnlt]
   by_cases h2 : 2 ≤ n
   · have hc : n < (bound + 2) * (bound + 2) := by omega
     have hiff := spfScan_eq_zero_iff bound n h2 hc
@@ -501,7 +501,7 @@ theorem sieveBody_wf (bound len : Nat) :
   intro a ha
   simp only [sieveBody, List.mem_cons, List.not_mem_nil, or_false] at ha
   rcases ha with h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h <;>
-    subst h <;> simp +decide [AInstr.WF, Instr.WF, Operand.WF, regCount]
+    subst h <;> simp +decide [AInstr.WF, Instr.WF, Operand.WF]
 
 theorem sieveCountProgram_wf (bound len : Nat) :
     (sieveCountProgram bound len).WF :=
@@ -697,7 +697,7 @@ def compilation : AProgramRefinement reference :=
             simpa using this
           cases output
           simp only [reference, Algorithm.ofChecker, check, hadm, hexp,
-            Bool.true_and, beq_self_eq_true, if_pos]
+            Bool.true_and, beq_self_eq_true, ite_eq_left]
       · exact absurd hdec (by simp))
 
 /-- The certified array algorithm: reference soundness and compiled

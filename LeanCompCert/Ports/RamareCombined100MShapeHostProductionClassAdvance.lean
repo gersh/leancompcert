@@ -52,7 +52,7 @@ theorem productionClassAdvanceWordPre
   have hp := c.markPhaseBody_run k s hsteps
   dsimp only at hp
   have hp10 : phased.regs 10 = 0 := by
-    rw [hp.1, if_neg (Nat.not_lt_of_ge hclass)]
+    rw [hp.1, ite_eq_right (Nat.not_lt_of_ge hclass)]
   have hpR : phased.regs rR = s.regs rR := hp.2.2.1
   have hnonzero : phased.regs rR ≠ 0 := by omega
   have hpCursor : machinePowerCursor phased = productionClassCursor fuel := by
@@ -100,7 +100,7 @@ theorem productionClassAdvanceWordPre
         have hbC : 2 * c.segLen + 2 < M := by simpa only [c] using hb
         have hfuelC : fuel ≤ c.segLen := by simpa only [c] using hfuel
         omega)
-    rw [hr, resetPowerCursor, if_neg hnonzero]
+    rw [hr, resetPowerCursor, ite_eq_right hnonzero]
     exact hpCursor
   have hr10 : reset.regs 10 = 0 :=
     (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10

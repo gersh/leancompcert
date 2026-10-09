@@ -233,19 +233,19 @@ theorem p1224MarkCellBody_markPower_run (k : Nat) (s : AState)
     P1224MarkCell.encode]
   by_cases ha2 : a = j + 2 * L
   · simp [ha2]
-  · simp only [if_neg ha2]
+  · simp only [ite_eq_right ha2]
     rw [congrFun hphiArr a]
     simp only [AState.writeArr]
     by_cases ha1 : a = j + L
-    · simp only [ha1, if_pos]
+    · simp only [ha1, ite_eq_left]
       cases first <;> simp [P1224MarkCell.markPower]
-    · simp only [if_neg ha1]
+    · simp only [ite_eq_right ha1]
       rw [congrFun hradArr a]
       simp only [AState.writeArr]
       by_cases ha0 : a = j
-      · simp only [ha0, if_pos]
+      · simp only [ha0, ite_eq_left]
         cases first <;> simp [P1224MarkCell.markPower]
-      · simp only [if_neg ha0]
+      · simp only [ite_eq_right ha0]
         exact congrFun hfarr a
 
 #print axioms p1224MarkFactorBody_run

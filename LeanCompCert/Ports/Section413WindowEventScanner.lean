@@ -80,17 +80,17 @@ theorem gateStage_output (k : Nat) (s : AState) (v active divisor : Nat)
   simp only [rOdd] at haOdd
   rw [gateStage, arun_lift]
   by_cases hv : v = 2
-  · simp only [hv, if_true]
+  · simp only [hv, ite_true]
     simp only [srun, sdest, sval, denoteOperand, denoteOp, Option.getD_some,
       RegState.set, rOddRem, rOdd,
       LeanCompCert.Ports.Section413WindowCellDiv.rGate]
-    simp only [Nat.reduceEqDiff, if_false, if_true,
+    simp only [Nat.reduceEqDiff, ite_false, ite_true,
       show 2 % M = 2 by decide, show 1 % M = 1 by decide]
     have hr : s.regs divisor % 2 < M :=
       Nat.lt_trans (Nat.mod_lt _ (by decide)) (by decide)
     rw [Nat.mod_eq_of_lt hr]
     unfold divisorGate
-    simp only [hv, if_true]
+    simp only [hv, ite_true]
     by_cases hodd : s.regs divisor % 2 = 1
     · simp [hodd, haRem, haOdd, hdRem, Nat.mod_eq_of_lt ha]
     · simp [hodd]
@@ -446,7 +446,7 @@ theorem safeDenStage_output (k : Nat) (s : AState) (den : Nat)
   simp only [rDenInv] at hdenInv
   rw [safeDenStage, arun_lift]
   simp only [srun, sdest, sval, denoteOperand, denoteOp, Option.getD_some,
-    RegState.set, rDenInv, rSafeDen, Nat.reduceEqDiff, if_false, if_true,
+    RegState.set, rDenInv, rSafeDen, Nat.reduceEqDiff, ite_false, ite_true,
     show 0 % M = 0 by decide, show 1 % M = 1 by decide]
   by_cases hz : s.regs den = 0
   · simp [hz, safeDen, hdenInv]
@@ -569,13 +569,13 @@ theorem divAddK1_clean_outputs (k : Nat) (s : AState) (negate : Bool)
     rcases hgate with hzero | hone
     · have h := LeanCompCert.Ports.Section413WindowCellDiv.body_outputs_gate_zero
         k s negate hword harray hden hzero
-      simp only [p, hzero, if_pos, h.1, h.2.1,
+      simp only [p, hzero, ite_eq_left, h.1, h.2.1,
         LeanCompCert.Ports.Section413Cells.decodeZ_zero, h.2.2]
       exact ⟨trivial, trivial, trivial⟩
     · have h :=
         LeanCompCert.Ports.Section413WindowCellDiv.body_outputs_gate_one_decoded
           k s negate hword harray hden hone
-      simpa only [p, hone, Nat.one_ne_zero, if_false] using h
+      simpa only [p, hone, Nat.one_ne_zero, ite_false] using h
   have hadd := addK1_clean_outputs k p hpword hparray hpViol
     (by simpa only [p] using hcleanLo)
     (by simpa only [p] using hcleanHi)
@@ -806,9 +806,9 @@ private theorem scaleTerms_clean_outputs (k : Nat) (s : AState)
   let hc : ScaleReceipts k s negate := ⟨hscaleLo, hscaleHi⟩
   rcases hgate with hzero | hone
   · have h := scaleTerms_zero k s negate hword harray hc hzero
-    simpa only [hzero, if_pos] using h
+    simpa only [hzero, ite_eq_left] using h
   · have h := scaleTerms_one k s negate hword harray hc hone
-    simpa only [hone, Nat.one_ne_zero, if_false] using h
+    simpa only [hone, Nat.one_ne_zero, ite_false] using h
 
 theorem scaleAddK2_clean_outputs (k : Nat) (s : AState) (negate : Bool)
     (hword : ∀ j, s.regs j < M) (harray : ∀ j, s.arr j < M)

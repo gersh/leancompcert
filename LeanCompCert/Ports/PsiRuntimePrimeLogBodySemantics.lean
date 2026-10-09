@@ -52,7 +52,7 @@ theorem psiPrimeLogBody_final_run
   rcases hr with ⟨hr10, hr11, hr12, hr14, hr16, hr17, hr18, hrArr⟩
   have hrRound : read.regs 11 = j := hr11.trans hround
   have hrFinal : read.regs 14 = 1 := by
-    simpa only [hround, if_pos hfinal] using hr14
+    simpa only [hround, ite_eq_left hfinal] using hr14
   have hrXm : j ≠ 0 →
       read.regs primeXm = (logIter (p <<< (62 - e)) j).1 := by
     intro hj
@@ -79,7 +79,7 @@ theorem psiPrimeLogBody_final_run
       have hsc1 : m.cfg.sc = 1 := by omega
       simpa only [core, hsc1] using hc0
     · have hstart : read.regs 12 = 0 := by
-        simpa only [hround, if_neg hj0] using hr12
+        simpa only [hround, ite_eq_right hj0] using hr12
       have hnormM : p <<< (62 - e) < M :=
         Nat.lt_trans hxhi (by decide)
       have hcj := psiPrimeLogCore_continue_run m index read p e

@@ -1005,8 +1005,8 @@ private theorem posFlip {c : Params} {k : Nat} (x y : Nat) :
     (if c.tdiv ≤ qOf c k then x else y)
       = (if qOf c k < c.tdiv then y else x) := by
   by_cases h : c.tdiv ≤ qOf c k
-  · rw [if_pos h, if_neg (show ¬ qOf c k < c.tdiv by omega)]
-  · rw [if_neg h, if_pos (show qOf c k < c.tdiv by omega)]
+  · rw [ite_eq_left h, ite_eq_right (show ¬ qOf c k < c.tdiv by omega)]
+  · rw [ite_eq_right h, ite_eq_left (show qOf c k < c.tdiv by omega)]
 
 private theorem maskMul_eq {P : Prop} [Decidable P] (x : Nat) :
     (if P then (1:Nat) else 0) * x = if P then x else 0 := by
@@ -1026,7 +1026,7 @@ private theorem resetFacts (hc : c.Sane) (hk : k < c.len * c.R)
   obtain ⟨hn1, hn24, hn24', hnbnd, hnM, hn1M⟩ := candFacts hc hk
   have h1M : (1:Nat) < M := by decide
   unfold m0Of phi0Of sq0Of pass0Of
-  by_cases hz : qOf c k = 0 <;> simp only [hz, if_true, if_false, reduceIte]
+  by_cases hz : qOf c k = 0 <;> simp only [hz, ite_true, ite_false, reduceIte]
   · exact ⟨by omega, hnM, by omega, by omega, by omega, by omega, by omega⟩
   · exact ⟨hs.mPos, hs.word 1, hs.phiPos, hs.word 2, hs.sqLe, hs.prod,
       hs.passLe⟩
@@ -1093,7 +1093,7 @@ private theorem peelFacts (hc : c.Sane) (hk : k < c.len * c.R)
   have hprod1 : m1Of c k s * phi1Of c k s ≤ c.lo + c.len := by
     unfold m1Of phi1Of
     by_cases hdvd : m0Of c k s % dOf c k = 0
-    · simp only [hdvd, if_true, reduceIte]
+    · simp only [hdvd, ite_true, reduceIte]
       have h1 : m0Of c k s / dOf c k * (dOf c k - 1) ≤ m0Of c k s := by
         have h2 : m0Of c k s / dOf c k * (dOf c k - 1)
             ≤ m0Of c k s / dOf c k * dOf c k :=
@@ -1107,7 +1107,7 @@ private theorem peelFacts (hc : c.Sane) (hk : k < c.len * c.R)
               ← Nat.mul_assoc]
         _ ≤ m0Of c k s * phi0Of c k s := Nat.mul_le_mul_right _ h1
         _ ≤ c.lo + c.len := hprod0
-    · simp only [hdvd, if_false, reduceIte]
+    · simp only [hdvd, ite_false, reduceIte]
       exact hprod0
   have hphi1M : phi1Of c k s < M := by
     have h1 : phi1Of c k s ≤ m1Of c k s * phi1Of c k s :=
@@ -1271,7 +1271,7 @@ theorem st4_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
     have hgoal : litDivStep 23 (2 ^ 44) 22 (st3 c k s) 23
         = (denoteOp .udiv (2 ^ 44 % M) (st3 c k s 22)).getD 0 := rfl
     rw [hgoal, v22, lit244]
-    simp only [denoteOp, if_neg hne, Option.getD_some]
+    simp only [denoteOp, ite_eq_right hne, Option.getD_some]
     show 2 ^ 44 / phiFOf c k s % M = tqOf c k s
     unfold tqOf
     refine Nat.mod_eq_of_lt ?_
@@ -1733,7 +1733,7 @@ private theorem divStep_val (dest a b : Nat) (t : RegState) (x y : Nat)
       = (denoteOp .udiv (t a) (t b)).getD 0 := by
     simp [divStep, RegState.set]
   rw [hgoal, ha, hb]
-  simp only [denoteOp, if_neg hy, Option.getD_some]
+  simp only [denoteOp, ite_eq_right hy, Option.getD_some]
   exact Nat.mod_eq_of_lt hlt
 
 set_option maxHeartbeats 800000 in
@@ -1837,17 +1837,17 @@ Every stage keeps every register inside a word: the blocks through
 private theorem denoteOp_udiv_lt (a b : Nat) :
     (denoteOp .udiv a b).getD 0 < M := by
   by_cases h : b = 0
-  · simp only [denoteOp, if_pos h, Option.getD_none]
+  · simp only [denoteOp, ite_eq_left h, Option.getD_none]
     exact M_pos
-  · simp only [denoteOp, if_neg h, Option.getD_some]
+  · simp only [denoteOp, ite_eq_right h, Option.getD_some]
     exact Nat.mod_lt _ M_pos
 
 private theorem denoteOp_urem_lt (a b : Nat) :
     (denoteOp .urem a b).getD 0 < M := by
   by_cases h : b = 0
-  · simp only [denoteOp, if_pos h, Option.getD_none]
+  · simp only [denoteOp, ite_eq_left h, Option.getD_none]
     exact M_pos
-  · simp only [denoteOp, if_neg h, Option.getD_some]
+  · simp only [denoteOp, ite_eq_right h, Option.getD_some]
     exact Nat.mod_lt _ M_pos
 
 private theorem divStep_lt (dest a b : Nat) (t : RegState)
@@ -2189,12 +2189,12 @@ theorem gRun_spec (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
           (mulBit_le _ _ _ (bitLe _) (mulBit_le _ _ _ hb56 hb57))
       obtain ⟨E6, E0⟩ := step3 _ Z58 hhitle
       refine ⟨?_, ?_⟩
-      · rw [E0, if_neg hq]
+      · rw [E0, ite_eq_right hq]
         unfold goodOf pass1Of
-        rw [if_pos (show qOf c k < c.tdiv by omega)]
-      · rw [E6, if_neg hq]
+        rw [ite_eq_left (show qOf c k < c.tdiv by omega)]
+      · rw [E6, ite_eq_right hq]
         unfold pass1Of
-        rw [if_pos (show qOf c k < c.tdiv by omega)]
+        rw [ite_eq_left (show qOf c k < c.tdiv by omega)]
   obtain ⟨e0, e6⟩ := hEq
   have e1 : gRun c k s 1 = m1Of c k s := by rw [G 1 (by decide)]; exact z1
   have e2 : gRun c k s 2 = phi1Of c k s := by rw [G 2 (by decide)]; exact z2

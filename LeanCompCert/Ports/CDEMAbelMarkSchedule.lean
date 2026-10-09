@@ -291,9 +291,9 @@ theorem body_first_scheduled_mark_before_acc (c : Cfg) (idx : Nat) (st : AState)
     rw [hm.array j]
     by_cases hw : j = c.winBase
     · subst j
-      rw [if_pos rfl, if_pos rfl, hsieveLive c.winBase hwinNe,
+      rw [ite_eq_left rfl, ite_eq_left rfl, hsieveLive c.winBase hwinNe,
         congrFun hsel.2.2.2.2 c.winBase]
-    · rw [if_neg hw, if_neg hw, hsieveLive j hj,
+    · rw [ite_eq_right hw, ite_eq_right hw, hsieveLive j hj,
         congrFun hsel.2.2.2.2 j]
   have markFrame (j : Nat)
       (hwrites : ArrayRegFrame.writes j c.markBody = false) :

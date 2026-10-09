@@ -37,7 +37,7 @@ theorem arun_prefix_add_bit_bounds
   change n ≤ (arun idx p [bo rViol .add (.reg rViol) (.reg flag)]).regs rViol ∧
     (arun idx p [bo rViol .add (.reg rViol) (.reg flag)]).regs rViol ≤ n + 1
   simp [bo, arun, astep, LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg, hpv, Nat.mod_eq_of_lt hsum]
   omega
 
@@ -83,7 +83,7 @@ theorem historicalFlag10_machine_bounds
       hv (by rfl) ?_ hNoWrap
   simp [historicalFlag10Prefix, historicalFlag10_eq_source, bo, arun, astep,
     LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg, Nat.mod_eq_of_lt hgateWord]
   split <;> simp
   simpa only [Nat.mod_eq_of_lt hgateWord] using hgate
@@ -108,7 +108,7 @@ theorem historicalFlag11_machine_bounds
       hv (by rfl) ?_ hNoWrap
   simp [historicalFlag11Prefix, historicalFlag11_eq_source, bo, arun, astep,
     LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg, Nat.mod_eq_of_lt hgateWord]
   split <;> simp
   simpa only [Nat.mod_eq_of_lt hgateWord] using hgate
@@ -136,7 +136,7 @@ theorem historicalFlag12_machine_bounds
   have hM1 : 1 + (M - 1) = M := by decide
   simp [historicalFlag12Prefix, historicalFlag12_eq_source, bo, arun, astep,
     LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg, hM1, gate_complement_true, gate_complement_false,
     Nat.add_mod_right,
     Nat.mod_eq_of_lt hgateWord]
@@ -159,7 +159,7 @@ theorem historicalFlag13_machine_bounds
   have hM1 : 1 + (M - 1) = M := by decide
   simp [historicalFlag13Prefix, historicalFlag13_eq_source, bo, arun, astep,
     LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg, hM1, gate_complement_true, gate_complement_false,
     Nat.add_mod_right,
     Nat.mod_eq_of_lt hgateWord]
@@ -182,7 +182,7 @@ theorem historicalFlag14_machine_bounds
   have hM1 : 1 + (M - 1) = M := by decide
   simp [historicalFlag14Prefix, historicalFlag14_eq_source, bo, arun, astep,
     LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg, hM1, gate_complement_true, gate_complement_false,
     Nat.add_mod_right,
     Nat.mod_eq_of_lt hgateWord]
@@ -202,7 +202,7 @@ theorem historicalFlag15_machine_bounds
   have hgateWord : s.regs 48 < M := by omega
   simp [historicalFlag15Prefix, historicalFlag15_eq_source, bo, arun, astep,
     LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg]
   split <;> simp
   simpa only [Nat.mod_eq_of_lt hgateWord] using hgate
@@ -222,7 +222,7 @@ theorem historicalParity_machine_bounds
   have hgateMod : s.regs 48 % M = s.regs 48 := Nat.mod_eq_of_lt hgateWord
   simp [historicalParityPrefix, historicalParity_eq_source, bo, arun, astep,
     LeanCompCert.Verified.InstrBlock.sdest,
-    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
+    LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp.eq_def,
     AState.writeReg]
   repeat' first | split | simp [hgateMod]
   all_goals simpa only [Nat.mod_eq_of_lt hgateWord] using hgate

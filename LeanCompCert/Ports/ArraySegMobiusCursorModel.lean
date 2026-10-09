@@ -114,7 +114,7 @@ theorem cursorStep_main_ready (segLen w limit bound : Nat)
         omega
       exact Nat.lt_of_le_of_ne hready.cursor_le hne
     have hpLe := hready.active_prime_le_bound hpiLt
-    rw [cursorStep, if_pos hj]
+    rw [cursorStep, ite_eq_left hj]
     change CursorMainReady segLen w limit bound
       { pi := cur.pi, p := cur.p, j := cur.j + cur.p }
     constructor
@@ -134,10 +134,10 @@ theorem cursorStep_main_ready (segLen w limit bound : Nat)
     by_cases hpiLt : cur.pi < limit
     · have hnextLe : cur.pi + 1 ≤ limit := by omega
       by_cases hterminal : cur.pi + 1 = limit
-      · rw [cursorStep, if_neg (Nat.not_lt.mpr hjL),
+      · rw [cursorStep, ite_eq_right (Nat.not_lt.mpr hjL),
           Nat.min_eq_left hnextLe]
         dsimp only
-        rw [if_pos hterminal]
+        rw [ite_eq_left hterminal]
         change CursorMainReady segLen w limit bound
           { pi := cur.pi + 1, p := table (cur.pi + 1),
             j := segLen + 1 }
@@ -159,10 +159,10 @@ theorem cursorStep_main_ready (segLen w limit bound : Nat)
         have hp := htablePrime (cur.pi + 1) hnextLt
         have hoff : firstOffset w (table (cur.pi + 1)) <
             table (cur.pi + 1) := Nat.mod_lt _ hp.1
-        rw [cursorStep, if_neg (Nat.not_lt.mpr hjL),
+        rw [cursorStep, ite_eq_right (Nat.not_lt.mpr hjL),
           Nat.min_eq_left hnextLe]
         dsimp only
-        rw [if_neg hterminal]
+        rw [ite_eq_right hterminal]
         change CursorMainReady segLen w limit bound
           { pi := cur.pi + 1, p := table (cur.pi + 1),
             j := firstOffset w (table (cur.pi + 1)) }
@@ -182,9 +182,9 @@ theorem cursorStep_main_ready (segLen w limit bound : Nat)
           exact firstOffset_dvd w (table (cur.pi + 1)) hp.1
     · have hpiEq : cur.pi = limit :=
         Nat.le_antisymm hready.cursor_le (Nat.le_of_not_gt hpiLt)
-      rw [cursorStep, if_neg (Nat.not_lt.mpr hjL), hpiEq,
+      rw [cursorStep, ite_eq_right (Nat.not_lt.mpr hjL), hpiEq,
         Nat.min_eq_right (by omega)]
-      simp only [if_pos]
+      simp only [ite_eq_left]
       change CursorMainReady segLen w limit bound
         { pi := limit, p := table limit, j := segLen + 1 }
       constructor
@@ -334,7 +334,7 @@ theorem cursorStep_advance (segLen w limit : Nat) (table : Nat → Nat)
           else firstOffset w (table (cur.pi + 1)) } := by
   have hmin : min (cur.pi + 1) limit = cur.pi + 1 :=
     Nat.min_eq_left (by omega)
-  rw [cursorStep, if_neg (Nat.not_lt.mpr hj), hmin]
+  rw [cursorStep, ite_eq_right (Nat.not_lt.mpr hj), hmin]
 
 theorem cursorStep_terminal (segLen w limit : Nat) (table : Nat → Nat)
     (cur : Cursor) (hj : segLen ≤ cur.j) (hpi : cur.pi = limit) :
@@ -342,7 +342,7 @@ theorem cursorStep_terminal (segLen w limit : Nat) (table : Nat → Nat)
       { pi := limit, p := table limit, j := segLen + 1 } := by
   have hmin : min (cur.pi + 1) limit = limit :=
     Nat.min_eq_right (by omega)
-  rw [cursorStep, if_neg (Nat.not_lt.mpr hj), hmin]
+  rw [cursorStep, ite_eq_right (Nat.not_lt.mpr hj), hmin]
   simp
 
 theorem scheduleStep_exhausted (segLen w limit i : Nat)
@@ -646,7 +646,7 @@ theorem arun_coreBody_simulates_live_nonstart (c : Cfg) (idx : Nat)
     (by rw [hw, hj]; exact hnM) hTM hA
     (by rw [hp, hw, hj]; exact hdiv) i hi
   dsimp [machineCursor, scheduleStep, cursorStep]
-  simp only [hjL, if_true]
+  simp only [hjL, ite_true]
   rw [hw, hj, hp] at hcell
   exact ⟨by
     rw [Cursor.mk.injEq]
@@ -696,8 +696,8 @@ theorem arun_coreBody_simulates_advance_nonstart (c : Cfg) (idx : Nat)
     (by rw [hjEq]; exact hjM) hA i hi
   have hmin : min (pi + 1) limit = pi + 1 := Nat.min_eq_left (by omega)
   dsimp [machineCursor, scheduleStep, cursorStep]
-  rw [if_neg (Nat.not_lt.mpr hjL), hmin, htable]
-  simp only [Nat.not_lt.mpr hjL, if_false]
+  rw [ite_eq_right (Nat.not_lt.mpr hjL), hmin, htable]
+  simp only [Nat.not_lt.mpr hjL, ite_false]
   exact ⟨by
     rw [Cursor.mk.injEq]
     exact ⟨hcur.1, hcur.2.1, hcur.2.2.1⟩,
@@ -854,8 +854,8 @@ theorem arun_coreBody_simulates_terminal_nonstart (c : Cfg) (idx : Nat)
   have hmin : min (c.tableLen + 1) c.tableLen = c.tableLen :=
     Nat.min_eq_right (by omega)
   dsimp [machineCursor, scheduleStep, cursorStep]
-  rw [if_neg (Nat.not_lt.mpr hjL), hmin, hRep.guard]
-  simp only [if_pos, Nat.not_lt.mpr hjL, if_false]
+  rw [ite_eq_right (Nat.not_lt.mpr hjL), hmin, hRep.guard]
+  simp only [ite_eq_left, Nat.not_lt.mpr hjL, ite_false]
   exact ⟨by
     rw [Cursor.mk.injEq]
     exact ⟨hcur.1, hcur.2.1, hcur.2.2.1⟩,

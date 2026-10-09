@@ -118,7 +118,7 @@ theorem checkBody_run (k : Nat) (s : AState)
   all_goals
     by_cases hL' : s.regs 180 < s.regs 200 <;>
       by_cases hU' : s.regs 181 < s.regs 201 <;>
-      simp only [if_pos, if_neg, hL', hU'] <;> decide
+      simp only [ite_eq_left, ite_eq_right, hL', hU'] <;> decide
 
 /-- The existing arithmetic circuit computes both increments even when the
 final endpoint additions wrap; this version deliberately retains the two

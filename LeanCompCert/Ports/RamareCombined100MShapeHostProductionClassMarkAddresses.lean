@@ -23,7 +23,7 @@ theorem productionClassMarkAddresses
       addressed.regs 36 < len := by
   have hfuelNe : fuel ≠ productionCursorCfg.segLen := Nat.ne_of_lt hfuel
   have hround : productionCursorCfg.markSteps ≤ s.regs rR := by
-    rw [h.sweep.round_eq, if_neg hfuelNe]
+    rw [h.sweep.round_eq, ite_eq_right hfuelNe]
     omega
   rcases productionStaticPlaneWordBounds with
     ⟨_, h7, h8, h9, h10, h11, h12, h13⟩

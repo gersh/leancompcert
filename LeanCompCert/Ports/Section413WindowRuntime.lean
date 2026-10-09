@@ -77,7 +77,7 @@ theorem traceStep_ok_of_word_le (G : Nat → Cell) (v lo : Nat)
   · simp [hlo]
   · change (if n + 1 < lo then 0 else
         (eventUnit G v n p).hi.toNat + offset) ≤ commonBound at hw
-    rw [if_neg hlo] at hw
+    rw [ite_eq_right hlo] at hw
     have hnat : (eventUnit G v n p).hi.toNat ≤ boundNum.toNat * unitScale := by
       have hnumNat : (boundNum.toNat : Int) = boundNum := Int.toNat_of_nonneg hnum
       have hshiftNat : boundNum.toNat * unitScale + offset = commonBound := by

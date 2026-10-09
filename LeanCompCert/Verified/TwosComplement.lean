@@ -52,14 +52,14 @@ def tcVal (x : Nat) : Int := if x < H then (x : Int) else (x : Int) - (B64 : Int
 
 /-- In-range values read as themselves. -/
 theorem tcVal_of_lt {x : Nat} (h : x < H) : tcVal x = (x : Int) := by
-  unfold tcVal; rw [if_pos h]
+  unfold tcVal; rw [ite_eq_left h]
 
 /-- Which branch `tcVal` took, as a usable disjunction. -/
-theorem tcVal_eq (x : Nat) (hx : x < B64) :
+theorem tcVal_eq (x : Nat) (_hx : x < B64) :
     (tcVal x = (x : Int) ∧ x < H) ∨ (tcVal x = (x : Int) - (B64 : Int) ∧ H ≤ x) := by
   by_cases h : x < H
-  · exact Or.inl ⟨by rw [tcVal, if_pos h], h⟩
-  · exact Or.inr ⟨by rw [tcVal, if_neg h], by omega⟩
+  · exact Or.inl ⟨by rw [tcVal, ite_eq_left h], h⟩
+  · exact Or.inr ⟨by rw [tcVal, ite_eq_right h], by omega⟩
 
 /-- **`.add` is two's complement addition.**
 
@@ -113,20 +113,20 @@ theorem tcOfSign_val (n m : Nat) (hm : m < H) :
   by_cases hn : n = 1
   · have hb : (n == 1) = true := by simp [hn]
     unfold tcOfSign tcVal SFix.val
-    rw [if_pos hn, hb, if_pos rfl]
+    rw [ite_eq_left hn, hb, ite_eq_left rfl]
     by_cases hm0 : m = 0
     · subst hm0
-      rw [Nat.sub_zero, Nat.mod_self, if_pos (by decide : (0 : Nat) < H)]
+      rw [Nat.sub_zero, Nat.mod_self, ite_eq_left (by decide : (0 : Nat) < H)]
       simp
     · have h1 : B64 - m < B64 := by simp only [B64, H] at *; omega
-      rw [Nat.mod_eq_of_lt h1, if_neg (by simp only [B64, H] at *; omega)]
+      rw [Nat.mod_eq_of_lt h1, ite_eq_right (by simp only [B64, H] at *; omega)]
       simp only [B64, H] at *
       omega
   · have hb : (n == 1) = false := by simp [hn]
     unfold tcOfSign tcVal SFix.val
-    rw [if_neg hn, hb]
-    simp only [Bool.false_eq_true, if_false]
-    rw [if_pos hm]
+    rw [ite_eq_right hn, hb]
+    simp only [Bool.false_eq_true, ite_false]
+    rw [ite_eq_left hm]
 
 /-- The conversion lands in range. -/
 theorem tcOfSign_lt (n m : Nat) (hm : m < B64) : tcOfSign n m < B64 := by

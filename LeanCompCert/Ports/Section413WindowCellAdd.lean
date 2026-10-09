@@ -100,7 +100,7 @@ theorem oneStage_clean_output (k : Nat) (s : AState) (acc term : Nat)
   rw [oneStage, arun_append, arun_append, arun_lift]
   change decodeZ (srun k q.regs
       [.mov acc (.reg LeanCompCert.Ports.Section413SignedAdd.rOut)] acc) = _ ∧ _
-  simp only [srun, sdest, sval, denoteOperand, RegState.set, if_pos]
+  simp only [srun, sdest, sval, denoteOperand, RegState.set, ite_eq_left]
   refine ⟨?_, ?_⟩
   · simpa [q, LeanCompCert.Ports.Section413SignedAdd.aBody, arun_lift,
       hpA, hpB] using hadd

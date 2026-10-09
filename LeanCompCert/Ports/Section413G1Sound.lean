@@ -698,8 +698,8 @@ theorem bnat_eq_bnat {p q : Prop} [Decidable p] [Decidable q] (h : p ↔ q) :
     bnat p = bnat q := by
   unfold bnat
   by_cases hp : p
-  · rw [if_pos hp, if_pos (h.mp hp)]
-  · rw [if_neg hp, if_neg (fun hq => hp (h.mpr hq))]
+  · rw [ite_eq_left hp, ite_eq_left (h.mp hp)]
+  · rw [ite_eq_right hp, ite_eq_right (fun hq => hp (h.mpr hq))]
 
 theorem decodeZ_lt_zero_iff (w : Nat) (hw : w < M) :
     decodeZ w < 0 ↔ 9223372036854775808 ≤ w := by
@@ -838,10 +838,10 @@ theorem Rep_min {s1 l1 h1 s2 l2 h2 : Nat} {z1 z2 : Int}
   unfold selMin
   rw [tlt_of_Rep r1 r2]
   by_cases hz : z1 < z2
-  · rw [bnat_true hz, if_pos (rfl : (1 : Nat) = 1),
+  · rw [bnat_true hz, ite_eq_left (rfl : (1 : Nat) = 1),
       show min z1 z2 = z1 by omega]
     exact r1
-  · rw [bnat_false hz, if_neg (by decide : ¬((0 : Nat) = 1)),
+  · rw [bnat_false hz, ite_eq_right (by decide : ¬((0 : Nat) = 1)),
       show min z1 z2 = z2 by omega]
     exact r2
 
@@ -853,10 +853,10 @@ theorem Rep_max {s1 l1 h1 s2 l2 h2 : Nat} {z1 z2 : Int}
   unfold selMax
   rw [tlt_of_Rep r1 r2]
   by_cases hz : z1 < z2
-  · rw [bnat_true hz, if_pos (rfl : (1 : Nat) = 1),
+  · rw [bnat_true hz, ite_eq_left (rfl : (1 : Nat) = 1),
       show max z1 z2 = z2 by omega]
     exact r2
-  · rw [bnat_false hz, if_neg (by decide : ¬((0 : Nat) = 1)),
+  · rw [bnat_false hz, ite_eq_right (by decide : ¬((0 : Nat) = 1)),
       show max z1 z2 = z1 by omega]
     exact r1
 
@@ -1085,7 +1085,7 @@ def roundHi (s lo hi : Nat) : Nat :=
 *evaluate*: any tactic that forces a `whnf` through one of them (a `show`
 across an `ite`, say) sends the kernel into the five-digit long division
 and it reports "deep recursion".  Every `ite` below is therefore taken
-apart by a **syntactic** `rw [if_pos …]` / `rw [if_neg …]`, never by
+apart by a **syntactic** `rw [ite_eq_left …]` / `rw [ite_eq_right …]`, never by
 reduction, and `tdiv18` is rewritten away by `tdiv18_of_Rep` before
 anything else touches it. -/
 
@@ -1128,9 +1128,9 @@ theorem divLo_spec {s lo hi : Nat} {z : Int} (r : Rep s lo hi z)
   unfold roundLo
   rw [r.sign]
   by_cases hz : z < 0
-  · rw [bnat_true hz, if_pos (rfl : (1 : Nat) = 1)]
+  · rw [bnat_true hz, ite_eq_left (rfl : (1 : Nat) = 1)]
     exact divLo_neg r hb hz
-  · rw [bnat_false hz, if_neg (by decide : ¬((0 : Nat) = 1))]
+  · rw [bnat_false hz, ite_eq_right (by decide : ¬((0 : Nat) = 1))]
     exact divLo_nonneg r hb hz
 
 /-- The upper endpoint, negative branch. -/
@@ -1172,9 +1172,9 @@ theorem divHi_spec {s lo hi : Nat} {z : Int} (r : Rep s lo hi z)
   unfold roundHi
   rw [r.sign]
   by_cases hz : z < 0
-  · rw [bnat_true hz, if_pos (rfl : (1 : Nat) = 1)]
+  · rw [bnat_true hz, ite_eq_left (rfl : (1 : Nat) = 1)]
     exact divHi_neg r hb hz
-  · rw [bnat_false hz, if_neg (by decide : ¬((0 : Nat) = 1))]
+  · rw [bnat_false hz, ite_eq_right (by decide : ¬((0 : Nat) = 1))]
     exact divHi_nonneg r hb hz
 
 /-! ## §12 The interval product
@@ -1340,9 +1340,9 @@ theorem double_transfer (a : Nat) (ha : a < M) :
 theorem gate_transfer (g a : Nat) (hg : g ≤ 1) (ha : a < M) :
     (g * a) % M = encodeZ (if g = 1 then decodeZ a else 0) := by
   rcases (show g = 0 ∨ g = 1 by omega) with rfl | rfl
-  · rw [if_neg (by decide : ¬((0 : Nat) = 1)), encodeZ_zero, Nat.zero_mul]
+  · rw [ite_eq_right (by decide : ¬((0 : Nat) = 1)), encodeZ_zero, Nat.zero_mul]
     exact Nat.zero_mod M
-  · rw [if_pos rfl, encodeZ_decodeZ_self ha, Nat.one_mul]
+  · rw [ite_eq_left rfl, encodeZ_decodeZ_self ha, Nat.one_mul]
     exact Nat.mod_eq_of_lt ha
 
 /-- **Addition transfers exactly** when both operands are capped: the sum
@@ -1376,9 +1376,9 @@ theorem decodeZ_tsub_zero {a : Nat} (ha : a < M) (ca : Capped a) :
 theorem decodeZ_gate {g a : Nat} (hg : g ≤ 1) (ha : a < M) :
     decodeZ ((g * a) % M) = if g = 1 then decodeZ a else 0 := by
   rcases (show g = 0 ∨ g = 1 by omega) with rfl | rfl
-  · rw [if_neg (by decide : ¬((0 : Nat) = 1)), Nat.zero_mul, Nat.zero_mod]
+  · rw [ite_eq_right (by decide : ¬((0 : Nat) = 1)), Nat.zero_mul, Nat.zero_mod]
     exact LeanCompCert.Ports.Section413Cells.decodeZ_zero
-  · rw [if_pos rfl, Nat.one_mul, Nat.mod_eq_of_lt ha]
+  · rw [ite_eq_left rfl, Nat.one_mul, Nat.mod_eq_of_lt ha]
 
 /-- The two outputs of `tcmul` are `u64`s (they are `encodeZ` images). -/
 theorem tcmul_lt {gate aLo aHi bLo bHi viol : Nat} (hg : 0 < gate)
@@ -2550,10 +2550,10 @@ theorem tweight_pass_frame (z : TSel) (t : TState) (hW : z.isW = 0) :
     PassFrame (tweight z t) t := by
   have hWne : z.isW ≠ 1 := by omega
   refine ⟨?_, ?_, ?_, ?_, rfl, rfl, rfl⟩
-  · simp only [tweight, hWne, if_false]
-  · simp only [tweight, hWne, if_false]
-  · simp only [tweight, hWne, if_false]
-  · simp only [tweight, hWne, if_false]
+  · simp only [tweight, hWne, ite_false]
+  · simp only [tweight, hWne, ite_false]
+  · simp only [tweight, hWne, ite_false]
+  · simp only [tweight, hWne, ite_false]
 
 theorem PassInv.of_frame {c : Cfg}
     {W : LeanCompCert.Ports.Section413Sweep.Cell} {a b : TState}
@@ -2688,8 +2688,8 @@ theorem AccRel_live_store (c : Cfg) (d : Nat) (t : TState)
     rw [getElem_bang_set_bang A d e _ hdA heA]
     by_cases hde : d = e
     · subst e
-      rw [if_pos rfl, hupdate, hrel.2 d hd]
-    · rw [if_neg hde]
+      rw [ite_eq_left rfl, hupdate, hrel.2 d hd]
+    · rw [ite_eq_right hde]
       exact (ttouch_live_acc_frame c d e t hc hd he (Ne.symm hde)).trans
         (hrel.2 e he)
 
@@ -2982,7 +2982,7 @@ theorem cratSMul_of_code {mc sig : Nat}
       LeanCompCert.Ports.Section413Sweep.csmul,
       LeanCompCert.Ports.Section413Sweep.cone,
       LeanCompCert.Ports.Section413Sweep.cfloorDiv,
-      LeanCompCert.Ports.Section413Sweep.cceilDiv, if_pos, Int.reduceLE,
+      LeanCompCert.Ports.Section413Sweep.cceilDiv, ite_eq_left, Int.reduceLE,
       Int.one_mul]
     rw [LeanCompCert.Ports.Section413Cells.natCast_ediv,
       LeanCompCert.Ports.Section413Cells.neg_natCast_ediv
@@ -3002,7 +3002,7 @@ theorem cratSMul_of_code {mc sig : Nat}
 
 theorem decodeZ_ofNat_small (n : Nat) (hn : n < H63) : decodeZ n = (n : Int) := by
   unfold decodeZ
-  rw [if_pos]
+  rw [ite_eq_left]
   simpa only [cellsH63_val, H63_val] using hn
 
 theorem decodeZ_tsub_small (n : Nat) (hn : n < H63) :
@@ -3058,7 +3058,7 @@ theorem weightV1_natAbs_le_scale (R X : Nat) (hX : 1 ≤ X) :
   rw [LeanCompCert.Ports.Section413Sweep.weightV1, hrat]
   rcases hmc with h0 | h1 | h2
   · simp [h0]
-  · simp only [h1, if_pos, Int.natAbs_natCast]
+  · simp only [h1, ite_eq_left, Int.natAbs_natCast]
     exact hq
   · simp only [h2, Nat.reduceEqDiff, ↓reduceIte, Int.natAbs_neg,
       Int.natAbs_natCast]
@@ -3181,7 +3181,7 @@ theorem tweight_live_square (z : TSel) (t : TState)
   have hwLo : wLo < M := Nat.mod_lt _ hMpos
   have hwHi : wHi < M := Nat.mod_lt _ hMpos
   have hww : ww.2.2 = 0 := by
-    simpa only [ww, tweight, hW, if_pos, muX, isP, isM, live, sig1,
+    simpa only [ww, tweight, hW, ite_eq_left, muX, isP, isM, live, sig1,
       magF, magC, wLo, wHi] using hclean
   have hmul := tcmul_decode (gate := z.isW) (aLo := wLo) (aHi := wHi)
     (bLo := wLo) (bHi := wHi) (viol := t.viol)
@@ -3189,7 +3189,7 @@ theorem tweight_live_square (z : TSel) (t : TState)
   have hcell := congrArg
     (fun p : Int × Int =>
       (⟨p.1, p.2⟩ : LeanCompCert.Ports.Section413Sweep.Cell)) hmul
-  simpa only [ww, tweight, hW, if_pos, muX, isP, isM, live, sig1,
+  simpa only [ww, tweight, hW, ite_eq_left, muX, isP, isM, live, sig1,
     magF, magC, wLo, wHi] using hcell
 
 /-- A clean live weight round establishes all raw bounds required by pass B,
@@ -3212,7 +3212,7 @@ theorem tweight_passU64 (z : TSel) (t : TState) (hW : z.isW = 1)
   have hwLo : wLo < M := Nat.mod_lt _ hMpos
   have hwHi : wHi < M := Nat.mod_lt _ hMpos
   have hwwClean : ww.2.2 = 0 := by
-    simpa only [ww, tweight, hW, if_pos, muX, isP, isM, live, sig1,
+    simpa only [ww, tweight, hW, ite_eq_left, muX, isP, isM, live, sig1,
       magF, magC, wLo, wHi] using hclean
   have hww := tcmul_lt (gate := z.isW) (aLo := wLo) (aHi := wHi)
     (bLo := wLo) (bHi := wHi) (viol := t.viol)
@@ -3220,7 +3220,7 @@ theorem tweight_passU64 (z : TSel) (t : TState) (hW : z.isW = 1)
   have hout : wLo < M ∧ wHi < M ∧ ww.1 < M ∧ ww.2.1 < M ∧
       t.dLo < M ∧ t.dHi < M ∧ ∀ i, t.arr i < M :=
     ⟨hwLo, hwHi, hww.1, hww.2, hdLo, hdHi, harr⟩
-  simpa only [PassU64, tweight, hW, if_pos, muX, isP, isM, live, sig1,
+  simpa only [PassU64, tweight, hW, ite_eq_left, muX, isP, isM, live, sig1,
     magF, magC, wLo, wHi, ww] using hout
 
 /-- Selector decoding inside candidate `x+1` and phase-2 position `pos`.
@@ -3434,8 +3434,8 @@ theorem PassInv.passB_round (c : Cfg) (hc : Admissible c) (x r : Nat)
         hinv hclean1
       have hi2 := PassInv.touch_zero c W (c.ttouch 1 r t)
         (LeanCompCert.Ports.Section413Sweep.touch c.rounds W p r) q hi1
-      simpa only [X, q, hdiv, if_pos, heq, ne_eq, not_true_eq_false,
-        if_false] using hi2
+      simpa only [X, q, hdiv, ite_eq_left, heq, ne_eq, not_true_eq_false,
+        ite_false] using hi2
     · have hg2one : 1 - bnat (q = r) = 1 := by simp [heq, bnat]
       have hg2one' : 1 - bnat ((x + 1) / r = r) = 1 := by
         simpa only [q, X] using hg2one
@@ -3453,13 +3453,13 @@ theorem PassInv.passB_round (c : Cfg) (hc : Admissible c) (x r : Nat)
       have hi2 := PassInv.touch_live c W (c.ttouch 1 r t)
         (LeanCompCert.Ports.Section413Sweep.touch c.rounds W p r)
         q hc hqCap hmuq hi1 hclean
-      simpa only [X, q, hdiv, if_pos, heq, ne_eq, not_false_eq_true]
+      simpa only [X, q, hdiv, ite_eq_left, heq, ne_eq, not_false_eq_true]
         using hi2
   · have hg1zero : bnat (X % r = 0) = 0 := bnat_false hdiv
     rw [hg1zero, Nat.zero_mul] at hclean ⊢
     have hi1 := PassInv.touch_zero c W t p r hinv
     have hi2 := PassInv.touch_zero c W (c.ttouch 0 r t) p q hi1
-    simpa only [X, q, hdiv, if_false] using hi2
+    simpa only [X, q, hdiv, ite_false] using hi2
 
 theorem PassInv.passB_round_past_sqrt (c : Cfg) (hc : Admissible c)
     (x r : Nat) (W : LeanCompCert.Ports.Section413Sweep.Cell) (t : TState)
@@ -4567,13 +4567,13 @@ theorem tfinBadLo_zero_sound (c : Cfg) (hc : Admissible c) (z : TSel)
     have hsign : bnat (H63 ≤ g) = 1 := bnat_true hH
     have hmag : tsub 0 g = (decodeZ g).natAbs := by
       have hm := tmag_mag g hg
-      simpa only [tmag, if_pos hH] using hm
+      simpa only [tmag, ite_eq_left hH] using hm
     have hcore : tfinBadCore (decodeZ g).natAbs (z.X * 10) = 0 := by
       change bnat (H63 ≤ g) *
         tfinBadCore (if bnat (H63 ≤ g) = 1 then tsub 0 g else g)
           (z.X * 10 % M) *
         (z.isF * bnat (c.checkLo ≤ z.X)) = 0 at hbad
-      simpa only [hsign, if_pos, hF, bnat_true hcheck, hmag, htenMod,
+      simpa only [hsign, ite_eq_left, hF, bnat_true hcheck, hmag, htenMod,
         Nat.one_mul, Nat.mul_one] using hbad
     have hprod := (tfinBadCore_eq_zero_iff _ _
       (natAbs_decodeZ_lt g hg) htenRaw).mp hcore
@@ -4631,14 +4631,14 @@ theorem tfinBadHi_zero_sound (c : Cfg) (hc : Admissible c) (z : TSel)
     have hsign : bnat (H63 ≤ g) = 0 := bnat_false hH
     have hmag : g = (decodeZ g).natAbs := by
       have hm := tmag_mag g hg
-      simpa only [tmag, if_neg hH] using hm
+      simpa only [tmag, ite_eq_right hH] using hm
     have hcore : tfinBadCore (decodeZ g).natAbs (z.X * 10) = 0 := by
       change (1 - bnat (H63 ≤ g)) *
         tfinBadCore (if bnat (H63 ≤ g) = 1 then tsub 0 g else g)
           (z.X * 10 % M) *
         (z.isF * bnat (c.checkLo ≤ z.X)) = 0 at hbad
       rw [hsign] at hbad
-      simp only [Nat.sub_zero, Nat.zero_ne_one, if_false, hF,
+      simp only [Nat.sub_zero, Nat.zero_ne_one, ite_false, hF,
         bnat_true hcheck, Nat.one_mul, Nat.mul_one] at hbad
       rw [hmag, htenMod] at hbad
       exact hbad
@@ -5007,9 +5007,9 @@ theorem Phase1Persist.step (c : Cfg) (hc : Admissible c) (idx : Nat)
         · exact hd
         · rw [hn1] at hn
           omega
-      rw [if_pos hw0.symm, hd0]
+      rw [ite_eq_left hw0.symm, hd0]
       simp
-    · rw [if_neg (Ne.symm hw0)]
+    · rw [ite_eq_right (Ne.symm hw0)]
       exact h.arr_zero
   have htrialAbove : ∀ i, c.cap < i → trial.arr i = 0 := by
     intro i hi
@@ -5018,7 +5018,7 @@ theorem Phase1Persist.step (c : Cfg) (hc : Admissible c) (idx : Nat)
     rw [hwr]
     have haddr : z.isDL * z.n1 ≤ c.cap := by
       exact Nat.le_trans (Nat.mul_le_mul_right z.n1 hDLle) (by simpa using hncap)
-    rw [if_neg (show i ≠ z.isDL * z.n1 by omega)]
+    rw [ite_eq_right (show i ≠ z.isDL * z.n1 by omega)]
     exact h.arr_above i hi
   let pre := tweight z (tpassA z trial)
   have hWne : z.isW ≠ 1 := by omega
@@ -5026,13 +5026,13 @@ theorem Phase1Persist.step (c : Cfg) (hc : Admissible c) (idx : Nat)
       pre.wwHi = 0 ∧ pre.dLo = 0 ∧ pre.dHi = 0 ∧
       pre.gLo = 0 ∧ pre.gHi = 0 ∧ pre.arr = trial.arr := by
     refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, rfl⟩
-    · simpa only [pre, tweight, hWne, if_false, tpassA, trial, ttrial, t]
+    · simpa only [pre, tweight, hWne, ite_false, tpassA, trial, ttrial, t]
         using h.wLo
-    · simpa only [pre, tweight, hWne, if_false, tpassA, trial, ttrial, t]
+    · simpa only [pre, tweight, hWne, ite_false, tpassA, trial, ttrial, t]
         using h.wHi
-    · simpa only [pre, tweight, hWne, if_false, tpassA, trial, ttrial, t]
+    · simpa only [pre, tweight, hWne, ite_false, tpassA, trial, ttrial, t]
         using h.wwLo
-    · simpa only [pre, tweight, hWne, if_false, tpassA, trial, ttrial, t]
+    · simpa only [pre, tweight, hWne, ite_false, tpassA, trial, ttrial, t]
         using h.wwHi
     · exact h.dLo
     · exact h.dHi
@@ -5309,9 +5309,9 @@ theorem SweepRel.step (c : Cfg) (hc : Admissible c) (hflag : c.tFlag = 0)
     dsimp only [W, ad]
     rw [hrel.ok_true]
     by_cases hcheck : c.checkLo ≤ X
-    · rw [if_pos hcheck, hfin.2.2.2.2.2.2.2.2 hcheck]
+    · rw [ite_eq_left hcheck, hfin.2.2.2.2.2.2.2.2 hcheck]
       decide
-    · rw [if_neg hcheck]
+    · rw [ite_eq_right hcheck]
       decide
   refine ⟨?_, hfin.2.1, hfin.2.2.1, hfin.2.2.2.1,
     hfin.2.2.2.2.1, hfin.2.2.2.2.2.1, hfin.2.2.2.2.2.2.1, ?_, hok⟩

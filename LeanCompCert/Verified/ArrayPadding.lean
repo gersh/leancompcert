@@ -60,14 +60,14 @@ private theorem denoteAInstr_mono {small large index : Nat}
       simp only [denoteAInstr] at h ⊢
       split at h
       next hidx =>
-        rw [if_pos (Nat.lt_of_lt_of_le hidx hLen)]
+        rw [ite_eq_left (Nat.lt_of_lt_of_le hidx hLen)]
         exact h
       next => contradiction
   | store idxReg srcReg =>
       simp only [denoteAInstr] at h ⊢
       split at h
       next hidx =>
-        rw [if_pos (Nat.lt_of_lt_of_le hidx hLen)]
+        rw [ite_eq_left (Nat.lt_of_lt_of_le hidx hLen)]
         exact h
       next => contradiction
 
@@ -278,7 +278,7 @@ private theorem denoteAInstr_transfer_prefix {len index : Nat}
       split at hRun
       next hidx =>
         have hidx' : t.regs idxReg < len := by simpa [hRegs] using hidx
-        rw [if_pos hidx']
+        rw [ite_eq_left hidx']
         have hout : out = s.writeReg dest (s.arr (s.regs idxReg)) :=
           (Option.some.inj hRun).symm
         subst out
@@ -301,7 +301,7 @@ private theorem denoteAInstr_transfer_prefix {len index : Nat}
       split at hRun
       next hidx =>
         have hidx' : t.regs idxReg < len := by simpa [hRegs] using hidx
-        rw [if_pos hidx']
+        rw [ite_eq_left hidx']
         have hout : out = s.writeArr (s.regs idxReg) (s.regs srcReg) :=
           (Option.some.inj hRun).symm
         subst out

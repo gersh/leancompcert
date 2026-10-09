@@ -118,7 +118,7 @@ theorem R2MarkTrace.Rep.step {L : Nat} {tr : R2MarkTrace}
     simp only [R2MarkTrace.step, updateCell]
     exact planeWordsAt_write_self tr.machine L e.cell
       ((tr.cells e.cell).markPower e.power e.weight e.first).encode hL
-  · simp only [R2MarkTrace.step, updateCell, if_neg hie]
+  · simp only [R2MarkTrace.step, updateCell, ite_eq_right hie]
     rw [planeWordsAt_write_other tr.machine L i e.cell
       ((tr.cells e.cell).markPower e.power e.weight e.first).encode hi he hie]
     exact hRep i hi

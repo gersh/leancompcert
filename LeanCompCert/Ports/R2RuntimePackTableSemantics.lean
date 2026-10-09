@@ -111,7 +111,7 @@ theorem exists_prime_of_lt_rootTrialPrimeCount (limit i : Nat)
       have hqRoot : q < runtimeRoot - 1 := by omega
       rw [rootTrialPrimeCount_succ_prime q hqRoot] at hi
       by_cases hp : LeanCompCert.Verified.PackedSieve.IsPrime (q + 2)
-      · simp only [hp, if_pos] at hi
+      · simp only [hp, ite_eq_left] at hi
         by_cases hbelow : i < rootTrialPrimeCount q
         · obtain ⟨p, hpq, hpPrime, hpRank⟩ := ih (by omega) hbelow
           exact ⟨p, by omega, hpPrime, hpRank⟩

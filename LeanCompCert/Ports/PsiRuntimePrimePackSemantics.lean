@@ -135,8 +135,8 @@ theorem psiRootPackBody_spec (m : PsiRuntimeMeta) (index : Nat) (s : AState)
       denoteOperand, denoteOp, AState.writeReg, RegState.set, hnRawM,
       hmarkRawM]
   have sr13 : sr.regs 13 = psiRootPackFlag m s index := by
-    simp [sr, psiRootPackRead, psiRootPackFlag, psiRootPackN, arun, astep,
-      sval, sdest, denoteOperand, denoteOp, AState.writeReg, RegState.set,
+    simp [sr, psiRootPackRead, psiRootPackFlag.eq_def, psiRootPackN.eq_def, arun, astep,
+      sval, sdest, denoteOperand, denoteOp.eq_def, AState.writeReg, RegState.set,
       hnRawM, hmarkRawM]
   have srWrite : sr.regs rWrite = s.regs rWrite := by
     simp [sr, psiRootPackRead, arun, astep, sval, sdest, denoteOperand,
@@ -576,13 +576,13 @@ theorem psiRootPackCount_rank_exists (m : PsiRuntimeMeta)
   | zero => simp at hrank
   | succ k ih =>
       by_cases hselected : arr (m.markBase + psiRootPackN k) = 0
-      · rw [psiRootPackCount_succ, if_pos hselected] at hrank
+      · rw [psiRootPackCount_succ, ite_eq_left hselected] at hrank
         by_cases hbefore : rank < psiRootPackCount m arr k
         · rcases ih hbefore with ⟨q, hq, hsel, hcount⟩
           exact ⟨q, by omega, hsel, hcount⟩
         · have heq : rank = psiRootPackCount m arr k := by omega
           exact ⟨k, by omega, hselected, heq.symm⟩
-      · rw [psiRootPackCount_succ, if_neg hselected] at hrank
+      · rw [psiRootPackCount_succ, ite_eq_right hselected] at hrank
         rcases ih hrank with ⟨q, hq, hsel, hcount⟩
         exact ⟨q, by omega, hsel, hcount⟩
 

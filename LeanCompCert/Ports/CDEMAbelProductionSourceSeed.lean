@@ -23,9 +23,9 @@ private theorem seedRegs_reg_eq (idx r value : Nat) (s : AState)
       apply ih (arun idx s [.scalar (.mov x.1 (.lit x.2))])
       · rw [cdem_seedReg_reg]
         by_cases hx : x.1 = r
-        · rw [if_pos hx.symm, hall x (by simp) hx,
+        · rw [ite_eq_left hx.symm, hall x (by simp) hx,
             Nat.mod_eq_of_lt hvalue]
-        · rw [if_neg (fun h => hx h.symm), hs]
+        · rw [ite_eq_right (fun h => hx h.symm), hs]
       · intro y hy
         exact hall y (by simp [hy])
 
@@ -41,7 +41,7 @@ private theorem seedRegs_reg_eq_of_mem (idx r value : Nat) (s : AState)
       by_cases hx : x.1 = r
       · apply seedRegs_reg_eq idx r value
           (arun idx s [.scalar (.mov x.1 (.lit x.2))]) xs
-        · rw [cdem_seedReg_reg, if_pos hx.symm,
+        · rw [cdem_seedReg_reg, ite_eq_left hx.symm,
             hall x (by simp) hx, Nat.mod_eq_of_lt hvalue]
         · exact hvalue
         · intro y hy

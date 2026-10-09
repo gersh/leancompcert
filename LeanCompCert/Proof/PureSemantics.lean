@@ -1511,7 +1511,7 @@ theorem evalCWhile_unroll
         rw [hFalse env hInv]
         show (if (0 : Int) = 0 then some env
           else (evalCSequence env body).bind (evalCWhile cond body 0)) = _
-        exact if_pos rfl
+        exact ite_eq_left rfl
       rw [hUnfold]
       rfl
   | succ remaining ih =>
@@ -1530,7 +1530,7 @@ theorem evalCWhile_unroll
         show (if guard = 0 then some env
           else (evalCSequence env body).bind
             (evalCWhile cond body (remaining + 1))) = _
-        exact if_neg hNe
+        exact ite_eq_right hNe
       rw [hUnfold, repeatStmts_succ, evalCSequence_append]
       cases hBody : evalCSequence env body with
       | none => rfl

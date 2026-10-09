@@ -132,18 +132,18 @@ theorem productionInitState_reset
     apply PowerCursor.ext
     · simp only [resetPowerCursor,
         productionInitState_regs_zero rR (by decide) (by decide) (by decide),
-        if_pos, productionInitialPowerCell, productionPowerPhases_head]
+        ite_eq_left, productionInitialPowerCell, productionPowerPhases_head]
     · simp only [resetPowerCursor,
         productionInitState_regs_zero rR (by decide) (by decide) (by decide),
-        if_pos, productionInitialPowerCell, productionPowerPhases_head]
+        ite_eq_left, productionInitialPowerCell, productionPowerPhases_head]
       exact productionTable_head
     · simp only [resetPowerCursor,
         productionInitState_regs_zero rR (by decide) (by decide) (by decide),
-        if_pos, productionInitialPowerCell, productionPowerPhases_head]
+        ite_eq_left, productionInitialPowerCell, productionPowerPhases_head]
       exact productionTable_head
     · simp only [resetPowerCursor,
         productionInitState_regs_zero rR (by decide) (by decide) (by decide),
-        if_pos, productionInitialPowerCell, productionPowerPhases_head,
+        ite_eq_left, productionInitialPowerCell, productionPowerPhases_head,
         productionTable_head, productionInitState_window]
   · exact productionInitState_plane_empty i hi
 

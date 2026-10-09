@@ -22,7 +22,7 @@ theorem sieveCommitGate_active (idx : Nat) (st : AState)
   have h1M : (1 : Nat) % M = 1 := by decide
   simp only [sieveCommitGate, arun, astep, InstrBlock.sdest,
     InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
-    hgate, hlast, Nat.one_mul, h1M, Option.getD_some, if_pos]
+    hgate, hlast, Nat.one_mul, h1M, Option.getD_some, ite_eq_left]
 
 def sieveCommitHead (c : Cfg) : List AInstr :=
   [.scalar (.binop 65 .add (.reg rN) (.lit c.muBase))]
@@ -37,7 +37,7 @@ theorem sieveCommitHead_run (c : Cfg) (idx : Nat) (st : AState)
   have hmuMod : c.muBase % M = c.muBase := Nat.mod_eq_of_lt (by omega)
   simp only [sieveCommitHead, arun, astep, InstrBlock.sdest,
     InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg, rN,
-    hmuMod, haddrMod7, Option.getD_some, if_pos]
+    hmuMod, haddrMod7, Option.getD_some, ite_eq_left]
 
 def sieveCommitMux : List AInstr := muxBody 66 64 65 rZero 67
 
@@ -60,7 +60,7 @@ theorem sieveCommitZero_active (idx : Nat) (st : AState)
   have hsub : (1 + (M - 1)) % M = 0 := by decide
   simp only [sieveCommitZero, arun, astep, InstrBlock.sdest,
     InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg, hlast,
-    h1M, hsub, Option.getD_some, if_pos]
+    h1M, hsub, Option.getD_some, ite_eq_left]
 
 def sieveCommitSink (c : Cfg) : List AInstr :=
   [.scalar (.binop 69 .mul (.reg 68) (.lit c.sink))]
@@ -70,7 +70,7 @@ theorem sieveCommitSink_zero (c : Cfg) (idx : Nat) (st : AState)
     (arun idx st (sieveCommitSink c)).regs 69 = 0 := by
   simp only [sieveCommitSink, arun, astep, InstrBlock.sdest,
     InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg, hzero,
-    Nat.zero_mul, Nat.zero_mod, Option.getD_some, if_pos]
+    Nat.zero_mul, Nat.zero_mod, Option.getD_some, ite_eq_left]
 
 def sieveCommitAdd : List AInstr :=
   [.scalar (.binop 66 .add (.reg 66) (.reg 69))]
@@ -82,7 +82,7 @@ theorem sieveCommitAdd_zero (idx : Nat) (st : AState) (addr : Nat)
   have hmod : addr % M = addr := Nat.mod_eq_of_lt haddrM
   simp only [sieveCommitAdd, arun, astep, InstrBlock.sdest,
     InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg, haddr,
-    hzero, Nat.add_zero, hmod, Option.getD_some, if_pos]
+    hzero, Nat.add_zero, hmod, Option.getD_some, ite_eq_left]
 
 def sieveCommitAddress (c : Cfg) : List AInstr :=
   sieveCommitGate ++ sieveCommitHead c ++ sieveCommitMux ++
@@ -171,7 +171,7 @@ theorem sieveCursorZero_active (idx : Nat) (st : AState)
   have hsub : (1 + (M - 1)) % M = 0 := by decide
   simp only [sieveCursorZero, arun, astep, InstrBlock.sdest,
     InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg, hlast,
-    h1M, hsub, Option.getD_some, if_pos]
+    h1M, hsub, Option.getD_some, ite_eq_left]
 
 def sieveCursorPrime : List AInstr :=
   [.scalar (.binop rPj .mul (.reg 70) (.reg 71))]
@@ -181,7 +181,7 @@ theorem sieveCursorPrime_zero (idx : Nat) (st : AState)
     (arun idx st sieveCursorPrime).regs rPj = 0 := by
   simp only [sieveCursorPrime, arun, astep, InstrBlock.sdest,
     InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg, rPj,
-    hzero, Nat.mul_zero, Nat.zero_mod, Option.getD_some, if_pos]
+    hzero, Nat.mul_zero, Nat.zero_mod, Option.getD_some, ite_eq_left]
 
 def sieveCursorN : List AInstr :=
   [.scalar (.binop rN .add (.reg rN) (.reg 64))]
@@ -195,7 +195,7 @@ theorem sieveCursorN_active (idx : Nat) (st : AState)
     simpa [rN] using hmod
   simp only [sieveCursorN, arun, astep, InstrBlock.sdest,
     InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg, rN,
-    hlast, hmod7, Option.getD_some, if_pos]
+    hlast, hmod7, Option.getD_some, ite_eq_left]
 
 def sieveCommitCursor : List AInstr :=
   sieveCursorAdd ++ sieveCursorZero ++ sieveCursorPrime ++ sieveCursorN
@@ -329,7 +329,7 @@ theorem sieveLastTest_run (c : Cfg) (idx : Nat) (st : AState)
   have hpj8 : st.regs 8 = c.pn - 1 := by simpa [rPj] using hpj
   simp only [sieveLastTest, arun, astep, InstrBlock.sdest,
     InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg, rPj,
-    hlastMod, hpj8, if_pos, Option.getD_some]
+    hlastMod, hpj8, ite_eq_left, Option.getD_some]
 
 theorem sieveBody_last_computed_store (c : Cfg) (idx : Nat) (st : AState)
     (hgate : st.regs 40 = 1) (hpj : st.regs rPj = c.pn - 1)

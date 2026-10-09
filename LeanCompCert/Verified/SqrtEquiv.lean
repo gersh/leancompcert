@@ -128,10 +128,10 @@ theorem sqrtStep_invariant {n x : Nat} (h₁ : Nat.sqrt n ≤ x) (h₂ : x ≤ n
     Nat.sqrt n ≤ sqrtStep n x ∧ sqrtStep n x ≤ n := by
   unfold sqrtStep
   by_cases hx : x = 0
-  · rw [if_pos hx]
+  · rw [ite_eq_left hx]
     subst hx
     exact ⟨h₁, Nat.zero_le n⟩
-  · rw [if_neg hx]
+  · rw [ite_eq_right hx]
     have hpos : 0 < x := Nat.pos_of_ne_zero hx
     refine ⟨sqrt_le_newton hpos, ?_⟩
     have hq : n / x ≤ n := Nat.div_le_self n x
@@ -164,10 +164,10 @@ theorem clampDown_eq_sqrt (n : Nat) :
     intro x h₁ h₂
     simp only [clampDown]
     by_cases hx : x * x ≤ n
-    · rw [if_pos hx]
+    · rw [ite_eq_left hx]
       have := le_sqrt_of_sq_le hx
       omega
-    · rw [if_neg hx]
+    · rw [ite_eq_right hx]
       have hgt : Nat.sqrt n < x := by
         rcases Nat.lt_or_ge (Nat.sqrt n) x with h | h
         · exact h

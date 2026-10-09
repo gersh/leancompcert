@@ -499,7 +499,7 @@ theorem okClassify_run (idx : Nat) (s : RegState) (a b k : Nat)
     CDEMAbelScan.rVDiv, reduceIte, Nat.reduceEqDiff, ha, hb, h2M, h1M,
     h0M, Nat.mod_eq_of_lt haSqM]
   simp only [hk30, he, ha2mod, show ¬k < a * a from by omega,
-    if_false, Section413G1Denote.msub_bit (hbit (k = a * a))]
+    ite_false, Section413G1Denote.msub_bit (hbit (k = a * a))]
   rw [ha2sum]
   by_cases heq : k = a * a <;>
     by_cases hbig : 2 * a + 1 ≤ k - a * a <;>

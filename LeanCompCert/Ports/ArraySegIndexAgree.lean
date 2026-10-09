@@ -99,8 +99,8 @@ theorem arun_coreBody_agree (c : Cfg) (i j : Nat) (st : AState)
       simp only [astep, LeanCompCert.Verified.InstrBlock.sdest,
         LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
         Option.getD_some, hiMod, hjMod, hspanMod, hspan1Mod]
-    · rw [if_neg (by omega), if_neg (by omega)]
-    · rw [if_neg hiNe, if_neg hjNe]
+    · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
+    · rw [ite_eq_right hiNe, ite_eq_right hjNe]
 
 open LeanCompCert.Ports.ArraySegMobiusIndexedRun in
 open LeanCompCert.Ports.ArraySegMobiusCursorModel in

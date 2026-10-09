@@ -749,7 +749,7 @@ theorem blkGeom_room : ∀ a ∈ blkGeom, cursor + depth a.expr ≤ regCount := 
 theorem blkNum_wf (c : Params) : ∀ a ∈ blkNum c, a.WF cursor := by
   intro a ha
   by_cases hup : c.up = 1 <;>
-    · simp only [blkNum, hup, if_true, if_false, List.mem_cons,
+    · simp only [blkNum, hup, ite_true, ite_false, List.mem_cons,
         List.not_mem_nil, or_false] at ha
       rcases ha with rfl | rfl | rfl | rfl <;>
         exact ⟨by simp [cursor], by simp [Expr.RegsBelow, cursor], rfl⟩
@@ -758,7 +758,7 @@ theorem blkNum_room (c : Params) :
     ∀ a ∈ blkNum c, cursor + depth a.expr ≤ regCount := by
   intro a ha
   by_cases hup : c.up = 1 <;>
-    · simp only [blkNum, hup, if_true, if_false, List.mem_cons,
+    · simp only [blkNum, hup, ite_true, ite_false, List.mem_cons,
         List.not_mem_nil, or_false] at ha
       rcases ha with rfl | rfl | rfl | rfl <;> simp [depth, cursor, regCount]
 
@@ -912,7 +912,7 @@ theorem blkT1_room : ∀ a ∈ blkT1, cursor + depth a.expr ≤ regCount := by
 theorem blkT2_wf (c : Params) : ∀ a ∈ blkT2 c, a.WF cursor := by
   intro a ha
   by_cases hup : c.up = 1 <;>
-    · simp only [blkT2, hup, if_true, if_false, List.mem_cons,
+    · simp only [blkT2, hup, ite_true, ite_false, List.mem_cons,
         List.not_mem_nil, or_false] at ha
       subst ha
       exact ⟨by simp [cursor], by simp [Expr.RegsBelow, sel, cursor], rfl⟩
@@ -921,7 +921,7 @@ theorem blkT2_room (c : Params) :
     ∀ a ∈ blkT2 c, cursor + depth a.expr ≤ regCount := by
   intro a ha
   by_cases hup : c.up = 1 <;>
-    · simp only [blkT2, hup, if_true, if_false, List.mem_cons,
+    · simp only [blkT2, hup, ite_true, ite_false, List.mem_cons,
         List.not_mem_nil, or_false] at ha
       subst ha
       simp [depth, sel, cursor, regCount]
@@ -1392,23 +1392,23 @@ theorem blkT2_spec (c : Params) (k : Nat) (t : RegState) (tA tB tt : Nat)
   have emax : max tA tB = if tA ≤ tB then tB else tA := Nat.max_def
   rw [emin, emax] at et
   by_cases hu : c.up = 1
-  · rw [if_pos hu] at et
+  · rw [ite_eq_left hu] at et
     by_cases hab : tA ≤ tB
-    · rw [if_pos hab] at et
+    · rw [ite_eq_left hab] at et
       subst et
       simp [run, blkT2, evalExpr, denoteOp, RegState.set, sel, h59, h61, l1,
         hu, hab, Nat.mod_eq_of_lt htA]
-    · rw [if_neg hab] at et
+    · rw [ite_eq_right hab] at et
       subst et
       simp [run, blkT2, evalExpr, denoteOp, RegState.set, sel, h59, h61, l1,
         hu, hab, Nat.mod_eq_of_lt htB]
-  · rw [if_neg hu] at et
+  · rw [ite_eq_right hu] at et
     by_cases hab : tA ≤ tB
-    · rw [if_pos hab] at et
+    · rw [ite_eq_left hab] at et
       subst et
       simp [run, blkT2, evalExpr, denoteOp, RegState.set, sel, h59, h61, l1,
         hu, hab, Nat.mod_eq_of_lt htB]
-    · rw [if_neg hab] at et
+    · rw [ite_eq_right hab] at et
       subst et
       simp [run, blkT2, evalExpr, denoteOp, RegState.set, sel, h59, h61, l1,
         hu, hab, Nat.mod_eq_of_lt htA]
@@ -1499,7 +1499,7 @@ theorem geom_facts (c : Params) {n pk : Nat} (hup : c.up ≤ 1) (hpk : 0 < pk)
     denAOf c n pk ≤ 13 * (n * n) ∧ denBOf c n pk ≤ 13 * (n * n) := by
   obtain ⟨p1, p2, p3, p4, p5⟩ := geom_products hpk h1 h2
   by_cases hu : c.up = 1 <;>
-    simp only [numAOf, denAOf, numBOf, denBOf, hu, if_true, if_false] <;>
+    simp only [numAOf, denAOf, numBOf, denBOf, hu, ite_true, ite_false] <;>
     refine ⟨by omega, by omega, by omega, by omega, by omega, by omega,
       by omega, by omega⟩
 
@@ -1821,10 +1821,10 @@ theorem act_zero_zero {a r : Nat} (e : a = if 1 ≤ r ∧ r ≤ 8 then 1 else 0)
     (h : r = 0) : a = 0 := by subst h; rw [e]; decide
 
 theorem act_zero_big {a r : Nat} (e : a = if 1 ≤ r ∧ r ≤ 8 then 1 else 0)
-    (h : 9 ≤ r) : a = 0 := by rw [e, if_neg (by omega)]
+    (h : 9 ≤ r) : a = 0 := by rw [e, ite_eq_right (by omega)]
 
 theorem act_one_mid {a r : Nat} (e : a = if 1 ≤ r ∧ r ≤ 8 then 1 else 0)
-    (h1 : 1 ≤ r) (h2 : r ≤ 8) : a = 1 := by rw [e, if_pos ⟨h1, h2⟩]
+    (h1 : 1 ≤ r) (h2 : r ≤ 8) : a = 1 := by rw [e, ite_eq_left ⟨h1, h2⟩]
 
 /-- `ceRound` with every binder named, so that its thirteen output fields are
 directly comparable with the registers the body leaves. -/
@@ -1961,7 +1961,7 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
     · refine ⟨h0, ?_⟩
       by_cases hle : pk2 ≤ n
       · exact hle
-      · rw [h0, Nat.one_mul, if_neg hle] at h; exact absurd h (by omega)
+      · rw [h0, Nat.one_mul, ite_eq_right hle] at h; exact absurd h (by omega)
   have hdob0 : dob = 0 → n < 2 * s 2 := by
     intro h0
     rcases Nat.lt_or_ge n (2 * s 2) with h | h
@@ -1970,26 +1970,26 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
       have hrr0 : rr = 0 := by
         have hb := hs.bumpRnd (by rw [hcandk]; exact hne)
         rw [hrndk] at hb; exact hb
-      have hf1 : first = 1 := by rw [efirst, if_pos hrr0]
+      have hf1 : first = 1 := by rw [efirst, ite_eq_left hrr0]
       have hle : pk2 ≤ n := by omega
-      rw [edob, hf1, Nat.one_mul, if_pos hle] at h0
+      rw [edob, hf1, Nat.one_mul, ite_eq_left hle] at h0
       exact absurd h0 (by omega)
   have hpkpos : 0 < pk := by
     rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
-    · rw [epk, if_neg (by omega)]; exact hs2pos
-    · rw [epk, if_pos h]; omega
+    · rw [epk, ite_eq_right (by omega)]; exact hs2pos
+    · rw [epk, ite_eq_left h]; omega
   have hpkle : pk ≤ n := by
     rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
-    · rw [epk, if_neg (by omega)]; exact hs2le
-    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, if_pos h]; exact hle
+    · rw [epk, ite_eq_right (by omega)]; exact hs2le
+    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, ite_eq_left h]; exact hle
   have hpklt : n < 2 * pk := by
     rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
-    · rw [epk, if_neg (by omega)]; exact hdob0 h
-    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, if_pos h]; omega
+    · rw [epk, ite_eq_right (by omega)]; exact hdob0 h
+    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, ite_eq_left h]; omega
   have hpkPow : pk = 2 ^ kk := by
     rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
-    · rw [epk, if_neg (by omega), ekk, h, Nat.add_zero]; exact hs.pkPow
-    · rw [epk, if_pos h, ekk, h, epk2, hs.pkPow, Nat.pow_succ]
+    · rw [epk, ite_eq_right (by omega), ekk, h, Nat.add_zero]; exact hs.pkPow
+    · rw [epk, ite_eq_left h, ekk, h, epk2, hs.pkPow, Nat.pow_succ]
   have hkkLe : kk ≤ 24 := by
     rcases Nat.lt_or_ge kk 25 with h | h
     · omega
@@ -2065,9 +2065,9 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
   obtain ⟨cf0, ecf0⟩ : ∃ x, x = if rr = 0 then 0 else s 4 := ⟨_, rfl⟩
   have hpkS2 : rr ≠ 0 → pk = s 2 := by
     intro h
-    have hf0 : first = 0 := by rw [efirst, if_neg h]
+    have hf0 : first = 0 := by rw [efirst, ite_eq_right h]
     have hd0 : dob = 0 := by rw [edob, hf0, Nat.zero_mul]
-    rw [epk, if_neg (by omega)]
+    rw [epk, ite_eq_right (by omega)]
   have hdivA : rr ≠ 0 →
       (s 5, s 6) = sdRun denA (min (rr - 1) 8) (0, numA) := by
     intro h
@@ -2082,20 +2082,20 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
     exact hh
   have hrA0lt : rA0 < denA := by
     by_cases h : rr = 0
-    · rw [erA0, if_pos h]; exact hnAlt
-    · rw [erA0, if_neg h]; exact sdRun_snd_bound hdA hnAlt (hdivA h)
+    · rw [erA0, ite_eq_left h]; exact hnAlt
+    · rw [erA0, ite_eq_right h]; exact sdRun_snd_bound hdA hnAlt (hdivA h)
   have hrB0lt : rB0 < denB := by
     by_cases h : rr = 0
-    · rw [erB0, if_pos h]; exact hnBlt
-    · rw [erB0, if_neg h]; exact sdRun_snd_bound hdB hnBlt (hdivB h)
+    · rw [erB0, ite_eq_left h]; exact hnBlt
+    · rw [erB0, ite_eq_right h]; exact sdRun_snd_bound hdB hnBlt (hdivB h)
   have hqA0b : 4 * qA0 ≤ 3 * 256 ^ (min (rr - 1) 8) := by
     by_cases h : rr = 0
-    · rw [eqA0, if_pos h]; omega
-    · rw [eqA0, if_neg h]; exact sdRun_fst_bound hdA hA43' (hdivA h)
+    · rw [eqA0, ite_eq_left h]; omega
+    · rw [eqA0, ite_eq_right h]; exact sdRun_fst_bound hdA hA43' (hdivA h)
   have hqB0b : 4 * qB0 ≤ 3 * 256 ^ (min (rr - 1) 8) := by
     by_cases h : rr = 0
-    · rw [eqB0, if_pos h]; omega
-    · rw [eqB0, if_neg h]; exact sdRun_fst_bound hdB hB43' (hdivB h)
+    · rw [eqB0, ite_eq_left h]; omega
+    · rw [eqB0, ite_eq_right h]; exact sdRun_fst_bound hdB hB43' (hdivB h)
   have hp8 : (256 : Nat) ^ (min (rr - 1) 8) ≤ 2 ^ 64 :=
     pow256_le8 (Nat.min_le_right _ _)
   have hqA0M : 4 * qA0 ≤ 3 * 2 ^ 64 := by omega
@@ -2340,8 +2340,8 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
       = if rr = 0 then a else b := by
     intro a b
     by_cases h : rr = 0
-    · rw [efirst, if_pos h, if_pos h, if_pos rfl]
-    · rw [efirst, if_neg h, if_neg h, if_neg (by decide : ¬ (0 : Nat) = 1)]
+    · rw [efirst, ite_eq_left h, ite_eq_left h, ite_eq_left rfl]
+    · rw [efirst, ite_eq_right h, ite_eq_right h, ite_eq_right (by decide : ¬ (0 : Nat) = 1)]
   rw [hif, ← eqA0] at r34
   rw [hif, ← erA0] at r35
   rw [hif, ← eqB0] at r36
@@ -2604,11 +2604,11 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
   -- blkUpd
   have hwA256 : act = 1 → wA < 256 := by
     intro h
-    rw [ewA, euA, evA, if_pos h, if_pos h]
+    rw [ewA, euA, evA, ite_eq_left h, ite_eq_left h]
     exact div_lt_256 hrA0lt
   have hwB256 : act = 1 → wB < 256 := by
     intro h
-    rw [ewB, euB, evB, if_pos h, if_pos h]
+    rw [ewB, euB, evB, ite_eq_left h, ite_eq_left h]
     exact div_lt_256 hrB0lt
   have hqA0M' : qA0 < M := q_lt hqA0M
   have hqB0M' : qB0 < M := q_lt hqB0M
@@ -2659,22 +2659,22 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
     rcases rr_tri rr with h0 | ⟨hlo, hhi⟩ | h9
     · have ha0 : act = 0 := act_zero_zero eact h0
       have x1 : qA = 0 := by
-        rw [eqA, if_neg (by rw [ha0]; decide), eqA0, if_pos h0]
+        rw [eqA, ite_eq_right (by rw [ha0]; decide), eqA0, ite_eq_left h0]
       have x2 : rA = numA := by
-        rw [erA, if_neg (by rw [ha0]; decide), erA0, if_pos h0]
+        rw [erA, ite_eq_right (by rw [ha0]; decide), erA0, ite_eq_left h0]
       rw [x1, x2, h0]; rfl
     · have ha1 : act = 1 := act_one_mid eact hlo hhi
       obtain ⟨mp1, mp2, mp3⟩ := min_pred hlo hhi
       have hne : ¬ rr = 0 := Nat.ne_of_gt hlo
       have hprev := hdivA hne
       rw [mp1] at hprev
-      have x5 : qA0 = s 5 := by rw [eqA0, if_neg hne]
-      have x6 : rA0 = s 6 := by rw [erA0, if_neg hne]
+      have x5 : qA0 = s 5 := by rw [eqA0, ite_eq_right hne]
+      have x6 : rA0 = s 6 := by rw [erA0, ite_eq_right hne]
       have xwA : wA = s 6 * 256 / denA := by
-        rw [ewA, euA, evA, if_pos ha1, if_pos ha1, x6]
+        rw [ewA, euA, evA, ite_eq_left ha1, ite_eq_left ha1, x6]
       have xzA : zA = s 6 * 256 % denA := by
-        rw [ezA, euA, evA, if_pos ha1, if_pos ha1, x6]
-      rw [mp2, ← mp3, sdRun_succ, ← hprev, eqA, if_pos ha1, erA, if_pos ha1,
+        rw [ezA, euA, evA, ite_eq_left ha1, ite_eq_left ha1, x6]
+      rw [mp2, ← mp3, sdRun_succ, ← hprev, eqA, ite_eq_left ha1, erA, ite_eq_left ha1,
         x5, xwA, xzA]
       rfl
     · have ha0 : act = 0 := act_zero_big eact h9
@@ -2683,30 +2683,30 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
       have hprev := hdivA hne
       rw [mb1] at hprev
       have x1 : qA = s 5 := by
-        rw [eqA, if_neg (by rw [ha0]; decide), eqA0, if_neg hne]
+        rw [eqA, ite_eq_right (by rw [ha0]; decide), eqA0, ite_eq_right hne]
       have x2 : rA = s 6 := by
-        rw [erA, if_neg (by rw [ha0]; decide), erA0, if_neg hne]
+        rw [erA, ite_eq_right (by rw [ha0]; decide), erA0, ite_eq_right hne]
       rw [mb2, x1, x2]; exact hprev
   have hdivB' : (qB, rB) = sdRun denB (min rr 8) (0, numB) := by
     rcases rr_tri rr with h0 | ⟨hlo, hhi⟩ | h9
     · have ha0 : act = 0 := act_zero_zero eact h0
       have x1 : qB = 0 := by
-        rw [eqB, if_neg (by rw [ha0]; decide), eqB0, if_pos h0]
+        rw [eqB, ite_eq_right (by rw [ha0]; decide), eqB0, ite_eq_left h0]
       have x2 : rB = numB := by
-        rw [erB, if_neg (by rw [ha0]; decide), erB0, if_pos h0]
+        rw [erB, ite_eq_right (by rw [ha0]; decide), erB0, ite_eq_left h0]
       rw [x1, x2, h0]; rfl
     · have ha1 : act = 1 := act_one_mid eact hlo hhi
       obtain ⟨mp1, mp2, mp3⟩ := min_pred hlo hhi
       have hne : ¬ rr = 0 := Nat.ne_of_gt hlo
       have hprev := hdivB hne
       rw [mp1] at hprev
-      have x7 : qB0 = s 7 := by rw [eqB0, if_neg hne]
-      have x8 : rB0 = s 8 := by rw [erB0, if_neg hne]
+      have x7 : qB0 = s 7 := by rw [eqB0, ite_eq_right hne]
+      have x8 : rB0 = s 8 := by rw [erB0, ite_eq_right hne]
       have xwB : wB = s 8 * 256 / denB := by
-        rw [ewB, euB, evB, if_pos ha1, if_pos ha1, x8]
+        rw [ewB, euB, evB, ite_eq_left ha1, ite_eq_left ha1, x8]
       have xzB : zB = s 8 * 256 % denB := by
-        rw [ezB, euB, evB, if_pos ha1, if_pos ha1, x8]
-      rw [mp2, ← mp3, sdRun_succ, ← hprev, eqB, if_pos ha1, erB, if_pos ha1,
+        rw [ezB, euB, evB, ite_eq_left ha1, ite_eq_left ha1, x8]
+      rw [mp2, ← mp3, sdRun_succ, ← hprev, eqB, ite_eq_left ha1, erB, ite_eq_left ha1,
         x7, xwB, xzB]
       rfl
     · have ha0 : act = 0 := act_zero_big eact h9
@@ -2715,9 +2715,9 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
       have hprev := hdivB hne
       rw [mb1] at hprev
       have x1 : qB = s 7 := by
-        rw [eqB, if_neg (by rw [ha0]; decide), eqB0, if_neg hne]
+        rw [eqB, ite_eq_right (by rw [ha0]; decide), eqB0, ite_eq_right hne]
       have x2 : rB = s 8 := by
-        rw [erB, if_neg (by rw [ha0]; decide), erB0, if_neg hne]
+        rw [erB, ite_eq_right (by rw [ha0]; decide), erB0, ite_eq_right hne]
       rw [mb2, x1, x2]; exact hprev
   have hqAb : 4 * qA ≤ 3 * 2 ^ 64 :=
     q_bound_of (sdRun_fst_bound hdA hA43' hdivA') (pow256_le8 (Nat.min_le_right rr 8))
@@ -2741,9 +2741,9 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
   have hisf1act : isf = 1 → act = 0 := fun h =>
     act_zero_big eact (by rw [hisfRr h]; exact Nat.le_succ 9)
   have hvAC : act = 0 → vA = C := by
-    intro h0; rw [evA, if_neg (by rw [h0]; decide)]
+    intro h0; rw [evA, ite_eq_right (by rw [h0]; decide)]
   have hvBC : act = 0 → vB = C := by
-    intro h0; rw [evB, if_neg (by rw [h0]; decide)]
+    intro h0; rw [evB, ite_eq_right (by rw [h0]; decide)]
   have hwALt36 : act = 0 → wA < 2 ^ 36 := by
     intro h0; rw [ewA, hvAC h0]; exact div_lt_2p36 huAM hCbig
   have hwBLt36 : act = 0 → wB < 2 ^ 36 := by
@@ -2753,20 +2753,20 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
     exact Nat.lt_trans (Nat.lt_of_lt_of_le (Nat.mod_lt _ hCpos) hCle) hn2b
   have hq0Lt : q0 < 2 ^ 36 := by
     by_cases h : isq = 1
-    · rw [eq0, if_pos h]; exact hwALt36 (hisq1act h)
-    · rw [eq0, if_neg h]; exact hs.q0Lt
+    · rw [eq0, ite_eq_left h]; exact hwALt36 (hisq1act h)
+    · rw [eq0, ite_eq_right h]; exact hs.q0Lt
   have hr0Lt : r0 < 2 ^ 50 := by
     by_cases h : isq = 1
-    · rw [er0, if_pos h]; exact hzALt50 (hisq1act h)
-    · rw [er0, if_neg h]; exact hs.r0Lt
+    · rw [er0, ite_eq_left h]; exact hzALt50 (hisq1act h)
+    · rw [er0, ite_eq_right h]; exact hs.r0Lt
   have hfALt : fA' < 2 ^ 36 := by
     by_cases h : isf = 1
-    · rw [efA', if_pos h]; exact hwALt36 (hisf1act h)
-    · rw [efA', if_neg h]; exact hs.fALt
+    · rw [efA', ite_eq_left h]; exact hwALt36 (hisf1act h)
+    · rw [efA', ite_eq_right h]; exact hs.fALt
   have hfBLt : fB' < 2 ^ 36 := by
     by_cases h : isf = 1
-    · rw [efB', if_pos h]; exact hwBLt36 (hisf1act h)
-    · rw [efB', if_neg h]; exact hs.fBLt
+    · rw [efB', ite_eq_left h]; exact hwBLt36 (hisf1act h)
+    · rw [efB', ite_eq_right h]; exact hs.fBLt
   ---- §7e the assembly
   obtain ⟨FB2, eFB2⟩ :
     ∃ x, x = qB + (1 - c.up) * (if rB = 0 then 0 else 1) := ⟨_, rfl⟩
@@ -2794,16 +2794,16 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
   have htBM : tB < M := by
     rw [etB]
     by_cases h1 : ge2 = 1
-    · rw [if_pos h1]
+    · rw [ite_eq_left h1]
       by_cases h2 : fB' ≤ base
-      · rw [if_pos h2]; exact Nat.lt_of_le_of_lt (Nat.sub_le base fB') hbaseM
-      · rw [if_neg h2]; exact htAM
-    · rw [if_neg h1]; exact hbfBM
+      · rw [ite_eq_left h2]; exact Nat.lt_of_le_of_lt (Nat.sub_le base fB') hbaseM
+      · rw [ite_eq_right h2]; exact htAM
+    · rw [ite_eq_right h1]; exact hbfBM
   have htvM : tv < M := by
     rw [etv]
     by_cases h : c.up = 1
-    · rw [if_pos h]; exact Nat.lt_of_le_of_lt (Nat.min_le_left tA tB) htAM
-    · rw [if_neg h]
+    · rw [ite_eq_left h]; exact Nat.lt_of_le_of_lt (Nat.min_le_left tA tB) htAM
+    · rw [ite_eq_right h]
       rcases Nat.le_total tA tB with hle | hle
       · rw [Nat.max_eq_right hle]; exact htBM
       · rw [Nat.max_eq_left hle]; exact htAM

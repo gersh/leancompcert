@@ -84,7 +84,7 @@ theorem prepStage_outputs (k cap : Nat) (s : RegState)
   simp only [prepStage, srun, sdest, sval, denoteOperand, denoteOp,
     RegState.set, rX, rNZ, rInv, rSafe, rPrev, rAddrPrevLo, rAddrPrevHi,
     rAddrCurLo, rAddrCurHi]
-  simp only [Nat.reduceEqDiff, if_false, if_true,
+  simp only [Nat.reduceEqDiff, ite_false, ite_true,
     show 0 % M = 0 by decide, show 1 % M = 1 by decide]
   have hcap : cap < M := by
     have : cap < tableLen cap := by simp [tableLen]; omega
@@ -180,7 +180,7 @@ theorem diffStage_outputs (k : Nat) (s : RegState) :
   simp only [rDiffLo, rDiffHi, rPrevLo, rPrevHi, rCurLo, rCurHi] at ⊢
   simp only [diffStage, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rDiffLo, rDiffHi, rPrevLo, rPrevHi,
-    rCurLo, rCurHi, Nat.reduceEqDiff, if_false, if_true]
+    rCurLo, rCurHi, Nat.reduceEqDiff, ite_false, ite_true]
   constructor <;> rfl
 
 theorem body_defined (k cap : Nat) (s : AState)

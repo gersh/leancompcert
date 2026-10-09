@@ -17,8 +17,8 @@ theorem entry_inv : Inv entry := by
   · intro j
     by_cases h : j = 0
     · subst h
-      simp only [entry, RegState.set, if_pos, Nat.mod_lt _ M_pos]
-    · simp only [entry, RegState.set, if_neg h, initialState]
+      simp only [entry, RegState.set, ite_eq_left, Nat.mod_lt _ M_pos]
+    · simp only [entry, RegState.set, ite_eq_right h, initialState]
       exact M_pos
   · simp [entry, RegState.set, initialState]
   · simp [entry, RegState.set, initialState]

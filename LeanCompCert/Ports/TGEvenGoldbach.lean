@@ -145,8 +145,8 @@ theorem body_viol (c : Cfg) (arr : Nat → Nat) (k : Nat) (s : AState)
   have htargetM : c.evenLo + 2 * k < M := by omega
   subst hsarr
   simp only [body, arun, astep, AState.writeReg, sdest, sval,
-    denoteOperand, denoteOp, Nat.reduceEqDiff, if_false,
-    if_true, Option.getD_some, rViol, rAddr, rP, rQ, rPBit, rQBit, rTarget,
+    denoteOperand, denoteOp, Nat.reduceEqDiff, ite_false,
+    ite_true, Option.getD_some, rViol, rAddr, rP, rQ, rPBit, rQBit, rTarget,
     rPLe, rDiff, rQEq, rPBitGood, rQBitGood, rGood, rBad,
     Cfg.qBase, Cfg.pBitBase, Cfg.qBitBase,
     Nat.mod_eq_of_lt hkM, Nat.mod_eq_of_lt hcountM,

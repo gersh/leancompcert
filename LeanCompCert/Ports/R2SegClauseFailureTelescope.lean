@@ -66,14 +66,14 @@ theorem logClauseOneInstrs_vup_run
   have hup' : s 350 = up := by simpa only [rVUp] using hup
   by_cases hcmp : biasOf S + thr < d + err + n
   · have hroom' : up + fin < M := by
-      simpa only [clauseOneFailure, if_pos hcmp, Nat.one_mul] using hroom
+      simpa only [clauseOneFailure, ite_eq_left hcmp, Nat.one_mul] using hroom
     simp [logClauseOneInstrs, clauseOneFailure, srun, RegState.set,
       sdest, sval, denoteOperand, denoteOp, hd', herr', hn', hthr', hfin,
       hup', hcmp, rD, rErr, rNe, rThr, rViol, rVUp,
       Nat.mod_eq_of_lt hde, Nat.mod_eq_of_lt hden,
       Nat.mod_eq_of_lt hbt, Nat.mod_eq_of_lt hroom']
   · have hupM : up < M := by
-      simpa only [clauseOneFailure, if_neg hcmp, Nat.zero_mul, Nat.add_zero]
+      simpa only [clauseOneFailure, ite_eq_right hcmp, Nat.zero_mul, Nat.add_zero]
         using hroom
     simp [logClauseOneInstrs, clauseOneFailure, srun, RegState.set,
       sdest, sval, denoteOperand, denoteOp, hd', herr', hn', hthr', hfin,
@@ -156,14 +156,14 @@ theorem logClauseTwoInstrs_vlo_run
   have hlo' : s 351 = lo := by simpa only [rVLo] using hlo
   by_cases hcmp : d + thr < biasOf S + err
   · have hroom' : lo + fin < M := by
-      simpa only [clauseTwoFailure, if_pos hcmp, Nat.one_mul] using hroom
+      simpa only [clauseTwoFailure, ite_eq_left hcmp, Nat.one_mul] using hroom
     simp [logClauseTwoInstrs, clauseTwoFailure, srun, RegState.set,
       sdest, sval, denoteOperand, denoteOp, hd', herr', hthr', hfin, hlo',
       hcmp, rD, rErr, rThr, rViol, rVLo,
       Nat.mod_eq_of_lt hdt, Nat.mod_eq_of_lt hbe,
       Nat.mod_eq_of_lt hroom']
   · have hloM : lo < M := by
-      simpa only [clauseTwoFailure, if_neg hcmp, Nat.zero_mul, Nat.add_zero]
+      simpa only [clauseTwoFailure, ite_eq_right hcmp, Nat.zero_mul, Nat.add_zero]
         using hroom
     simp [logClauseTwoInstrs, clauseTwoFailure, srun, RegState.set,
       sdest, sval, denoteOperand, denoteOp, hd', herr', hthr', hfin, hlo',

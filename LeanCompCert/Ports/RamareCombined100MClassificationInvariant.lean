@@ -156,7 +156,7 @@ theorem Cfg.markBody_class_plane_frame
   have hp := c.markPhaseBody_run k s hTM
   dsimp only at hp
   have hp10 : phased.regs 10 = 0 := by
-    rw [hp.1, if_neg (Nat.not_lt_of_ge hclass)]
+    rw [hp.1, ite_eq_right (Nat.not_lt_of_ge hclass)]
   have hr10 : reset.regs 10 = 0 :=
     (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
   have ha := c.markAddressBody_inactive_run k reset hr10
@@ -287,7 +287,7 @@ theorem Cfg.markBody_class_table_frame
   have hp := c.markPhaseBody_run k s hTM
   dsimp only at hp
   have hp10 : phased.regs 10 = 0 := by
-    rw [hp.1, if_neg (Nat.not_lt_of_ge hclass)]
+    rw [hp.1, ite_eq_right (Nat.not_lt_of_ge hclass)]
   have hr10 : reset.regs 10 = 0 :=
     (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
   have ha := c.markAddressBody_inactive_run k reset hr10
@@ -662,9 +662,9 @@ theorem LambdaPsiSweep.body_class_other_plane_frame
   have hphase := c.shape.markBody_phase_run k s hTM
   dsimp only at hphase
   have hm10 : marked.regs 10 = 0 := by
-    rw [hphase.1, if_neg (by omega : ¬s.regs rR < c.shape.markSteps)]
+    rw [hphase.1, ite_eq_right (by omega : ¬s.regs rR < c.shape.markSteps)]
   have hm11 : marked.regs 11 = 1 := by
-    rw [hphase.2, if_pos hclass]
+    rw [hphase.2, ite_eq_left hclass]
   have hmR : marked.regs rR = s.regs rR :=
     arun_frame k rR c.shape.markBody (by rfl) s
   have hmW : marked.regs rW = s.regs rW :=
@@ -728,9 +728,9 @@ theorem LambdaPsiSweep.body_class_table_frame
   have hphase := c.shape.markBody_phase_run k s hTM
   dsimp only at hphase
   have hm10 : marked.regs 10 = 0 := by
-    rw [hphase.1, if_neg (Nat.not_lt_of_ge hclass)]
+    rw [hphase.1, ite_eq_right (Nat.not_lt_of_ge hclass)]
   have hm11 : marked.regs 11 = 1 := by
-    rw [hphase.2, if_pos hclass]
+    rw [hphase.2, ite_eq_left hclass]
   have hmR : marked.regs rR = s.regs rR :=
     arun_frame k rR c.shape.markBody (by rfl) s
   have hmW : marked.regs rW = s.regs rW :=
@@ -1201,9 +1201,9 @@ theorem ofChain_body_classification_counters
   have hphase := shape.markBody_phase_run k s hTM
   dsimp only at hphase
   have hm10 : marked.regs 10 = 0 := by
-    rw [hphase.1, if_neg (by omega : ¬s.regs rR < shape.markSteps)]
+    rw [hphase.1, ite_eq_right (by omega : ¬s.regs rR < shape.markSteps)]
   have hm11 : marked.regs 11 = 1 := by
-    rw [hphase.2, if_pos hclass]
+    rw [hphase.2, ite_eq_left hclass]
   have hmR : marked.regs rR = s.regs rR :=
     arun_frame k rR shape.markBody (by rfl) s
   have hmW : marked.regs rW = s.regs rW :=

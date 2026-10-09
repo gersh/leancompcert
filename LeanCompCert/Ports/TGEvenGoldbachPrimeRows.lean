@@ -213,7 +213,7 @@ theorem body_result (c : Cfg) (arr : Nat → Nat) (k : Nat) (s : AState)
   have h2c3 : 2 * c.goldbach.count ≠ 3 * c.goldbach.count := by omega
   subst hsarr
   simp only [body, arun, astep, AState.writeReg, AState.writeArr, sdest,
-    sval, denoteOperand, denoteOp, Nat.reduceEqDiff, if_false, if_true,
+    sval, denoteOperand, denoteOp, Nat.reduceEqDiff, ite_false, ite_true,
     Option.getD_some, rViol, rAddr, rP, rQ, rLoLeP, rPLtHi, rPRange,
     rPOff, rPSafe, rPBit, rLoLeQ, rQLtHi, rQRange, rQOff, rQSafe,
     rQBit, rPBitGood, rQBitGood, rGood, rBad, rOne,

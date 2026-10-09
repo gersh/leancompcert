@@ -102,11 +102,11 @@ theorem fpMulTail_spec (k : Nat) (u : RegState) (S dst rlo rhi t0 t1 : Nat)
     apply Nat.mod_eq_of_lt; rw [hMv]; omega
   simp only [fpMulTail, srun_cons, srun_nil, sdest, sval, denoteOperand,
     denoteOp, Option.getD_some, RegState.set]
-  simp only [if_neg ht01, if_neg (Ne.symm ht01), if_neg ht0lo, if_neg ht0hi,
-    if_neg ht1lo, if_neg ht1hi, if_neg hdt0, if_neg hdt1,
-    if_neg (Ne.symm ht0lo), if_neg (Ne.symm ht0hi), if_neg (Ne.symm ht1lo),
-    if_neg (Ne.symm ht1hi), if_neg (Ne.symm hdt0), if_neg (Ne.symm hdt1),
-    if_pos rfl, if_true]
+  simp only [ite_eq_right ht01, ite_eq_right (Ne.symm ht01), ite_eq_right ht0lo, ite_eq_right ht0hi,
+    ite_eq_right ht1lo, ite_eq_right ht1hi, ite_eq_right hdt0, ite_eq_right hdt1,
+    ite_eq_right (Ne.symm ht0lo), ite_eq_right (Ne.symm ht0hi), ite_eq_right (Ne.symm ht1lo),
+    ite_eq_right (Ne.symm ht1hi), ite_eq_right (Ne.symm hdt0), ite_eq_right (Ne.symm hdt1),
+    ite_eq_left rfl, ite_true]
   rw [hlit1, hlit2, Nat.shiftLeft_eq, Nat.shiftRight_eq_div_pow,
     Nat.mod_eq_of_lt (by omega : u rhi * 2 ^ (64 - S) < M),
     Nat.mod_eq_of_lt (by omega : u rlo / 2 ^ S < M)]
@@ -301,7 +301,7 @@ theorem sfpMulG_sign (k : Nat) (s : RegState)
     hB0 hB1 hB2 hB3 hB4 hB5 hB6 hB7
   rw [sfpMulG, srun_append]
   simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
-    Option.getD_some, RegState.set, if_pos rfl]
+    Option.getD_some, RegState.set, ite_eq_left rfl]
   rw [fA, fB, xor01 _ _ ha hb]
   apply Nat.mod_eq_of_lt
   rw [hMv]

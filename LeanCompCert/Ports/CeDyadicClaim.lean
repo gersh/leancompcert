@@ -111,7 +111,7 @@ theorem ceAccepts_of_denote (c : Params) (hP : c.Sane)
                   (fun v k => ceRound c k v) (initVals c)).acc ≤ c.bound
           else c.bound ≤ ((List.range (c.len * c.R)).foldl
                   (fun v k => ceRound c k v) (initVals c)).acc)) := hc
-    rw [if_neg hc'] at hval
+    rw [ite_eq_right hc'] at hval
     exact absurd hval (by omega)
 
 /-- The claim, ready for any independent provider of a `Computation.Returns`

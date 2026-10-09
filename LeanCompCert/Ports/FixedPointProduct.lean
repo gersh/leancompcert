@@ -144,7 +144,7 @@ private theorem body_denote (scale accumulator word : Nat) (s : RegState)
       Nat.mod_eq_of_lt hscalePredLt, Nat.mod_eq_of_lt haddLt,
       Nat.mod_eq_of_lt hquotLt, hscaleZero,
       s2, s3, s1, RegState.set]
-  · simp only [s1, RegState.set, if_pos, step]
+  · simp only [s1, RegState.set, ite_eq_left, step]
     rw [haddEq]
 
 private theorem fold_denote (scale : Nat) (words : List Nat)

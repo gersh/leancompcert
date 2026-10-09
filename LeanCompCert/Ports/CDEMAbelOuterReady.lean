@@ -709,14 +709,14 @@ theorem bodySchedule_production_ready (c : Cfg) (idx : Nat) (st : AState)
       dsimp only at hcontinue
       exact
         { cursor := by
-            simp only [hlast, if_false]
+            simp only [hlast, ite_false]
             rw [show (bodySchedule c idx (c.bsSteps - 1) st).regs rR =
               (bodyIter c idx (c.bsSteps - 1) (arun idx st c.body)).regs rR + 1
               from hcontinue.1,
               hmiddle.2.cursor, hstartR]
             omega
           window := by
-            simp only [hlast, if_false]
+            simp only [hlast, ite_false]
             exact hcontinue.2.trans hmiddle.2.window }
 
 theorem bodyIter_succ_start (c : Cfg) (idx n : Nat) (st : AState) :

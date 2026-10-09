@@ -111,7 +111,7 @@ theorem maskFold_eq_loopE (p : Nat → Bool) (arr : Nat → Nat)
   unfold maskStep LeanCompCert.Ports.RS62.stepGuarded
   rw [harg, hcell]
   by_cases hp : p (n0 + k) = true
-  · rw [if_pos hp, if_pos hp]
+  · rw [ite_eq_left hp, ite_eq_left hp]
     simpa [LeanCompCert.Ports.RS62.stepWord] using
       (LeanCompCert.Ports.RS62.stepWord_eq_stepRef state (n0 + k)
         (by omega))
@@ -152,7 +152,7 @@ theorem maskFold_prefix_bounds (p : Nat → Bool) (arr : Nat → Nat)
       rw [hmask k hkf]
       cases hp : p (n0 + k) with
       | false =>
-        simp only [hp, Bool.false_eq_true, if_false, Nat.zero_mul,
+        simp only [hp, Bool.false_eq_true, ite_false, Nat.zero_mul,
           Nat.add_zero]
         constructor
         · exact Nat.le_trans hprev.1 (by
@@ -162,7 +162,7 @@ theorem maskFold_prefix_bounds (p : Nat → Bool) (arr : Nat → Nat)
             rw [Nat.succ_mul]
             omega)
       | true =>
-        simp only [hp, if_pos, Nat.one_mul]
+        simp only [hp, ite_eq_left, Nat.one_mul]
         have hL := LeanCompCert.Ports.RS62.incLWord_le ((n0 - 1) + k)
         have hU := LeanCompCert.Ports.RS62.incUWord_le ((n0 - 1) + k)
         have hU' : incUWord ((n0 - 1) + k) ≤ fpD + n0 + f := by omega
@@ -203,7 +203,7 @@ theorem room_of_endpoint_bounds (p : Nat → Bool) (arr : Nat → Nat)
     Nat.mul_le_mul_right (fpD + n0 + f) hkLe
   cases hp : p (n0 + k) with
   | false =>
-      simp only [hp, Bool.false_eq_true, if_false, Nat.zero_mul,
+      simp only [hp, Bool.false_eq_true, ite_false, Nat.zero_mul,
         Nat.add_zero]
       constructor
       · exact Nat.lt_of_le_of_lt
@@ -211,7 +211,7 @@ theorem room_of_endpoint_bounds (p : Nat → Bool) (arr : Nat → Nat)
       · exact Nat.lt_of_le_of_lt
           (Nat.le_trans hprefix.2 (Nat.add_le_add_left hkMulU SU)) (by omega)
   | true =>
-      simp only [hp, if_pos, Nat.one_mul]
+      simp only [hp, ite_eq_left, Nat.one_mul]
       constructor
       · calc
           (maskFold arr n0 k SL SU).1 + incLWord ((n0 - 1) + k)

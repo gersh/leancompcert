@@ -201,14 +201,14 @@ theorem selectionBody_run (c : Cfg) (k : Nat) (s : AState)
           s.regs 100 + c.logLoBase else c.logSink) % M =
         s.arr (if s.regs 100 < c.logLen then
           s.regs 100 + c.logLoBase else c.logSink) := by
-    simpa [selectedLoIndex, sRP,
-      LeanCompCert.Ports.RamareCombined100M.ShapeSieve.rShapeP] using htabLM
+    simpa [selectedLoIndex.eq_def, sRP.eq_def,
+      LeanCompCert.Ports.RamareCombined100M.ShapeSieve.rShapeP.eq_def] using htabLM
   have htabUM' :
       s.arr (if s.regs 100 < c.logLen then
           s.regs 100 + c.logHiBase else c.logSink) % M =
         s.arr (if s.regs 100 < c.logLen then
           s.regs 100 + c.logHiBase else c.logSink) := by
-    simpa [selectedHiIndex, sRP,
+    simpa [selectedHiIndex.eq_def, sRP.eq_def,
       LeanCompCert.Ports.RamareCombined100M.ShapeSieve.rShapeP] using htabUM
   by_cases hg : s.regs 11 = 1
   · have hsubLg : (s.regs 180 + (M - s.regs 182)) % M =

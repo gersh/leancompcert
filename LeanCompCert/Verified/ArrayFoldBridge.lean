@@ -114,14 +114,14 @@ theorem arun_word (k : Nat) :
                       (denoteOperand k s.regs rhs) with
                   | none => simpa [hv] using M_pos
                   | some v => exact denoteOp_lt op _ _ _ hv
-            · simp only [astep, AState.writeReg, if_neg hEq]
+            · simp only [astep, AState.writeReg, ite_eq_right hEq]
               exact hr j
         | load dest idxReg =>
             by_cases hEq : j = dest
             · subst hEq
               simp only [astep, AState.writeReg]
               exact ha _
-            · simp only [astep, AState.writeReg, if_neg hEq]
+            · simp only [astep, AState.writeReg, ite_eq_right hEq]
               exact hr j
         | store idxReg srcReg => exact hr j
       · intro j
@@ -133,7 +133,7 @@ theorem arun_word (k : Nat) :
             · subst hEq
               simp only [astep, AState.writeArr]
               exact hr _
-            · simp only [astep, AState.writeArr, if_neg hEq]
+            · simp only [astep, AState.writeArr, ite_eq_right hEq]
               exact ha j
 
 theorem arun_regs_word (k : Nat) (l : List AInstr) (s : AState)
@@ -202,10 +202,10 @@ theorem denoteAInstr_eq_astep {len k : Nat} {s : AState} {i : AInstr}
               rfl
   | load dest idxReg =>
       simp only [ADefined] at h
-      simp only [denoteAInstr, astep, if_pos h]
+      simp only [denoteAInstr, astep, ite_eq_left h]
   | store idxReg srcReg =>
       simp only [ADefined] at h
-      simp only [denoteAInstr, astep, if_pos h]
+      simp only [denoteAInstr, astep, ite_eq_left h]
 
 /-- Definedness splits along a block boundary, at the state the second block
 starts in.  Transcribing a sixty-instruction body in one `simp` produces a
@@ -275,14 +275,14 @@ theorem eq_astep_of_denoteAInstr_eq_some {len k : Nat} {s out : AState}
               exact Option.some.inj h.symm
   | load dest idxReg =>
       by_cases hidx : s.regs idxReg < len
-      · simp only [denoteAInstr, if_pos hidx, astep] at h ⊢
+      · simp only [denoteAInstr, ite_eq_left hidx, astep] at h ⊢
         exact Option.some.inj h.symm
-      · simp [denoteAInstr, if_neg hidx] at h
+      · simp [denoteAInstr, ite_eq_right hidx] at h
   | store idxReg srcReg =>
       by_cases hidx : s.regs idxReg < len
-      · simp only [denoteAInstr, if_pos hidx, astep] at h ⊢
+      · simp only [denoteAInstr, ite_eq_left hidx, astep] at h ⊢
         exact Option.some.inj h.symm
-      · simp [denoteAInstr, if_neg hidx] at h
+      · simp [denoteAInstr, ite_eq_right hidx] at h
 
 /-- A successful partial straight-line block ends in exactly `arun`, without
 requiring its definedness proof to be reconstructed separately. -/
@@ -765,9 +765,9 @@ machine's truncation is invisible. -/
 theorem or_one_mod {v m : Nat} (hv : v < m) (hm : 1 < m) :
     (v + (if v = 0 then 1 else 0)) % m = if v = 0 then 1 else v := by
   by_cases h : v = 0
-  · rw [if_pos h, if_pos h, h]
+  · rw [ite_eq_left h, ite_eq_left h, h]
     exact Nat.mod_eq_of_lt hm
-  · rw [if_neg h, if_neg h, Nat.add_zero]
+  · rw [ite_eq_right h, ite_eq_right h, Nat.add_zero]
     exact Nat.mod_eq_of_lt hv
 
 /-- Flag negation, as the machine computes it: `1 - g` is
@@ -776,10 +776,10 @@ theorem one_sub_bit (a : Prop) [Decidable a] :
     (1 + (M - (if a then (1:Nat) else 0))) % M = if a then 0 else 1 := by
   have hM : 1 ≤ M := Nat.le_of_lt one_lt_M
   by_cases ha : a
-  · rw [if_pos ha, if_pos ha]
+  · rw [ite_eq_left ha, ite_eq_left ha]
     have h : 1 + (M - 1) = M := by omega
     rw [h, Nat.mod_self]
-  · rw [if_neg ha, if_neg ha]
+  · rw [ite_eq_right ha, ite_eq_right ha]
     have h : 1 + (M - 0) = 1 + M := by omega
     rw [h, Nat.add_mod_right, Nat.mod_eq_of_lt one_lt_M]
 

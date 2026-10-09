@@ -26,7 +26,7 @@ theorem productionClassAdvanceGuards
       (arun k loaded Cfg.markAdvanceValueBody).regs rPow ≠ 0 := by
   have hfuelNe : fuel ≠ productionCursorCfg.segLen := Nat.ne_of_lt hfuel
   have hclass : productionCursorCfg.markSteps ≤ s.regs rR := by
-    rw [h.sweep.round_eq, if_neg hfuelNe]
+    rw [h.sweep.round_eq, ite_eq_right hfuelNe]
     omega
   have hviol : s.regs rViol < M := by rw [h.sweep.viol_eq]; exact hviolM
   have hvmark : s.regs rVMark < M := by rw [h.sweep.vmark_eq]; exact hvmarkM

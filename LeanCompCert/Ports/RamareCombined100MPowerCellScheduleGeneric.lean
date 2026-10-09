@@ -128,17 +128,17 @@ theorem cursorPowerListFold_filter_le
   | nil => rfl
   | cons j js ih =>
       by_cases hpower : p ^ j ≤ global
-      · simp only [List.filter_cons, decide_eq_true_eq, hpower, if_true,
+      · simp only [List.filter_cons, decide_eq_true_eq, hpower, ite_true,
           cursorPowerListFold, List.foldl_cons]
         exact ih _
       · have hnotdvd : ¬p ^ j ∣ w + i := by
           intro hdvd
           have hle : p ^ j ≤ w + i := Nat.le_of_dvd hnpos hdvd
           exact hpower (Nat.le_trans hle hnglobal)
-        simp only [List.filter_cons, decide_eq_true_eq, hpower, if_false,
+        simp only [List.filter_cons, decide_eq_true_eq, hpower, ite_false,
           cursorPowerListFold, List.foldl_cons]
         rw [cursorPowerFold_eq segLen w i (p ^ j) p x
-          (Nat.pow_pos hp) hi, if_neg hnotdvd]
+          (Nat.pow_pos hp) hi, ite_eq_right hnotdvd]
         exact ih x
 
 theorem cursorPhasesFold_boundedPowerPhases

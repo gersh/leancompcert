@@ -188,7 +188,7 @@ theorem k1Slots_eq_k1Delta (slotCount : Nat) (G : Nat → Cell)
     k1Slots slotCount G v n = k1Delta G v n := by
   unfold k1Slots k1SlotDelta k1Delta
   by_cases heven : n % 2 = 0
-  · simp only [heven, if_true]
+  · simp only [heven, ite_true]
     rw [foldl_two_deltas_zero,
       ← slotDivSum_eq_delta_fold slotCount v n (k1First G n),
       ← slotDivSum_eq_delta_fold slotCount v (n / 2)
@@ -196,7 +196,7 @@ theorem k1Slots_eq_k1Delta (slotCount : Nat) (G : Nat → Cell)
       slotDivSum_eq_kDivSum slotCount v n (k1First G n) hn,
       slotDivSum_eq_kDivSum slotCount v (n / 2)
         (k1Second G (n / 2)) hhalf]
-  · simp only [heven, if_false, cadd_zero]
+  · simp only [heven, ite_false, cadd_zero]
     rw [← slotDivSum_eq_delta_fold slotCount v n (k1First G n),
       slotDivSum_eq_kDivSum slotCount v n (k1First G n) hn]
 
@@ -206,7 +206,7 @@ theorem k2Slots_eq_k2Delta (slotCount : Nat) (G : Nat → Cell)
     k2Slots slotCount G v n = k2Delta G v n := by
   unfold k2Slots k2SlotDelta k2Delta
   by_cases heven : n % 2 = 0
-  · simp only [heven, if_true]
+  · simp only [heven, ite_true]
     rw [foldl_two_deltas_zero,
       ← slotDivSum_eq_delta_fold slotCount v n (k2First G n),
       ← slotDivSum_eq_delta_fold slotCount v (n / 2)
@@ -214,7 +214,7 @@ theorem k2Slots_eq_k2Delta (slotCount : Nat) (G : Nat → Cell)
       slotDivSum_eq_kDivSum slotCount v n (k2First G n) hn,
       slotDivSum_eq_kDivSum slotCount v (n / 2)
         (k2Second G (n / 2)) hhalf]
-  · simp only [heven, if_false, cadd_zero]
+  · simp only [heven, ite_false, cadd_zero]
     rw [← slotDivSum_eq_delta_fold slotCount v n (k2First G n),
       slotDivSum_eq_kDivSum slotCount v n (k2First G n) hn]
 

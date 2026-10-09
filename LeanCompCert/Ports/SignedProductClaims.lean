@@ -103,7 +103,7 @@ def Claim.comparisonFailedRaw (claim : Claim) : Nat :=
 theorem Claim.comparisonFailed_eq_raw (claim : Claim) :
     claim.comparisonFailed = claim.comparisonFailedRaw := by
   cases hl : claim.left.negative <;> cases hr : claim.right.negative <;>
-    simp [Claim.comparisonFailed, Claim.comparisonFailedRaw, hl, hr,
+    simp [Claim.comparisonFailed, Claim.comparisonFailedRaw,
       Claim.left, Claim.right, SignedWord.mul]
 
 theorem Claim.failed_eq_comparisonFailed (claim : Claim) :
@@ -133,7 +133,7 @@ theorem failureCount_eq_zero_iff (claims : List Claim) :
   | cons claim rest ih =>
       change claim.failed + failureCount rest = 0 ↔
         ∀ item ∈ claim :: rest, item.Holds
-      rw [Nat.add_eq_zero, Claim.failed_eq_zero_iff, ih]
+      rw [Nat.add_eq_zero_iff, Claim.failed_eq_zero_iff, ih]
       simp
 
 theorem failed_le_one (claim : Claim) : claim.failed ≤ 1 := by
@@ -268,7 +268,7 @@ private theorem claimBlock_denote (claim : Claim) (s : RegState) (accumulator : 
       Nat.mod_eq_of_lt hla, Nat.mod_eq_of_lt hlb,
       Nat.mod_eq_of_lt hra, Nat.mod_eq_of_lt hrb,
       Nat.mod_eq_of_lt hlprod, Nat.mod_eq_of_lt hrprod,
-      Nat.mod_eq_of_lt haccLt, Nat.mod_eq_of_lt hfailed,
+      Nat.mod_eq_of_lt haccLt,
       Nat.mod_eq_of_lt hnext, RegState.set, haccumulator,
       Claim.comparisonFailedRaw, hlsign, hrsign,
       rViol, rLeft, rRight, rFailed] <;>

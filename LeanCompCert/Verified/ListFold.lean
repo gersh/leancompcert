@@ -71,7 +71,7 @@ theorem foldl_guard {α : Type _} (p : Nat → Bool) (f : α → Nat → α)
   | nil => rfl
   | cons n rest ih =>
       by_cases h : p n = true
-      · simp only [List.foldl_cons, List.filter_cons, h, if_pos]
+      · simp only [List.foldl_cons, List.filter_cons, h, ite_eq_left]
         simpa [h] using ih (f init n)
       · simp only [Bool.not_eq_true] at h
         simp only [List.foldl_cons, List.filter_cons, h]

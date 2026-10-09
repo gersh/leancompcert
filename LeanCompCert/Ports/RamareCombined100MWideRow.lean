@@ -181,13 +181,13 @@ theorem rowWideCheck_sound (k : Nat) (s : AState) (bound : Nat)
         LeanCompCert.Verified.AddWide.wval
           (product.regs ExactProduct.rLo, product.regs ExactProduct.rHi))) := by
     intro h
-    rw [if_pos h] at hcmpZero
+    rw [ite_eq_left h] at hcmpZero
     contradiction
   have hpass : s.regs rAccW + 1 ≤ bound := by
     apply Nat.le_of_not_gt
     intro h
     apply (not_or.mp hnot).1
-    rw [hoverFrame, hover, if_pos h]
+    rw [hoverFrame, hover, ite_eq_left h]
   have hinputs := rowProductStage_inputs k s bound hsum hbound hpass
   have hlow := ExactProduct.floorBlock_low k staged hwStaged
   have hhigh := ExactProduct.floorBlock_high k staged hwStaged

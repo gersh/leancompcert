@@ -138,7 +138,7 @@ private theorem ceilTail_run (k : Nat) (st : AState) (q lo : Nat)
     LeanCompCert.Verified.InstrBlock.sdest,
     LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
     AState.writeReg, RegState.set, List.foldl_cons, List.foldl_nil,
-    if_pos rfl, if_true, Option.getD_some, rT0, rLo, rProd]
+    ite_eq_left rfl, ite_true, Option.getD_some, rT0, rLo, rProd]
   rw [hlo', hq', show (4294967295 : Nat) % M = 4294967295 by decide,
     Nat.zero_mod M, hand, Nat.mod_eq_of_lt hremM]
   split <;> simp_all [Nat.mod_eq_of_lt hfit]

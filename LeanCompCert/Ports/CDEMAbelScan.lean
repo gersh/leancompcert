@@ -738,7 +738,7 @@ def Cfg.body (c : Cfg) : List AInstr :=
 def Cfg.primeCells (c : Cfg) : List (Nat × Nat) :=
   c.primes.zipIdx.map (fun x => (c.primeBase + x.2, x.1))
 
-def Cfg.seedList (c : Cfg) : List (Nat × Nat) :=
+def Cfg.seedList (_c : Cfg) : List (Nat × Nat) :=
   [ (rZero, 0), (rR, 0), (rW, 1), (rD, 1), (rSg, 0), (rJ, 0)
   , (rN, 0), (rPj, 0), (rM, 0), (rPar, 0), (rSqf, 0)
   , (rF, 0), (rE, 0), (rKr, 0), (rC, 0), (rDp, 0), (rDn, 0)

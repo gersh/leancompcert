@@ -525,7 +525,7 @@ private theorem badOf_eq_zero_iff (bound d : Nat) (hd : d < M) (hb : bound < M) 
     refine ⟨?_, ?_⟩ <;> (by_cases h1 : d = 0 <;> by_cases h2 : d > bound <;>
       simp [h1, h2] at h ⊢) <;> omega
   · rintro ⟨h1, h2⟩
-    rw [if_neg (by omega), if_neg (by omega)]
+    rw [ite_eq_right (by omega), ite_eq_right (by omega)]
 
 private theorem foldl_badOf_eq_zero_iff (bound : Nat) :
     ∀ (ds : List Nat),
@@ -589,18 +589,18 @@ theorem ladderProgram_denote (bound expected : Nat) (ds : List Nat)
   · intro h
     have hV : ds.foldl (fun a d => a + badOf bound d) 0 = 0 := by
       by_cases hc : ds.foldl (fun a d => a + d) 0 ≠ expected
-      · rw [if_pos hc] at h; omega
-      · rw [if_neg hc] at h; omega
+      · rw [ite_eq_left hc] at h; omega
+      · rw [ite_eq_right hc] at h; omega
     have hT : ds.foldl (fun a d => a + d) 0 = expected := by
       by_cases hc : ds.foldl (fun a d => a + d) 0 ≠ expected
-      · rw [if_pos hc] at h; omega
+      · rw [ite_eq_left hc] at h; omega
       · omega
     exact ⟨fun d hd => (badOf_eq_zero_iff bound d (hdM d hd) hbound).mp
       ((foldl_badOf_eq_zero_iff bound ds).mp hV d hd), hT⟩
   · rintro ⟨hall, htotal⟩
     rw [(foldl_badOf_eq_zero_iff bound ds).mpr (fun d hd =>
       (badOf_eq_zero_iff bound d (hdM d hd) hbound).mpr (hall d hd)),
-      if_neg (by omega)]
+      ite_eq_right (by omega)]
 
 /--
 **Acceptance implies coverage.**

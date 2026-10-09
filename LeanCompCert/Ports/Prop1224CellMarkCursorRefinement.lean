@@ -80,7 +80,7 @@ theorem P1224MarkCursor.Bounds.past_output_guards
   have hstep := P1224MarkCursor.step_eq_mux c windowBase tableWord cur h.pi_le
   have hnot : ¬ cur.offset < c.segLen := Nat.not_lt.mpr hPast
   dsimp only at hstep
-  simp only [if_neg hnot] at hstep
+  simp only [ite_eq_right hnot] at hstep
   have hqEq := congrArg P1224MarkCursor.power hstep
   have hbpEq := congrArg P1224MarkCursor.base hstep
   have hfsEq := congrArg P1224MarkCursor.first hstep
@@ -163,7 +163,7 @@ theorem p1224PastResult_refines_cursor (c : CellCfg) (windowBase : Nat)
   dsimp only at hstep hq hbp hfs hjOut hpi
   have hpast : ¬ (P1224MarkCursor.ofState s).offset < c.segLen := by
     simpa [P1224MarkCursor.ofState] using hj
-  simp only [if_neg hpast] at hstep
+  simp only [ite_eq_right hpast] at hstep
   rw [hstep]
   apply P1224MarkCursor.ext
   · simpa [P1224MarkCursor.ofState] using hpi

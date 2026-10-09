@@ -194,7 +194,7 @@ theorem body_viol (c : Cfg) (arr : Nat → Nat) (k : Nat) (s : AState)
   have hTargetM : c.goldbach.evenLo + 2 * k < M := by omega
   subst hsarr
   simp only [body, arun, astep, AState.writeReg, sdest, sval,
-    denoteOperand, denoteOp, Nat.reduceEqDiff, if_false, if_true,
+    denoteOperand, denoteOp, Nat.reduceEqDiff, ite_false, ite_true,
     Option.getD_some, rViol, rAddr, rP, rQ, rSmallLo, rSmallHi,
     rSmallRange, rSmallOff, rSmallSafe, rPBit, rLargeLo, rLargeHi,
     rLargeRange, rLargeOff, rLargeSafe, rQBit, rPBitGood, rQBitGood,
@@ -224,7 +224,7 @@ theorem body_viol (c : Cfg) (arr : Nat → Nat) (k : Nat) (s : AState)
         have hWitnessM : c.witnessBase < M := by
           simpa [Cfg.pBase] using hpBaseM
         omega
-      simp only [p, hpLo, hpHi, if_true, Nat.one_mul,
+      simp only [p, hpLo, hpHi, ite_true, Nat.one_mul,
         Nat.mod_eq_of_lt (show 1 < M by decide),
         Nat.mod_eq_of_lt hpOffM]
       rw [hpSub, Nat.mod_eq_of_lt hpOffM, Nat.mod_eq_of_lt hpMaskAddr]
@@ -239,7 +239,7 @@ theorem body_viol (c : Cfg) (arr : Nat → Nat) (k : Nat) (s : AState)
               rw [heq, Nat.add_mod, Nat.mod_self, Nat.zero_add, Nat.mod_mod,
                 Nat.mod_eq_of_lt hqOffM]
             have hpqM : p + q < M := by omega
-            simp only [q, hqLo, hqHi, if_true, Nat.one_mul,
+            simp only [q, hqLo, hqHi, ite_true, Nat.one_mul,
               Nat.mod_eq_of_lt (show 1 < M by decide),
               Nat.mod_eq_of_lt hqOffM]
             rw [hqSub, Nat.mod_eq_of_lt hqOffM, Nat.mod_eq_of_lt hpqM]

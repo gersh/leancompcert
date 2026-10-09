@@ -109,7 +109,7 @@ theorem harmBody_denote (c : Params) (hc : c.Sane) (i : Nat) (hi : i < c.len)
   rw [denoteOp_add_of_lt hdenM]
   rw [denoteOp_add_of_lt hnumM]
   simp [denoteOp, regStep, obs, hstep, term, rAcc, rGood, rDen, rNum, rTerm,
-    rSum, rNoWrap, rUnder, rPass, RegState.set, hden0,
+    rSum, rNoWrap, rUnder, rPass, RegState.set,
     Nat.mod_eq_of_lt htermM]
   rfl
 
@@ -131,8 +131,8 @@ theorem harmProgram_denote (c : Params) (hc : c.Sane) :
   refine Program.denote_eq_obs_foldl_mem (harmProgram c) (fun _ => True)
     (regStep c) obs (hstep c) HState.good
     (initialState.set rGood 1)
-    (by simp [harmProgram, denoteInstrs, denoteInstr, denoteOperand, initialState,
-      RegState.set, rGood, M]) trivial ?_ ?_ ?_ ?_
+    (by simp [harmProgram, denoteInstrs, denoteInstr, denoteOperand,
+      rGood, M]) trivial ?_ ?_ ?_ ?_
   · intro i s hi _
     exact harmBody_denote c hc i hi s
   · intros; trivial

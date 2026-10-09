@@ -55,7 +55,7 @@ theorem ProductionClassSweepCursorInv.step
   let c : LambdaPsiSweep.Cfg := { shape := productionCursorCfg, logs }
   have hfuelNe : fuel ≠ productionCursorCfg.segLen := Nat.ne_of_lt hfuel
   have hround : s.regs rR = productionCursorCfg.markSteps + fuel := by
-    rw [h.sweep.round_eq, if_neg hfuelNe]
+    rw [h.sweep.round_eq, ite_eq_right hfuelNe]
   have hclass : productionCursorCfg.markSteps ≤ s.regs rR := by
     rw [hround]
     omega

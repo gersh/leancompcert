@@ -94,7 +94,7 @@ theorem logBeforeFinalEventBody_continue_run_of_word
       rounded.regs r = s.regs r :=
     arun_frame k r (logLiveRoundBody c) hw s
   have hpFin : rounded.regs 247 = 1 := by
-    simpa only [hjfin, if_pos] using hp.2.2.1
+    simpa only [hjfin, ite_eq_left] using hp.2.2.1
   rw [logBeforeFinalEventBody_eq_stages, arun_append]
   exact
     ⟨(frameFinal rNe (by rfl)).trans hstate.1,

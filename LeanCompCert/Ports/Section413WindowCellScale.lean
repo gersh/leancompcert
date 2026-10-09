@@ -115,7 +115,7 @@ theorem oneStage_clean_output (k : Nat) (s : AState) (src dest : Nat)
   rw [oneStage, arun_append, arun_append, arun_lift]
   change srun k q.regs
     [.mov dest (.reg LeanCompCert.Ports.Section413SignedScale.rOut)] dest = _ ∧ _
-  simp only [srun, sdest, sval, denoteOperand, RegState.set, if_pos]
+  simp only [srun, sdest, sval, denoteOperand, RegState.set, ite_eq_left]
   refine ⟨?_, ?_⟩
   · simpa [q, hpWord, hpFactor] using hscale
   · simpa [q, p, arun_lift] using
@@ -537,8 +537,8 @@ theorem body_clean_outputs (k : Nat) (s : AState) (negate : Bool)
     apply hqOutLo.trans
     dsimp only [p]
     cases hneg : negate
-    · simpa only [hneg, Bool.false_eq_true, if_false] using hlow.1
-    · simpa only [hneg, if_true] using hlow.1
+    · simpa only [hneg, Bool.false_eq_true, ite_false] using hlow.1
+    · simpa only [hneg, ite_true] using hlow.1
   have hqHi : q.regs rOutHi =
       encodeZ ((s.regs rFactor : Int) *
         decodeZ (if negate then
@@ -546,9 +546,9 @@ theorem body_clean_outputs (k : Nat) (s : AState) (negate : Bool)
         else s.regs rInHi)) := by
     dsimp only [q]
     cases hneg : negate
-    · simpa only [hneg, Bool.false_eq_true, if_false, hpFactor, hpInHi]
+    · simpa only [hneg, Bool.false_eq_true, ite_false, hpFactor, hpInHi]
         using hhigh.1
-    · simpa only [hneg, if_true, hpFactor, hpInLo] using hhigh.1
+    · simpa only [hneg, ite_true, hpFactor, hpInLo] using hhigh.1
   have hqarr : q.arr = s.arr := hhigh.2.trans hlow.2
   rw [body, arun_append, arun_append]
   have hgate := gateStage_outputs k q
@@ -674,31 +674,31 @@ theorem body_clean_outputs_gate_one_decoded (k : Nat) (s : AState)
         LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
       else s.regs rInLo) := by
     cases hneg : negate
-    · simpa only [hneg, Bool.false_eq_true, if_false] using hlo.2.1
-    · simpa only [hneg, if_true] using hlo.2.1
+    · simpa only [hneg, Bool.false_eq_true, ite_false] using hlo.2.1
+    · simpa only [hneg, ite_true] using hlo.2.1
   have hloUpper : (s.regs rFactor : Int) *
       decodeZ (if negate then
         LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInHi)
       else s.regs rInLo) < (H63 : Int) := by
     cases hneg : negate
-    · simpa only [hneg, Bool.false_eq_true, if_false] using hlo.2.2.1
-    · simpa only [hneg, if_true] using hlo.2.2.1
+    · simpa only [hneg, Bool.false_eq_true, ite_false] using hlo.2.2.1
+    · simpa only [hneg, ite_true] using hlo.2.2.1
   have hhiLower : -(H63 : Int) ≤ (s.regs rFactor : Int) *
       decodeZ (if negate then
         LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
       else s.regs rInHi) := by
     cases hneg : negate
-    · simpa only [hneg, Bool.false_eq_true, if_false, hpFactor, hpInHi]
+    · simpa only [hneg, Bool.false_eq_true, ite_false, hpFactor, hpInHi]
         using hhi.2.1
-    · simpa only [hneg, if_true, hpFactor, hpInLo] using hhi.2.1
+    · simpa only [hneg, ite_true, hpFactor, hpInLo] using hhi.2.1
   have hhiUpper : (s.regs rFactor : Int) *
       decodeZ (if negate then
         LeanCompCert.Ports.Section413G1Program.tsub 0 (s.regs rInLo)
       else s.regs rInHi) < (H63 : Int) := by
     cases hneg : negate
-    · simpa only [hneg, Bool.false_eq_true, if_false, hpFactor, hpInHi]
+    · simpa only [hneg, Bool.false_eq_true, ite_false, hpFactor, hpInHi]
         using hhi.2.2.1
-    · simpa only [hneg, if_true, hpFactor, hpInLo] using hhi.2.2.1
+    · simpa only [hneg, ite_true, hpFactor, hpInLo] using hhi.2.2.1
   refine ⟨?_, ?_, henc.2.2⟩
   · rw [henc.1, decodeZ_encodeZ _ hloLower hloUpper]
   · rw [henc.2.1, decodeZ_encodeZ _ hhiLower hhiUpper]

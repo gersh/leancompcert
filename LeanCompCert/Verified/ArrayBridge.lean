@@ -145,7 +145,7 @@ def initialMem (arrayLen : Nat) (base : Int) : Mem :=
 theorem initialMem_cell (arrayLen : Nat) (base : Int) {n : Nat} (h : n < arrayLen) :
     initialMem arrayLen base (cellAddr base n) = some 0 := by
   unfold initialMem cellAddr indexedAddr
-  rw [if_pos]
+  rw [ite_eq_left]
   refine ⟨by omega, by omega, by omega⟩
 
 /-- The initial memory-extended CCIR state: nothing defined but the base
@@ -323,7 +323,7 @@ theorem evalCCStraight_frame {env env' : CCEnv} {si : StraightInstruction}
     (h : evalCCStraight env si = some env') {j : CCIR.LocalId}
     (hj : j ≠ destOf si) : env' j = env j := by
   obtain ⟨v, rfl⟩ := evalCCStraight_shape h
-  simp only [CCEnv.set, if_neg hj]
+  simp only [CCEnv.set, ite_eq_right hj]
 
 theorem evalCCSequence_frame :
     ∀ (l : List StraightInstruction) {env env' : CCEnv},
@@ -428,7 +428,7 @@ theorem stateInv_set_high {regCount : Nat} {s : RegState} {env : CCEnv}
     intro hEq
     have : i + 1 = id.value := congrArg CCIR.LocalId.value hEq
     omega
-  simp only [CCEnv.set, if_neg hne]
+  simp only [CCEnv.set, ite_eq_right hne]
   exact h.1 i hi
 
 /-- Writing a register preserves `StateInv` (the public counterpart of
@@ -446,13 +446,13 @@ theorem stateInv_set_reg {regCount : Nat} {s : RegState} {env : CCEnv}
         intro h
         injection h with h1
         omega
-      simp only [CCEnv.set, RegState.set, if_neg hId, if_neg hEq]
+      simp only [CCEnv.set, RegState.set, ite_eq_right hId, ite_eq_right hEq]
       exact hInv.1 i hi
   · intro i hi
     by_cases hEq : i = dest
     · subst hEq
       simpa [RegState.set] using hValue
-    · simp only [RegState.set, if_neg hEq]
+    · simp only [RegState.set, ite_eq_right hEq]
       exact hInv.2 i hi
 
 /-- The base parameter survives a compiled scalar instruction. -/
@@ -542,7 +542,7 @@ theorem compileAInstr_correct
             simp only [baseDecl, regLocal] at this
             omega
           show (m.env.set (regLocal dest).id _) (baseDecl regCount).id = _
-          simp only [CCEnv.set, if_neg hne]
+          simp only [CCEnv.set, ite_eq_right hne]
           exact hRel.hbase
         · exact hRel.hcells
       · trivial
@@ -578,16 +578,16 @@ theorem compileAInstr_correct
           simp only [Mem.set]
           by_cases hEq : n = s.regs idxReg
           · subst hEq
-            rw [if_pos rfl]
+            rw [ite_eq_left rfl]
             simp [AState.writeArr]
-          · rw [if_neg (fun hc => hEq (cellAddr_inj hc))]
+          · rw [ite_eq_right (fun hc => hEq (cellAddr_inj hc))]
             rw [hRel.hcells n hn]
             simp [AState.writeArr, hEq]
         · intro n hn
           show (if n = s.regs idxReg then s.regs srcReg else s.arr n) < M
           by_cases hEq : n = s.regs idxReg
-          · rw [if_pos hEq]; exact hRel.hregs.2 srcReg hSrc
-          · rw [if_neg hEq]; exact hRel.hcellsLt n hn
+          · rw [ite_eq_left hEq]; exact hRel.hregs.2 srcReg hSrc
+          · rw [ite_eq_right hEq]; exact hRel.hcellsLt n hn
       · trivial
 
 /-! ## Blocks, folds, and the bridge -/

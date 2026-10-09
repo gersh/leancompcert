@@ -73,7 +73,7 @@ theorem historicalFlag13_result
           (stair - stairSub) * 81920 := by
       rw [hsum, Nat.add_mul]
       simp [Nat.add_mod, Nat.mul_mod, Nat.mod_eq_of_lt hscaledAny]
-    simp only [if_pos hsok, Nat.one_mul]
+    simp only [ite_eq_left hsok, Nat.one_mul]
     rw [Nat.mod_eq_of_lt hssWord]
     rw [hsubExact, hscaledExact]
     by_cases huok : (stair - stairSub) * 81920 ≤ uElem
@@ -86,7 +86,7 @@ theorem historicalFlag13_result
         rw [show n + (1 + M) = (n + 1) + M by omega,
           Nat.add_mod_right, Nat.mod_eq_of_lt hNoWrap]
   · have hzero : (0 + (M - 0)) % M = 0 := by simp [M]
-    simp only [if_neg hsok, Nat.zero_mul, Nat.zero_mod]
+    simp only [ite_eq_right hsok, Nat.zero_mul, Nat.zero_mod]
     rw [hzero]
     by_cases huok : 0 ≤ uElem
     · cases isLastB <;>

@@ -48,7 +48,7 @@ def borrow4 (x y : Limbs4) : Nat :=
   borrowStep x.l3 y.l3 b2
 
 theorem borrowStep_eq_sbb_borrow (x y borrow : Nat)
-    (hx : x < B) (hy : y < B) (hb : borrow ≤ 1) :
+    (hx : x < B) (_hy : y < B) (hb : borrow ≤ 1) :
     borrowStep x y borrow =
       (LeanCompCert.Verified.Limb.sbbStep x y borrow).2 := by
   unfold borrowStep LeanCompCert.Verified.Limb.sbbStep
@@ -76,7 +76,7 @@ private theorem borrowStep_le_one (x y borrow : Nat) (hb : borrow ≤ 1) :
   · have hne : x ≠ y := Nat.ne_of_lt hlt
     simp [hlt, hne]
   · by_cases heq : x = y
-    · simp [hlt, heq, hb]
+    · simp [heq, hb]
     · simp [hlt, heq]
 
 theorem borrow4_le_one (x y : Limbs4) : borrow4 x y ≤ 1 := by
@@ -166,10 +166,10 @@ def compareBody : List AInstr :=
 
 /-- Exact denotation of the literal four-word comparison block. -/
 theorem compareBody_run (k : Nat) (s : AState)
-    (hx0 : s.regs rX0 < M) (hx1 : s.regs rX1 < M)
-    (hx2 : s.regs rX2 < M)
-    (hy0 : s.regs rY0 < M) (hy1 : s.regs rY1 < M)
-    (hy2 : s.regs rY2 < M) (hy3 : s.regs rY3 < M)
+    (_hx0 : s.regs rX0 < M) (_hx1 : s.regs rX1 < M)
+    (_hx2 : s.regs rX2 < M)
+    (_hy0 : s.regs rY0 < M) (_hy1 : s.regs rY1 < M)
+    (_hy2 : s.regs rY2 < M) (_hy3 : s.regs rY3 < M)
     (hzero : s.regs 11 = 0) :
     (arun k s compareBody).regs rBorrow =
       borrow4

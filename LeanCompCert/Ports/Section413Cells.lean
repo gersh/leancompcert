@@ -191,12 +191,12 @@ theorem divP18ceil_spec (lo hi : Nat) (hlo : lo < B64) (hhi : hi < B64) :
   unfold divP18ceil
   rw [divP18q_spec lo hi hlo hhi]
   by_cases hex : lo % E18 = 0 ∧ (divP18w lo hi).2 = 0
-  · rw [if_pos hex]
+  · rw [ite_eq_left hex]
     have h0 : (lo + B64 * hi) % P18 = 0 :=
       (divP18_exact_iff lo hi hlo hhi).mpr hex
     simp only [P18] at *
     omega
-  · rw [if_neg hex]
+  · rw [ite_eq_right hex]
     have h0 : ¬ (lo + B64 * hi) % P18 = 0 := fun hc =>
       hex ((divP18_exact_iff lo hi hlo hhi).mp hc)
     simp only [P18] at *
@@ -290,18 +290,18 @@ set_option linter.unusedSimpArgs false in
 theorem smVal_of_val (z : Int) :
     smVal (if z < 0 then 1 else 0) z.natAbs = z := by
   by_cases h : z < 0
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     simp only [smVal, reduceIte]
     omega
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     simp only [smVal, reduceIte]
     omega
 
 theorem smCanon_of_val (z : Int) :
     smCanon (if z < 0 then 1 else 0) z.natAbs := by
   by_cases h : z < 0
-  · rw [if_pos h]; exact ⟨Nat.le_refl 1, fun _ => by omega⟩
-  · rw [if_neg h]; exact ⟨by omega, fun hc => by omega⟩
+  · rw [ite_eq_left h]; exact ⟨Nat.le_refl 1, fun _ => by omega⟩
+  · rw [ite_eq_right h]; exact ⟨by omega, fun hc => by omega⟩
 
 /-- The magnitude of a product is the product of the magnitudes (the two
 `MulWide.hl` inputs). -/

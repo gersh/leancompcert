@@ -63,10 +63,10 @@ theorem sqrtStreamInvAt_of_full (c : Cfg) (before after : AState)
     by_cases hlt : nextKey before < before.regs rT2
     · rw [hfull.t, hfull.t2]
       simp only [nextKey] at hlt
-      rw [if_pos hlt, if_pos hlt, hentry.sqrt.nextSquare]
+      rw [ite_eq_left hlt, ite_eq_left hlt, hentry.sqrt.nextSquare]
     · rw [hfull.t, hfull.t2]
       simp only [nextKey] at hlt
-      rw [if_neg hlt, if_neg hlt, hentry.sqrt.nextSquare]
+      rw [ite_eq_right hlt, ite_eq_right hlt, hentry.sqrt.nextSquare]
       simp only [Nat.add_mul, Nat.mul_add, Nat.one_mul, Nat.mul_one]
       omega
   have hlower :
@@ -102,7 +102,7 @@ theorem interior_stream_step_of_full (c : Cfg) (before after : AState)
     InteriorStreamStepSpec c dp dn before after := by
   have hnotLast : cell + 1 ≠ c.segLen := by omega
   have hwindow : after.regs rW = before.regs rW := by
-    rw [hcursor.window, if_neg hnotLast, ← hstartW]
+    rw [hcursor.window, ite_eq_right hnotLast, ← hstartW]
   have hcellAfter : after.regs rC = before.regs rC + 1 := hfull.cell
   have hnextAddrNeSink :
       before.regs rC + 1 + c.winBase ≠ c.sink := by
@@ -117,7 +117,7 @@ theorem interior_stream_step_of_full (c : Cfg) (before after : AState)
     rw [hcellAfter]
     have hlive := hfull.live
       (before.regs rC + 1 + c.winBase) hnextAddrNeSink
-    rw [if_neg hnextAddrNeCurrent] at hlive
+    rw [ite_eq_right hnextAddrNeCurrent] at hlive
     exact hlive
   have ht : after.regs rT = Nat.sqrt (nextKey before) := by
     rw [hfull.t]
@@ -127,10 +127,10 @@ theorem interior_stream_step_of_full (c : Cfg) (before after : AState)
     by_cases hlt : nextKey before < before.regs rT2
     · rw [hfull.t, hfull.t2]
       simp only [nextKey] at hlt
-      rw [if_pos hlt, if_pos hlt, hentry.sqrt.nextSquare]
+      rw [ite_eq_left hlt, ite_eq_left hlt, hentry.sqrt.nextSquare]
     · rw [hfull.t, hfull.t2]
       simp only [nextKey] at hlt
-      rw [if_neg hlt, if_neg hlt, hentry.sqrt.nextSquare]
+      rw [ite_eq_right hlt, ite_eq_right hlt, hentry.sqrt.nextSquare]
       simp only [Nat.add_mul, Nat.mul_add, Nat.one_mul, Nat.mul_one]
       omega
   have hkeyAfter :

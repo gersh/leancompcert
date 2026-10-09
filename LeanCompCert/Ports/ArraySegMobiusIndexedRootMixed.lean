@@ -65,7 +65,7 @@ theorem rootScanMixed_eq_boot_of_le (boot : List Nat)
   induction fuel with
   | zero => rfl
   | succ k ih =>
-      rw [rootScanMixed_succ, if_pos (by omega), ih (by omega)]
+      rw [rootScanMixed_succ, ite_eq_left (by omega), ih (by omega)]
 
 /-- The mixed finite fold always retains the bootstrap prefix. -/
 theorem rootScanMixed_has_prefix (boot : List Nat)
@@ -203,7 +203,7 @@ theorem indexedBodyRun_mixed_root_acc_prefix
             (by dsimp [n] at hnOne; omega) hcurRoot hRM hTM hPM hcurM
             hspanM hcurNe hkSeg hnM hnextPeriod hcapM hA hkPrefix.zero
           simpa [out, rootScanMixed_succ, n, hnOne, cur, hcurEq,
-            hboundNext, if_pos h1Boot, hmaxOne, Nat.add_assoc] using ho
+            hboundNext, ite_eq_left h1Boot, hmaxOne, Nat.add_assoc] using ho
         · by_cases hnBoot : n ≤ bootBound
           · have hcurEq : cur = boot := by
               dsimp [cur]
@@ -521,7 +521,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_transition
     hstep.2.2.2.2.2⟩
   · have hscan : rootScanMixed boot bootBound w c.segLen =
         rootTableStep cur n := by
-      rw [← hkSucc, rootScanMixed_succ, if_neg (by omega)]
+      rw [← hkSucc, rootScanMixed_succ, ite_eq_right (by omega)]
     have hboundNext : w + c.segLen - 1 = n := by
       dsimp only [n, k]
       omega
@@ -733,7 +733,7 @@ theorem indexedBodyRun_mixed_root_acc_complete_wrap
     hstep.2.2.2.2.2⟩
   · have hscan : rootScanMixed boot bootBound w c.segLen =
         rootTableStep cur n := by
-      rw [← hkSucc, rootScanMixed_succ, if_neg (by omega)]
+      rw [← hkSucc, rootScanMixed_succ, ite_eq_right (by omega)]
     have hboundNext : w + c.segLen - 1 = n := by dsimp [n, k]; omega
     simpa [hscan, hboundNext] using hstep.1
   · intro j hj

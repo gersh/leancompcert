@@ -201,7 +201,7 @@ theorem k1Prep_den (k : Nat) (s : AState) (den : Nat)
   have hp := safeDenStage_output k s den hdenWord hdenInv
   rw [k1PrepState, arun_append, arun_lift]
   simp only [srun, sdest, sval, denoteOperand, RegState.set,
-    LeanCompCert.Ports.Section413WindowCellDiv.rDen, if_pos]
+    LeanCompCert.Ports.Section413WindowCellDiv.rDen, ite_eq_left]
   simpa only [p] using hp
 
 theorem k1Prep_arr (k : Nat) (s : AState) (den : Nat) :
@@ -339,7 +339,7 @@ theorem k1TwicePrep_den (k : Nat) (s : AState) (den : Nat)
   simp only [srun, sdest, sval, denoteOperand, denoteOp, Option.getD_some,
     RegState.set, rTwice, rSafeDen,
     LeanCompCert.Ports.Section413WindowCellDiv.rDen,
-    Nat.reduceEqDiff, if_false, if_true, show 2 % M = 2 by decide]
+    Nat.reduceEqDiff, ite_false, ite_true, show 2 % M = 2 by decide]
   rw [show p.regs 51 = p.regs rSafeDen by rfl, hp,
     Nat.mod_eq_of_lt htwice]
 
@@ -937,34 +937,34 @@ theorem event_clean_outputs (k : Nat) (s : AState) (c : Cfg)
       arun k (arun k p (k1Stage divisor negK1))
         (k2Stage factor negK2) := by
     dsimp only [p, eventPrefixState, eventPrefix]
-    simp only [event, Bool.false_eq_true, if_false, arun_append]
+    simp only [event, Bool.false_eq_true, ite_false, arun_append]
   rw [hout]
   refine ⟨?_, ?_, ?_, ?_, ha.2.2.2.2.1, ha.2.2.2.2.2.1, ?_⟩
   · rw [ha.1, hp.2.2.2.1, hp.2.1, hp.2.2.1, hpDivisor, hpGate]
     cases negK1
-    · simp only [Bool.false_eq_true, if_false]
+    · simp only [Bool.false_eq_true, ite_false]
       rw [hdecodeLo]
-    · simp only [if_true]
+    · simp only [ite_true]
       rw [hnegHi]
   · rw [ha.2.1, hp.2.2.2.2.1, hp.2.1, hp.2.2.1, hpDivisor, hpGate]
     cases negK1
-    · simp only [Bool.false_eq_true, if_false]
+    · simp only [Bool.false_eq_true, ite_false]
       rw [hdecodeHi]
-    · simp only [if_true]
+    · simp only [ite_true]
       rw [hnegLo]
   · rw [ha.2.2.1, hp.2.2.2.2.2.1, hpFactor,
       hpScaleInLo, hpScaleInHi, hpGate]
     cases negK2
-    · simp only [Bool.false_eq_true, if_false]
+    · simp only [Bool.false_eq_true, ite_false]
       rw [hdecodeLo]
-    · simp only [if_true]
+    · simp only [ite_true]
       rw [hnegHi]
   · rw [ha.2.2.2.1, hp.2.2.2.2.2.2.1, hpFactor,
       hpScaleInLo, hpScaleInHi, hpGate]
     cases negK2
-    · simp only [Bool.false_eq_true, if_false]
+    · simp only [Bool.false_eq_true, ite_false]
       rw [hdecodeHi]
-    · simp only [if_true]
+    · simp only [ite_true]
       rw [hnegLo]
   · exact ha.2.2.2.2.2.2.trans hp.2.2.2.2.2.2.2.2
 
@@ -1054,7 +1054,7 @@ theorem eventTwice_clean_outputs (k : Nat) (s : AState) (c : Cfg)
       arun k (arun k p (k1TwiceStage divisor negK1))
         (k2Stage factor negK2) := by
     dsimp only [p, eventPrefixState, eventPrefix]
-    simp only [event, if_true, arun_append]
+    simp only [event, ite_true, arun_append]
   rw [hout]
   exact ha
 
@@ -1287,9 +1287,9 @@ theorem event_flags_zero_receipts_and_input (k : Nat) (s : AState) (c : Cfg)
   have hk2 := k2Stage_flags_zero_receipts_and_input k q factor negK2
     hqword hqarray
     (by simpa only [event, eventPrefix, eventPrefixState, Bool.false_eq_true,
-      if_false, arun_append, p, q] using hscale)
+      ite_false, arun_append, p, q] using hscale)
     (by simpa only [event, eventPrefix, eventPrefixState, Bool.false_eq_true,
-      if_false, arun_append, p, q] using hadd)
+      ite_false, arun_append, p, q] using hadd)
   have hk1 := k1Stage_add_zero_receipts_and_input k p divisor negK1
     hpword hparray (by simpa only [q] using hk2.2.2)
   have hpScale : p.regs LeanCompCert.Ports.Section413SignedScale.rViol = 0 := by
@@ -1346,9 +1346,9 @@ theorem eventTwice_flags_zero_receipts_and_input (k : Nat) (s : AState)
   have hqarray : ∀ j, q.arr j < M := arun_arr_word k _ _ hpword hparray
   have hk2 := k2Stage_flags_zero_receipts_and_input k q factor negK2
     hqword hqarray
-    (by simpa only [event, eventPrefix, eventPrefixState, if_true,
+    (by simpa only [event, eventPrefix, eventPrefixState, ite_true,
       arun_append, p, q] using hscale)
-    (by simpa only [event, eventPrefix, eventPrefixState, if_true,
+    (by simpa only [event, eventPrefix, eventPrefixState, ite_true,
       arun_append, p, q] using hadd)
   have hk1 := k1TwiceStage_add_zero_receipts_and_input k p divisor negK1
     hpword hparray (by simpa only [q] using hk2.2.2)
@@ -1409,9 +1409,9 @@ theorem event_zero_implies_input_zero (k : Nat) (s : AState) (c : Cfg)
   have hpzero : p.regs LeanCompCert.Ports.Section413SignedAdd.rViol = 0 := by
     cases twiceDen
     · exact k1Stage_zero_implies_input_zero k p divisor negK1 hpword hparray
-        (by simpa only [middle, Bool.false_eq_true, if_false, q] using hqzero)
+        (by simpa only [middle, Bool.false_eq_true, ite_false, q] using hqzero)
     · exact k1TwiceStage_zero_implies_input_zero k p divisor negK1
-        hpword hparray (by simpa only [middle, if_true, q] using hqzero)
+        hpword hparray (by simpa only [middle, ite_true, q] using hqzero)
   rw [show p.regs LeanCompCert.Ports.Section413SignedAdd.rViol =
       s.regs LeanCompCert.Ports.Section413SignedAdd.rViol by
     exact eventPrefix_frame_of k s c active divisor x _

@@ -988,14 +988,14 @@ theorem Cfg.markCellBody_run (k : Nat) (s : AState)
   simp only [Cfg.markCellBody, arun_append]
   refine ⟨?_, hpow'.trans (hpow.trans (frame1 rPow (by decide))),
     hbase'''.trans (hbase''.trans hbase')⟩
-  simp only [AState.writeArr] at harr2 ⊢
+  simp only [AState.writeArr.eq_def] at harr2 ⊢
   rw [h34, h35, h36, hpow, hbase'', h41, h44, h45, h46,
     frame1 34 (by decide), frame1 35 (by decide), frame1 36 (by decide),
     frame1 rPow (by decide), hbase', frame1 41 (by decide),
     frame1 44 (by decide), frame1 45 (by decide), frame1 46 (by decide),
     harr1'] at harr2
-  simpa only [loadedCell, PlaneCell.markPower, writeLoadedCell,
-    AState.writeArr_regs, AState.writeArr] using harr2
+  simpa only [loadedCell.eq_def, PlaneCell.markPower.eq_def, writeLoadedCell.eq_def,
+    AState.writeArr_regs, AState.writeArr.eq_def] using harr2
 
 /-- Address specialization of `markCellBody_run`: after one live event, a
 physical read of the seven planes is exactly the logical `markPower` result. -/
@@ -1094,40 +1094,40 @@ theorem Cfg.markAdvancePowerBody_run (c : Cfg) (k : Nat) (s : AState)
   have hmulMod :
       (s.regs 3 * s.regs 7) % 18446744073709551616 =
         s.regs 3 * s.regs 7 := Nat.mod_eq_of_lt hmul37
-  have hhiN : c.hi < 18446744073709551616 := by simpa [M] using hhi
+  have hhiN : c.hi < 18446744073709551616 := by simpa [M.eq_def] using hhi
   have hhiMod : c.hi % 18446744073709551616 = c.hi :=
     Nat.mod_eq_of_lt hhiN
   by_cases ha : s.regs 10 = 0
   · by_cases hb : s.regs 25 = 0
     · simp [Cfg.markAdvancePowerBody, arun, astep, AState.writeReg,
-        sdest, sval, denoteOperand, denoteOp, advanceActive, Cfg.powerFits,
+        sdest, sval, denoteOperand, denoteOp.eq_def, advanceActive, Cfg.powerFits.eq_def,
         Cfg.bumpPower, Cfg.stepPrime, ha, hb, hmulMod, hhiMod,
-        rPow, rBase, M]
+        rPow.eq_def, rBase.eq_def, M.eq_def]
     · have hb1 : s.regs 25 = 1 := by omega
       simp [Cfg.markAdvancePowerBody, arun, astep, AState.writeReg,
-        sdest, sval, denoteOperand, denoteOp, advanceActive, Cfg.powerFits,
+        sdest, sval, denoteOperand, denoteOp.eq_def, advanceActive, Cfg.powerFits.eq_def,
         Cfg.bumpPower, Cfg.stepPrime, ha, hb1, hmulMod, hhiMod,
-        rPow, rBase, M]
+        rPow.eq_def, rBase.eq_def, M.eq_def]
   · have ha1 : s.regs 10 = 1 := by omega
     by_cases hb : s.regs 25 = 0
     · simp [Cfg.markAdvancePowerBody, arun, astep, AState.writeReg,
-        sdest, sval, denoteOperand, denoteOp, advanceActive, Cfg.powerFits,
+        sdest, sval, denoteOperand, denoteOp.eq_def, advanceActive, Cfg.powerFits.eq_def,
         Cfg.bumpPower, Cfg.stepPrime, ha1, hb, hmulMod, hhiMod,
-        rPow, rBase, M]
+        rPow.eq_def, rBase.eq_def, M.eq_def]
     · have hb1 : s.regs 25 = 1 := by omega
       by_cases hf : s.regs rPow * s.regs rBase ≤ c.hi
       · have hf37 : s.regs 3 * s.regs 7 ≤ c.hi := by
-          simpa [rPow, rBase] using hf
+          simpa [rPow.eq_def, rBase.eq_def] using hf
         simp [Cfg.markAdvancePowerBody, arun, astep, AState.writeReg,
-          sdest, sval, denoteOperand, denoteOp, advanceActive, Cfg.powerFits,
+          sdest, sval, denoteOperand, denoteOp.eq_def, advanceActive, Cfg.powerFits.eq_def,
           Cfg.bumpPower, Cfg.stepPrime, ha1, hb1, hf37,
-          hmulMod, hhiMod, rPow, rBase, M]
+          hmulMod, hhiMod, rPow.eq_def, rBase.eq_def, M.eq_def]
       · have hf37 : ¬s.regs 3 * s.regs 7 ≤ c.hi := by
-          simpa [rPow, rBase] using hf
+          simpa [rPow.eq_def, rBase.eq_def] using hf
         simp [Cfg.markAdvancePowerBody, arun, astep, AState.writeReg,
-          sdest, sval, denoteOperand, denoteOp, advanceActive, Cfg.powerFits,
+          sdest, sval, denoteOperand, denoteOp.eq_def, advanceActive, Cfg.powerFits.eq_def,
           Cfg.bumpPower, Cfg.stepPrime, ha1, hb1, hf37,
-          hmulMod, hhiMod, rPow, rBase, M]
+          hmulMod, hhiMod, rPow.eq_def, rBase.eq_def, M.eq_def]
 
 def clampPi (K candidate : Nat) : Nat :=
   if candidate > K then K else candidate

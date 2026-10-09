@@ -267,7 +267,7 @@ theorem compileExpr_sound (e : Expr) :
                   Nat.lt_of_lt_of_le hrr
                     (Nat.le_trans (compileExpr_cursor_le l cursor)
                       (compileExpr_cursor_le r (compileExpr cursor l).2.2))
-                simp only [RegState.set, if_neg (Nat.ne_of_lt hlt)]
+                simp only [RegState.set, ite_eq_right (Nat.ne_of_lt hlt)]
                 rw [h2f rr (Nat.lt_of_lt_of_le hrr
                     (compileExpr_cursor_le l cursor)),
                   h1f rr hrr]
@@ -375,7 +375,7 @@ theorem Expr.toBody_correct (e : Expr) (dest cursor : Nat)
     rfl
   · simpa [RegState.set] using h1v
   · intro rr hrr hne
-    simp only [RegState.set, if_neg hne]
+    simp only [RegState.set, ite_eq_right hne]
     exact h1f rr hrr
 
 /-- If the expression's denotation is undefined, so is its body fragment. -/

@@ -75,7 +75,7 @@ theorem lowerValue_run (k : Nat) (s : AState)
     rw [hB0]
     by_cases h : s.regs sShapeTail = 1
     · simp [bB, h]
-    · simp only [bB, h, if_false]
+    · simp only [bB, h, ite_false]
       exact (encodeZ_ofNat (show (0 : Nat) < M by decide)).symm
   have hwB : ∀ j, foldB.regs j < M :=
     (LeanCompCert.Ports.Section413G1Denote.arun_lt k
@@ -135,7 +135,7 @@ theorem upperValue_run (k : Nat) (s : AState)
     rw [hB0]
     by_cases h : s.regs sShapeTail = 1
     · simp [bB, h]
-    · simp only [bB, h, if_false]
+    · simp only [bB, h, ite_false]
       exact (encodeZ_ofNat (show (0 : Nat) < M by decide)).symm
   have hwB : ∀ j, foldB.regs j < M :=
     (LeanCompCert.Ports.Section413G1Denote.arun_lt k

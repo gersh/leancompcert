@@ -76,34 +76,34 @@ theorem markAdvanceFlagsBody_run (c : R2Cfg) (k : Nat) (s : AState)
   by_cases ha : s.regs 8 = 0
   · by_cases hp : s.regs 27 = 0
     · simp [markAdvanceFlagsInstrs, srun, RegState.set, sdest, sval,
-        denoteOperand, denoteOp, advanceActive, R2Cfg.powerFits,
+        denoteOperand, denoteOp.eq_def, advanceActive, R2Cfg.powerFits.eq_def,
         R2Cfg.bumpPower, R2Cfg.stepPrime, ha, hp, hmulMod, hhiMod,
-        rQ, rBp]
+        rQ.eq_def, rBp.eq_def]
     · have hp1 : s.regs 27 = 1 := by omega
       simp [markAdvanceFlagsInstrs, srun, RegState.set, sdest, sval,
-        denoteOperand, denoteOp, advanceActive, R2Cfg.powerFits,
+        denoteOperand, denoteOp.eq_def, advanceActive, R2Cfg.powerFits.eq_def,
         R2Cfg.bumpPower, R2Cfg.stepPrime, ha, hp1, hmulMod, hhiMod,
-        rQ, rBp]
+        rQ.eq_def, rBp.eq_def]
   · have ha1 : s.regs 8 = 1 := by omega
     by_cases hp : s.regs 27 = 0
     · simp [markAdvanceFlagsInstrs, srun, RegState.set, sdest, sval,
-        denoteOperand, denoteOp, advanceActive, R2Cfg.powerFits,
+        denoteOperand, denoteOp.eq_def, advanceActive, R2Cfg.powerFits.eq_def,
         R2Cfg.bumpPower, R2Cfg.stepPrime, ha1, hp, hmulMod, hhiMod,
-        rQ, rBp]
+        rQ.eq_def, rBp.eq_def]
     · have hp1 : s.regs 27 = 1 := by omega
       by_cases hf : s.regs rQ * s.regs rBp ≤ c.hi
       · have hf' : s.regs 3 * s.regs 170 ≤ c.hi := by
-          simpa [rQ, rBp] using hf
+          simpa [rQ.eq_def, rBp.eq_def] using hf
         simp [markAdvanceFlagsInstrs, srun, RegState.set, sdest, sval,
-          denoteOperand, denoteOp, advanceActive, R2Cfg.powerFits,
+          denoteOperand, denoteOp.eq_def, advanceActive, R2Cfg.powerFits.eq_def,
           R2Cfg.bumpPower, R2Cfg.stepPrime, ha1, hp1, hf', hmulMod,
-          hhiMod, honeMod, hzero, rQ, rBp]
+          hhiMod, honeMod, hzero, rQ.eq_def, rBp.eq_def]
       · have hf' : ¬s.regs 3 * s.regs 170 ≤ c.hi := by
-          simpa [rQ, rBp] using hf
+          simpa [rQ.eq_def, rBp.eq_def] using hf
         simp [markAdvanceFlagsInstrs, srun, RegState.set, sdest, sval,
-          denoteOperand, denoteOp, advanceActive, R2Cfg.powerFits,
+          denoteOperand, denoteOp.eq_def, advanceActive, R2Cfg.powerFits.eq_def,
           R2Cfg.bumpPower, R2Cfg.stepPrime, ha1, hp1, hf', hmulMod,
-          hhiMod, honeMod, rQ, rBp]
+          hhiMod, honeMod, rQ.eq_def, rBp.eq_def]
 
 #print axioms markAdvanceFlagsBody_run
 

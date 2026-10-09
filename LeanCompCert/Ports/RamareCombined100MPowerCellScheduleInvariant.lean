@@ -53,7 +53,7 @@ theorem productionWindowStart_markInv
     vmark_le_viol := ?_
     last_failure_le := ?_ }
   · apply PowerCellState.ext
-    · simp only [resetPowerCellState, resetPowerCursor, hround, if_pos,
+    · simp only [resetPowerCellState, resetPowerCursor, hround, ite_eq_left,
         productionInitialPowerCell]
       rw [productionPowerPhases_head, productionTable_head, hwindow]
       rfl

@@ -312,7 +312,7 @@ theorem divisorProduct_dvd (ps : List Nat) (n : Nat)
       have htailDvd := ih htailPrime htailOrdered
       by_cases hpDvd : p ∣ n
       · have hmod : n % p = 0 := Nat.dvd_iff_mod_eq_zero.mp hpDvd
-        rw [divisorProduct, if_pos hmod]
+        rw [divisorProduct, ite_eq_left hmod]
         have hne : ∀ q, q ∈ ps → p ≠ q := by
           intro q hq hpq
           have hpLtQ := List.rel_of_pairwise_cons hordered hq
@@ -342,13 +342,13 @@ theorem dvd_divisorProduct_of_mem_dvd {p n : Nat} (ps : List Nat)
       simp only [List.mem_cons] at hpMem
       by_cases hqDvd : q ∣ n
       · have hqMod : n % q = 0 := Nat.dvd_iff_mod_eq_zero.mp hqDvd
-        rw [divisorProduct, if_pos hqMod]
+        rw [divisorProduct, ite_eq_left hqMod]
         rcases hpMem with rfl | hpTail
         · exact Nat.dvd_mul_right _ (divisorProduct ps n)
         · exact Nat.dvd_mul_left_of_dvd (ih hpTail) q
       · have hqMod : n % q ≠ 0 := by
           simpa only [Nat.dvd_iff_mod_eq_zero] using hqDvd
-        rw [divisorProduct, if_neg hqMod]
+        rw [divisorProduct, ite_eq_right hqMod]
         rcases hpMem with hpEq | hpTail
         · subst q
           exact False.elim (hqDvd hpDvd)

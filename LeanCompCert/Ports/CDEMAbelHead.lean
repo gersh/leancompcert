@@ -321,7 +321,7 @@ theorem headAbsPre_run (idx : Nat) (r : RegState) (f : Nat)
       out 157 = (M - headX f) % M ∧ out rF = f := by
   have hF' : r 12 = f := by simpa [rF] using hF
   have hcut : 9223372036854775808 % M = 9223372036854775808 := by decide
-  simp [headAbsPreS, headX, srun, sdest, sval, denoteOperand, denoteOp,
+  simp [headAbsPreS, headX.eq_def, srun, sdest, sval, denoteOperand, denoteOp.eq_def,
     RegState.set, rF, hF', hcut]
 
 theorem headInc_run (idx : Nat) (r : RegState) (g e : Nat)
@@ -1278,7 +1278,7 @@ theorem accHead_middle_run (c : Cfg) (idx : Nat) (st : AState)
       simp
     · intro j hj
       simp only [cleared, hloaded144, hloadedZero]
-      rw [if_neg hj]
+      rw [ite_eq_right hj]
   have hloaded140 : loaded 140 = 0 := by
     rw [loadedKeep 140 (by decide), hp.1]
   have hloadedK : loaded rK = st.regs rK := by
@@ -1451,7 +1451,7 @@ theorem accHead_last_run (c : Cfg) (idx : Nat) (st : AState)
       simp
     · intro j hj
       simp only [cleared, hloaded144, hloadedZero]
-      rw [if_neg hj]
+      rw [ite_eq_right hj]
   have loadedToBefore (j : Nat) (hj148 : j ≠ 148)
       (hw : RegFrame.writes j (headPreS c) = false) :
       loaded j = st.regs j := by rw [loadedKeep j hj148, preKeep j hw]

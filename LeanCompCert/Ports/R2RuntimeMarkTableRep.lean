@@ -92,7 +92,7 @@ theorem runtimeSweepEntry_cells_rep :
     (i + runtimeProductionCfg.segLen) = 0 at h1
   change runtimeSweepPackedState.arr
     (i + 2 * runtimeProductionCfg.segLen) = 0 at h2
-  simp [runtimeFirstWindow, emptyMarkCell, MarkCell.encode, packWeights,
+  simp [runtimeFirstWindow, emptyMarkCell, MarkCell.encode, packWeights_eq,
     h0, h1, h2]
 
 theorem runtimeSweepEntry_failure_regs :
@@ -160,7 +160,7 @@ theorem runtimeSweepFirstPrelude_rep :
         (i + runtimeProductionCfg.segLen) = 0 at h1
       change runtimeSweepPackedState.arr
         (i + 2 * runtimeProductionCfg.segLen) = 0 at h2
-      simp [runtimeFirstWindow, emptyMarkCell, MarkCell.encode, packWeights,
+      simp [runtimeFirstWindow, emptyMarkCell, MarkCell.encode, packWeights_eq,
         h0, h1, h2]
   · intro i hi
     rw [harr]

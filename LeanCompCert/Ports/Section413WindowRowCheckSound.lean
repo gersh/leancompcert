@@ -76,7 +76,7 @@ theorem firstDivPrep_outputs (k : Nat) (s : AState) :
     LeanCompCert.Ports.Section413WindowCellDiv.rGate,
     LeanCompCert.Ports.Section413WindowCellDiv.rDen,
     LeanCompCert.Ports.Section413WindowSchedule.rN,
-    rK2Lo, rK2Hi, Nat.reduceEqDiff, if_false, if_true,
+    rK2Lo, rK2Hi, Nat.reduceEqDiff, ite_false, ite_true,
     show 1 % M = 1 by decide]
   exact ⟨trivial, trivial, trivial, trivial, trivial⟩
 
@@ -102,7 +102,7 @@ theorem secondDivPrep_outputs (k : Nat) (s : AState)
     LeanCompCert.Ports.Section413WindowCellDiv.rOutHi,
     LeanCompCert.Ports.Section413WindowCellDiv.rDen,
     LeanCompCert.Ports.Section413WindowSchedule.rN,
-    Nat.reduceEqDiff, if_false, if_true, show 1 % M = 1 by decide]
+    Nat.reduceEqDiff, ite_false, ite_true, show 1 % M = 1 by decide]
   exact ⟨trivial, trivial, Nat.mod_eq_of_lt hn, trivial⟩
 
 theorem secondDivSave_outputs (k : Nat) (s : AState) :
@@ -117,7 +117,7 @@ theorem secondDivSave_outputs (k : Nat) (s : AState) :
     rDiv2Lo, rDiv2Hi,
     LeanCompCert.Ports.Section413WindowCellDiv.rOutLo,
     LeanCompCert.Ports.Section413WindowCellDiv.rOutHi,
-    Nat.reduceEqDiff, if_false, if_true]
+    Nat.reduceEqDiff, ite_false, ite_true]
   exact ⟨trivial, trivial, trivial⟩
 
 theorem unitReset_outputs (k : Nat) (s : AState) :
@@ -129,7 +129,7 @@ theorem unitReset_outputs (k : Nat) (s : AState) :
   rw [unitReset, arun_lift]
   simp only [srun, sdest, sval, denoteOperand, RegState.set,
     rSavedAddViol, LeanCompCert.Ports.Section413SignedAdd.rViol,
-    Nat.reduceEqDiff, if_false, if_true, show 0 % M = 0 by decide]
+    Nat.reduceEqDiff, ite_false, ite_true, show 0 % M = 0 by decide]
   exact ⟨trivial, trivial, trivial⟩
 
 theorem unitSave_outputs (k : Nat) (s : AState) :
@@ -139,7 +139,7 @@ theorem unitSave_outputs (k : Nat) (s : AState) :
       out.arr = s.arr := by
   rw [unitSave, arun_lift]
   simp only [srun, sdest, sval, denoteOperand, RegState.set,
-    rUnitAddBad, LeanCompCert.Ports.Section413SignedAdd.rViol, if_true]
+    rUnitAddBad, LeanCompCert.Ports.Section413SignedAdd.rViol, ite_true]
   exact ⟨trivial, trivial⟩
 
 def unitMaxLoState (k : Nat) (s : AState) : AState :=
@@ -426,7 +426,7 @@ theorem checkStage_outputs (k : Nat) (s : AState) (lo offset : Nat)
     rRowViol, rMaxHi, LeanCompCert.Ports.Section413SignedAdd.rViol,
     LeanCompCert.Ports.Section413WindowSchedule.rS,
     LeanCompCert.Ports.Section413WindowSchedule.rN,
-    Nat.reduceEqDiff, if_false, if_true,
+    Nat.reduceEqDiff, ite_false, ite_true,
     show LeanCompCert.Ports.Section413WindowSchedule.slots % M =
       LeanCompCert.Ports.Section413WindowSchedule.slots by decide,
     show 1 % M = 1 by decide,
@@ -578,10 +578,10 @@ theorem nonnegativeWord_eq_toNat (w : Nat) (hw : w < M) :
   unfold nonnegativeWord decodeZ
   by_cases hlt : w < H63
   · have hsign : ¬ H63 ≤ w := by omega
-    rw [if_neg hsign, if_pos hlt]
+    rw [ite_eq_right hsign, ite_eq_left hlt]
     simp
   · have hsign : H63 ≤ w := by omega
-    rw [if_pos hsign, if_neg hlt]
+    rw [ite_eq_left hsign, ite_eq_right hlt]
     symm
     apply Int.toNat_of_nonpos
     simp only [M, H63, LeanCompCert.Verified.MulWide.B64] at hw hsign ⊢

@@ -84,9 +84,9 @@ theorem absIlo_encode (k : Nat) (s : AState) (z : Int)
   rw [absIlo_run k s (by rw [hz]; exact Section413Cells.encodeZ_lt z), hz]
   have hs := Section413Cells.encodeZ_sign z hlo hhi
   by_cases h : z < 0
-  · rw [if_pos (hs.mpr h)]
+  · rw [ite_eq_left (hs.mpr h)]
     exact Section413Cells.encodeZ_mag_neg z hlo h
-  · rw [if_neg (fun hh => h (hs.mp hh))]
+  · rw [ite_eq_right (fun hh => h (hs.mp hh))]
     exact Section413Cells.encodeZ_mag_nonneg z (Int.le_of_not_gt h) hhi
 
 theorem absIhi_encode (k : Nat) (s : AState) (z : Int)
@@ -97,9 +97,9 @@ theorem absIhi_encode (k : Nat) (s : AState) (z : Int)
   rw [absIhi_run k s (by rw [hz]; exact Section413Cells.encodeZ_lt z), hz]
   have hs := Section413Cells.encodeZ_sign z hlo hhi
   by_cases h : z < 0
-  · rw [if_pos (hs.mpr h)]
+  · rw [ite_eq_left (hs.mpr h)]
     exact Section413Cells.encodeZ_mag_neg z hlo h
-  · rw [if_neg (fun hh => h (hs.mp hh))]
+  · rw [ite_eq_right (fun hh => h (hs.mp hh))]
     exact Section413Cells.encodeZ_mag_nonneg z (Int.le_of_not_gt h) hhi
 
 /-- The scalar suffix of `weightedStep`, after the two endpoint magnitudes
@@ -133,7 +133,7 @@ private theorem weightedFinish_run_raw (k : Nat) (s : AState)
   rw [ceilDiv_eq_div_add_modBit _ _ hn] at hsum ⊢
   have hden : ((if s.regs 132 = 0 then 1 else 0) + s.regs 132) % M =
       s.regs 132 := by
-    rw [if_neg (Nat.ne_of_gt hn), Nat.zero_add, Nat.mod_eq_of_lt hnM]
+    rw [ite_eq_right (Nat.ne_of_gt hn), Nat.zero_add, Nat.mod_eq_of_lt hnM]
   by_cases h : s.regs 323 < s.regs 324
   · have hnot : ¬ s.regs 324 ≤ s.regs 323 := by omega
     rw [Nat.max_eq_right (by omega)] at hsum ⊢
@@ -143,7 +143,7 @@ private theorem weightedFinish_run_raw (k : Nat) (s : AState)
             s.regs 324 := by
       simp [h, hnot, Nat.mod_eq_of_lt hhi]
     by_cases hr : s.regs 324 % s.regs 132 = 0
-    · simp only [hr, if_pos, if_true] at hsum ⊢
+    · simp only [hr, ite_eq_left, ite_true] at hsum ⊢
       have hdiv : s.regs 324 / s.regs 132 < M :=
         Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hhi
       have hsum' : s.regs 261 + s.regs 324 / s.regs 132 < M := by omega
@@ -156,7 +156,7 @@ private theorem weightedFinish_run_raw (k : Nat) (s : AState)
         Nat.mod_eq_of_lt hlo, Nat.mod_eq_of_lt hhi,
         Nat.mod_eq_of_lt hnM, Nat.mod_eq_of_lt hacc,
         Nat.mod_eq_of_lt hdiv, Nat.mod_eq_of_lt hsum']
-    · simp only [hr, if_neg, if_false] at hsum ⊢
+    · simp only [hr, ite_eq_right, ite_false] at hsum ⊢
       have hceil : s.regs 324 / s.regs 132 + 1 < M := by omega
       have hdiv : s.regs 324 / s.regs 132 < M := by omega
       have hrem : s.regs 324 % s.regs 132 < M :=
@@ -179,7 +179,7 @@ private theorem weightedFinish_run_raw (k : Nat) (s : AState)
             s.regs 323 := by
       simp [h, hge, Nat.mod_eq_of_lt hlo]
     by_cases hr : s.regs 323 % s.regs 132 = 0
-    · simp only [hr, if_pos, if_true] at hsum ⊢
+    · simp only [hr, ite_eq_left, ite_true] at hsum ⊢
       have hdiv : s.regs 323 / s.regs 132 < M :=
         Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hlo
       have hsum' : s.regs 261 + s.regs 323 / s.regs 132 < M := by omega
@@ -192,7 +192,7 @@ private theorem weightedFinish_run_raw (k : Nat) (s : AState)
         Nat.mod_eq_of_lt hlo, Nat.mod_eq_of_lt hhi,
         Nat.mod_eq_of_lt hnM, Nat.mod_eq_of_lt hacc,
         Nat.mod_eq_of_lt hdiv, Nat.mod_eq_of_lt hsum']
-    · simp only [hr, if_neg, if_false] at hsum ⊢
+    · simp only [hr, ite_eq_right, ite_false] at hsum ⊢
       have hceil : s.regs 323 / s.regs 132 + 1 < M := by omega
       have hdiv : s.regs 323 / s.regs 132 < M := by omega
       have hrem : s.regs 323 % s.regs 132 < M :=
@@ -235,7 +235,7 @@ theorem weightedFinish_run_mod (k : Nat) (s : AState)
   rw [ceilDiv_eq_div_add_modBit _ _ hn]
   have hden : ((if s.regs 132 = 0 then 1 else 0) + s.regs 132) % M =
       s.regs 132 := by
-    rw [if_neg (Nat.ne_of_gt hn), Nat.zero_add, Nat.mod_eq_of_lt hnM]
+    rw [ite_eq_right (Nat.ne_of_gt hn), Nat.zero_add, Nat.mod_eq_of_lt hnM]
   by_cases h : s.regs 323 < s.regs 324
   · have hnot : ¬ s.regs 324 ≤ s.regs 323 := by omega
     rw [Nat.max_eq_right (by omega)]

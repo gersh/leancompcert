@@ -80,7 +80,7 @@ theorem CellFactorShape.markPrime {cell : Cell}
         ⟨cell.prod * row.p ^ e, cell.p, cell.pe, cell.q, cell.qe, 2⟩)
   by_cases hskip : !row.active || e = 0
   · simpa [hskip] using hcell
-  rw [if_neg hskip]
+  rw [ite_eq_right hskip]
   have he : 0 < e := by
     have : e ≠ 0 := by
       intro hz
@@ -88,7 +88,7 @@ theorem CellFactorShape.markPrime {cell : Cell}
       simp [hz]
     omega
   by_cases hc0 : cell.count = 0
-  · rw [if_pos hc0]
+  · rw [ite_eq_left hc0]
     have hprod : cell.prod = 1 := hcell.emptyProd hc0
     constructor
     · simp
@@ -96,9 +96,9 @@ theorem CellFactorShape.markPrime {cell : Cell}
     · intro _
       simp [hprod, hrow, he]
     · simp
-  · rw [if_neg hc0]
+  · rw [ite_eq_right hc0]
     by_cases hc1 : cell.count = 1
-    · rw [if_pos hc1]
+    · rw [ite_eq_left hc1]
       have hone := hcell.one hc1
       constructor
       · simp
@@ -108,7 +108,7 @@ theorem CellFactorShape.markPrime {cell : Cell}
         refine ⟨hone.2.1, hrow, he, ?_⟩
         rw [hone.1]
         simp
-    · rw [if_neg hc1]
+    · rw [ite_eq_right hc1]
       have hcle : cell.count ≤ 2 := hcell.count_le
       have hc2 : cell.count = 2 := by omega
       have htwo := hcell.two hc2

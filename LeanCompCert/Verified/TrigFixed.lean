@@ -109,16 +109,16 @@ theorem step_upper_abs {t X c A R u v w : Nat}
     w * (A * c * B62 * B62) ≤ R * (X * X) := by
   calc w * (A * c * B62 * B62)
       = (w * c) * (A * B62 * B62) := by
-        simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+        simp [Nat.mul_comm, Nat.mul_left_comm]
     _ ≤ v * (A * B62 * B62) := Nat.mul_le_mul h1 (Nat.le_refl _)
     _ = (v * B62) * (A * B62) := by
-        simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+        simp [Nat.mul_comm, Nat.mul_left_comm]
     _ ≤ (u * X) * (A * B62) := Nat.mul_le_mul h2 (Nat.le_refl _)
     _ = (u * B62) * (X * A) := by
-        simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+        simp [Nat.mul_comm, Nat.mul_left_comm]
     _ ≤ (t * X) * (X * A) := Nat.mul_le_mul h3 (Nat.le_refl _)
     _ = (t * A) * (X * X) := by
-        simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+        simp [Nat.mul_comm, Nat.mul_left_comm]
     _ ≤ R * (X * X) := Nat.mul_le_mul h (Nat.le_refl _)
 
 theorem step_upper {t X c A R : Nat} (h : t * A ≤ R) :
@@ -144,7 +144,7 @@ theorem step_lower_abs {t X c A R E u v w : Nat} (hX : X ≤ B62) (hc : 2 ≤ c)
   have s1 : (u + 1) * B62 * X = u * X * B62 + B62 * X := by
     have d : (u + 1) * B62 * X = u * B62 * X + B62 * X := by simp [Nat.add_mul]
     have a : u * B62 * X = u * X * B62 := by
-      simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+      simp [Nat.mul_comm, Nat.mul_left_comm]
     rw [d, a]
   have s2 : (v + 1) * B62 * B62 = v * (B62 * B62) + B62 * B62 := by
     have d : (v + 1) * B62 * B62 = v * B62 * B62 + B62 * B62 := by simp [Nat.add_mul]
@@ -167,7 +167,7 @@ theorem step_lower_abs {t X c A R E u v w : Nat} (hX : X ≤ B62) (hc : 2 ≤ c)
   calc R * (X * X)
       ≤ ((t + E) * A) * (X * X) := Nat.mul_le_mul h (Nat.le_refl _)
     _ = ((t + E) * (X * X)) * A := by
-        simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+        simp [Nat.mul_comm, Nat.mul_left_comm]
     _ ≤ ((v + E + 2) * (B62 * B62)) * A := Nat.mul_le_mul hsum (Nat.le_refl _)
     _ = (v + E + 2) * (A * B62 * B62) := by
         simp [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
@@ -480,7 +480,7 @@ theorem evenSum_add_oddSum (X : Nat) : ∀ n, evenSum X n + oddSum X n = cosSum 
     show evenSum X n + (if n % 2 = 0 then cosTerm X n else 0)
       + (oddSum X n + (if n % 2 = 0 then 0 else cosTerm X n))
       = cosSum X n + cosTerm X n
-    by_cases h : n % 2 = 0 <;> simp only [h, if_pos, if_neg, if_true, if_false] <;> omega
+    by_cases h : n % 2 = 0 <;> simp only [h, ite_eq_left, ite_false] <;> omega
 
 theorem evenSum_le_cosSum (X : Nat) (n : Nat) : evenSum X n ≤ cosSum X n := by
   have h := evenSum_add_oddSum X n
@@ -529,7 +529,7 @@ theorem sinEvenSum_add_sinOddSum (X : Nat) : ∀ n,
     show sinEvenSum X n + (if n % 2 = 0 then sinTerm X n else 0)
       + (sinOddSum X n + (if n % 2 = 0 then 0 else sinTerm X n))
       = sinSum X n + sinTerm X n
-    by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+    by_cases h : n % 2 = 0 <;> simp only [h, ite_true, ite_false] <;> omega
 
 #print axioms cosTerm_bracket
 #print axioms sinTerm_bracket

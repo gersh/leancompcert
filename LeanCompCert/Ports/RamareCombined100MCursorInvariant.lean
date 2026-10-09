@@ -54,12 +54,12 @@ theorem planeEventCellFold_progression (count i j pow base : Nat)
           omega
         have hsucc : ∃ t, t < count + 1 ∧ j + t * pow = i :=
           ⟨count, by omega, hlast⟩
-        rw [if_pos hlast, ih, if_neg hnone, if_pos hsucc]
+        rw [ite_eq_left hlast, ih, ite_eq_right hnone, ite_eq_left hsucc]
       · by_cases hprev : ∃ t, t < count ∧ j + t * pow = i
         · have hsucc : ∃ t, t < count + 1 ∧ j + t * pow = i := by
             rcases hprev with ⟨t, ht, heq⟩
             exact ⟨t, by omega, heq⟩
-          rw [if_neg hlast, ih, if_pos hprev, if_pos hsucc]
+          rw [ite_eq_right hlast, ih, ite_eq_left hprev, ite_eq_left hsucc]
         · have hnoneSucc : ¬∃ t, t < count + 1 ∧ j + t * pow = i := by
             intro h
             rcases h with ⟨t, ht, heq⟩
@@ -68,7 +68,7 @@ theorem planeEventCellFold_progression (count i j pow base : Nat)
             · have htEq : t = count := by omega
               subst t
               exact hlast heq
-          rw [if_neg hlast, ih, if_neg hprev, if_neg hnoneSucc]
+          rw [ite_eq_right hlast, ih, ite_eq_right hprev, ite_eq_right hnoneSucc]
 
 /-- The Ramaré production offset formula is definitionally the already-audited
 segmented-sieve `firstOffset`. -/
@@ -90,13 +90,13 @@ theorem planeEventCellFold_powerCursorEvents (segLen w i pow base : Nat)
     cursorLiveEvents, planeEventCellFold_progression _ i
       (firstOffset w pow) pow base x hpow]
   by_cases hdiv : pow ∣ w + i
-  · rw [if_pos hdiv,
-      if_pos ((mem_cursor_progression_iff segLen w i pow hpow hi).2 hdiv)]
+  · rw [ite_eq_left hdiv,
+      ite_eq_left ((mem_cursor_progression_iff segLen w i pow hpow hi).2 hdiv)]
   · have hnone : ¬∃ t, t < liveCount segLen (firstOffset w pow) pow ∧
         firstOffset w pow + t * pow = i := by
       intro h
       exact hdiv ((mem_cursor_progression_iff segLen w i pow hpow hi).1 h)
-    rw [if_neg hdiv, if_neg hnone]
+    rw [ite_eq_right hdiv, ite_eq_right hnone]
 
 /-- Runnable selected-cell view of one production power cursor. -/
 def cursorPowerFold (segLen w i pow base : Nat) (x : PlaneCell) : PlaneCell :=
@@ -137,7 +137,7 @@ theorem powerHitExponents_eq_range' (p n start count : Nat) :
               (List.range' start (count + 1))).length
       rw [List.range'_succ]
       by_cases hhit : p ^ start ∣ n
-      · simp only [List.filter_cons, decide_eq_true_eq, hhit, if_true,
+      · simp only [List.filter_cons, decide_eq_true_eq, hhit, ite_true,
           List.length_cons, List.range'_succ]
         congr 1
         simpa [powerHitExponents] using ih (start + 1)
@@ -153,7 +153,7 @@ theorem powerHitExponents_eq_range' (p n start count : Nat) :
             List.filter (fun j => decide (p ^ j ∣ n))
               (List.range' (start + 1) count) = [] := by
           simpa [powerHitExponents] using htail
-        simp only [List.filter_cons, decide_eq_true_eq, hhit, if_false]
+        simp only [List.filter_cons, decide_eq_true_eq, hhit, ite_false]
         rw [htailRaw]
         rfl
 
@@ -193,10 +193,10 @@ theorem cursorPowerListFold_eq_hits (segLen w i p : Nat) (js : List Nat)
       simp only [cursorPowerListFold, List.foldl_cons]
       rw [cursorPowerFold_eq segLen w i (p ^ j) p x (Nat.pow_pos hp) hi]
       by_cases hhit : p ^ j ∣ w + i
-      · simp only [hhit, if_true, List.filter_cons, decide_eq_true_eq,
+      · simp only [hhit, ite_true, List.filter_cons, decide_eq_true_eq,
           List.foldl_cons]
         exact ih (x.markPower (p ^ j) p)
-      · simp only [hhit, if_false, List.filter_cons, decide_eq_true_eq]
+      · simp only [hhit, ite_false, List.filter_cons, decide_eq_true_eq]
         exact ih x
 
 /-- Runnable selected-cell view of all 32 production power cursors for one

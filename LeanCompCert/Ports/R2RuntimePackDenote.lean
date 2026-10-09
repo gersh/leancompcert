@@ -511,9 +511,9 @@ theorem rootPackInitialModel_invariant (arr : Nat → Nat) :
         have hE : rootPackExNext 0 (rootPackInitialModel arr) = 1 := by rfl
         have hL : Nat.log2 2 = 1 := by decide
         constructor
-        · rw [rootPackXmInit, hS, if_pos rfl, rootPackNorm, hE, hN, hL,
+        · rw [rootPackXmInit, hS, ite_eq_left rfl, rootPackNorm, hE, hN, hL,
             hR, logIter]
-        · rw [rootPackAaInit, hS, if_pos rfl, hR, logIter] }
+        · rw [rootPackAaInit, hS, ite_eq_left rfl, hR, logIter] }
 
 theorem rootPackInvariant_step (c : R2Cfg) (index : Nat) (m : RootPackModel)
     (hcfg : RootPackCfgSafe c)
@@ -594,7 +594,7 @@ theorem rootPackInvariant_step (c : R2Cfg) (index : Nat) (m : RootPackModel)
       rw [rootPackModelStep, hq]
       exact Nat.add_le_add hinv.writeLe hhit
     · rw [rootPackXmInit, rootPackAaInit, hstart]
-      simp only [if_pos, hrel.2, logIter]
+      simp only [ite_eq_left, hrel.2, logIter]
       constructor
       · simpa only [rootPackNorm] using congrArg
           (fun e => rootPackN (index + 1) <<< (62 - e)) hnextEx
@@ -633,7 +633,7 @@ theorem rootPackInvariant_step (c : R2Cfg) (index : Nat) (m : RootPackModel)
         simp [rootPackFinish, hf]
       simp [rootPackHit, hfinish, hinv.writeLe]
     · rw [rootPackXmInit, rootPackAaInit, hstart]
-      simp only [Nat.zero_ne_one, if_false, rootPackModelStep]
+      simp only [Nat.zero_ne_one, ite_false, rootPackModelStep]
       have hnorm : rootPackNorm (index + 1) = rootPackNorm index := by
         simp only [rootPackNorm, hrel.1]
       rw [hrel.2, hnorm]
@@ -669,7 +669,7 @@ theorem rootPackDecode_defined (c : R2Cfg) (index : Nat) (s : AState)
     hiM, hsM, hsne, hnM, hnRawM, hncell]
   constructor
   · exact h24ne
-  · rw [if_neg h24ne, Option.getD_some, h24M, hqM, hnRaw24M]
+  · rw [ite_eq_right h24ne, Option.getD_some, h24M, hqM, hnRaw24M]
     simpa [rootPackN, runtimeScale] using hncell
 
 theorem rootPackDecode_run (c : R2Cfg) (index : Nat) (s : AState)
@@ -698,7 +698,7 @@ theorem rootPackDecode_run (c : R2Cfg) (index : Nat) (s : AState)
       (if runtimeScale % M = 0 then none
         else some (index % M % (runtimeScale % M))).getD 0 =
           rootPackRound index := by
-    rw [if_neg hsne, Option.getD_some, hiM, hsM]
+    rw [ite_eq_right hsne, Option.getD_some, hiM, hsM]
     rfl
   have hrSuccM : (rootPackRound index + 1) % M =
       rootPackRound index + 1 := Nat.mod_eq_of_lt (by
@@ -712,11 +712,11 @@ theorem rootPackDecode_run (c : R2Cfg) (index : Nat) (s : AState)
   have hNdecode :
       ((if 24 % M = 0 then none else some (index / (24 % M) % M)).getD 0 + 2) % M =
         index / 24 + 2 := by
-    rw [if_neg h24ne, Option.getD_some, h24M, hqM, hnRaw24M]
+    rw [ite_eq_right h24ne, Option.getD_some, h24M, hqM, hnRaw24M]
   have hRdecode :
       (if 24 % M = 0 then none else some (index % (24 % M) % M)).getD 0 =
         index % 24 := by
-    rw [if_neg h24ne, Option.getD_some, h24M]
+    rw [ite_eq_right h24ne, Option.getD_some, h24M]
     exact Nat.mod_eq_of_lt (Nat.lt_trans (Nat.mod_lt _ (by decide)) (by decide))
   simp [rootPackDecode, arun, astep, sval, sdest, denoteOperand, denoteOp,
     AState.writeReg, rootPackN, rootPackRound, runtimeScale, hiM, hsM,

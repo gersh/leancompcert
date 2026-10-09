@@ -71,9 +71,9 @@ theorem roundSig_round (c : Cfg) (n r : Nat) (hr : r < c.rounds)
   rw [hdiv, hmod]
   by_cases hlast : r + 1 = c.rounds
   · have hq : r = c.rounds - 1 := by omega
-    simp only [if_pos hlast, if_pos hq]
+    simp only [ite_eq_left hlast, ite_eq_left hq]
   · have hq : ¬ r = c.rounds - 1 := by omega
-    simp only [if_neg hlast, if_neg hq]
+    simp only [ite_eq_right hlast, ite_eq_right hq]
 
 /-- Every non-final divisor round exposes the idle signal. -/
 theorem roundSig_idle (c : Cfg) (n r : Nat) (hr : r < c.rounds)
@@ -94,7 +94,7 @@ theorem roundSig_last (c : Cfg) (n r : Nat) (hr : r < c.rounds)
       trialPrefix (c.lo + n) r) :
     roundSig c (n * c.rounds + r) a = trialSig (c.lo + n) c.rounds := by
   rw [roundSig_round c n r hr a hmo]
-  simp only [if_pos hlast]
+  simp only [ite_eq_left hlast]
   rw [hpre, ← trialPrefix_succ, hlast, trialPrefix_full]
   simp [trialSig]
 
@@ -132,7 +132,7 @@ theorem basePrefix_before (c : Cfg) (hR : 0 < c.rounds) (n count : Nat)
       have hq : q < c.rounds := by omega
       have hne : q + 1 ≠ c.rounds := by omega
       have h := block_prefix c hR n a hmo q hq
-      simp only [if_neg hne] at h
+      simp only [ite_eq_right hne] at h
       change basePrefix c n (q + 1) a =
         ⟨a.bad, a.mo, trialPrefix (c.lo + n) (q + 1)⟩ at h
       rw [h]
@@ -160,18 +160,18 @@ theorem fullPrefix_spec (c : Cfg) (k n : Nat) (hR : 0 < c.rounds)
       have hqne : q ≠ c.rounds := by omega
       have hprev := ih (by omega)
       rw [fullPrefix_succ, hprev]
-      simp only [if_neg hqne, fullGstep]
+      simp only [ite_eq_right hqne, fullGstep]
       have hb := basePrefix_before c hR n q a.base hmo hq
       have hmoq : (basePrefix c n q a.base).mo < M := by
         rw [hb.1]
         exact hmo
       by_cases hlast : q + 1 = c.rounds
-      · rw [if_pos hlast,
+      · rw [ite_eq_left hlast,
           roundSig_last c n q hq hlast (basePrefix c n q a.base) hmoq hb.2]
         apply FullAbs.eq_of
         · exact (basePrefix_succ c n q a.base).symm
         · rfl
-      · rw [if_neg hlast,
+      · rw [ite_eq_right hlast,
           roundSig_idle c n q hq (basePrefix c n q a.base) hmoq hlast]
         apply FullAbs.eq_of
         · exact (basePrefix_succ c n q a.base).symm
@@ -190,7 +190,7 @@ theorem fullBlock_spec (c : Cfg) (k n : Nat) (hR : 0 < c.rounds)
     ⟨basePrefix c n c.rounds a.base,
       resStep k (trialSig (c.lo + n) c.rounds) a.residue⟩
   rw [fullPrefix_spec c k n hR a hmo hw c.rounds (Nat.le_refl _),
-    if_pos rfl]
+    ite_eq_left rfl]
 
 /-- Initializing the residue does not perturb the base state and writes the
 five supplied word values exactly. -/

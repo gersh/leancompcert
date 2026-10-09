@@ -85,7 +85,7 @@ private theorem set_preserves_counter (p : Program) (env : Proof.CCEnv)
     (Proof.CCEnv.set env id value) ⟨counterReg p + 1⟩ =
       env ⟨counterReg p + 1⟩ := by
   simp only [Proof.CCEnv.set]
-  rw [if_neg]
+  rw [ite_eq_right]
   intro h
   exact hNe (h ▸ rfl)
 
@@ -420,12 +420,12 @@ theorem evalCCSequence_var_eq_lit (p : Program) (k : Nat) :
               cases hL : Proof.evalOperand env (compileOperand k lhs) with
               | none => rfl
               | some lv =>
-                  simp only [mbind_some, obind_pure]
+                  simp only [mbind_some]
                   cases hR : Proof.evalOperand env
                       (compileOperand k rhs) with
                   | none => rfl
                   | some rv =>
-                      simp only [mbind_some, obind_pure]
+                      simp only [mbind_some]
                       cases hres : Proof.evalCCBinary
                           (regLocal dest).type arith lv rv with
                       | none => rfl
@@ -526,12 +526,12 @@ theorem evalCCSequence_var_eq_lit (p : Program) (k : Nat) :
                       (compileOperand k lhs) with
                   | none => rfl
                   | some lv =>
-                      simp only [mbind_some, obind_pure]
+                      simp only [mbind_some]
                       cases hR : Proof.evalOperand env
                           (compileOperand k rhs) with
                       | none => rfl
                       | some rv =>
-                          simp only [mbind_some, obind_pure]
+                          simp only [mbind_some]
                           cases hres : Proof.evalCCComparison
                               scratchLocal.type cmp lv rv with
                           | none => rfl
@@ -565,7 +565,7 @@ theorem evalCCSequence_var_eq_lit (p : Program) (k : Nat) :
                                         value) (.local ⟨0⟩) with
                                   | none =>
                                       simp only [hRead, mbind_none,
-                                        obind_none] at hCast
+                                        ] at hCast
                                       simp at hCast
                                   | some readValue =>
                                       rw [hRead, mbind_some] at hCast
@@ -574,11 +574,11 @@ theorem evalCCSequence_var_eq_lit (p : Program) (k : Nat) :
                                           readValue with
                                       | none =>
                                           simp only [hNorm, mbind_none,
-                                            obind_none] at hCast
+                                            ] at hCast
                                           simp at hCast
                                       | some normValue =>
                                           simp only [hNorm, mbind_some,
-                                            obind_pure] at hCast
+                                            ] at hCast
                                           injection hCast with hEnvEq
                                           rw [← hEnvEq,
                                             set_preserves_counter p _ _
@@ -1166,9 +1166,9 @@ theorem evalCExpr_rolledGuard (p : Program) (cEnv : Proof.CEnv) (k : Nat)
   show Proof.normalize C.CType.u8
       (if ((k : Nat) : Int) < ((p.loopCount : Nat) : Int) then 1 else 0) = _
   by_cases hlt : k < p.loopCount
-  · rw [if_pos (by exact_mod_cast hlt), if_pos hlt]
+  · rw [ite_eq_left (by exact_mod_cast hlt), ite_eq_left hlt]
     exact normalize_u8 1 (by decide)
-  · rw [if_neg (by exact_mod_cast hlt), if_neg hlt]
+  · rw [ite_eq_right (by exact_mod_cast hlt), ite_eq_right hlt]
     exact normalize_u8 0 (by decide)
 
 /-! ### The rolled block advances the counter by one -/
@@ -1222,11 +1222,11 @@ theorem evalCWhile_rolled (p : Program) (name : String) (hWF : p.WF)
     ⟨Nat.le_refl _, ccEnv, hRel, by rw [Nat.sub_self]; exact hCounter⟩
   · rintro env ⟨_, cc, hcc, hctr⟩
     rw [evalCExpr_rolledGuard p env (p.loopCount - 0) hCount
-      (by rw [hcc ⟨counterReg p + 1⟩]; exact hctr), if_neg (by omega)]
+      (by rw [hcc ⟨counterReg p + 1⟩]; exact hctr), ite_eq_right (by omega)]
   · rintro remaining env ⟨hLe, cc, hcc, hctr⟩
     refine ⟨1, ?_, by decide⟩
     rw [evalCExpr_rolledGuard p env (p.loopCount - (remaining + 1)) hCount
-      (by rw [hcc ⟨counterReg p + 1⟩]; exact hctr), if_pos (by omega)]
+      (by rw [hcc ⟨counterReg p + 1⟩]; exact hctr), ite_eq_left (by omega)]
   · rintro remaining env next ⟨hLe, cc, hcc, hctr⟩ hRun
     have hRes := Proof.lowerSequence_correct (loweringContext p name)
       (rolledBlock p) ((rolledBlock p).map compiledStmt) cc env hcc hWFs

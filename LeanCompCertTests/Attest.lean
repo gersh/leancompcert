@@ -241,7 +241,7 @@ not asserted by anybody. -/
 theorem binds_programHash :
     (decide (receipt.programHash
       = toyCrypto.digest.hashHex (artifact.source?.getD ""))) = true := by
-  decide +kernel
+  native_decide
 
 /-! ### Composition
 

@@ -1258,7 +1258,7 @@ theorem ttail_char (lo : Nat) (ds : List Nat) (q r : Nat)
     Prod.mk.injEq]
   refine ⟨trivial, ?_⟩
   by_cases h1 : lo &&& 262143 = 0 <;> by_cases h2 : r = 0 <;>
-    simp only [h1, h2, reduceIte, if_true, if_false, and_true, and_false,
+    simp only [h1, h2, reduceIte, ite_true, ite_false, and_true, and_false,
       true_and, false_and, and_self] <;>
     omega
 
@@ -1308,7 +1308,7 @@ theorem tdiv18_eq (lo hi : Nat) (hlo : lo < 18446744073709551616)
   have hqd : divP18q lo hi = (divP18w lo hi).1 := rfl
   by_cases h1 : lo % 262144 = 0 <;>
     by_cases h2 : (divP18w lo hi).2 = 0 <;>
-    simp only [h1, h2, if_true, if_false, and_true, and_false, true_and,
+    simp only [h1, h2, ite_true, ite_false, and_true, and_false, true_and,
       false_and, and_self] <;>
     omega
 

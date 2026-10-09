@@ -55,7 +55,7 @@ theorem passBGateS_spec (k : Nat) (s : RegState) (z : TSel)
   have hsub1 : (1 + (M - 1)) % M = 0 := by decide
   simp only [passBGateS, passBGateBody, scalarOf, List.map_cons, List.map_nil, srun,
     InstrBlock.sdest, InstrBlock.sval, denoteOperand, denoteOp, RegState.set,
-    Option.getD_some, if_true, if_false, Nat.reduceEqDiff, h31, h34, h38,
+    Option.getD_some, ite_true, ite_false, Nat.reduceEqDiff, h31, h34, h38,
     hrB, Nat.mod_eq_of_lt hremM, Nat.mod_eq_of_lt hqM]
   rcases (by omega : z.inB = 0 ∨ z.inB = 1) with hIn | hIn <;>
     by_cases hp : z.X % z.rB = 0 <;>

@@ -110,7 +110,7 @@ theorem srun_untouched (k : Nat) (r : Nat) :
       intro h s
       rw [srun_cons, ih (fun j hj => h j (by simp [hj]))]
       show (if r = sdest i then sval k s i else s r) = s r
-      rw [if_neg (Ne.symm (h i (by simp)))]
+      rw [ite_eq_right (Ne.symm (h i (by simp)))]
 
 /-- Every register stays a `u64`. -/
 theorem srun_lt (k : Nat) :
@@ -125,7 +125,7 @@ theorem srun_lt (k : Nat) :
       intro j'
       by_cases hEq : j' = sdest i
       · subst hEq
-        simp only [RegState.set, if_pos rfl]
+        simp only [RegState.set]
         cases i with
         | mov d src =>
             show denoteOperand k s src < M
@@ -137,7 +137,7 @@ theorem srun_lt (k : Nat) :
             obtain ⟨h1, h2⟩ := noDivI_binop (h (Instr.binop d op l' r') (by simp))
             show (denoteOp op (denoteOperand k s l') (denoteOperand k s r')).getD 0 < M
             exact denoteOp_lt op _ _ _ (denoteOp_isSome op h1 h2 _ _)
-      · simp only [RegState.set, if_neg hEq]
+      · simp only [RegState.set, ite_eq_right hEq]
         exact hs j'
 
 /-- Well-formedness of a block, decidable and block-sized. -/
@@ -260,7 +260,7 @@ theorem srun_lt_of_lt (k : Nat) :
       intro j'
       by_cases hEq : j' = sdest i
       · subst hEq
-        simp only [RegState.set, if_pos rfl]
+        simp only [RegState.set]
         cases i with
         | mov d src =>
             show denoteOperand k s src < M
@@ -273,7 +273,7 @@ theorem srun_lt_of_lt (k : Nat) :
             cases hv : denoteOp op (denoteOperand k s l') (denoteOperand k s r') with
             | none => simpa [hv] using M_pos
             | some v => exact denoteOp_lt op _ _ _ hv
-      · simp only [RegState.set, if_neg hEq]
+      · simp only [RegState.set, ite_eq_right hEq]
         exact hs j'
 
 end LeanCompCert.Verified.InstrBlock

@@ -161,7 +161,7 @@ theorem first_arithmeticInv (c : Cfg) (w : Nat)
       progression_active := ?_ }
   · intro d hd hdK
     simp only [MarkState.first]
-    rw [if_neg (by unfold Cfg.winBase Cfg.k1; omega)]
+    rw [ite_eq_right (by unfold Cfg.winBase Cfg.k1; omega)]
     exact htable d hd hdK
   · intro _
     simp [MarkState.first, markSignOfCode, muCodeFor_one]
@@ -179,7 +179,7 @@ theorem ArithmeticInv.step (c : Cfg) (w : Nat) (s : MarkState)
         progression_active := ?_ }
     · intro d hd hdK
       simp only [MarkState.step, hm, ↓reduceIte]
-      rw [if_neg (by unfold Cfg.winBase Cfg.k1; omega)]
+      rw [ite_eq_right (by unfold Cfg.winBase Cfg.k1; omega)]
       exact h.table d hd hdK
     · intro hnext
       simpa [MarkState.step, hm] using h.sign_active hm
@@ -212,7 +212,7 @@ theorem ArithmeticInv.step (c : Cfg) (w : Nat) (s : MarkState)
           simpa [d] using hcode
         have hnonzero : Ref.muCodeFor c.kBound d ≠ 0 := by
           intro hz
-          rw [hcode, markCellOfCode, if_pos hz] at hactive
+          rw [hcode, markCellOfCode, ite_eq_left hz] at hactive
           exact (Nat.lt_irrefl _ hactive)
         have hnonzero' : Ref.muCodeFor c.kBound (s.divisor + 1) ≠ 0 := by
           simpa [d] using hnonzero
@@ -301,7 +301,7 @@ def partialPlaneValue (kBound w j divisor multiple : Nat) : Nat :=
 theorem partialPlaneValue_terminal (kBound w j multiple : Nat)
     (hkPos : 0 < kBound) (hj : j < multiple) :
     partialPlaneValue kBound w j kBound multiple = planeValue kBound w j := by
-  rw [partialPlaneValue, if_pos hj, planeValue_eq_rowsValue]
+  rw [partialPlaneValue, ite_eq_left hj, planeValue_eq_rowsValue]
   have hk : kBound - 1 + 1 = kBound := by omega
   rw [← hk]
   rfl
@@ -407,7 +407,7 @@ private theorem partialPlaneValue_lt (kBound w j d m : Nat) :
 private theorem partialPlaneValue_of_row_complete (kBound w j d m : Nat)
     (hd : 0 < d) (hj : j < m) :
     partialPlaneValue kBound w j d m = rowsValue kBound w j d := by
-  rw [partialPlaneValue, if_pos hj]
+  rw [partialPlaneValue, ite_eq_left hj]
   have hdPred : d - 1 + 1 = d := by omega
   rw [← hdPred]
   rfl
@@ -450,17 +450,17 @@ theorem PlaneInv.step (c : Cfg) (w : Nat) (origin : Nat → Nat)
       have hcode := CDEMAbelMarkReady.muCode_cases c.kBound s.divisor
       simp only [MarkState.step, hm, ↓reduceIte]
       rw [h.window s.multiple hm]
-      simp only [partialPlaneValue, Nat.lt_irrefl, if_false,
+      simp only [partialPlaneValue, Nat.lt_irrefl, ite_false,
         show s.multiple < s.multiple + s.divisor by
           exact Nat.lt_add_of_pos_right h.arithmetic.divisorPos,
-        if_true, rowStep, hmark]
+        ite_true, rowStep, hmark]
       rw [applyMuCode_eq_add_sign _ _ (rowsValue_lt _ _ _ _) hcode,
         ← hsign]
       rw [Nat.mod_add_mod, Nat.add_mod_mod]
       simp [Nat.add_assoc]
     · have haddr : j + c.winBase ≠ s.multiple + c.winBase := by omega
       simp only [MarkState.step, hm, ↓reduceIte]
-      rw [if_neg haddr, h.window j hj]
+      rw [ite_eq_right haddr, h.window j hj]
       by_cases hjmark : MarksCell w s.divisor j
       · have hcut : j < s.multiple ↔ j < s.multiple + s.divisor := by
           constructor
@@ -493,7 +493,7 @@ theorem PlaneInv.step (c : Cfg) (w : Nat) (origin : Nat → Nat)
       simp only [MarkState.step, hm, hdK, ↓reduceIte]
       rw [h.window j hj]
       unfold partialPlaneValue
-      rw [if_pos (by omega), if_pos hj, hd]
+      rw [ite_eq_left (by omega), ite_eq_left hj, hd]
 
 theorem PlaneInv.iter (c : Cfg) (w : Nat) (origin : Nat → Nat)
     (s : MarkState) (h : PlaneInv c w origin s) (n : Nat) :
@@ -530,14 +530,14 @@ private theorem fold_marks_eq_delta (kBound w j : Nat) (xs : List Nat)
       by_cases hm : MarksCell w d j
       · have hz : (w + j) % d = 0 :=
           (Nat.dvd_iff_mod_eq_zero).1 ((marksCell_iff_dvd w d j hd).1 hm)
-        simp only [if_pos hm, if_neg (fun hn : (w + j) % d ≠ 0 => hn hz)]
+        simp only [ite_eq_left hm, ite_eq_right (fun hn : (w + j) % d ≠ 0 => hn hz)]
         exact ih htail _
       · have hnz : (w + j) % d ≠ 0 := by
           intro hz
           apply hm
           exact (marksCell_iff_dvd w d j hd).2
             ((Nat.dvd_iff_mod_eq_zero).2 hz)
-        simp only [if_neg hm, if_pos hnz]
+        simp only [ite_eq_right hm, ite_eq_left hnz]
         exact ih htail _
 
 theorem planeValue_eq_deltaF (kBound w j : Nat) :

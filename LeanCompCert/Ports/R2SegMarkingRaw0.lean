@@ -16,14 +16,14 @@ private theorem rawMarkCount_zero_false (prod lsum p wt : Nat) :
       (MarkCell.markPower ⟨prod, lsum, 0, 0, 0⟩ p wt false).encode := by
   apply PlaneWords.ext <;>
     simp [PlaneWords.rawMarkCount, MarkCell.markPower, MarkCell.encode,
-      packWeights, markBit, wtBits, Nat.shiftLeft_eq]
+      packWeights_eq, markBit, wtBits, Nat.shiftLeft_eq]
 
 private theorem rawMarkCount_zero_true (prod lsum p wt : Nat) :
     (MarkCell.encode ⟨prod, lsum, 0, 0, 0⟩).rawMarkCount 0 p wt true =
       (MarkCell.markPower ⟨prod, lsum, 0, 0, 0⟩ p wt true).encode := by
   apply PlaneWords.ext <;>
     simp [PlaneWords.rawMarkCount, MarkCell.markPower, MarkCell.encode,
-      packWeights, markBit, wtBits, Nat.shiftLeft_eq]
+      packWeights_eq, markBit, wtBits, Nat.shiftLeft_eq]
 
 /-- Empty canonical cells commute with the literal raw packed update. -/
 theorem rawMark_encode_of_count_zero (x : MarkCell) (p wt : Nat)

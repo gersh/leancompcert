@@ -30,7 +30,7 @@ theorem Cfg.classClearBody_run (k : Nat) (s : AState)
     (hzero : s.regs 0 = 0) :
     arun k s Cfg.classClearBody = clearClassCells s := by
   simp [Cfg.classClearBody, clearClassCells, arun, astep,
-    AState.writeArr, hzero]
+    AState.writeArr.eq_def, hzero]
 
 /-- Exactly the seven live plane addresses are the partiality obligations of
 the classifier clear stage. -/
@@ -73,7 +73,7 @@ theorem Cfg.body_candidate_run (c : Cfg) (k : Nat) (s : AState)
   have hmW : marked.regs rW = s.regs rW :=
     arun_frame k rW c.markBody (by rfl) s
   have hm11 : marked.regs 11 = 1 := by
-    rw [hmphase.2, if_pos hclass]
+    rw [hmphase.2, ite_eq_left hclass]
   have hc := Cfg.classBody_candidate_run c k marked hm11
     (by simpa [hmR] using hclass) (by simpa [hmR] using hR)
     (by simpa [hmR, hmW] using hsum)

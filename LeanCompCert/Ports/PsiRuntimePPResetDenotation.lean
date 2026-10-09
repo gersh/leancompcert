@@ -148,13 +148,13 @@ theorem psiPPResetProgram_pair_zero (m : PsiRuntimeMeta)
          m.cfg.ppBase + 2 * rank = k * 2 + m.cfg.ppBase + 1) := by
       refine ⟨rank, List.mem_range.mpr hrank, Or.inl ?_⟩
       omega
-    rw [hout', hfold, if_pos hex]
+    rw [hout', hfold, ite_eq_left hex]
   · have hex : exists k, k ∈ List.range (m.ppCount + 1) /\
         (m.cfg.ppBase + 2 * rank + 1 = k * 2 + m.cfg.ppBase \/
          m.cfg.ppBase + 2 * rank + 1 = k * 2 + m.cfg.ppBase + 1) := by
       refine ⟨rank, List.mem_range.mpr hrank, Or.inr ?_⟩
       omega
-    rw [hout', hfold, if_pos hex]
+    rw [hout', hfold, ite_eq_left hex]
 
 /-- Successful source execution frames every cell outside the reset region.
 This includes both the resident-prime region below it and all result/carry
@@ -194,7 +194,7 @@ theorem psiPPResetProgram_arr_frame (m : PsiRuntimeMeta)
       rcases houtside with hlo | hhi <;> omega
     · have hk' := List.mem_range.mp hk
       rcases houtside with hlo | hhi <;> omega
-  rw [if_neg hnone, hentryArr]
+  rw [ite_eq_right hnone, hentryArr]
 
 /-- The explicit readiness proposition also proves that every loop store is
 in bounds.  This is the fixed-width/address side condition consumed by an

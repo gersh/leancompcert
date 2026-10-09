@@ -56,13 +56,13 @@ theorem sqrtStream_step (st : AState) (h : SqrtStreamInv st) :
         st.regs rT else st.regs rT + 1) =
       Nat.sqrt (st.regs rW + st.regs rC) := by
   by_cases hlt : st.regs rW + st.regs rC < st.regs rT2
-  · simp only [hlt, if_true]
+  · simp only [hlt, ite_true]
     symm
     apply sqrt_eq_of_square_bounds
     · exact h.lower
     · rw [← h.nextSquare]
       exact hlt
-  · simp only [hlt, if_false]
+  · simp only [hlt, ite_false]
     symm
     apply sqrt_eq_of_square_bounds
     · rw [← h.nextSquare]

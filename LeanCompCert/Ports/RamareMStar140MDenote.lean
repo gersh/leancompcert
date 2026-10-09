@@ -72,8 +72,8 @@ private theorem bitOf_congr {p q : Prop} [Decidable p] [Decidable q] (h : p ↔ 
     bitOf p = bitOf q := by
   unfold bitOf
   by_cases hp : p
-  · rw [if_pos hp, if_pos (h.mp hp)]
-  · rw [if_neg hp, if_neg (fun t => hp (h.mpr t))]
+  · rw [ite_eq_left hp, ite_eq_left (h.mp hp)]
+  · rw [ite_eq_right hp, ite_eq_right (fun t => hp (h.mpr t))]
 
 /-- The flat index decodes to `(q, r)`; `Ports/RamareWM217.lean`'s `idx_decode`. -/
 private theorem idx_decode (B q r : Nat) (hB : 0 < B) (hr : r < B) :
@@ -218,9 +218,9 @@ private theorem msIdx_ne (c : Cfg) (hok : msOK c = true) (k : Nat)
     unfold semQ
     rw [semP_eq hscM hnM]
     rcases hsc with h0 | h2
-    · rw [h0, if_pos rfl, Nat.div_self (by omega)]
+    · rw [h0, ite_eq_left rfl, Nat.div_self (by omega)]
       omega
-    · rw [if_neg (by omega)]
+    · rw [ite_eq_right (by omega)]
       exact Nat.ne_of_lt (Nat.div_lt_self (by omega) (by omega))
   · -- commit round
     have hw : bitOf (k % c.B < c.B - 2) = 0 := bitOf_neg (by omega)
@@ -258,7 +258,7 @@ theorem msRound_arr_indep (c : Cfg) (hok : msOK c = true) (k : Nat)
         (if msIdx c k st = c.n0 + k / c.B then v else st.arr (msIdx c k st))
         (fun cl j => if j = c.n0 + k / c.B then cl
           else (if j = c.n0 + k / c.B then v else st.arr j)) := rfl
-  rw [if_neg hne] at hL
+  rw [ite_eq_right hne] at hL
   rw [hL, msRound_eq_G]
   congr 1
   funext cl j
@@ -879,8 +879,8 @@ private theorem find?_snoc_none {α : Type _} {p : α → Bool} {a : α} :
       intro _
       simp only [List.nil_append]
       by_cases ha : p a
-      · rw [List.find?_cons_of_pos ha, if_pos ha]
-      · rw [List.find?_cons_of_neg ha, if_neg ha]
+      · rw [List.find?_cons_of_pos ha, ite_eq_left ha]
+      · rw [List.find?_cons_of_neg ha, ite_eq_right ha]
         rfl
   | cons b l ih =>
       intro h
@@ -927,7 +927,7 @@ private theorem stores_arr (k : Nat) :
           rw [find?_snoc_none hfind]
           by_cases hi : e.1 = i
           · subst i; simp
-          · rw [if_neg (fun h' : i = e.1 => hi h'.symm)]
+          · rw [ite_eq_right (fun h' : i = e.1 => hi h'.symm)]
             simp [hi]
 
 private theorem stores_regs (k : Nat) :
@@ -939,7 +939,7 @@ private theorem stores_regs (k : Nat) :
   | cons e l ih =>
       intro s j h1 h2
       show (arun k (arun k s (storeTriple e)) (l.flatMap storeTriple)).regs j = _
-      rw [ih _ j h1 h2, storeTriple_regs, if_neg h2, if_neg h1]
+      rw [ih _ j h1 h2, storeTriple_regs, ite_eq_right h2, ite_eq_right h1]
 
 private theorem stores_regs_lt (k : Nat) :
     ∀ (l : List (Nat × Nat)) (s : AState), (∀ j, s.regs j < M) →
@@ -977,7 +977,7 @@ private theorem stores_defined (c : Cfg) (hok : msOK c = true) (k : Nat) :
       refine ⟨⟨trivial, trivial, ?_, trivial⟩, ih _ ?_⟩
       · change (if rT1 = rT2 then e.2 % M else
           if rT1 = rT1 then e.1 % M else s.regs rT1) < c.limit + 1 + c.tab
-        rw [if_neg (by decide), if_pos rfl, Nat.mod_eq_of_lt heM]
+        rw [ite_eq_right (by decide), ite_eq_left rfl, Nat.mod_eq_of_lt heM]
         exact he
       · intro f hf
         exact hall f (List.mem_cons_of_mem e hf)
@@ -1062,16 +1062,16 @@ private theorem msEntry_arr (c : Cfg) (hok : msOK c = true) (i : Nat) :
   rw [Nat.mod_eq_of_lt one_lt_M]
   unfold arr0 logAt
   by_cases hi : c.limit + 1 ≤ i
-  · rw [if_pos hi]
+  · rw [ite_eq_left hi]
     have hi1 : i ≠ 1 := by
       have hn0 := ok_n0 hok
       have hnlim := ok_n0_le hok
       omega
-    rw [if_neg hi1]
+    rw [ite_eq_right hi1]
     cases hfind : c.logs.reverse.find? (fun e => decide (c.limit + 1 + e.1 = i)) with
     | none => simp
     | some e => simp
-  · rw [if_neg hi]
+  · rw [ite_eq_right hi]
     have hfind : c.logs.reverse.find? (fun e => decide (c.limit + 1 + e.1 = i)) = none := by
       apply List.find?_eq_none.mpr
       intro e he

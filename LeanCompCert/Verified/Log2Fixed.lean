@@ -30,12 +30,12 @@ theorem foldl_range_eq_min (n : Nat) (hn : n ≠ 0) (k : Nat) :
     simp only [List.foldl_cons, List.foldl_nil]
     by_cases h : 2 ^ (k + 1) ≤ n
     · have hk : k + 1 ≤ Nat.log2 n := (Nat.le_log2 hn).mpr h
-      rw [if_pos h]
+      rw [ite_eq_left h]
       omega
     · have hk : Nat.log2 n ≤ k := by
         have hnot : ¬(k + 1 ≤ Nat.log2 n) := mt (Nat.le_log2 hn).mp h
         omega
-      rw [if_neg h]
+      rw [ite_eq_right h]
       omega
 
 /-- On the u64 range, the fixed 64-round computation agrees with `Nat.log2`. -/

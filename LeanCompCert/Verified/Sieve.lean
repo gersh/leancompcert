@@ -100,12 +100,12 @@ theorem spfScan_spec (bound n : Nat) :
       rw [h0]
       unfold spfStep
       by_cases hc : (b + 2) * (b + 2) ≤ n ∧ n % (b + 2) = 0
-      · rw [if_pos ⟨rfl, hc.1, hc.2⟩]
+      · rw [ite_eq_left ⟨rfl, hc.1, hc.2⟩]
         right
         refine ⟨⟨by omega, hc.1, hc.2⟩, by omega, ?_⟩
         intro d hd
         exact hall d hd
-      · rw [if_neg (fun hcon => hc hcon.2)]
+      · rw [ite_eq_right (fun hcon => hc hcon.2)]
         left
         refine ⟨rfl, ?_⟩
         intro d hd
@@ -121,7 +121,7 @@ theorem spfScan_spec (bound n : Nat) :
         have := hhit.1
         omega
       unfold spfStep
-      rw [if_neg (fun hcon => hne hcon.1)]
+      rw [ite_eq_right (fun hcon => hne hcon.1)]
       right
       exact ⟨hhit, by omega, hmin⟩
 
@@ -197,7 +197,7 @@ theorem spfFixed_eq_leastFactor (bound n : Nat)
   cases spfScan_spec bound n with
   | inl h =>
     obtain ⟨h0, hall⟩ := h
-    rw [if_pos h0]
+    rw [ite_eq_left h0]
     -- Every hit lies beyond the window, but the window covers `√n`: no hits.
     have hnone : ∀ d, ¬ Hit n d := by
       intro d hd
@@ -213,7 +213,7 @@ theorem spfFixed_eq_leastFactor (bound n : Nat)
     have hne : spfScan bound n ≠ 0 := by
       have := hhit.1
       omega
-    rw [if_neg hne]
+    rw [ite_eq_right hne]
     -- Both sides are the least hit; uniqueness of the least element.
     cases leastFactor_spec n with
     | inl h' => exact absurd hhit ((h'.2) _)
@@ -230,7 +230,7 @@ theorem spfScan_eq_zero_iff (bound n : Nat) (hn : 2 ≤ n)
   · intro h
     rw [← hfix]
     unfold spfFixed
-    rw [if_pos h]
+    rw [ite_eq_left h]
   · intro h
     rcases spfScan_spec bound n with ⟨h0, -⟩ | ⟨hhit, -, -⟩
     · exact h0
@@ -240,7 +240,7 @@ theorem spfScan_eq_zero_iff (bound n : Nat) (hn : 2 ≤ n)
         omega
       have hfx : spfFixed bound n = spfScan bound n := by
         unfold spfFixed
-        rw [if_neg hne]
+        rw [ite_eq_right hne]
       rw [hfx, h] at hfix
       rw [hfix] at hhit
       have hsq := hhit.2.1

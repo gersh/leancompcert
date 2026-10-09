@@ -258,7 +258,7 @@ theorem R2MarkCursor.Bounds.past_output_guards
   have hstep := R2MarkCursor.step_eq_mux c windowBase tableWord cur h.pi_le
   have hnot : ¬ cur.offset < c.segLen := Nat.not_lt.mpr hPast
   dsimp only at hstep
-  simp only [if_neg hnot] at hstep
+  simp only [ite_eq_right hnot] at hstep
   have hqEq := congrArg R2MarkCursor.power hstep
   have hbpEq := congrArg R2MarkCursor.base hstep
   have hwtEq := congrArg R2MarkCursor.weight hstep

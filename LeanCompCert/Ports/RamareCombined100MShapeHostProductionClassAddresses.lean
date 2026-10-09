@@ -23,12 +23,12 @@ theorem productionClassAddresses
       addressed.regs 138 < len := by
   have hfuelNe : fuel ≠ productionCursorCfg.segLen := Nat.ne_of_lt hfuel
   have hround : s.regs rR = productionCursorCfg.markSteps + fuel := by
-    rw [h.sweep.round_eq, if_neg hfuelNe]
+    rw [h.sweep.round_eq, ite_eq_right hfuelNe]
   have hclass : productionCursorCfg.markSteps ≤ s.regs rR := by
     rw [hround]
     omega
   have hwindow : s.regs rW = w := by
-    rw [h.sweep.window_eq, if_neg hfuelNe]
+    rw [h.sweep.window_eq, ite_eq_right hfuelNe]
   have hR : s.regs rR < M := by
     rw [hround]
     have hp := productionCursorCfg_period_lt_word

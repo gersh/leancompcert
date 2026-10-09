@@ -121,7 +121,7 @@ theorem indexedBodyRun_first_root_acc_prefix
             hcurrent (Nat.le_of_lt hlen) hprevR hprevW hprevWrite hT
             hiEq (by decide) hcurRoot hRM hTM hPM hcurM hspanM hcurNe
             hkSeg hwM hnextPeriod hcapM hA hkPrefix.zero
-          simpa [out, rootScanTable_succ, if_pos h1le, hmax,
+          simpa [out, rootScanTable_succ, ite_eq_left h1le, hmax,
             Nat.add_assoc] using hone
         · by_cases hkBoot : k + 1 ≤ bootBound
           · have htable : rootScanTable boot bootBound k = boot :=
@@ -254,7 +254,7 @@ theorem indexedBodyRun_first_root_acc_complete_wrap
     rw [← hkSucc, indexedBodyRun_succ]
   have hscan : rootScanTable boot bootBound c.segLen =
       rootTableStep (rootScanTable boot bootBound k) c.segLen := by
-    rw [← hkSucc, rootScanTable_succ, if_neg (by omega)]
+    rw [← hkSucc, rootScanTable_succ, ite_eq_right (by omega)]
   rw [hrun]
   refine ⟨?_, ?_, hstep.2.2.2.1, hstep.2.2.2.2.1,
     hstep.2.2.2.2.2⟩
@@ -346,7 +346,7 @@ theorem indexedBodyRun_first_root_acc_complete_transition
     rw [← hkSucc, indexedBodyRun_succ]
   have hscan : rootScanTable boot bootBound c.segLen =
       rootTableStep (rootScanTable boot bootBound k) c.segLen := by
-    rw [← hkSucc, rootScanTable_succ, if_neg (by omega)]
+    rw [← hkSucc, rootScanTable_succ, ite_eq_right (by omega)]
   rw [hrun]
   refine ⟨?_, ?_, hstep.2.2.2.1, hstep.2.2.2.2.1,
     hstep.2.2.2.2.2⟩

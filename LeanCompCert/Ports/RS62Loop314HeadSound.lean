@@ -28,7 +28,7 @@ private theorem srun_mulLit_mod (k dst src L : Nat) (s : RegState)
     (hL : L < M) :
     (srun k s [.binop dst .mul (.reg src) (.lit L)]) dst = s src * L % M := by
   show (if dst = dst then (s src * (L % M)) % M else s dst) = _
-  rw [if_pos rfl, Nat.mod_eq_of_lt hL]
+  rw [ite_eq_left rfl, Nat.mod_eq_of_lt hL]
 
 /-- The analogous abstract one-instruction rule for unsigned division. -/
 private theorem srun_udivLit_mod (k dst src L : Nat) (s : RegState)

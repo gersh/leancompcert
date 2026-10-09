@@ -54,7 +54,7 @@ theorem sourceCfg_height_word (records termDigest q : Nat)
             else (sourceCfg records termDigest).hEven)
       else (sourceCfg records termDigest).hFloor) < M := by
   by_cases hodd : q % 2 = 1
-  <;> simp only [hodd, if_true, if_false]
+  <;> simp only [hodd, ite_true, ite_false]
   <;> split
   <;> change q ≤ 400000 at hq
   <;> simp only [sourceCfg, M] at *

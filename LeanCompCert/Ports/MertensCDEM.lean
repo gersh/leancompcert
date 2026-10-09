@@ -439,10 +439,10 @@ theorem bodyA_spec (c : Cfg) (idx : Nat) (s : RegState) (hadm : Admissible c)
   have hs4M : s 4 % M = s 4 := Nat.mod_eq_of_lt (hs 4)
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
     simp only [bodyA, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true,
+      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true,
       hidxM, hRmodM, hne, hqM, hnM, hdM, h1M, h0M, h2M, hloM, hXM, hXM2, hs2M, hs3M, hs4M, ite_mod,
-      bit_mul_val, bit'_mul_val, ite_add_ite, one_sub_bit, ite_ite_and,
-      ite_ite_and', ge_iff_le]
+      bit_mul_val, bit'_mul_val, ite_add_ite, one_sub_bit,
+      ]
 
 /-! ## Stage B: one round of trial division -/
 
@@ -503,10 +503,10 @@ theorem bodyB_spec (idx d : Nat) (s : RegState)
     intro P inst; split <;> omega
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
     simp only [bodyB, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true,
-      h7, hdne, h1M, h0M, hremM, hdivM, hs2M, hselM, hsel2, hdivremM, trialStep,
+      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true,
+      h7, hdne, h1M, h0M, hremM, hdivM, hs2M, hselM, hdivremM, trialStep,
       ite_mod, bit_mul_val, bit'_mul_val, ite_add_ite, one_sub_bit,
-      ite_ite_and, ite_ite_and', ge_iff_le,
+      ite_ite_and,
       hor _ _ h3 (hbit _ _), hxor _ _ h4 (hbit _ _)]
 
 /-! ## Stage C₁: decode `μ` and advance the accumulator -/
@@ -515,7 +515,7 @@ open LeanCompCert.Verified.ArrayFoldBridge in
 set_option maxHeartbeats 1000000 in
 /-- **Stage C₁.** -/
 theorem bodyC1_spec (c : Cfg) (idx : Nat) (s : RegState)
-    (hs : ∀ j, s j < M) (hR : c.rounds < M)
+    (_hs : ∀ j, s j < M) (hR : c.rounds < M)
     (h3 : s 3 ≤ 1) (h4 : s 4 ≤ 1) :
     let s' := srun idx s (bodyC1 c)
     let last := if s 6 = c.rounds - 1 then 1 else 0
@@ -554,12 +554,12 @@ theorem bodyC1_spec (c : Cfg) (idx : Nat) (s : RegState)
     have := Nat.mul_le_mul hnz hop; omega
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
     simp only [bodyC1, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true,
+      Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true,
       h1M, hRm, hs4, moOf, omegaPar, moStep,
       msub_bit _ h3, msub_bit _ hop,
       hmul _ _ hnz hop', hmul _ _ hnz hop,
       hmul _ _ (hbit _ _) hp1, hmul _ _ (hbit _ _) hp2,
-      ge_iff_le]
+      ]
 
 /-! ## Stage C₂ₐ: the absolute value, branchlessly -/
 
@@ -581,30 +581,30 @@ theorem bodyC2a_spec (c : Cfg) (idx : Nat) (s : RegState)
     rw [Nat.add_mod_right]
     exact Nat.mod_eq_of_lt (by have := ArrayFoldBridge.one_lt_M; omega)
   by_cases hba : c.bias ≤ s 1
-  · have h31 : (if c.bias ≤ s 1 then (1:Nat) else 0) = 1 := if_pos hba
+  · have h31 : (if c.bias ≤ s 1 then (1:Nat) else 0) = 1 := ite_eq_left hba
     have h32 : (s 1 + (M - c.bias)) % M = s 1 - c.bias := by
       have he : s 1 + (M - c.bias) = (s 1 - c.bias) + M := by omega
       rw [he, Nat.add_mod_right]
       exact Nat.mod_eq_of_lt (by omega)
     have h32M : (s 1 - c.bias) % M = s 1 - c.bias := Nat.mod_eq_of_lt (by omega)
-    have habs : absOf c (s 1) = s 1 - c.bias := if_pos hba
+    have habs : absOf c (s 1) = s 1 - c.bias := ite_eq_left hba
     refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
       simp only [bodyC2a, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-        Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true,
-        hbM, h1c, ge_iff_le, h31, h32, h32M, habs, hb0, hb1, hb0', Nat.sub_zero, Nat.one_mul,
-        Nat.sub_self, Nat.zero_mul, Nat.add_zero, Nat.zero_add, Nat.zero_mod]
-  · have h31 : (if c.bias ≤ s 1 then (1:Nat) else 0) = 0 := if_neg hba
+        Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true,
+        hbM, h1c, ge_iff_le, h31, h32, h32M, habs, hb1, Nat.one_mul,
+        Nat.sub_self, Nat.zero_mul, Nat.add_zero, Nat.zero_mod]
+  · have h31 : (if c.bias ≤ s 1 then (1:Nat) else 0) = 0 := ite_eq_right hba
     have h33 : (c.bias + (M - s 1)) % M = c.bias - s 1 := by
       have he : c.bias + (M - s 1) = (c.bias - s 1) + M := by omega
       rw [he, Nat.add_mod_right]
       exact Nat.mod_eq_of_lt (by omega)
     have h33M : (c.bias - s 1) % M = c.bias - s 1 := Nat.mod_eq_of_lt (by omega)
-    have habs : absOf c (s 1) = c.bias - s 1 := if_neg hba
+    have habs : absOf c (s 1) = c.bias - s 1 := ite_eq_right hba
     refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
       simp only [bodyC2a, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-        Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true,
-        hbM, h1c, ge_iff_le, h31, h33, h33M, habs, hb0, hb1, hb0', Nat.sub_zero, Nat.one_mul,
-        Nat.zero_mul, Nat.add_zero, Nat.zero_add, Nat.zero_mod]
+        Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true,
+        hbM, h1c, ge_iff_le, h31, h33, h33M, habs, hb0', Nat.sub_zero, Nat.one_mul,
+        Nat.zero_mul, Nat.zero_add, Nat.zero_mod]
 
 /-! ## Stage C₂ᵦ: the row test, the anchor test, and the flag -/
 
@@ -642,9 +642,9 @@ theorem bodyC2b_spec (c : Cfg) (idx : Nat) (s : RegState) (hadm : Admissible c)
       (s 22 * (if P then (1:Nat) else 0)) % M = if P then s 22 else 0 := by
     intro P inst
     by_cases hP : P
-    · rw [if_pos hP, if_pos hP, Nat.mul_one]
+    · rw [ite_eq_left hP, ite_eq_left hP, Nat.mul_one]
       exact Nat.mod_eq_of_lt (by have := ArrayFoldBridge.one_lt_M; omega)
-    · rw [if_neg hP, if_neg hP, Nat.mul_zero]
+    · rw [ite_eq_right hP, ite_eq_right hP, Nat.mul_zero]
       exact h0c
   have hfin : ∀ P : Prop, ∀ _ : Decidable P,
       (s 0 ||| (if P then s 22 else 0)) % M = s 0 ||| (if P then s 22 else 0) := by
@@ -671,29 +671,29 @@ theorem bodyC2b_spec (c : Cfg) (idx : Nat) (s : RegState) (hadm : Admissible c)
   have hclamp : absClamped c (s 1) = if c.cap ≤ s 37 then c.cap else s 37 := by
     rw [absClamped, h37]
   by_cases hcap : c.cap ≤ s 37
-  · have h38 : (if c.cap ≤ s 37 then (1:Nat) else 0) = 1 := if_pos hcap
-    have hcl : absClamped c (s 1) = c.cap := by rw [hclamp, if_pos hcap]
+  · have h38 : (if c.cap ≤ s 37 then (1:Nat) else 0) = 1 := ite_eq_left hcap
+    have hcl : absClamped c (s 1) = c.cap := by rw [hclamp, ite_eq_left hcap]
     refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;>
       simp only [bodyC2b, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-        Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true,
-        badOf, RowFail, AnchorFail, hcl, hcapM, hdenM, hslM, hlowM, haxM, hamM, h37M,
-        h1c, h0c, ge_iff_le, h38, hb0, hb1, hb0',
+        Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true,
+        badOf, RowFail, AnchorFail, hcl, hcapM, hdenM, hslM, hlowM, haxM, hamM,
+        h1c, h0c, ge_iff_le, h38, hb1,
         hprod _ (Nat.le_refl _), hsum _ (Nat.le_refl _),
-        Nat.one_mul, Nat.zero_mul, Nat.mul_zero, Nat.add_zero, Nat.zero_add,
-        Nat.sub_self, ite_mod, bit_mul_val, bit'_mul_val, one_sub_bit, ite_add_ite, ite_add_ite',
-        ite_ite_and, ite_ite_and', ite_ite_and_not, bit_or_bit, hmulv, hfin]
-  · have h38 : (if c.cap ≤ s 37 then (1:Nat) else 0) = 0 := if_neg hcap
-    have hcl : absClamped c (s 1) = s 37 := by rw [hclamp, if_neg hcap]
+        Nat.one_mul, Nat.zero_mul, Nat.zero_add,
+        ite_mod, bit_mul_val, one_sub_bit,
+        ite_ite_and, ite_ite_and_not, bit_or_bit, hmulv, hfin]
+  · have h38 : (if c.cap ≤ s 37 then (1:Nat) else 0) = 0 := ite_eq_right hcap
+    have hcl : absClamped c (s 1) = s 37 := by rw [hclamp, ite_eq_right hcap]
     have hle : s 37 ≤ c.cap := Nat.le_of_lt (by omega)
     refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;>
       simp only [bodyC2b, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-        Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true,
+        Option.getD_some, reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true,
         badOf, RowFail, AnchorFail, hcl, hcapM, hdenM, hslM, hlowM, haxM, hamM, h37M,
-        h1c, h0c, ge_iff_le, h38, hb0, hb1, hb0',
+        h1c, h0c, ge_iff_le, h38, hb0,
         hprod _ hle, hsum _ hle,
-        Nat.one_mul, Nat.zero_mul, Nat.mul_zero, Nat.add_zero, Nat.zero_add,
-        Nat.sub_self, ite_mod, bit_mul_val, bit'_mul_val, one_sub_bit, ite_add_ite, ite_add_ite',
-        ite_ite_and, ite_ite_and', ite_ite_and_not, bit_or_bit, hmulv, hfin]
+        Nat.one_mul, Nat.zero_mul, Nat.add_zero,
+        ite_mod, bit_mul_val, one_sub_bit,
+        ite_ite_and, ite_ite_and_not, bit_or_bit, hmulv, hfin]
 
 /-! ## The body, composed
 
@@ -708,32 +708,32 @@ def step (c : Cfg) (idx : Nat) (s : RegState) : RegState := srun idx s (body c)
 theorem bodyA_defined (c : Cfg) (idx : Nat) (s : RegState)
     (hne : ¬ (c.rounds % M = 0)) : SAllDefined idx s (bodyA c) := by
   simp only [bodyA, SAllDefined, SDefined, sdest, sval, denoteOperand, denoteOp,
-    RegState.set, Option.getD_some, Option.isSome_some, reduceIte, reduceCtorEq,
-    Nat.reduceEqDiff, if_true, hne, and_true, true_and]
+    RegState.set, Option.getD_some, Option.isSome_some, reduceIte,
+    Nat.reduceEqDiff, ite_true, hne, and_true]
 
 /-- `bodyB` is defined when the decoded divisor is nonzero. -/
 theorem bodyB_defined (idx : Nat) (s : RegState) (hd : ¬ (s 7 = 0)) :
     SAllDefined idx s bodyB := by
   simp only [bodyB, SAllDefined, SDefined, sdest, sval, denoteOperand, denoteOp,
-    RegState.set, Option.getD_some, Option.isSome_some, reduceIte, reduceCtorEq,
-    Nat.reduceEqDiff, if_true, hd, and_true, true_and]
+    RegState.set, Option.getD_some, Option.isSome_some, reduceIte,
+    Nat.reduceEqDiff, ite_true, hd, and_true]
 
 /-- `bodyC` divides nowhere, so it is defined everywhere. -/
 theorem bodyC_defined (c : Cfg) (idx : Nat) (s : RegState) :
     SAllDefined idx s (bodyC c) := by
   rw [show bodyC c = bodyC1 c ++ (bodyC2a c ++ bodyC2b c) from by
-    simp only [bodyC, bodyC2, List.append_assoc],
+    simp only [bodyC, bodyC2],
     SAllDefined_append, SAllDefined_append]
   refine ⟨?_, ?_, ?_⟩
   · simp only [bodyC1, SAllDefined, SDefined, sdest, sval, denoteOperand,
       denoteOp, RegState.set, Option.getD_some, Option.isSome_some, reduceIte,
-      reduceCtorEq, Nat.reduceEqDiff, if_true, and_true, true_and]
+      Nat.reduceEqDiff, ite_true, and_true]
   · simp only [bodyC2a, SAllDefined, SDefined, sdest, sval, denoteOperand,
       denoteOp, RegState.set, Option.getD_some, Option.isSome_some, reduceIte,
-      reduceCtorEq, Nat.reduceEqDiff, if_true, and_true, true_and]
+      Nat.reduceEqDiff, ite_true, and_true]
   · simp only [bodyC2b, SAllDefined, SDefined, sdest, sval, denoteOperand,
       denoteOp, RegState.set, Option.getD_some, Option.isSome_some, reduceIte,
-      reduceCtorEq, Nat.reduceEqDiff, if_true, and_true, true_and]
+      reduceCtorEq, Nat.reduceEqDiff, ite_true, and_true]
 
 /-- **The body is defined** at every index the loop visits.  The only partial
 operations are the index decode (divisor `rounds`, nonzero by `Admissible`)
@@ -887,10 +887,10 @@ theorem entry_inv (c : Cfg) : Inv (entry c) := by
     by_cases h : j = 1
     · subst h
       show (initialState.set 1 (c.m0 % M)) 1 < M
-      simp only [RegState.set, if_pos rfl]
+      simp only [RegState.set]
       exact Nat.mod_lt _ M_pos
     · show (initialState.set 1 (c.m0 % M)) j < M
-      simp only [RegState.set, if_neg h]
+      simp only [RegState.set, ite_eq_right h]
       exact M_pos
   · show (initialState.set 1 (c.m0 % M)) 0 ≤ 1
     simp [RegState.set, initialState]
@@ -957,37 +957,37 @@ theorem bodyA_wf (c : Cfg) : ∀ i ∈ bodyA c, i.WF regCount := by
   intro i hi
   simp only [bodyA, List.mem_cons, List.not_mem_nil, or_false] at hi
   rcases hi with h|h|h|h|h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [Instr.WF, Operand.WF, regCount]
+    simp +decide [Instr.WF, Operand.WF]
 
 theorem bodyB_wf : ∀ i ∈ bodyB, i.WF regCount := by
   intro i hi
   simp only [bodyB, List.mem_cons, List.not_mem_nil, or_false] at hi
   rcases hi with h|h|h|h|h|h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [Instr.WF, Operand.WF, regCount]
+    simp +decide []
 
 theorem bodyC1_wf (c : Cfg) : ∀ i ∈ bodyC1 c, i.WF regCount := by
   intro i hi
   simp only [bodyC1, List.mem_cons, List.not_mem_nil, or_false] at hi
   rcases hi with h|h|h|h|h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [Instr.WF, Operand.WF, regCount]
+    simp +decide [Instr.WF, Operand.WF]
 
 theorem bodyC2a_wf (c : Cfg) : ∀ i ∈ bodyC2a c, i.WF regCount := by
   intro i hi
   simp only [bodyC2a, List.mem_cons, List.not_mem_nil, or_false] at hi
   rcases hi with h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [Instr.WF, Operand.WF, regCount]
+    simp +decide [Instr.WF, Operand.WF]
 
 theorem bodyC2b_wf (c : Cfg) : ∀ i ∈ bodyC2b c, i.WF regCount := by
   intro i hi
   simp only [bodyC2b, List.mem_cons, List.not_mem_nil, or_false] at hi
   rcases hi with h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h <;> subst h <;>
-    simp +decide [Instr.WF, Operand.WF, regCount]
+    simp +decide [Instr.WF, Operand.WF]
 
 theorem initBlock_wf (c : Cfg) : ∀ i ∈ initBlock c, i.WF regCount := by
   intro i hi
   simp only [initBlock, List.mem_cons, List.not_mem_nil, or_false] at hi
   subst hi
-  simp +decide [Instr.WF, Operand.WF, regCount]
+  simp +decide [Instr.WF, Operand.WF]
 
 theorem body_wf (c : Cfg) : ∀ i ∈ body c, i.WF regCount := by
   intro i hi
@@ -1075,7 +1075,7 @@ theorem gstep_qX (c : Cfg) (idx : Nat) (a : Abs) (q X : Nat)
     simp only [badOf, moOf, hX, hq, hbad, hmo, ht, muPlus, muMinus]
     rfl
   · show moOf _ _ _ = _
-    simp only [moOf, hq, hbad, hmo, ht, muPlus, muMinus]
+    simp only [moOf, hq, hmo, ht, muPlus, muMinus]
 
 /-- **One round of one candidate**, in ordinary arithmetic.  The candidate is
 reset at round `0`; the accumulators move only at the last round. -/
@@ -1093,10 +1093,10 @@ theorem gstep_round (c : Cfg) (n r : Nat) (hr : r < c.rounds) (a : Abs)
   rw [gstep_qX c (n * c.rounds + r) a r (c.lo + n) hmod (by rw [hdiv])]
   by_cases hlast : r + 1 = c.rounds
   · have hq : r = c.rounds - 1 := by omega
-    simp only [if_pos hlast, if_pos hq, Nat.one_mul, moAdvance]
+    simp only [ite_eq_left hlast, ite_eq_left hq, Nat.one_mul, moAdvance]
     rfl
   · have hq : ¬ (r = c.rounds - 1) := by omega
-    simp only [if_neg hlast, if_neg hq, Nat.zero_mul, ite_self, or_zero,
+    simp only [ite_eq_right hlast, ite_eq_right hq, Nat.zero_mul, ite_self, or_zero,
       moStep_zero _ hmo]
 
 /-- The rounds a candidate has run through, as a prefix fold. -/
@@ -1108,7 +1108,7 @@ theorem trialPrefix_full (X R : Nat) : trialPrefix X R = trialRun X R := rfl
 /-- **The prefix of one block.**  After `k + 1 ≤ rounds` rounds the candidate's
 trial state is the `k + 1`-round prefix, and the accumulators have moved
 exactly when the block is complete. -/
-theorem block_prefix (c : Cfg) (hR : 0 < c.rounds) (n : Nat) (a : Abs)
+theorem block_prefix (c : Cfg) (_hR : 0 < c.rounds) (n : Nat) (a : Abs)
     (hmo : a.mo < M) :
     ∀ k, k < c.rounds →
       (List.range (k + 1)).foldl (fun x r => gstep c (n * c.rounds + r) x) a =
@@ -1125,7 +1125,7 @@ theorem block_prefix (c : Cfg) (hR : 0 < c.rounds) (n : Nat) (a : Abs)
       rw [show (List.range 1) = [0] from rfl, List.foldl_cons, List.foldl_nil,
         gstep_round c n 0 hk a hmo]
       simp only [trialPrefix, show (List.range 1) = [0] from rfl, List.foldl_cons,
-        List.foldl_nil, if_pos rfl]
+        List.foldl_nil]
       rfl
   | succ k ih =>
       intro hk
@@ -1133,11 +1133,11 @@ theorem block_prefix (c : Cfg) (hR : 0 < c.rounds) (n : Nat) (a : Abs)
       have hkne : ¬ (k + 1 = c.rounds) := by omega
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
         ih hklt]
-      rw [if_neg hkne]
+      rw [ite_eq_right hkne]
       rw [gstep_round c n (k + 1) hk
         ⟨a.bad, a.mo, trialPrefix (c.lo + n) (k + 1)⟩ hmo]
       have hne0 : ¬ (k + 1 = 0) := by omega
-      simp only [if_neg hne0, trialPrefix, List.range_succ, List.foldl_append,
+      simp only [ite_eq_right hne0, trialPrefix, List.range_succ, List.foldl_append,
         List.foldl_cons, List.foldl_nil]
 
 /-- **One block.**  A whole candidate's contribution. -/
@@ -1160,7 +1160,7 @@ def moAt (c : Cfg) : Nat → Nat
   | 0 => c.m0 % M
   | n + 1 => moAdvance (moAt c n) (trialRun (c.lo + n) c.rounds)
 
-theorem moAt_lt (c : Cfg) (hm0 : c.m0 < M) : ∀ n, moAt c n < M
+theorem moAt_lt (c : Cfg) (_hm0 : c.m0 < M) : ∀ n, moAt c n < M
   | 0 => by rw [moAt]; exact Nat.mod_lt _ M_pos
   | _ + 1 => moStep_lt _ _ _
 
@@ -1352,10 +1352,10 @@ theorem absClamped_eq (c : Cfg) (hadm : Admissible c) (X mo : Nat)
     absClamped c mo = absOf c mo := by
   by_cases hc : c.cap ≤ absOf c mo
   · exfalso
-    rw [absClamped, if_pos hc] at hpass
+    rw [absClamped, ite_eq_left hc] at hpass
     have := hadm.capSound
     omega
-  · rw [absClamped, if_neg hc]
+  · rw [absClamped, ite_eq_right hc]
 
 /--
 **The certificate's meaning.**
@@ -1379,7 +1379,7 @@ theorem value_eq_zero_sound (c : Cfg) (hadm : Admissible c) (hval : value c = 0)
       AnchorFail c (c.lo + n) (moAt c (n + 1))) := by
     rw [rowFlag] at hflag
     intro h
-    rw [if_pos h] at hflag
+    rw [ite_eq_left h] at hflag
     omega
   constructor
   · intro hlow

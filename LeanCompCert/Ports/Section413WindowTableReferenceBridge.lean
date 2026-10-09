@@ -211,7 +211,7 @@ theorem g1_tableCell_withinCap (hflag : g1TableCfg.tFlag = 0)
     have hhi := LeanCompCert.Ports.Section413G1Sound.capped_range
       hrel.gHi_u64 hrel.gHi_cap
     rw [g1_tableCell_eq hflag X hX]
-    rw [g1G, if_pos hX, ← hrel.g_eq]
+    rw [g1G, ite_eq_left hX, ← hrel.g_eq]
     exact ⟨hlo.1, hlo.2, hhi.1, hhi.2⟩
 
 theorem g2_tableCell_withinCap (hflag : g2TableCfg.tFlag = 0)
@@ -229,7 +229,7 @@ theorem g2_tableCell_withinCap (hflag : g2TableCfg.tFlag = 0)
     have hhi := LeanCompCert.Ports.Section413G2Sound.capped_range
       hrel.gHi_u64 hrel.gHi_cap
     rw [g2_tableCell_eq hflag X hX]
-    rw [g2G, if_pos hX, ← hrel.g_eq]
+    rw [g2G, ite_eq_left hX, ← hrel.g_eq]
     exact ⟨hlo.1, hlo.2, hhi.1, hhi.2⟩
 
 private theorem safeX_le {cap x : Nat} (hcap : 1 ≤ cap) (hx : x ≤ cap) :

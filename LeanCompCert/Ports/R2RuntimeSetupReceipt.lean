@@ -150,12 +150,14 @@ theorem runtimeRootSetup_source_table (h : RootSetupReceipt) :
     rw [hReceiptEval]
     exact hReceiptZero
   have hReceiptOut : receiptOut.regs rrFail = 0 := by
-    simpa only [rootReceiptProgram] using
-      AProgram.output_eq_of_rolledCompile_fromArray
+    have h := AProgram.output_eq_of_rolledCompile_fromArray
         (rootReceiptProgram runtimeProductionCfg)
         (rootReceiptProgram_wf runtimeProductionCfg) 0 productionBaseOk
         packed.arr mPack.mem hPackedCells hPackedCellsLt receiptOut hReceiptRun
         0 hReceiptMachine
+    have hout : (rootReceiptProgram runtimeProductionCfg).output = rrFail := rfl
+    rw [hout] at h
+    exact h
   exact ⟨marked, packed, hMarkRun, hPackRun, hCount,
     rootReceiptFinalState_zero_sound packed.arr hReceiptOut⟩
 

@@ -221,14 +221,14 @@ theorem hitCount_eq_zero_iff (table : List (Nat × Nat))
     intro pr hpr hdvd
     obtain ⟨_, _, hrlt, hodd, hrdvd⟩ := hvalid pr hpr
     have hz := hall pr hpr
-    rw [hitOf, if_pos] at hz
+    rw [hitOf, ite_eq_left] at hz
     · exact absurd hz (by decide)
     · rw [(dvd_proth_iff hodd hrdvd).mp hdvd, Nat.mod_eq_of_lt hrlt]
   · rintro ⟨hk, hno⟩
     refine ⟨by simp [hk], ?_⟩
     intro pr hpr
     obtain ⟨_, _, hrlt, hodd, hrdvd⟩ := hvalid pr hpr
-    rw [hitOf, if_neg]
+    rw [hitOf, ite_eq_right]
     intro hmod
     exact hno pr hpr ((dvd_proth_iff hodd hrdvd).mpr
       (by rw [hmod, Nat.mod_eq_of_lt hrlt]))
@@ -409,7 +409,7 @@ private theorem denote_entry (index : Nat) (s : RegState) (pr : Nat × Nat)
       = some (s.set 3 (s 1 % pr.1)) :=
     denoteInstr_binop_eq index s 3 Op.urem (.reg 1) (.lit pr.1) _ (by
       show (if pr.1 % M = 0 then none else some (s 1 % (pr.1 % M) % M)) = _
-      rw [if_neg hne, hpM, hmod])
+      rw [ite_eq_right hne, hpM, hmod])
   have h2 : denoteInstr index (s.set 3 (s 1 % pr.1))
         (Instr.binop 3 Op.eq (.reg 3) (.lit pr.2))
       = some ((s.set 3 (s 1 % pr.1)).set 3 (hitOf (s 1) pr)) :=

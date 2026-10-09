@@ -49,7 +49,7 @@ theorem sFactorG_spec (k : Nat) (s : RegState) (hk : k < M)
   simp only [sFactorG, srun_cons, srun_nil, sdest, sval, denoteOperand,
     denoteOp, Option.getD_some, RegState.set]
   simp only [hMv] at hk hc hle ⊢
-  simp only [if_true, show ¬((7 : Nat) = 8) by decide, if_false,
+  simp only [ite_true, show ¬((7 : Nat) = 8) by decide, ite_false,
     show (1 : Nat) % 18446744073709551616 = 1 by decide,
     show (2 : Nat) % 18446744073709551616 = 2 by decide]
   have m0 : k % 18446744073709551616 = k := Nat.mod_eq_of_lt (by omega)
@@ -123,10 +123,10 @@ theorem sinBodyG_raw (k : Nat) (s : RegState) (X : Nat)
         ≤ s 2 * X / B62 * X / B62 := Nat.div_le_self _ _
     omega
   rw [sinBodyG, srun_append, srun_append, srun_append]
-  simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
+  simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp.eq_def,
     RegState.set]
   rw [e3, e3b]
-  simp only [Nat.ne_of_gt hcpos, if_true, if_false, Option.getD_some]
+  simp only [Nat.ne_of_gt hcpos, ite_true, ite_false, Option.getD_some]
   rw [Nat.mod_eq_of_lt hres]
   rfl
 
@@ -181,7 +181,7 @@ theorem SinInv_closed (k : Nat) (s : RegState) (X : Nat) (hXb : X ≤ B62)
   · rw [srun_untouched k 1 sinStepG (by decide)]; exact hX1
   · rw [h2, h20, h21]
     by_cases h : k % 2 = 0 <;>
-      simp only [h, if_neg, if_true, if_false] <;> omega
+      simp only [h, ite_eq_right, ite_true, ite_false] <;> omega
 
 theorem sinPrefix_noDiv : (sFactorG ++ mulAG ++ mulBG).all NoDivI = true := rfl
 
@@ -206,7 +206,7 @@ theorem sinStepG_defined (k : Nat) (s : RegState) (hk : k < M)
   simp only [denoteOperand]
   rw [sinPrefix_divisor k (srun k s accG) hk hc]
   simp only [denoteOp]
-  rw [if_neg (Nat.ne_of_gt hcpos)]
+  rw [ite_eq_right (Nat.ne_of_gt hcpos)]
   rfl
 
 /-- Loop entry for the sine series: the seed term is `X`, since `2^62 · x = X`. -/
@@ -243,11 +243,11 @@ theorem sinProgram_init (X : Nat) (hX : X ≤ B62) :
   simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, RegState.set,
     hXM, sinState, initialState]
   by_cases h2 : j = 2
-  · simp only [h2, if_pos rfl, show ¬((2 : Nat) = 1) by decide, if_false]
+  · simp only [h2, ite_eq_left rfl, show ¬((2 : Nat) = 1) by decide, ite_false]
   · by_cases h1 : j = 1
-    · simp only [h1, h2, if_pos rfl, if_false]
-      simp only [show ¬((1 : Nat) = 2) by decide, if_false, if_pos rfl]
-    · simp only [h1, h2, if_false]
+    · simp only [h1, h2, ite_eq_left rfl, ite_false]
+      simp only [show ¬((1 : Nat) = 2) by decide, ite_false, ite_eq_left rfl]
+    · simp only [h1, h2, ite_false]
 
 def sinFoldObs (X : Nat) (n : Nat) : Nat × Nat × Nat :=
   (List.range n).foldl (fun a index => sinG X index a) (X, 0, 0)
@@ -264,9 +264,9 @@ theorem sinFoldObs_eq (X : Nat) (hX : X ≤ B62) : ∀ n,
     simp only [sinG, Prod.mk.injEq]
     refine ⟨rfl, ?_, ?_⟩
     · show _ = sinEvenSum X n + (if n % 2 = 0 then sinTerm X n else 0)
-      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+      by_cases h : n % 2 = 0 <;> simp only [h, ite_eq_right, ite_true, ite_false] <;> omega
     · show _ = sinOddSum X n + (if n % 2 = 0 then 0 else sinTerm X n)
-      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+      by_cases h : n % 2 = 0 <;> simp only [h, ite_eq_right, ite_true, ite_false] <;> omega
 
 /-- **The sine program denotes the even parity sum.** -/
 theorem sinProgram_even (X n : Nat) (hX : X ≤ B62) (hn : 2 * n + 3 < 4294967296) :

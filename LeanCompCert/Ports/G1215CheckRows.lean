@@ -44,12 +44,12 @@ theorem hitOf_cap (c : Params) (n b accU accL xU kU xL kL : Nat)
   refine ⟨?_, ?_⟩
   · by_cases hcap : accU ≤ ACAP
     · exact hcap
-    · exact absurd (by simpa only [hitOf, if_neg hcap, Nat.zero_mul] using h)
+    · exact absurd (by simpa only [hitOf, ite_eq_right hcap, Nat.zero_mul] using h)
         (by decide)
   · by_cases hcap : accL ≤ ACAP
     · exact hcap
     · exact absurd
-        (by simpa only [hitOf, if_neg hcap, Nat.mul_zero, Nat.zero_mul] using h)
+        (by simpa only [hitOf, ite_eq_right hcap, Nat.mul_zero, Nat.zero_mul] using h)
         (by decide)
 
 theorem hitAt_cap (c : Params) (n i accU accL : Nat)
@@ -255,11 +255,11 @@ theorem rows_of_denote (c : Params) (hc : c.Sane)
   have hfinU : (blockFold c c.len).accU ≤ c.finU := by
     by_cases hx : (blockFold c c.len).accU ≤ c.finU
     · exact hx
-    · rw [if_neg hx] at hU; exact absurd hU (by decide)
+    · rw [ite_eq_right hx] at hU; exact absurd hU (by decide)
   have hfinL : c.finL ≤ (blockFold c c.len).accL := by
     by_cases hx : c.finL ≤ (blockFold c c.len).accL
     · exact hx
-    · rw [if_neg hx] at hL; exact absurd hL (by decide)
+    · rw [ite_eq_right hx] at hL; exact absurd hL (by decide)
   have hlen : c.len - 1 + 1 = c.len := by have := hc.lenPos; omega
   obtain ⟨heU, heL⟩ := blockFold_acc_eq c hc hgood c.len (Nat.le_refl _)
   refine ⟨?_, ?_, ?_⟩

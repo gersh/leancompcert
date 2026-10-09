@@ -40,7 +40,7 @@ theorem foldl_scheduledCellStep_of_not_mem (w p i : Nat)
       have hpair : i ≠ j ∧ i ∉ js := by simpa using hi
       have hij : i ≠ j := hpair.1
       have hitail : i ∉ js := hpair.2
-      simp only [List.foldl_cons, scheduledCellStep, if_neg hij]
+      simp only [List.foldl_cons, scheduledCellStep, ite_eq_right hij]
       exact ih st hitail
 
 /-- Scanning the finite window for one prime performs exactly its one
@@ -150,7 +150,7 @@ theorem tracedScheduleRun_cell (fuel segLen w limit i : Nat)
         eventCellFold w i
           (tracedScheduleStep segLen w limit i table q).events st.cell
       by_cases hj : q.state.cursor.j < segLen
-      · simp only [tracedScheduleStep, scheduleStep, hj, if_true,
+      · simp only [tracedScheduleStep, scheduleStep, hj, ite_true,
           eventCellFold, List.foldl_append, List.foldl_cons, List.foldl_nil]
         change scheduledCellStep w q.state.cursor.j q.state.cursor.p i
             q.state.cell =
@@ -158,7 +158,7 @@ theorem tracedScheduleRun_cell (fuel segLen w limit i : Nat)
             (eventCellFold w i q.events st.cell)
         rw [show q.state.cell = eventCellFold w i q.events st.cell by
           simpa [q] using ih]
-      · simp only [tracedScheduleStep, scheduleStep, hj, if_false,
+      · simp only [tracedScheduleStep, scheduleStep, hj, ite_false,
           List.append_nil]
         simpa [q] using ih
 
@@ -192,7 +192,7 @@ theorem tracedScheduleRun_live_prefix (q segLen w limit i pi p j : Nat)
       constructor
       · simp only [tracedScheduleStep]
         rw [hprevCursor]
-        simp only [hkLive, if_true, hprevEvents, List.range_succ,
+        simp only [hkLive, ite_true, hprevEvents, List.range_succ,
           List.map_append, List.map_cons, List.map_nil]
       · change cursorStep segLen w limit table prev.state.cursor =
           { pi := pi, p := p, j := j + (k + 1) * p }
@@ -213,7 +213,7 @@ theorem liveCount_index_live (segLen j p t : Nat)
     · exact h
     · simp [liveCount, h] at ht
   have htDiv : t ≤ (segLen - 1 - j) / p := by
-    simp only [liveCount, if_pos hj] at ht
+    simp only [liveCount, ite_eq_left hj] at ht
     omega
   have hmul : t * p ≤ segLen - 1 - j := by
     exact Nat.le_trans (Nat.mul_le_mul_right p htDiv)
@@ -226,7 +226,7 @@ theorem liveCount_exhausted (segLen j p : Nat) (hp : 0 < p) :
   · have hlt : segLen - 1 - j <
         p * ((segLen - 1 - j) / p + 1) :=
       Nat.lt_mul_div_succ _ hp
-    simp only [liveCount, if_pos hj]
+    simp only [liveCount, ite_eq_left hj]
     rw [Nat.mul_comm]
     omega
   · simp [liveCount, hj, Nat.le_of_not_gt hj]
@@ -273,7 +273,14 @@ theorem tracedScheduleRun_add (a b segLen w limit i : Nat)
       change tracedScheduleStep segLen w limit i table
           (tracedScheduleRun (a + b) segLen w limit i table st) = _
       rw [ih]
-      simp only [tracedScheduleRun, tracedScheduleStep, List.append_assoc]
+      change tracedScheduleStep segLen w limit i table _ =
+        { state := (tracedScheduleStep segLen w limit i table
+            (tracedScheduleRun b segLen w limit i table
+              (tracedScheduleRun a segLen w limit i table st).state)).state
+          events := _ ++ (tracedScheduleStep segLen w limit i table
+            (tracedScheduleRun b segLen w limit i table
+              (tracedScheduleRun a segLen w limit i table st).state)).events }
+      simp only [tracedScheduleStep.eq_def, List.append_assoc]
 
 /-- A complete nonterminal prime phase emits its exact live block and loads
 the next represented prime at its first translated multiple. -/
@@ -547,7 +554,7 @@ theorem liveCount_add_one_le_budget (segLen j p : Nat) :
   by_cases hj : j < segLen
   · have hsub : segLen - 1 - j ≤ segLen := by omega
     have hdiv := Nat.div_le_div_right (c := p) hsub
-    simp only [liveCount, if_pos hj]
+    simp only [liveCount, ite_eq_left hj]
     omega
   · simp [liveCount, hj]
 
@@ -657,14 +664,14 @@ theorem eventCellFold_progression (q w i j p : Nat)
           omega
         have hsucc : ∃ t, t < q + 1 ∧ j + t * p = i :=
           ⟨q, by omega, hlast⟩
-        rw [ih, if_neg hnone, if_pos hsucc]
+        rw [ih, ite_eq_right hnone, ite_eq_left hsucc]
         simp [scheduledCellStep, hlast]
       · by_cases hprev : ∃ t, t < q ∧ j + t * p = i
         · have hsucc : ∃ t, t < q + 1 ∧ j + t * p = i := by
             rcases hprev with ⟨t, ht, heq⟩
             exact ⟨t, by omega, heq⟩
           have hne : i ≠ j + q * p := by omega
-          rw [ih, if_pos hprev, if_pos hsucc]
+          rw [ih, ite_eq_left hprev, ite_eq_left hsucc]
           simp [scheduledCellStep, hne]
         · have hnoneSucc : ¬∃ t, t < q + 1 ∧ j + t * p = i := by
             intro h
@@ -675,7 +682,7 @@ theorem eventCellFold_progression (q w i j p : Nat)
               subst t
               exact hlast heq
           have hne : i ≠ j + q * p := by omega
-          rw [ih, if_neg hprev, if_neg hnoneSucc]
+          rw [ih, ite_eq_right hprev, ite_eq_right hnoneSucc]
           simp [scheduledCellStep, hne]
 
 /-- A translated in-window offset occurs in the positive cursor progression
@@ -718,13 +725,13 @@ theorem eventCellFold_cursorLiveEvents (segLen w p i : Nat)
   rw [cursorLiveEvents, eventCellFold_progression _ w i
     (firstOffset w p) p st hp]
   by_cases hdiv : p ∣ w + i
-  · rw [if_pos ((mem_cursor_progression_iff segLen w i p hp hi).2 hdiv)]
+  · rw [ite_eq_left ((mem_cursor_progression_iff segLen w i p hp hi).2 hdiv)]
     exact (primeCellScan_eq_rootCellStep segLen w p i st hi).symm
   · have hnone : ¬∃ t, t < liveCount segLen (firstOffset w p) p ∧
         firstOffset w p + t * p = i := by
       intro h
       exact hdiv ((mem_cursor_progression_iff segLen w i p hp hi).1 h)
-    rw [if_neg hnone]
+    rw [ite_eq_right hnone]
     rw [primeCellScan_eq_rootCellStep segLen w p i st hi,
       rootCellStep_miss (w + i) st p hdiv]
 
@@ -788,7 +795,7 @@ theorem eventCellFold_filter_multiples (w p i : Nat) (xs : List Nat)
       by_cases hdiv : p ∣ w + j
       · have hdec : decide (p ∣ w + j) = true := by simp [hdiv]
         rw [List.filter_cons, hdec]
-        simp only [if_true, List.map_cons]
+        simp only [ite_true, List.map_cons]
         change eventCellFold w i
             ((js.filter fun j => decide (p ∣ w + j)).map
               (fun j => (j, p)))

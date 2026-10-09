@@ -29,7 +29,7 @@ theorem markAddress30_lt_of_markRound
   let reset := arun k phased c.markResetBody
   have hp := c.markPhaseBody_run k s hsteps
   dsimp only at hp
-  have hp10 : phased.regs 10 = 1 := by rw [hp.1, if_pos hround]
+  have hp10 : phased.regs 10 = 1 := by rw [hp.1, ite_eq_left hround]
   have hr10 : reset.regs 10 = 1 :=
     (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
   dsimp only
@@ -63,7 +63,7 @@ theorem markAddress31_lt_of_markRound
   let p := arun k s (lift c.markPhaseBody)
   let z := arun k p c.markResetBody
   have hp := c.markPhaseBody_run k s hsteps; dsimp only at hp
-  have hp10 : p.regs 10 = 1 := by rw [hp.1, if_pos hround]
+  have hp10 : p.regs 10 = 1 := by rw [hp.1, ite_eq_left hround]
   have hz10 : z.regs 10 = 1 := (arun_frame k 10 c.markResetBody (by rfl) p).trans hp10
   dsimp only; by_cases hj : z.regs rJ < c.segLen
   · rcases hlive _ hj with ⟨a,b,d,e,f,g,h⟩
@@ -85,7 +85,7 @@ theorem markAddress32_lt_of_markRound
   let p:=arun k s (lift c.markPhaseBody)
   let z:=arun k p c.markResetBody
   have hp:=c.markPhaseBody_run k s hsteps; dsimp only at hp
-  have hp10:p.regs 10=1:=by rw [hp.1,if_pos hround]
+  have hp10:p.regs 10=1:=by rw [hp.1,ite_eq_left hround]
   have hz10:z.regs 10=1:=(arun_frame k 10 c.markResetBody (by rfl) p).trans hp10
   dsimp only; by_cases hj:z.regs rJ<c.segLen
   · rcases hlive _ hj with ⟨a,b,d,e,f,g,h⟩
@@ -105,7 +105,7 @@ theorem markAddress33_lt_of_markRound
   let p:=arun k s (lift c.markPhaseBody)
   let z:=arun k p c.markResetBody
   have hp:=c.markPhaseBody_run k s hsteps;dsimp only at hp
-  have hp10:p.regs 10=1:=by rw[hp.1,if_pos hround]
+  have hp10:p.regs 10=1:=by rw[hp.1,ite_eq_left hround]
   have hz10:z.regs 10=1:=(arun_frame k 10 c.markResetBody (by rfl) p).trans hp10
   dsimp only;by_cases hj:z.regs rJ<c.segLen
   · rcases hlive _ hj with⟨a,b,d,e,f,g,h⟩;rw[(c.markAddressBody_live_run k z hz10 hj a b d e f g h).2.2.2.2.2.1];omega
@@ -130,7 +130,7 @@ theorem markAddress34_lt_of_markRound
   let z := arun k p c.markResetBody
   have hp := c.markPhaseBody_run k s hsteps
   dsimp only at hp
-  have hp10 : p.regs 10 = 1 := by rw [hp.1, if_pos hround]
+  have hp10 : p.regs 10 = 1 := by rw [hp.1, ite_eq_left hround]
   have hz10 : z.regs 10 = 1 :=
     (arun_frame k 10 c.markResetBody (by rfl) p).trans hp10
   dsimp only
@@ -160,7 +160,7 @@ theorem markAddress35_lt_of_markRound
   let z := arun k p c.markResetBody
   have hp := c.markPhaseBody_run k s hsteps
   dsimp only at hp
-  have hp10 : p.regs 10 = 1 := by rw [hp.1, if_pos hround]
+  have hp10 : p.regs 10 = 1 := by rw [hp.1, ite_eq_left hround]
   have hz10 : z.regs 10 = 1 :=
     (arun_frame k 10 c.markResetBody (by rfl) p).trans hp10
   dsimp only
@@ -190,7 +190,7 @@ theorem markAddress36_lt_of_markRound
   let z := arun k p c.markResetBody
   have hp := c.markPhaseBody_run k s hsteps
   dsimp only at hp
-  have hp10 : p.regs 10 = 1 := by rw [hp.1, if_pos hround]
+  have hp10 : p.regs 10 = 1 := by rw [hp.1, ite_eq_left hround]
   have hz10 : z.regs 10 = 1 :=
     (arun_frame k 10 c.markResetBody (by rfl) p).trans hp10
   dsimp only

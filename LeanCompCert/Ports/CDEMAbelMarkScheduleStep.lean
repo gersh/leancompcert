@@ -219,8 +219,8 @@ theorem body_active_resident_scheduled (c : Cfg) (idx : Nat) (st : AState)
     rw [hm.array j]
     by_cases ha : j = cell + c.winBase
     · subst j
-      rw [if_pos rfl, if_pos rfl, hp.live _ haddrNe]
-    · rw [if_neg ha, if_neg ha, hp.live j hj]
+      rw [ite_eq_left rfl, ite_eq_left rfl, hp.live _ haddrNe]
+    · rw [ite_eq_right ha, ite_eq_right ha, hp.live j hj]
   have markedFrame (j : Nat)
       (hwrites : ArrayRegFrame.writes j c.markBody = false) :
       marked.regs j = pre.regs j :=

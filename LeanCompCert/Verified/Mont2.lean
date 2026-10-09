@@ -125,10 +125,10 @@ theorem sbbcW_eq (x y c : Nat) (hx : x < M) (hy : y < M) (hc : c ≤ 1) :
     sbbcW x y c = sbbc x y c := by
   simp only [sbbcW, sbbc, wsub, wadd, wlt, M_val] at hx hy ⊢
   by_cases h : x < y + c
-  · rw [if_pos h, Prod.mk.injEq]
+  · rw [ite_eq_left h, Prod.mk.injEq]
     refine ⟨by omega, ?_⟩
     split <;> split <;> omega
-  · rw [if_neg h, Prod.mk.injEq]
+  · rw [ite_eq_right h, Prod.mk.injEq]
     refine ⟨by omega, ?_⟩
     split <;> split <;> omega
 
@@ -137,9 +137,9 @@ theorem sbbc_spec (x y c : Nat) (hx : x < M) (hy : y < M) (hc : c ≤ 1) :
       (sbbc x y c).1 < M ∧ (sbbc x y c).2 ≤ 1 := by
   simp only [sbbc, M_val] at hx hy ⊢
   by_cases h : x < y + c
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     refine ⟨by omega, by omega, by omega⟩
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     refine ⟨by omega, by omega, by omega⟩
 
 /-! ## The 128-bit product without division -/
@@ -204,8 +204,10 @@ theorem hlW_eq (a b : Nat) (ha : a < M) (hb : b < M) :
   rw [wand_mask a, wand_mask b, wshr_eq a 32 ha, wshr_eq b 32 hb,
     wmul_half _ _ ha0 hb0, wmul_half _ _ ha0 hb1, wmul_half _ _ ha1 hb0,
     wmul_half _ _ ha1 hb1, wshr_eq _ 32 (wadd_lt _ _)]
-  simp only [MulWide.hl, MulWide.B32, MulWide.B64, wadd, wlt, wshl,
-    Nat.shiftLeft_eq, two_pow_32, M_val, Prod.mk.injEq, true_and] at hhi ⊢
+  unfold MulWide.hl MulWide.B32 MulWide.B64 at hhi
+  unfold MulWide.hl MulWide.B32 MulWide.B64 wadd wlt wshl
+  rw [M_val] at *
+  simp only [Nat.shiftLeft_eq, two_pow_32, Prod.mk.injEq, true_and] at hhi ⊢
   revert hhi
   split <;> split <;> omega
 
@@ -331,7 +333,7 @@ theorem mul2_val (a0 a1 b0 b1 : Nat)
   exact hident
 
 theorem mul2_lt (a0 a1 b0 b1 : Nat)
-    (ha0 : a0 < M) (ha1 : a1 < M) (hb0 : b0 < M) (hb1 : b1 < M) :
+    (ha0 : a0 < M) (_ha1 : a1 < M) (hb0 : b0 < M) (_hb1 : b1 < M) :
     (mul2 a0 a1 b0 b1).1 < M ∧ (mul2 a0 a1 b0 b1).2.1 < M ∧
       (mul2 a0 a1 b0 b1).2.2.1 < M ∧ (mul2 a0 a1 b0 b1).2.2.2 < M := by
   simp only [mul2, addcW]
@@ -357,8 +359,8 @@ def redcStep2 (n0 n1 np t0 t1 t2 t3 : Nat) : Nat × Nat × Nat × Nat :=
   (w1.1, w2.1, w3.1, w3.2)
 
 theorem redcStep2_lt (n0 n1 np t0 t1 t2 t3 : Nat)
-    (hn0 : n0 < M) (hn1 : n1 < M) (hnp : np < M)
-    (h0 : t0 < M) (h1 : t1 < M) (h2 : t2 < M) (h3 : t3 < M) :
+    (_hn0 : n0 < M) (_hn1 : n1 < M) (_hnp : np < M)
+    (_h0 : t0 < M) (_h1 : t1 < M) (_h2 : t2 < M) (_h3 : t3 < M) :
     (redcStep2 n0 n1 np t0 t1 t2 t3).1 < M ∧
       (redcStep2 n0 n1 np t0 t1 t2 t3).2.1 < M ∧
       (redcStep2 n0 n1 np t0 t1 t2 t3).2.2.1 < M ∧
@@ -368,7 +370,7 @@ theorem redcStep2_lt (n0 n1 np t0 t1 t2 t3 : Nat)
 
 /-- **One machine reduction step realizes one `Montgomery.redcStep`.** -/
 theorem redcStep2_val (n0 n1 np t0 t1 t2 t3 : Nat)
-    (hn0 : n0 < M) (hn1 : n1 < M) (hnp : np < M)
+    (hn0 : n0 < M) (hn1 : n1 < M) (_hnp : np < M)
     (h0 : t0 < M) (h1 : t1 < M) (h2 : t2 < M) (h3 : t3 < M)
     (hinv : MontMultiplier (pval n0 n1) np) :
     qval (redcStep2 n0 n1 np t0 t1 t2 t3).1
@@ -467,7 +469,7 @@ theorem condSub2_val (n0 n1 x0 x1 : Nat)
       rw [hge, wsel_one d0.1 x0 hd0.2.1, wsel_one d1.1 x1 hd1.2.1]
       have hnot : ¬ (pval x0 x1 < pval n0 n1) := by
         simp only [pval, M_val] at *; omega
-      rw [if_neg hnot]
+      rw [ite_eq_right hnot]
       refine ⟨?_, hd0.2.1, hd1.2.1⟩
       simp only [pval, M_val] at *; omega
   | inr h =>
@@ -476,7 +478,7 @@ theorem condSub2_val (n0 n1 x0 x1 : Nat)
       rw [hge, wsel_zero d0.1 x0 hx0, wsel_zero d1.1 x1 hx1]
       have hlt : pval x0 x1 < pval n0 n1 := by
         simp only [pval, M_val] at *; omega
-      rw [if_pos hlt]
+      rw [ite_eq_left hlt]
       exact ⟨rfl, hx0, hx1⟩
 
 /-! ## Two-limb Montgomery multiplication -/
@@ -491,7 +493,7 @@ def montMul2 (n0 n1 np a0 a1 b0 b1 : Nat) : Nat × Nat :=
 
 /-- Two limbs below `2⁶⁴` whose value is below `2¹²⁸` really are the value. -/
 theorem qval_of_lt (t0 t1 t2 t3 : Nat)
-    (h0 : t0 < M) (h1 : t1 < M) (h2 : t2 < M) (h3 : t3 < M)
+    (h0 : t0 < M) (h1 : t1 < M) (_h2 : t2 < M) (_h3 : t3 < M)
     (hlt : qval t0 t1 t2 t3 < M * M) :
     t2 = 0 ∧ t3 = 0 ∧ qval t0 t1 t2 t3 = pval t0 t1 := by
   simp only [qval, pval, M_val] at h0 h1 hlt ⊢
@@ -505,7 +507,7 @@ true modular product.
 theorem montMul2_val (n0 n1 np a0 a1 b0 b1 : Nat)
     (hn0 : n0 < M) (hn1 : n1 < M) (hnp : np < M)
     (ha0 : a0 < M) (ha1 : a1 < M) (hb0 : b0 < M) (hb1 : b1 < M)
-    (hodd : pval n0 n1 % 2 = 1) (hN : 0 < pval n0 n1)
+    (hodd : pval n0 n1 % 2 = 1) (_hN : 0 < pval n0 n1)
     (hHalf : 2 * pval n0 n1 ≤ M * M)
     (hinv : MontMultiplier (pval n0 n1) np)
     (ha : pval a0 a1 < pval n0 n1) (hb : pval b0 b1 < pval n0 n1) :
@@ -606,8 +608,8 @@ theorem dbl2_val (n0 n1 x0 x1 : Nat)
       = 2 * pval x0 x1 % pval n0 n1 := by
     rw [hcs.1, hkey]
     by_cases hlt : 2 * pval x0 x1 < pval n0 n1
-    · rw [if_pos hlt, Nat.mod_eq_of_lt hlt]
-    · rw [if_neg hlt]
+    · rw [ite_eq_left hlt, Nat.mod_eq_of_lt hlt]
+    · rw [ite_eq_right hlt]
       have hge : pval n0 n1 ≤ 2 * pval x0 x1 := Nat.not_lt.mp hlt
       rw [Nat.mod_eq_sub_mod hge, Nat.mod_eq_of_lt (by omega)]
   refine ⟨hmain, hcs.2.1, hcs.2.2, ?_⟩

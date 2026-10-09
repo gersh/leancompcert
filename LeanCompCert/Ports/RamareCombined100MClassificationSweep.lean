@@ -93,7 +93,7 @@ theorem LambdaPsiSweep.body_mark_shape_seen_frame
   have hphase := c.shape.markBody_phase_run k s hTM
   dsimp only at hphase
   have hm11 : marked.regs 11 = 0 := by
-    rw [hphase.2, if_neg (by omega : ¬c.shape.markSteps ≤ s.regs rR)]
+    rw [hphase.2, ite_eq_right (by omega : ¬c.shape.markSteps ≤ s.regs rR)]
   have hmShape : marked.regs rVShape = s.regs rVShape :=
     arun_frame k rVShape c.shape.markBody (by rfl) s
   have hmSeen : marked.regs rSeen = s.regs rSeen :=
@@ -192,9 +192,9 @@ theorem ofChain_body_class_current_empty
   have hclass' : shape.markSteps ≤ s.regs rR := by
     simpa only [shape] using hclass
   have hm10 : marked.regs 10 = 0 := by
-    rw [hphase.1, if_neg (Nat.not_lt_of_ge hclass')]
+    rw [hphase.1, ite_eq_right (Nat.not_lt_of_ge hclass')]
   have hm11 : marked.regs 11 = 1 := by
-    rw [hphase.2, if_pos hclass']
+    rw [hphase.2, ite_eq_left hclass']
   have hmR : marked.regs rR = s.regs rR :=
     arun_frame k rR shape.markBody (by rfl) s
   have hmW : marked.regs rW = s.regs rW :=
@@ -289,9 +289,9 @@ theorem ProductionClassSweepInv.step
   let out := arun k s (LambdaPsiSweep.body c)
   have hfuelNe : fuel ≠ productionCursorCfg.segLen := Nat.ne_of_lt hfuel
   have hround : s.regs rR = productionCursorCfg.markSteps + fuel := by
-    rw [h.round_eq, if_neg hfuelNe]
+    rw [h.round_eq, ite_eq_right hfuelNe]
   have hwindow : s.regs rW = w := by
-    rw [h.window_eq, if_neg hfuelNe]
+    rw [h.window_eq, ite_eq_right hfuelNe]
   have hcurrent : CellRel (productionCursorCfg.readPlaneCell fuel s)
       (markCell (factorRows productionCursorCfg.table) (w + fuel)) :=
     h.pending fuel (Nat.le_refl _) hfuel
@@ -489,32 +489,32 @@ theorem ProductionClassSweepInv.step
     cleared := ?_
     pending := ?_ }
   · by_cases hb : fuel + 1 = productionCursorCfg.segLen
-    · rw [if_pos hb]
+    · rw [ite_eq_left hb]
       have hb' : productionCursorCfg.markSteps + fuel + 1 =
           productionCursorCfg.period := by
         unfold Cfg.period
         omega
-      rw [hposition.1, if_pos hb']
-    · rw [if_neg hb]
+      rw [hposition.1, ite_eq_left hb']
+    · rw [ite_eq_right hb]
       have hb' : productionCursorCfg.markSteps + fuel + 1 ≠
           productionCursorCfg.period := by
         unfold Cfg.period
         omega
-      rw [hposition.1, if_neg hb']
+      rw [hposition.1, ite_eq_right hb']
       omega
   · by_cases hb : fuel + 1 = productionCursorCfg.segLen
-    · rw [if_pos hb]
+    · rw [ite_eq_left hb]
       have hb' : productionCursorCfg.markSteps + fuel + 1 =
           productionCursorCfg.period := by
         unfold Cfg.period
         omega
-      rw [hposition.2, if_pos hb']
-    · rw [if_neg hb]
+      rw [hposition.2, ite_eq_left hb']
+    · rw [ite_eq_right hb]
       have hb' : productionCursorCfg.markSteps + fuel + 1 ≠
           productionCursorCfg.period := by
         unfold Cfg.period
         omega
-      rw [hposition.2, if_neg hb']
+      rw [hposition.2, ite_eq_right hb']
   · intro i hi
     by_cases hieq : i = fuel
     · simpa only [hieq] using hcurrentEmpty
@@ -550,11 +550,11 @@ theorem ProductionClassSweepInv.start
     seen_eq := by simpa using hseen
     cleared := ?_
     pending := ?_ }
-  · rw [if_neg]
+  · rw [ite_eq_right]
     · simpa using hround
     · change 0 ≠ 999900
       omega
-  · rw [if_neg]
+  · rw [ite_eq_right]
     · exact hwindow
     · change 0 ≠ 999900
       omega
@@ -690,7 +690,7 @@ theorem productionMarkRun_shape_seen_frame
     have hne : i ≠ productionCursorCfg.period := by
       unfold Cfg.period
       omega
-    rw [if_neg hne] at hpos
+    rw [ite_eq_right hne] at hpos
     rw [hpos.1]
     exact hi
   · exact hvshape
@@ -835,7 +835,7 @@ theorem productionWindow_classStart
     change productionCursorCfg.markSteps ≠
       productionCursorCfg.markSteps + 999900
     omega
-  simp only [if_neg hmarkNe] at hpos
+  simp only [ite_eq_right hmarkNe] at hpos
   have hzeroMarked : marked.regs 0 = 0 :=
     (BodyRefinement.bodyRun_reg_frame c k productionCursorCfg.markSteps
       0 s (by rfl)).trans hzero

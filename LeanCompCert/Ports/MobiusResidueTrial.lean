@@ -137,7 +137,7 @@ theorem signal_read (c : Cfg) (idx : Nat) (s : RegState)
   have h1M : (1 : Nat) % M = 1 := by decide
   simp only [MobiusResidueScalar.readSig, signalBlock, srun, sdest, sval, denoteOperand,
     denoteOp, RegState.set, Option.getD_some, reduceIte,
-    Nat.reduceEqDiff, if_true, roundSig, hdec.1, hdec.2, ht3, ht4,
+    Nat.reduceEqDiff, ite_true, roundSig, hdec.1, hdec.2, ht3, ht4,
     muPlus, muMinus, omegaPar]
   simp only [hRm, h1M, ht2, one_sub_bit_mod _ ht3b,
     bit_mod _ homega, one_sub_bit_mod _ homega,

@@ -94,18 +94,18 @@ theorem fullPrefix_spec (c : Cfg) (n : Nat) (hR : 0 < c.rounds)
       have hqne : q ≠ c.rounds := by omega
       have hprev := ih (by omega)
       rw [fullPrefix_succ, hprev]
-      simp only [if_neg hqne, MobiusExtremaTrial.fullGstep]
+      simp only [ite_eq_right hqne, MobiusExtremaTrial.fullGstep]
       have hb := basePrefix_before c hR n q a.base hmo hq
       have hmoq : (basePrefix c n q a.base).mo < M := by
         rw [hb.1]
         exact hmo
       by_cases hlast : q + 1 = c.rounds
-      · rw [if_pos hlast,
+      · rw [ite_eq_left hlast,
           roundSig_last c n q hq hlast (basePrefix c n q a.base) hmoq hb.2]
         apply MobiusExtremaTrial.FullAbs.eq_of
         · exact (basePrefix_succ c n q a.base).symm
         · rfl
-      · rw [if_neg hlast,
+      · rw [ite_eq_right hlast,
           roundSig_idle c n q hq (basePrefix c n q a.base) hmoq hlast,
           extStep_idle (c.lo + n) a.extrema he]
         apply MobiusExtremaTrial.FullAbs.eq_of
@@ -125,7 +125,7 @@ theorem fullBlock_spec (c : Cfg) (n : Nat) (hR : 0 < c.rounds)
   change fullPrefix c n c.rounds a =
     ⟨basePrefix c n c.rounds a.base,
       MobiusExtremaScalar.extStep (trialSig (c.lo + n) c.rounds) a.extrema⟩
-  rw [fullPrefix_spec c n hR a hmo he c.rounds (Nat.le_refl _), if_pos rfl]
+  rw [fullPrefix_spec c n hR a hmo he c.rounds (Nat.le_refl _), ite_eq_left rfl]
 
 /-- Extrema after `count` completed candidate blocks. -/
 def trialExtAt (c : Cfg) (e0 : MobiusExtremaScalar.Ext) :

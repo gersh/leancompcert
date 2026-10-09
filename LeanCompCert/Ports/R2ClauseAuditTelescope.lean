@@ -116,28 +116,28 @@ theorem auditInstr_audit_mono (S k : Nat) (s : AState) (i : AInstr)
     hstepWord.1 hstepWord.2
   have hfinMono : stepped.regs auditReg ≤ afterFin.regs auditReg := by
     by_cases hfin : decide (i = finInstr) = true
-    · simpa only [finExtra, if_pos hfin] using
+    · simpa only [finExtra, ite_eq_left hfin] using
         finGuardBody_audit_mono k stepped hstepWord
     · simp [finExtra, hfin]
   have haddMono : afterFin.regs auditReg ≤
       (arun k afterFin addExtra).regs auditReg := by
     by_cases h293 : decide (i = clauseAdd293) = true
-    · simpa only [addExtra, if_pos h293] using
+    · simpa only [addExtra, ite_eq_left h293] using
         gatedAddGuardBody_audit_mono k afterFin 293 (.reg rD) hfinWord
     · by_cases h294 : decide (i = clauseAdd294) = true
-      · simpa only [addExtra, if_neg h293, if_pos h294] using
+      · simpa only [addExtra, ite_eq_right h293, ite_eq_left h294] using
           gatedAddGuardBody_audit_mono k afterFin 294 (.reg 293) hfinWord
       · by_cases h295 : decide (i = clauseAdd295 S) = true
-        · simpa only [addExtra, if_neg h293, if_neg h294, if_pos h295] using
+        · simpa only [addExtra, ite_eq_right h293, ite_eq_right h294, ite_eq_left h295] using
             gatedAddGuardBody_audit_mono k afterFin 295
               (.lit (biasOf S)) hfinWord
         · by_cases h321 : decide (i = clauseAdd321) = true
-          · simpa only [addExtra, if_neg h293, if_neg h294, if_neg h295,
-              if_pos h321] using
+          · simpa only [addExtra, ite_eq_right h293, ite_eq_right h294, ite_eq_right h295,
+              ite_eq_left h321] using
               gatedAddGuardBody_audit_mono k afterFin 321 (.reg rD) hfinWord
           · by_cases h322 : decide (i = clauseAdd322 S) = true
-            · simpa only [addExtra, if_neg h293, if_neg h294, if_neg h295,
-                if_neg h321, if_pos h322] using
+            · simpa only [addExtra, ite_eq_right h293, ite_eq_right h294, ite_eq_right h295,
+                ite_eq_right h321, ite_eq_left h322] using
                 gatedAddGuardBody_audit_mono k afterFin 322
                   (.lit (biasOf S)) hfinWord
             · simp [addExtra, h293, h294, h295, h321, h322]
@@ -205,7 +205,7 @@ private theorem optionalExtras_sourceAgree (S k : Nat) (i : AInstr)
   by_cases h295 : decide (i = clauseAdd295 S) = true <;>
   by_cases h321 : decide (i = clauseAdd321) = true <;>
   by_cases h322 : decide (i = clauseAdd322 S) = true <;>
-  simp only [hfin, h293, h294, h295, h321, h322, if_pos, if_neg, arun] <;>
+  simp only [hfin, h293, h294, h295, h321, h322, ite_eq_left, ite_eq_right, arun] <;>
   first
   | exact SourceAgree.trans
       (gatedAddGuardBody_sourceAgree k _ _ _)

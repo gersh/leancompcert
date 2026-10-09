@@ -361,7 +361,7 @@ private theorem resetFacts (hc : c.Sane) (hk : k < c.len * c.R)
     pass0Of c k s ≤ 1 := by
   obtain ⟨hn2, hn17, hnbnd, hnM⟩ := candFacts hc hk
   unfold m0Of phi0Of sq0Of pass0Of
-  by_cases hz : qOf c k = 0 <;> simp only [hz, if_true, if_false, reduceIte]
+  by_cases hz : qOf c k = 0 <;> simp only [hz, ite_true, ite_false, reduceIte]
   · exact ⟨by omega, hnM, by omega, by
       have : (1:Nat) < M := by decide
       omega, by omega, by omega, by omega⟩
@@ -439,7 +439,7 @@ private theorem peelFacts (hc : c.Sane) (hk : k < c.len * c.R)
   have hprod1 : m1Of c k s * phi1Of c k s ≤ c.lo + c.len := by
     unfold m1Of phi1Of
     by_cases hdvd : m0Of c k s % dOf c k = 0
-    · simp only [hdvd, if_true, reduceIte]
+    · simp only [hdvd, ite_true, reduceIte]
       have h1 : m0Of c k s / dOf c k * (dOf c k - 1) ≤ m0Of c k s := by
         have h2 : m0Of c k s / dOf c k * (dOf c k - 1)
             ≤ m0Of c k s / dOf c k * dOf c k :=
@@ -453,7 +453,7 @@ private theorem peelFacts (hc : c.Sane) (hk : k < c.len * c.R)
               ← Nat.mul_assoc]
         _ ≤ m0Of c k s * phi0Of c k s := Nat.mul_le_mul_right _ h1
         _ ≤ c.lo + c.len := hprod0
-    · simp only [hdvd, if_false, reduceIte]
+    · simp only [hdvd, ite_false, reduceIte]
       exact hprod0
   have hphi1M : phi1Of c k s < M := by
     have h1 : phi1Of c k s ≤ m1Of c k s * phi1Of c k s :=
@@ -613,7 +613,7 @@ theorem st4_vals (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
     rw [hgoal, v20, v21]
     have hd : (denoteOp .udiv (2 ^ 44 + phiFOf c k s - 1) (phiFOf c k s)).getD 0
         = (2 ^ 44 + phiFOf c k s - 1) / phiFOf c k s % M := by
-      simp only [denoteOp, if_neg hne, Option.getD_some]
+      simp only [denoteOp, ite_eq_right hne, Option.getD_some]
     rw [hd]
     refine Nat.mod_eq_of_lt ?_
     have h1 : (2:Nat) ^ 44 < M := by decide
@@ -651,8 +651,8 @@ private theorem posFlip {c : Params} {k : Nat} (x y : Nat) :
     (if c.tdiv ≤ qOf c k then x else y)
       = (if qOf c k < c.tdiv then y else x) := by
   by_cases h : c.tdiv ≤ qOf c k
-  · rw [if_pos h, if_neg (show ¬ qOf c k < c.tdiv by omega)]
-  · rw [if_neg h, if_pos (show qOf c k < c.tdiv by omega)]
+  · rw [ite_eq_left h, ite_eq_right (show ¬ qOf c k < c.tdiv by omega)]
+  · rw [ite_eq_right h, ite_eq_left (show qOf c k < c.tdiv by omega)]
 
 /-- The disjunction of two bits is a bit. -/
 private theorem orLe (x y : Nat) (hx : x ≤ 1) (hy : y ≤ 1) : x ||| y ≤ 1 := by
@@ -733,17 +733,17 @@ registers), and the round's invariant needs it at `gfRun`. -/
 private theorem denoteOp_udiv_lt (a b : Nat) :
     (denoteOp .udiv a b).getD 0 < M := by
   by_cases h : b = 0
-  · simp only [denoteOp, if_pos h, Option.getD_none]
+  · simp only [denoteOp, ite_eq_left h, Option.getD_none]
     exact M_pos
-  · simp only [denoteOp, if_neg h, Option.getD_some]
+  · simp only [denoteOp, ite_eq_right h, Option.getD_some]
     exact Nat.mod_lt _ M_pos
 
 private theorem denoteOp_urem_lt (a b : Nat) :
     (denoteOp .urem a b).getD 0 < M := by
   by_cases h : b = 0
-  · simp only [denoteOp, if_pos h, Option.getD_none]
+  · simp only [denoteOp, ite_eq_left h, Option.getD_none]
     exact M_pos
-  · simp only [denoteOp, if_neg h, Option.getD_some]
+  · simp only [denoteOp, ite_eq_right h, Option.getD_some]
     exact Nat.mod_lt _ M_pos
 
 private theorem divStep_lt (dest a b : Nat) (t : RegState)
@@ -767,7 +767,7 @@ private theorem divStep_val (dest a b : Nat) (t : RegState) (x y : Nat)
       = (denoteOp .udiv (t a) (t b)).getD 0 := by
     simp [divStep, RegState.set]
   rw [hgoal, ha, hb]
-  simp only [denoteOp, if_neg hy, Option.getD_some]
+  simp only [denoteOp, ite_eq_right hy, Option.getD_some]
   exact Nat.mod_eq_of_lt hlt
 
 private theorem idxDivStep_lt (R j : Nat) (t : RegState) (ht : ∀ i, t i < M) :
@@ -1546,10 +1546,10 @@ private theorem ballow_eq {c : Params} {k : Nat} (hq : c.tdiv ≤ qOf c k) :
       (if nOf c k ≤ c.split then 1 else 0))
       = (if qOf c k - c.tdiv + 1 = 1 ∨ nOf c k ≤ c.split then 1 else 0) := by
   by_cases h1 : qOf c k = c.tdiv <;> by_cases h2 : nOf c k ≤ c.split
-  · rw [if_pos h1, if_pos h2, if_pos (Or.inr h2)]; decide
-  · rw [if_pos h1, if_neg h2, if_pos (Or.inl (by omega))]; decide
-  · rw [if_neg h1, if_pos h2, if_pos (Or.inr h2)]; decide
-  · rw [if_neg h1, if_neg h2, if_neg (by
+  · rw [ite_eq_left h1, ite_eq_left h2, ite_eq_left (Or.inr h2)]; decide
+  · rw [ite_eq_left h1, ite_eq_right h2, ite_eq_left (Or.inl (by omega))]; decide
+  · rw [ite_eq_right h1, ite_eq_left h2, ite_eq_left (Or.inr h2)]; decide
+  · rw [ite_eq_right h1, ite_eq_right h2, ite_eq_right (by
       rintro (h | h)
       · exact h1 (by omega)
       · exact h2 h)]
@@ -1725,7 +1725,7 @@ theorem gfRun_spec (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
       · show run k (stF2 c k s) blkF3 0 = _
         rw [c0v]
         unfold goodOf pass1Of
-        rw [bitIf, bitIf, if_neg hq, if_pos hqlt]
+        rw [bitIf, bitIf, ite_eq_right hq, ite_eq_left hqlt]
       · show run k (stF2 c k s) blkF3 1 = _
         exact c1f.trans (b1.trans A1)
       · show run k (stF2 c k s) blkF3 2 = _
@@ -1737,7 +1737,7 @@ theorem gfRun_spec (hc : c.Sane) (hk : k < c.len * c.R) (hs : Inv c s) :
       · show run k (stF2 c k s) blkF3 5 = _
         rw [c5v]
         unfold pass1Of
-        rw [bitIf, if_neg hq, if_pos hqlt]
+        rw [bitIf, ite_eq_right hq, ite_eq_left hqlt]
       · show run k (stF2 c k s) blkF3 13 = _
         exact c13f.trans (b13.trans A13)
       · show run k (stF2 c k s) blkF3 14 = _

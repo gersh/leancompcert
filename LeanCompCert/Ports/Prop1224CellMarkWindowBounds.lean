@@ -37,10 +37,10 @@ theorem P1224MarkWindow.cell_radical_dvd_step
     (w.cells i).radical ∣
       ((w.step c windowBase tableWord).cells i).radical := by
   by_cases hresident : w.cursor.offset < c.segLen
-  · simp only [P1224MarkWindow.step, hresident, if_true]
+  · simp only [P1224MarkWindow.step, hresident, ite_true]
     by_cases hi : i = w.cursor.offset
     · subst i
-      simp only [updateP1224Cell, if_pos rfl]
+      simp only [updateP1224Cell, ite_eq_left rfl]
       by_cases hfirst : w.cursor.first = 1
       · simp [P1224MarkCell.markPower, hfirst]
         exact ⟨w.cursor.base, rfl⟩
@@ -79,8 +79,8 @@ theorem P1224MarkWindow.resident_product_eq_step_radical
     (w.cells w.cursor.offset).radical *
         (if w.cursor.first = 1 then w.cursor.base else 1) =
       ((w.step c windowBase tableWord).cells w.cursor.offset).radical := by
-  simp only [P1224MarkWindow.step, hresident, if_true, updateP1224Cell,
-    if_pos rfl]
+  simp only [P1224MarkWindow.step, hresident, ite_true, updateP1224Cell,
+    ite_eq_left rfl]
   by_cases hfirst : w.cursor.first = 1
   · simp [P1224MarkCell.markPower, hfirst]
   · simp [P1224MarkCell.markPower, hfirst]
@@ -104,15 +104,15 @@ theorem P1224MarkWindow.CellsInv.step
     (w.step c windowBase tableWord).CellsInv := by
   intro i
   by_cases hresident : w.cursor.offset < c.segLen
-  · simp only [P1224MarkWindow.step, hresident, if_true]
+  · simp only [P1224MarkWindow.step, hresident, ite_true]
     by_cases hi : i = w.cursor.offset
     · subst i
-      simp only [updateP1224Cell, if_pos rfl]
+      simp only [updateP1224Cell, ite_eq_left rfl]
       exact (hinv w.cursor.offset).markPower w.cursor.base
         (w.cursor.first = 1) (hbase hresident)
-    · simp only [updateP1224Cell, if_neg hi]
+    · simp only [updateP1224Cell, ite_eq_right hi]
       exact hinv i
-  · simp only [P1224MarkWindow.step, hresident, if_false]
+  · simp only [P1224MarkWindow.step, hresident, ite_false]
     exact hinv i
 
 /-- Symbolic finite preservation.  The only schedule-specific premise is
@@ -154,10 +154,10 @@ theorem P1224MarkWindow.resident_mark_words
       (w.cells w.cursor.offset).sqf < M := by
   apply (hinv w.cursor.offset).mark_words
   by_cases hfirst : w.cursor.first = 1
-  · simp only [hfirst, decide_true, Bool.true_eq, if_true]
+  · simp only [hfirst, decide_true, Bool.true_eq, ite_true]
     exact Nat.lt_of_le_of_lt (by simpa [hfirst] using hready hresident)
       (Nat.lt_of_le_of_lt hcandidate hceiling)
-  · simp only [hfirst, decide_false, Bool.false_eq_true, if_false]
+  · simp only [hfirst, decide_false, Bool.false_eq_true, ite_false]
     exact Nat.lt_of_le_of_lt (by simpa [hfirst] using hready hresident)
       (Nat.lt_of_le_of_lt hcandidate hceiling)
 

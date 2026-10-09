@@ -150,7 +150,7 @@ theorem qAtRank_dense {rank : Nat} (h : rank < denseRankEnd) :
     qAtRank rank = rank + 1 := by simp [qAtRank, h]
 
 theorem qAtRank_extension {localRank : Nat}
-    (h : localRank < extensionRankCount) :
+    (_h : localRank < extensionRankCount) :
     qAtRank (denseRankEnd + localRank) =
       firstExtensionQ + localRank * extensionDivisor := by
   have hn : ¬denseRankEnd + localRank < denseRankEnd := by omega

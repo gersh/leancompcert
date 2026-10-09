@@ -180,7 +180,7 @@ theorem logBody_continue_final_run (c : R2Cfg) (k : Nat) (s : AState)
     (by simpa only [normalized] using hpAa) hSM hsmall
   dsimp only at hln
   have hpFin : roundedPrefix.regs 247 = 1 := by
-    simpa only [hjfin, if_pos] using hp.2.2.1
+    simpa only [hjfin, ite_eq_left] using hp.2.2.1
   have hcursor := logBody_cursor_of_liveRound_run c k s ec 1 hec hpFin hecM
   dsimp only at hcursor
   have hbody := logBody_continue_run c k s ec wc n payload mode e th viol
@@ -192,8 +192,8 @@ theorem logBody_continue_final_run (c : R2Cfg) (k : Nat) (s : AState)
   exact ⟨by simpa only [normalized, hjfin] using hbody.1,
     by simpa only [normalized, logFrac, hjfin] using hbody.2.1,
     hln.1,
-    by simpa only [hjfin, if_pos] using hbody.2.2.1,
-    by simpa only [hjfin, if_pos] using hbody.2.2.2,
+    by simpa only [hjfin, ite_eq_left] using hbody.2.2.1,
+    by simpa only [hjfin, ite_eq_left] using hbody.2.2.2,
     hcursor.1, hln.2⟩
 
 #print axioms logLnFinalizeBody_eq_stages

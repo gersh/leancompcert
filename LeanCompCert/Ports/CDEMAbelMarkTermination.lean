@@ -244,7 +244,7 @@ theorem residentSteps_markCell_le_allowance (c : Cfg) (w d : Nat)
       divisorAllowance c d := by
   by_cases hzero : Ref.muCodeFor c.kBound d = 0
   · simp [divisorAllowance, markCellOfCode, hzero]
-  · simp only [divisorAllowance, hzero, if_false]
+  · simp only [divisorAllowance, hzero, ite_false]
     exact residentSteps_le_div_succ c.segLen d _ hd
 
 /-- Exact remaining scheduled work.  `fuel` is the number of divisor
@@ -335,7 +335,7 @@ theorem CursorInv.step (c : Cfg) (w : Nat) (s : MarkState)
       { table := by
           intro d hd hdK
           simp only [MarkState.step, hm, ↓reduceIte]
-          rw [if_neg (by
+          rw [ite_eq_right (by
             unfold Cfg.winBase Cfg.k1
             omega)]
           exact h.table d hd hdK
@@ -493,7 +493,7 @@ theorem first_cursorInv (c : Cfg) (st : LeanCompCert.Verified.ArrayState.AState)
     { table := by
         intro d hd hdK
         simp only [MarkState.first]
-        rw [if_neg (by
+        rw [ite_eq_right (by
           unfold Cfg.winBase Cfg.k1
           omega)]
         exact htable d hd hdK

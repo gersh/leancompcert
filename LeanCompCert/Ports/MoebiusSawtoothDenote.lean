@@ -152,7 +152,7 @@ theorem arun_lt (k : Nat) :
         | scalar instr =>
             by_cases hEq : j = sdest instr
             · subst hEq
-              simp only [astep, AState.writeReg, if_pos rfl]
+              simp only [astep, AState.writeReg, ite_eq_left rfl]
               cases instr with
               | mov d src =>
                   cases src with
@@ -165,14 +165,14 @@ theorem arun_lt (k : Nat) :
                   | none => simpa [sval, hv] using M_pos
                   | some v =>
                       simpa [sval, hv] using denoteOp_lt op _ _ _ hv
-            · simp only [astep, AState.writeReg, if_neg hEq]
+            · simp only [astep, AState.writeReg, ite_eq_right hEq]
               exact hr j
         | load dest idxReg =>
             by_cases hEq : j = dest
             · subst hEq
-              simp only [astep, AState.writeReg, if_pos rfl]
+              simp only [astep, AState.writeReg, ite_eq_left rfl]
               exact ha _
-            · simp only [astep, AState.writeReg, if_neg hEq]
+            · simp only [astep, AState.writeReg, ite_eq_right hEq]
               exact hr j
         | store idxReg srcReg => exact hr j
       · intro j
@@ -182,9 +182,9 @@ theorem arun_lt (k : Nat) :
         | store idxReg srcReg =>
             by_cases hEq : j = s.regs idxReg
             · subst hEq
-              simp only [astep, AState.writeArr, if_pos rfl]
+              simp only [astep, AState.writeArr, ite_eq_left rfl]
               exact hr _
-            · simp only [astep, AState.writeArr, if_neg hEq]
+            · simp only [astep, AState.writeArr, ite_eq_right hEq]
               exact ha j
 
 theorem bodyReset_defined (index : Nat) (s : AState) :

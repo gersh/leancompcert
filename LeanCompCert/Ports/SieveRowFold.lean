@@ -138,9 +138,9 @@ theorem gstepB_round (hacc0 : ∀ mo t, mo < M → acc 0 mo t = mo)
   rw [gstepB_qX c P acc (n * c.rounds + r) a r (c.lo + n) hmod (by rw [hdiv])]
   by_cases hlast : r + 1 = c.rounds
   · have hq : r = c.rounds - 1 := by omega
-    simp only [if_pos hlast, if_pos hq]
+    simp only [ite_eq_left hlast, ite_eq_left hq]
   · have hq : ¬ (r = c.rounds - 1) := by omega
-    simp only [if_neg hlast, if_neg hq, ite_self, or_zero, hacc0 _ _ hmo]
+    simp only [ite_eq_right hlast, ite_eq_right hq, ite_self, or_zero, hacc0 _ _ hmo]
 
 /-- The prefix of one block. -/
 theorem blockB_prefix (hacc0 : ∀ mo t, mo < M → acc 0 mo t = mo)
@@ -159,7 +159,7 @@ theorem blockB_prefix (hacc0 : ∀ mo t, mo < M → acc 0 mo t = mo)
       rw [show (List.range 1) = [0] from rfl, List.foldl_cons, List.foldl_nil,
         gstepB_round c P acc hacc0 n 0 hk a hmo]
       simp only [trialPrefix, show (List.range 1) = [0] from rfl,
-        List.foldl_cons, List.foldl_nil, if_pos rfl]
+        List.foldl_cons, List.foldl_nil, ite_eq_left rfl]
       rfl
   | succ k ih =>
       intro hk
@@ -167,11 +167,11 @@ theorem blockB_prefix (hacc0 : ∀ mo t, mo < M → acc 0 mo t = mo)
       have hkne : ¬ (k + 1 = c.rounds) := by omega
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
         ih hklt]
-      rw [if_neg hkne]
+      rw [ite_eq_right hkne]
       rw [gstepB_round c P acc hacc0 n (k + 1) hk
         ⟨a.bad, a.mo, trialPrefix (c.lo + n) (k + 1)⟩ hmo]
       have hne0 : ¬ (k + 1 = 0) := by omega
-      simp only [if_neg hne0, trialPrefix, List.range_succ, List.foldl_append,
+      simp only [ite_eq_right hne0, trialPrefix, List.range_succ, List.foldl_append,
         List.foldl_cons, List.foldl_nil]
 
 /-- One block: a whole candidate's contribution. -/
@@ -289,7 +289,7 @@ theorem valueB_eq_zero_sound (hacc0 : ∀ mo t, mo < M → acc 0 mo t = mo)
     exact hval
   rw [rowFlagB] at hflag
   by_cases hp : P (c.lo + n) (accAt c acc (n + 1)) = true
-  · rw [if_pos hp] at hflag
+  · rw [ite_eq_left hp] at hflag
     omega
   · simpa using hp
 

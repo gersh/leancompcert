@@ -133,7 +133,7 @@ theorem compareG_spec (idx : Nat) (s : RegState) (x : MulThree.Limbs3)
     rw [hc, hhi]
     exact Nat.mod_eq_of_lt hwords.2.2
   simp only [compareG, srun, sdest, sval, denoteOperand, denoteOp,
-    Option.getD_some, RegState.set, Nat.reduceEqDiff, M, if_true, if_false] at htop ⊢
+    Option.getD_some, RegState.set, Nat.reduceEqDiff, M, ite_true, ite_false] at htop ⊢
   change s 170 = x.lo at hlo
   change (s 171 + s 172) % (2 ^ 64) = x.mid at hmid
   simp only [hmid] at htop
@@ -185,7 +185,7 @@ theorem prepG_spec (idx k : Nat) (s : RegState) :
     let out := srun idx s (prepG k)
     out 166 = uWord k (s 65) (s 159) ∧ out 167 = nWord (s 65) := by
   simp only [prepG, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-    Option.getD_some, Nat.reduceEqDiff, if_true, if_false, ceilWord, uWord, nWord]
+    Option.getD_some, Nat.reduceEqDiff, ite_true, ite_false, ceilWord, uWord, nWord]
   exact ⟨trivial, trivial⟩
 
 /-- Source-predicate form of the checker theorem. -/
@@ -197,10 +197,10 @@ theorem checkerG_nat_spec (idx : Nat) (s : RegState) (hs : ∀ j, s j < M) :
     (hs 166) (hs 167)
   by_cases htest : s 167 * s 166 ^ 2 ≤ 2 ^ 122
   · have hle := hiff.mpr htest
-    simpa only [htest, hle, if_true] using hchecker
+    simpa only [htest, hle, ite_true] using hchecker
   · have hnle : ¬MulThree.lePow122 (MulThree.squareMul (s 166) (s 167)) :=
       fun hle => htest (hiff.mp hle)
-    simpa only [htest, hnle, if_false] using hchecker
+    simpa only [htest, hnle, ite_false] using hchecker
 
 theorem checkerG_frame_viol (idx : Nat) (s : RegState) :
     srun idx s checkerG rMViol = s rMViol :=
@@ -221,7 +221,7 @@ theorem prepG_frame_gate (idx k : Nat) (s : RegState) :
 theorem gateG_spec (idx : Nat) (s : RegState) :
     srun idx s gateG rMViol = (s rMViol + s 191 * s 133) % M := by
   simp only [gateG, srun, sdest, sval, denoteOperand, denoteOp, RegState.set,
-    Option.getD_some, rMViol, Nat.reduceEqDiff, if_true, if_false]
+    Option.getD_some, rMViol, Nat.reduceEqDiff, ite_true, ite_false]
   simp [Nat.add_mod]
 
 end LeanCompCert.Ports.ArraySegMobiusSquaredSound

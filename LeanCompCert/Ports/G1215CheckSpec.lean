@@ -167,9 +167,9 @@ theorem tdbFinal_pos (n : Nat) (hn : 1 ≤ n) (D : Nat) :
 theorem ceil_le (K pf : Nat) (hpf : 1 ≤ pf) :
     K / pf + (if K % pf = 0 then 0 else 1) ≤ K := by
   by_cases h : K % pf = 0
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     exact Nat.div_le_self _ _
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     have hpf2 : 2 ≤ pf := by
       rcases (show pf = 1 ∨ 2 ≤ pf by omega) with rfl | h2
       · exact absurd (Nat.mod_one K) h
@@ -330,7 +330,7 @@ theorem round_trial (c : Params) (hc : c.Sane) (j q : Nat) (v : Vals) (t : TD)
   simp only [gRound, hmod, hdiv, hm, hphi, hsq, hpass,
     TrialDivisionBlockSpec.tdbRound_m, TrialDivisionBlockSpec.tdbRound_phi,
     TrialDivisionBlockSpec.tdbRound_sq,
-    if_pos hq, if_neg hne, if_neg hnl, Nat.add_zero, Nat.mod_eq_of_lt haccU,
+    ite_eq_left hq, ite_eq_right hne, ite_eq_right hnl, Nat.add_zero, Nat.mod_eq_of_lt haccU,
     Nat.mod_eq_of_lt haccL]
 
 /-- **The first exponent round** (`q = tdiv`): the last peel, the two
@@ -369,7 +369,7 @@ theorem round_exp0 (c : Params) (hc : c.Sane) (j : Nat) (v : Vals) (t : TD)
     hitAt, mantX,
     TrialDivisionBlockSpec.tdbRound_m, TrialDivisionBlockSpec.tdbRound_phi,
     TrialDivisionBlockSpec.tdbRound_sq, TrialDivisionBlockSpec.tdbFinal_fst,
-    if_neg hz, if_neg hlt, if_true, Nat.sub_self, Nat.zero_or]
+    ite_eq_right hz, ite_eq_right hlt, ite_true, Nat.sub_self, Nat.zero_or]
 
 /-- **A later exponent round** (`q = tdiv + i + 1`): both mantissae advance by
 one step of their own `mantX`, the accumulators are untouched, and the pass
@@ -413,7 +413,7 @@ theorem round_expS (c : Params) (hc : c.Sane) (j i : Nat) (v : Vals)
   have hcond : (c.tdiv + i + 1 = c.R - 1) ↔ (i + 1 + 1 = c.bmax) := by
     unfold Params.R; omega
   simp only [gRound, hmod, hdiv, hxU, hkU, hxL, hkL, hitAt, mantX, hsub, hcond,
-    if_neg hz, if_neg hlt, if_neg heq, Nat.add_zero, Nat.mod_eq_of_lt haccU,
+    ite_eq_right hz, ite_eq_right hlt, ite_eq_right heq, Nat.add_zero, Nat.mod_eq_of_lt haccU,
     Nat.mod_eq_of_lt haccL,
     TrialDivisionBlockSpec.tdbRound_m, TrialDivisionBlockSpec.tdbRound_phi,
     TrialDivisionBlockSpec.tdbRound_sq]
@@ -447,10 +447,10 @@ theorem trial_fold (c : Params) (hc : c.Sane) (j : Nat) (v : Vals)
       rcases Nat.eq_zero_or_pos r with rfl | hrpos
       · rw [bState_zero, round_trial c hc j 0 v (tdbBlock 0 (c.lo + j))
               (by have := hc.tdivPos; omega) haccU haccL
-              (by rw [if_pos rfl, TrialDivisionBlockSpec.tdbBlock_zero])
-              (by rw [if_pos rfl, TrialDivisionBlockSpec.tdbBlock_zero])
-              (by rw [if_pos rfl, TrialDivisionBlockSpec.tdbBlock_zero])
-              (by rw [if_pos rfl]),
+              (by rw [ite_eq_left rfl, TrialDivisionBlockSpec.tdbBlock_zero])
+              (by rw [ite_eq_left rfl, TrialDivisionBlockSpec.tdbBlock_zero])
+              (by rw [ite_eq_left rfl, TrialDivisionBlockSpec.tdbBlock_zero])
+              (by rw [ite_eq_left rfl]),
             ← TrialDivisionBlockSpec.tdbBlock_succ]
       · have hz : ¬ (r = 0) := by omega
         rw [ih hrpos (by omega),
@@ -462,8 +462,8 @@ theorem trial_fold (c : Params) (hc : c.Sane) (j : Nat) (v : Vals)
               , accU := v.accU, accL := v.accL, pass := 0
               , xU := v.xU, kU := v.kU, xL := v.xL, kL := v.kL }
               (tdbBlock r (c.lo + j)) (by omega) haccU haccL
-              (by simp only [if_neg hz]) (by simp only [if_neg hz])
-              (by simp only [if_neg hz]) (by simp only [if_neg hz]),
+              (by simp only [ite_eq_right hz]) (by simp only [ite_eq_right hz])
+              (by simp only [ite_eq_right hz]) (by simp only [ite_eq_right hz]),
             ← TrialDivisionBlockSpec.tdbBlock_succ]
 
 /-- **The exponent phase.**  After `r + 1 ≤ bmax` exponent rounds the two
@@ -540,8 +540,8 @@ theorem exp_fold (c : Params) (hc : c.Sane) (j : Nat) (v : Vals)
                v.good * orFold c (c.lo + j) (bAccU c (c.lo + j) v.accU)
                  (bAccL c (c.lo + j) v.accL) c.bmax
              else v.good) := by
-        rw [if_neg (show ¬ (c.tdiv = c.R - 1) by unfold Params.R; omega),
-            if_neg (show ¬ ((1:Nat) = c.bmax) by omega)]
+        rw [ite_eq_right (show ¬ (c.tdiv = c.R - 1) by unfold Params.R; omega),
+            ite_eq_right (show ¬ ((1:Nat) = c.bmax) by omega)]
       refine ⟨(tdbBlock (c.tdiv + 1) (c.lo + j)).m,
               (tdbBlock (c.tdiv + 1) (c.lo + j)).phi,
               (tdbBlock (c.tdiv + 1) (c.lo + j)).sq, ?_⟩
@@ -549,7 +549,7 @@ theorem exp_fold (c : Params) (hc : c.Sane) (j : Nat) (v : Vals)
   | succ r ih =>
       intro hr
       obtain ⟨m0, phi0, sq0, hIH⟩ := ih (by omega)
-      rw [if_neg (show ¬ (r + 1 = c.bmax) by omega)] at hIH
+      rw [ite_eq_right (show ¬ (r + 1 = c.bmax) by omega)] at hIH
       have hAMU : bAccU c (c.lo + j) v.accU < M := Nat.mod_lt _ M_pos
       have hAML : bAccL c (c.lo + j) v.accL < M := Nat.mod_lt _ M_pos
       have h2 : bState c j v (c.tdiv + (r + 1) + 1) =
@@ -602,8 +602,8 @@ theorem exp_fold (c : Params) (hc : c.Sane) (j : Nat) (v : Vals)
                  (bAccL c (c.lo + j) v.accL) c.bmax
              else v.good) := by
         by_cases hlast : r + 1 + 1 = c.bmax
-        · rw [if_pos hlast, if_pos hlast, hp, hlast]
-        · rw [if_neg hlast, if_neg hlast]
+        · rw [ite_eq_left hlast, ite_eq_left hlast, hp, hlast]
+        · rw [ite_eq_right hlast, ite_eq_right hlast]
       refine ⟨(tdbRound (c.tdiv + r + 1 + 2)
                 { m := m0, phi := phi0, om := 0, sq := sq0 }).m,
               (tdbRound (c.tdiv + r + 1 + 2)
@@ -639,7 +639,7 @@ theorem block_eq_candidate_lt (c : Params) (hc : c.Sane) (j : Nat) (v : Vals)
   have hb : c.bmax = 16 := hc.bmaxEq
   obtain ⟨m, phi, sq, hE⟩ :=
     exp_fold c hc j v haccU haccL (c.bmax - 1) (by omega)
-  rw [if_pos (show c.bmax - 1 + 1 = c.bmax by omega)] at hE
+  rw [ite_eq_left (show c.bmax - 1 + 1 = c.bmax by omega)] at hE
   rw [show c.bmax - 1 + 1 = c.bmax by omega] at hE
   refine ⟨m, phi, sq, ?_⟩
   rw [block_eq_bState, show c.R = c.tdiv + (c.bmax - 1) + 1 by

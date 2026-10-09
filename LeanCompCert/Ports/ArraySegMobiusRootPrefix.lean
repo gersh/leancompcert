@@ -52,7 +52,7 @@ theorem rootScanTable_eq_boot_of_le (boot : List Nat)
   induction fuel with
   | zero => rfl
   | succ k ih =>
-      rw [rootScanTable_succ, if_pos (by omega), ih (by omega)]
+      rw [rootScanTable_succ, ite_eq_left (by omega), ih (by omega)]
 
 /-- Complete induction state after a strict prefix of the first root
 accumulation window. -/
@@ -161,7 +161,7 @@ theorem bodyRun_first_root_acc_prefix
             hcurrent (Nat.le_of_lt hlen) hprevR hprevW hprevWrite
             hT hiEq (by decide) hroot hRM hTM hPM hidxM hspanM hidxNe
             hkSeg hwM hnextPeriod hcapM hA hkPrefix.zero
-          simpa [out, rootScanTable_succ, if_pos h1le, hmax,
+          simpa [out, rootScanTable_succ, ite_eq_left h1le, hmax,
             Nat.add_assoc] using hone
         · by_cases hkBoot : k + 1 ≤ bootBound
           · have htable : rootScanTable boot bootBound k = boot :=
@@ -286,7 +286,7 @@ theorem bodyRun_first_root_acc_complete_wrap
     rw [← hkSucc, bodyRun_succ]
   have hscan : rootScanTable boot bootBound c.segLen =
       rootTableStep (rootScanTable boot bootBound k) c.segLen := by
-    rw [← hkSucc, rootScanTable_succ, if_neg (by omega)]
+    rw [← hkSucc, rootScanTable_succ, ite_eq_right (by omega)]
   rw [hrun]
   refine ⟨?_, ?_, hstep.2.2.2.1, hstep.2.2.2.2.1,
     hstep.2.2.2.2.2⟩

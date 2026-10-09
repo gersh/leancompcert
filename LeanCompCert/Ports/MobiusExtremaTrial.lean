@@ -363,9 +363,9 @@ theorem extremaEpilogue_output (threshold : Nat) (s : RegState)
     srun 0 s (extremaEpilogue threshold) ArraySegSieve.outputReg =
       failures threshold (MobiusExtremaScalar.readExt s) := by
   simp [ArraySegSieve.outputReg] at hz
-  simp [extremaEpilogue, failures, MobiusExtremaScalar.readExt, srun,
-    sdest, sval, denoteOperand, denoteOp, RegState.set, hz,
-    ArraySegSieve.outputReg, ArraySegSieve.rTmax, ArraySegSieve.rTmin]
+  simp [extremaEpilogue, failures, MobiusExtremaScalar.readExt.eq_def, srun,
+    sdest, sval, denoteOperand, denoteOp.eq_def, RegState.set, hz,
+    ArraySegSieve.outputReg.eq_def, ArraySegSieve.rTmax.eq_def, ArraySegSieve.rTmin.eq_def]
   split <;> split <;> decide
 
 private theorem fullStep_output_frame (c : Cfg) (idx : Nat)

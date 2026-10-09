@@ -28,7 +28,7 @@ theorem P1224MarkCell.Inv.markPower {x : P1224MarkCell} (hx : x.Inv)
     (p : Nat) (first : Bool) (hp : 2 ≤ p) : (x.markPower p first).Inv := by
   cases first with
   | false =>
-      simp only [P1224MarkCell.markPower, Bool.false_eq_true, if_false]
+      simp only [P1224MarkCell.markPower, Bool.false_eq_true, ite_false]
       refine {
         radical_pos := hx.radical_pos
         phi_pos := hx.phi_pos
@@ -37,7 +37,7 @@ theorem P1224MarkCell.Inv.markPower {x : P1224MarkCell} (hx : x.Inv)
       change 1 ≤ 1
       omega
   | true =>
-      simp only [P1224MarkCell.markPower, Bool.true_eq, if_true]
+      simp only [P1224MarkCell.markPower, Bool.true_eq, ite_true]
       refine ⟨Nat.mul_pos hx.radical_pos (by omega),
         Nat.mul_pos hx.phi_pos (by omega), ?_, hx.sqf_le_one⟩
       exact Nat.mul_le_mul hx.phi_le_radical (Nat.sub_le p 1)
@@ -53,11 +53,11 @@ theorem P1224MarkCell.Inv.mark_words {x : P1224MarkCell}
   refine ⟨hrad, ?_, hx.sqf_le_one, ?_⟩
   · cases first with
     | false =>
-        simp only [Bool.false_eq_true, if_false] at hrad ⊢
+        simp only [Bool.false_eq_true, ite_false] at hrad ⊢
         have hrad' : x.radical < M := by simpa using hrad
         simpa using Nat.lt_of_le_of_lt hx.phi_le_radical hrad'
     | true =>
-        simp only [Bool.true_eq, if_true] at hrad ⊢
+        simp only [Bool.true_eq, ite_true] at hrad ⊢
         exact Nat.lt_of_le_of_lt
           (Nat.mul_le_mul hx.phi_le_radical (Nat.sub_le p 1)) hrad
   · exact Nat.lt_of_le_of_lt hx.sqf_le_one (by decide)

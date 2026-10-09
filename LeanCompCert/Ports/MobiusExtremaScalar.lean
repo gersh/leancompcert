@@ -80,9 +80,9 @@ theorem wordMax_eq_max (raw hi : Nat) (hhi : hi < M) :
     wordMax raw hi = max (raw % M) hi := by
   unfold wordMax
   by_cases h : hi < raw % M
-  · rw [if_pos h, Nat.max_eq_left (Nat.le_of_lt h)]
+  · rw [ite_eq_left h, Nat.max_eq_left (Nat.le_of_lt h)]
     simp [M]
-  · rw [if_neg h, Nat.max_eq_right (Nat.le_of_not_gt h)]
+  · rw [ite_eq_right h, Nat.max_eq_right (Nat.le_of_not_gt h)]
     simp only [Nat.zero_mul, Nat.zero_add, Nat.sub_zero]
     change ((1 + M) * hi) % M = hi
     rw [Nat.add_mul]
@@ -92,9 +92,9 @@ theorem wordMin_eq_min (raw lo : Nat) (hlo : lo < M) :
     wordMin raw lo = min (raw % M) lo := by
   unfold wordMin
   by_cases h : raw % M < lo
-  · rw [if_pos h, Nat.min_eq_left (Nat.le_of_lt h)]
+  · rw [ite_eq_left h, Nat.min_eq_left (Nat.le_of_lt h)]
     simp [M]
-  · rw [if_neg h, Nat.min_eq_right (Nat.le_of_not_gt h)]
+  · rw [ite_eq_right h, Nat.min_eq_right (Nat.le_of_not_gt h)]
     simp only [Nat.zero_mul, Nat.zero_add, Nat.sub_zero]
     change ((1 + M) * lo) % M = lo
     rw [Nat.add_mul]

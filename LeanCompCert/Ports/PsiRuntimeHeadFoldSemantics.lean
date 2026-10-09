@@ -110,8 +110,8 @@ private theorem psiHeadReadBody_run (m : PsiRuntimeMeta) (index : Nat)
     simpa [psiHeadRank, Nat.add_comm] using hp
   have hweightRaw : s.arr (index / ppPowerRounds + m.markBase) = weight := by
     simpa [psiHeadRank, Nat.add_comm] using hweight
-  simp [psiHeadReadBody, psiHeadFoldBody, psiHeadRank, psiHeadRound,
-    arun, astep, sval, sdest, denoteOperand, denoteOp, AState.writeReg,
+  simp [psiHeadReadBody, psiHeadFoldBody, psiHeadRank.eq_def, psiHeadRound.eq_def,
+    arun, astep, sval, sdest, denoteOperand, denoteOp.eq_def, AState.writeReg,
     hIndexMod, hRoundsM, hRounds0, hRankRawMod, hRoundRawMod,
     hPrimeAddrRawMod, hWeightAddrRawMod, hpRaw, hweightRaw]
 

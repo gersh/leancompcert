@@ -112,7 +112,7 @@ theorem compareG_spec (k : Nat) (s : RegState) (x : MulThree.Limbs3)
     Option.getD_some, RegState.set, Nat.reduceEqDiff,
     rMid, rMid0, rMid1, rCarry, rTop,
     rTop0, rTopNZ, rMidGT, rMidEQ, rLoNZ, rPLo, rEqLoBad, rBad0, rBad,
-    M, if_true, if_false] at htop ⊢
+    M, ite_true, ite_false] at htop ⊢
   change s 4 = x.lo at hlo
   change (s 5 + s 6) % (2 ^ 64) = x.mid at hmid
   simp only [hmid] at htop
@@ -175,10 +175,10 @@ theorem program_denote (u n : Nat) (hu : u < M) (hn : n < M) :
       if n * u ^ 2 ≤ 2 ^ 122 then 0 else 1 := by
     by_cases htest : n * u ^ 2 ≤ 2 ^ 122
     · have hle := hiff.mpr htest
-      simpa only [htest, hle, if_true] using hbody
+      simpa only [htest, hle, ite_true] using hbody
     · have hnle : ¬MulThree.lePow122 (MulThree.squareMul u n) :=
         fun hle => htest (hiff.mp hle)
-      simpa only [htest, hnle, if_false] using hbody
+      simpa only [htest, hnle, ite_false] using hbody
   unfold AProgram.denote
   rw [init_lift]
   simp only [MobiusSquaredBlock.program]

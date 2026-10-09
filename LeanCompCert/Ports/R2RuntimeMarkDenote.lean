@@ -123,7 +123,7 @@ theorem rootMarkBody_spec (c : R2Cfg) (index : Nat) (s : AState)
       rootMarkHit]
     by_cases hsq : rootMarkD index * rootMarkD index ≤ rootMarkN index
     · by_cases hrem : rootMarkN index % rootMarkD index = 0
-      · simp only [hsq, hrem, if_pos]
+      · simp only [hsq, hrem, ite_eq_left]
         rw [sw11]
         simp [hOneM, hnM, Nat.add_mod, Nat.mul_mod]
         rw [hCancelM]

@@ -391,11 +391,11 @@ theorem Cfg.markPhaseBody_run (c : Cfg) (k : Nat) (s : AState)
   rw [arun_lift]
   by_cases hp : s.regs rR < c.markSteps
   · have hp5 : s.regs 5 < c.markSteps := by simpa [rR] using hp
-    simp [Cfg.markPhaseBody, srun, sdest, sval, denoteOperand, denoteOp,
-      RegState.set, rR, hp5, hTmodNum, M]
+    simp [Cfg.markPhaseBody, srun, sdest, sval, denoteOperand, denoteOp.eq_def,
+      RegState.set, rR.eq_def, hp5, hTmodNum, M]
   · have hp5 : ¬s.regs 5 < c.markSteps := by simpa [rR] using hp
-    simp [Cfg.markPhaseBody, srun, sdest, sval, denoteOperand, denoteOp,
-      RegState.set, rR, hp5, hTmodNum, M]
+    simp [Cfg.markPhaseBody, srun, sdest, sval, denoteOperand, denoteOp.eq_def,
+      RegState.set, rR.eq_def, hp5, hTmodNum, M]
 
 /-- The 120-instruction mark core never overwrites the phase selectors, so
 the complete mark block exposes the same exact complementary bits. -/

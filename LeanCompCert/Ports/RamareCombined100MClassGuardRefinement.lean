@@ -61,7 +61,7 @@ theorem CellRel.nonzeroProducts_mul_dvd
         Nat.ne_of_gt (Nat.pow_pos (by omega))
       have hpNorm : nonzeroProduct (p ^ pe) = p ^ pe := by
         unfold nonzeroProduct zeroBit
-        rw [if_neg hpow0]
+        rw [ite_eq_right hpow0]
         omega
       have hzeroNorm : nonzeroProduct 0 = 1 := by decide
       simpa only [onePrimeCell, hpNorm, hzeroNorm, Nat.mul_one] using
@@ -73,11 +73,11 @@ theorem CellRel.nonzeroProducts_mul_dvd
         Nat.ne_of_gt (Nat.pow_pos (by omega))
       have hpNorm : nonzeroProduct (p ^ pe) = p ^ pe := by
         unfold nonzeroProduct zeroBit
-        rw [if_neg hpPow0]
+        rw [ite_eq_right hpPow0]
         omega
       have hqNorm : nonzeroProduct (q ^ qe) = q ^ qe := by
         unfold nonzeroProduct zeroBit
-        rw [if_neg hqPow0]
+        rw [ite_eq_right hqPow0]
         omega
       have hboth : p ^ pe * q ^ qe ∣ prod :=
         (hshape.two rfl).2.2.2
@@ -117,11 +117,11 @@ theorem CellRel.decodePlaneCell_secondGuard_exact
         Nat.ne_of_gt (Nat.pow_pos (by omega))
       have hpNorm : nonzeroProduct (p ^ pe) = p ^ pe := by
         unfold nonzeroProduct zeroBit
-        rw [if_neg hpPow0]
+        rw [ite_eq_right hpPow0]
         omega
       have hqNorm : nonzeroProduct (q ^ qe) = q ^ qe := by
         unfold nonzeroProduct zeroBit
-        rw [if_neg hqPow0]
+        rw [ite_eq_right hqPow0]
         omega
       have hqDvd : q ^ qe ∣ n / p ^ pe :=
         (Nat.dvd_div_iff_mul_dvd hdiv.pProdDvd).2 (by

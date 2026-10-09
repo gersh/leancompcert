@@ -129,7 +129,7 @@ theorem candidateFlag_eq_zero_iff {n R : Nat} (hR : 0 < R) :
     · have hm : n % 2 = 0 := Nat.dvd_iff_mod_eq_zero.mp hdvd
       simp [hm] at heven
     · have hm : n % (2 * r + 1) = 0 := by
-        rw [tdiv, if_neg (by omega)] at hdvd
+        rw [tdiv, ite_eq_right (by omega)] at hdvd
         exact Nat.dvd_iff_mod_eq_zero.mp hdvd
       exact hodd r hrpos (by omega) hm
   · intro hall
@@ -139,7 +139,7 @@ theorem candidateFlag_eq_zero_iff {n R : Nat} (hR : 0 < R) :
       simp [hm]
     · intro r hr1 hrR hm
       have hd : tdiv r ∣ n := by
-        rw [tdiv, if_neg (by omega)]
+        rw [tdiv, ite_eq_right (by omega)]
         exact Nat.dvd_iff_mod_eq_zero.mpr hm
       exact hall r (by omega) hd
 
@@ -264,8 +264,8 @@ theorem bumpPk_eq_pow (c : Params) (j : Nat) (v : Vals)
     (hpow : v.pk = 2 ^ v.kk) : bumpPk c j v = 2 ^ bumpK c j v := by
   unfold bumpPk bumpK
   by_cases h : v.pk * 2 ≤ c.lo + j
-  · rw [if_pos h, if_pos h, hpow, Nat.pow_succ]
-  · rw [if_neg h, if_neg h, hpow]
+  · rw [ite_eq_left h, ite_eq_left h, hpow, Nat.pow_succ]
+  · rw [ite_eq_right h, ite_eq_right h, hpow]
 
 def zeroState (c : Params) (j : Nat) (v : Vals) : Vals :=
   let n := c.lo + j
@@ -464,7 +464,7 @@ theorem lastTerm_preLast (c : Params) (j : Nat) (v : Vals)
     simp [c0, lastTerm, preLast, quietState, finState, q0State, sdState,
       zeroState, ceTerm, sd, denAOf, denBOf, hpk, quotientB_zero _ _ _ hC,
       Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
-    simp_all [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+    simp_all []
   · let c1 : Params := ⟨lo, len, R, k0, 1, lfx, bound⟩
     have hpk : bumpPk c1 j v = 2 ^ bumpK c1 j v := bumpPk_eq_pow c1 j v hpow
     have hC : 0 < (lo + j) * (lo + j - 1) :=
@@ -474,8 +474,8 @@ theorem lastTerm_preLast (c : Params) (j : Nat) (v : Vals)
     change lastTerm c1 (preLast c1 j v) = ceTerm c1 (lo + j) (bumpK c1 j v)
     simp [c1, lastTerm, preLast, quietState, finState, q0State, sdState,
       zeroState, ceTerm, sd, denAOf, denBOf, hpk, quotientB_one _ _ _ hC,
-      Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
-    simp_all [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm]
+      Nat.mul_comm, Nat.mul_left_comm]
+    simp_all []
 
 /-! ## One block is one source candidate -/
 
@@ -609,10 +609,10 @@ theorem bumpK_blockFold_eq_log2 (c : Params) (hP : c.Sane)
   have hn : c.lo + j ≠ 0 := by have := hP.loBig; omega
   unfold bumpK
   by_cases hb : (blockFold c j).pk * 2 ≤ c.lo + j
-  · rw [if_pos hb]
+  · rw [ite_eq_left hb]
     have heq : c.lo + j = (blockFold c j).pk * 2 := by omega
     rw [heq, hpow, ← Nat.pow_succ, Nat.log2_two_pow]
-  · rw [if_neg hb]
+  · rw [ite_eq_right hb]
     have hlo' : 2 ^ (blockFold c j).kk ≤ c.lo + j := by
       rw [← hpow]
       exact hlo
@@ -696,7 +696,7 @@ theorem blockFold_acc_eq_sourceSum_of_ok (c : Params) (hP : c.Sane)
       by_cases hadd : (blockFold c j).acc + sourceContribution c j < M
       · rw [blockFold_acc_succ c hP j (by omega), Nat.mod_eq_of_lt hadd,
           ih (by omega), sourceSum_succ]
-      · rw [if_neg hadd] at hs
+      · rw [ite_eq_right hadd] at hs
         omega
 
 theorem ceFinal_eq_blockFold (c : Params) : ceFinal c = blockFold c c.len := by

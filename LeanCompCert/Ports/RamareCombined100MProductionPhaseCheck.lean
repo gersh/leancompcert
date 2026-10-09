@@ -64,13 +64,13 @@ theorem PowerPhaseChain.of_edge_checks (hi limit : Nat) (table : Nat → Nat) :
           have htail := ih htailChecks htailTerminal
           by_cases hfit : phase.pow * phase.base ≤ hi
           · simp only [powerPhaseEdgeCheck, Bool.and_eq_true,
-              decide_eq_true_eq, hfit, if_true] at hedge
+              decide_eq_true_eq, hfit, ite_true] at hedge
             rcases hedge with ⟨hpow, hnonterminal, heq⟩
             subst next
             exact .bump phase.pi phase.pow phase.base rest hpow hfit
               hnonterminal htail
           · simp only [powerPhaseEdgeCheck, Bool.and_eq_true,
-              decide_eq_true_eq, hfit, if_false] at hedge
+              decide_eq_true_eq, hfit, ite_false] at hedge
             rcases hedge with ⟨hpow, hnext, heq⟩
             subst next
             exact .nextBase phase.pi phase.pow phase.base rest hpow hfit

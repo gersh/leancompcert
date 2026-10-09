@@ -58,11 +58,11 @@ private theorem wf400_not_write_audit (i : AInstr) (hi : i.WF 400) :
   | scalar instr =>
       cases instr <;>
         simp only [AInstr.WF, Instr.WF, Operand.WF] at hi <;>
-        simp [instrWrites, LeanCompCert.Verified.InstrBlock.sdest, auditReg] <;>
+        simp [instrWrites, LeanCompCert.Verified.InstrBlock.sdest, auditReg.eq_def] <;>
         omega
   | load dest idx =>
       simp only [AInstr.WF] at hi
-      simp [instrWrites, auditReg]
+      simp [instrWrites, auditReg.eq_def]
       omega
   | store idx src => rfl
 
@@ -75,12 +75,12 @@ theorem auditInstr_audit_mono (k : Nat) (s : AState) (i : AInstr)
   · have hstepWord : WordState (astep k s i) := by
       change WordState (arun k s [i])
       exact arun_word k [i] s hword.1 hword.2
-    rw [auditInstr, if_pos hmul, arun_append]
+    rw [auditInstr, ite_eq_left hmul, arun_append]
     change s.regs auditReg ≤
       (arun k (astep k s i) productGuardBody).regs auditReg
     rw [← hstepFrame]
     exact productGuardBody_audit_mono k (astep k s i) hstepWord
-  · rw [auditInstr, if_neg hmul, List.append_nil]
+  · rw [auditInstr, ite_eq_right hmul, List.append_nil]
     change s.regs auditReg ≤ (astep k s i).regs auditReg
     omega
 
@@ -114,7 +114,7 @@ theorem productGuardBody_sourceAgree (k : Nat) (s : AState) :
     simp [productGuardBody, writes, instrWrites,
       LeanCompCert.Verified.InstrBlock.sdest, auditReg, zeroReg, safeReg,
       quotientReg, mismatchReg, badReg]
-    omega
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;> exact decide_eq_false (by omega)
 
 theorem auditInstr_sourceAgree (k : Nat) (audited source : AState)
     (i : AInstr) (hi : i.WF 400)
@@ -123,10 +123,10 @@ theorem auditInstr_sourceAgree (k : Nat) (audited source : AState)
       (astep k source i) := by
   have hstep := astep_sourceAgree (idx := k) hagree hi
   by_cases hmul : isProductMul i
-  · rw [auditInstr, if_pos hmul, arun_append]
+  · rw [auditInstr, ite_eq_left hmul, arun_append]
     exact SourceAgree.trans
       (productGuardBody_sourceAgree k (astep k audited i)) hstep
-  · simpa only [auditInstr, if_neg hmul, List.append_nil, arun] using hstep
+  · simpa only [auditInstr, ite_eq_right hmul, List.append_nil, arun] using hstep
 
 theorem auditBlock_sourceAgree (k : Nat) :
     ∀ (xs : List AInstr) (audited source : AState),
@@ -421,15 +421,11 @@ theorem runtime_every_product_fits_of_source_run (arr : Nat → Nat)
   let c := runtimeProductionCfg
   let N := p.loopCount
   let entry := arun 0 (initialAStateWithArray arr) p.init
-  let loopOut := (List.range N).foldl
-    (fun s index => arun index s p.body) entry
   have hp := r2RuntimeProgram_wf c runtimeProductionSeed
   have hzeroWord := initialAStateWithArray_word arr harr
   have hentryWord : WordState entry := by
     exact arun_word 0 p.init
       (initialAStateWithArray arr) hzeroWord.1 hzeroWord.2
-  have hloopWord : WordState loopOut := by
-    exact fold_arun_word p.body (List.range N) entry hentryWord
   have hstepMono : ∀ k s, WordState s →
       s.regs auditReg ≤ (arun k s p.body).regs auditReg := by
     intro k s hs
@@ -442,11 +438,6 @@ theorem runtime_every_product_fits_of_source_run (arr : Nat → Nat)
     rw [show p.epilogue = auditBlock c.epilogue by
       exact runtimeProductSourceProgram_epilogue]
     exact auditBlock_audit_mono 0 c.epilogue s hp.2.2.2 hs
-  have hloopZero : loopOut.regs auditReg = 0 := by
-    apply loop_zero_of_runFromArray p arr harr out auditReg hrun houtZero
-      loopOut
-    · rfl
-    · exact hepiMono
   intro j hj
   have hN : N = c.period * c.segCount :=
     runtimeProductSourceProgram_loopCount
@@ -470,18 +461,18 @@ theorem runtime_every_product_fits_of_source_run (arr : Nat → Nat)
     simp only [Nat.zero_add, List.append_assoc, List.singleton_append, tail]
   have htailMono := fold_step_mono p.body auditReg hstepMono tail after
     hafterWord
-  have hloopZero' :
+  have hloopZero :
       ((List.range N).foldl
         (fun s index => arun index s p.body) entry).regs
-          auditReg = 0 := by
-    simpa only [loopOut] using hloopZero
-  rw [hrange, List.foldl_append] at hloopZero'
+          auditReg = 0 :=
+    loop_zero_of_runFromArray p arr harr out auditReg hrun houtZero _ rfl hepiMono
+  rw [hrange, List.foldl_append] at hloopZero
   change
     (tail.foldl (fun s index => arun index s p.body)
-      after).regs auditReg = 0 at hloopZero'
+      after).regs auditReg = 0 at hloopZero
   have hafterZero : after.regs auditReg = 0 :=
     Nat.eq_zero_of_le_zero
-      (Nat.le_trans htailMono (Nat.le_of_eq hloopZero'))
+      (Nat.le_trans htailMono (Nat.le_of_eq hloopZero))
   have hpreZero : pre.regs auditReg = 0 :=
     Nat.eq_zero_of_le_zero
       (Nat.le_trans hbodyMono (Nat.le_of_eq hafterZero))

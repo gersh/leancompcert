@@ -163,19 +163,19 @@ theorem arrayLen_eq (c : Layout) : c.arrayLen = 3 * c.segment + c.tableLen + 2 :
 theorem sink_eq (c : Layout) : c.sink = 2 * c.segment := rfl
 theorem primeBase_eq (c : Layout) : c.primeBase = 3 * c.segment + 1 := rfl
 
-theorem sink_lt (h : LayoutOk c) : c.sink < c.arrayLen := by
+theorem sink_lt (_h : LayoutOk c) : c.sink < c.arrayLen := by
   rw [sink_eq, arrayLen_eq]; omega
 
-theorem sinkF_lt (h : LayoutOk c) : c.sink + c.segment < c.arrayLen := by
+theorem sinkF_lt (_h : LayoutOk c) : c.sink + c.segment < c.arrayLen := by
   rw [sink_eq, arrayLen_eq]; omega
 
-theorem seg_lt (h : LayoutOk c) : c.segment < c.arrayLen := by
+theorem seg_lt (_h : LayoutOk c) : c.segment < c.arrayLen := by
   rw [arrayLen_eq]; omega
 
-theorem segF_lt (h : LayoutOk c) : 2 * c.segment < c.arrayLen := by
+theorem segF_lt (_h : LayoutOk c) : 2 * c.segment < c.arrayLen := by
   rw [arrayLen_eq]; omega
 
-theorem table_lt (h : LayoutOk c) {t : Nat} (ht : t ≤ c.tableLen) :
+theorem table_lt (_h : LayoutOk c) {t : Nat} (ht : t ≤ c.tableLen) :
     t + c.primeBase < c.arrayLen := by
   rw [primeBase_eq, arrayLen_eq]; omega
 
@@ -270,15 +270,15 @@ theorem body_defined (c : Layout) (t : Nat) (s : AState)
     have h1 : t + (M - c.markSteps) = M + (t - c.markSteps) := by omega
     rw [h1, Nat.add_mod_left]
     exact Nat.mod_eq_of_lt (by omega)
-  simp only [Layout.bodyBlock, AllDefined, ADefined, arun, astep,
+  simp only [Layout.bodyBlock, AllDefined, ADefined, astep,
     InstrBlock.sdest, InstrBlock.sval, denoteOperand, denoteOp,
-    AState.writeReg, AState.writeArr, RegState.set, Option.getD_some,
+    AState.writeReg, AState.writeArr, Option.getD_some,
     Option.isSome_some, rPos, rNeg, rPi, rP, rJ,
-    reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true, and_true, true_and,
+    reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true, and_true, true_and,
     htmM, hjM, hLM, hTM, h1M, h0M, h2M, hsinkM, hpbM, hKM, hppM, hppne,
     ite_mod, bit_mul_val, bit'_mul_val, ite_add_ite, one_sub_bit,
-    ite_ite_and, ite_ite_and', bit_and_bit, bit_or_bit, bit_xor_one,
-    bit_and_one, ge_iff_le]
+    ite_ite_and,
+    ]
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · split <;> omega
   · split <;> omega

@@ -74,6 +74,15 @@ def markWeightAdd (d wt : Nat) : Nat :=
     (wt <<< wtBits) * markBit (d = 1) +
     (markBit (d < 3) <<< 56)
 
+/-- The defining equation of `markWeightAdd`, stated explicitly so that `simp`
+can use it without generating the definition's equation lemma (which needs
+expensive reduction of the literal shifts). -/
+theorem markWeightAdd_eq (d wt : Nat) :
+    markWeightAdd d wt = wt * markBit (d = 0) +
+      (wt <<< wtBits) * markBit (d = 1) + (markBit (d < 3) <<< 56) := by
+  unfold markWeightAdd
+  rfl
+
 def markCellBody : List AInstr :=
   markProductBody ++ markLogBody ++ markWeightBody
 
@@ -127,7 +136,7 @@ theorem markWeightAdd_lt (d wt : Nat) (hd : d ≤ 3)
     (hwt : wt < 2 ^ wtBits) : markWeightAdd d wt < M := by
   have hc : d = 0 ∨ d = 1 ∨ d = 2 ∨ d = 3 := by omega
   rcases hc with rfl | rfl | rfl | rfl <;>
-    simp [markWeightAdd, markBit, wtBits, M, Nat.shiftLeft_eq] at hwt ⊢ <;>
+    simp [markWeightAdd_eq, markBit, wtBits, M, Nat.shiftLeft_eq] at hwt ⊢ <;>
     omega
 
 #print axioms markProductBody_run

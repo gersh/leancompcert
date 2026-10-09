@@ -444,11 +444,11 @@ theorem divModMSB_val : ∀ (digits : List Nat) (d remainder : Nat),
       have hQ : (divStep digit d remainder).1 =
           (remainder * 2 ^ 64 + digit) / d := by
         unfold divStep
-        rw [if_neg hd]
+        rw [ite_eq_right hd]
       have hR : (divStep digit d remainder).2 =
           (remainder * 2 ^ 64 + digit) % d := by
         unfold divStep
-        rw [if_neg hd]
+        rw [ite_eq_right hd]
       have ih := divModMSB_val rest d (divStep digit d remainder).2 hd
       have hLen : ((divModMSB rest d
           (divStep digit d remainder).2).1).length = rest.length := by
@@ -495,7 +495,7 @@ theorem divModMSB_rem_lt : ∀ (digits : List Nat) (d remainder : Nat),
       have hR : (divStep digit d remainder).2 =
           (remainder * 2 ^ 64 + digit) % d := by
         unfold divStep
-        rw [if_neg hd]
+        rw [ite_eq_right hd]
       rw [hR]
       exact divModMSB_rem_lt rest d _ hd
         (Nat.mod_lt _ (Nat.pos_of_ne_zero hd))

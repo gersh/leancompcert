@@ -139,7 +139,7 @@ private theorem combine_spec (k : Nat) (s : RegState)
     split <;> omega
   simp only [combine, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rLo, rMid, rMid0, rMid1,
-    rCarry, rTop, rTop0, M, Nat.reduceEqDiff, if_true, if_false]
+    rCarry, rTop, rTop0, M, Nat.reduceEqDiff, ite_true, ite_false]
   refine ⟨trivial, trivial, Nat.mod_eq_of_lt ?_⟩
   simp only [rTop0, M] at htop
   split <;> omega

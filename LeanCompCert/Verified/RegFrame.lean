@@ -141,7 +141,7 @@ theorem srun_read_write (k r : Nat) (xs : List Instr) (i : Instr)
     srun k s (xs ++ i :: ys) r = sval k (srun k s xs) i := by
   rw [srun_append, srun_cons, srun_frame k r ys hys]
   show (if r = sdest i then sval k (srun k s xs) i else srun k s xs r) = _
-  rw [if_pos hi.symm]
+  rw [ite_eq_left hi.symm]
 
 /--
 The common special case of `srun_read_write`: the last instruction of the

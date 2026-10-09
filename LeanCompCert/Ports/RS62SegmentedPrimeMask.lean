@@ -343,7 +343,7 @@ theorem normalizedState_cell_all (arr : Nat → Nat) (f i : Nat)
         simp [ih (by omega)]
       · change (if i = f then zeroMarkBit ((normalizedState arr f).arr f)
           else (normalizedState arr f).arr i) = _
-        rw [if_neg hif, ih (by omega)]
+        rw [ite_eq_right hif, ih (by omega)]
         by_cases hi : i < f
         · have hiSucc : i < f + 1 := by omega
           simp [hi, hiSucc]
@@ -353,7 +353,7 @@ theorem normalizedState_cell_all (arr : Nat → Nat) (f i : Nat)
 theorem normalizedState_cell (arr : Nat → Nat) (f i : Nat)
     (hfM : f < M) (hi : i < f) :
     (normalizedState arr f).arr i = zeroMarkBit (arr i) := by
-  rw [normalizedState_cell_all arr f i hfM, if_pos hi]
+  rw [normalizedState_cell_all arr f i hfM, ite_eq_left hi]
 
 /-- Boolean prime predicate consumed by the compiled RS62 ladder. -/
 def isPrimeBool (n : Nat) : Bool := decide (IsPrime n)

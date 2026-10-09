@@ -236,7 +236,7 @@ theorem sweepFold_eq_zero_iff (n : Nat) (f : Nat → Bool) :
     | cons x xs ih =>
         intro a
         by_cases hx : f x
-        · simp only [List.foldl_cons, hx, if_pos, List.mem_cons]
+        · simp only [List.foldl_cons, hx, ite_eq_left, List.mem_cons]
           rw [ih]
           constructor
           · rintro ⟨ha, hall⟩
@@ -246,7 +246,7 @@ theorem sweepFold_eq_zero_iff (n : Nat) (f : Nat → Bool) :
             · exact hall i hi
           · rintro ⟨ha, hall⟩
             exact ⟨ha, fun i hi => hall i (Or.inr hi)⟩
-        · simp only [List.foldl_cons, hx, if_neg, Bool.false_eq_true, not_false_eq_true]
+        · simp only [List.foldl_cons, hx, ite_eq_right, Bool.false_eq_true, not_false_eq_true]
           rw [ih]
           simp only [List.mem_cons]
           constructor

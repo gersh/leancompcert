@@ -170,7 +170,7 @@ theorem one_lower_outputs (k : Nat) (s : AState) (negate : Bool)
     [.mov rOutLo (.reg LeanCompCert.Ports.Section413SignedDiv.rFloor)]
       rOutLo = _ ∧ _
   simp only [srun, sdest, sval, denoteOperand, RegState.set, rOutLo,
-    if_pos]
+    ite_eq_left]
   refine ⟨?_, ?_⟩
   · simpa [q, hpWord, hpDen] using hdiv.1
   · simpa [q, p, arun_lift] using hdiv.2.2
@@ -223,7 +223,7 @@ theorem one_upper_outputs (k : Nat) (s : AState) (negate : Bool)
     [.mov rOutHi (.reg LeanCompCert.Ports.Section413SignedDiv.rCeil)]
       rOutHi = _ ∧ _
   simp only [srun, sdest, sval, denoteOperand, RegState.set, rOutHi,
-    if_pos]
+    ite_eq_left]
   refine ⟨?_, ?_⟩
   · simpa [q, hpWord, hpDen] using hdiv.2.1
   · simpa [q, p, arun_lift] using hdiv.2.2
@@ -288,7 +288,7 @@ theorem body_outputs (k : Nat) (s : AState) (negate : Bool)
     srun k q.regs gateStage rOutHi = _ ∧ _
   simp only [gateStage, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rOutLo, rOutHi,
-    rGate, Nat.reduceEqDiff, if_false, if_true]
+    rGate, Nat.reduceEqDiff, ite_false, ite_true]
   refine ⟨?_, ?_, ?_⟩
   · rw [show q.regs 36 = q.regs rOutLo by rfl, hqLo,
       show q.regs 35 = q.regs rGate by rfl, hqGate]

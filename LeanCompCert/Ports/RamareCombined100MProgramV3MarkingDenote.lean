@@ -145,7 +145,7 @@ theorem bodyNext_marking_persistent_frame (k : Nat) (s : AState)
   have hcheckFrames := candidateChecks_gate_frames gammaLo gammaHi bound limit
     cgammaLo cgammaHi cbound lower logLen loBase hiBase sink egammaLo egammaHi
   have hgatedStep : gated.regs rStep = 0 := by
-    rw [hgate.1, if_neg (fun h => h hsame)]
+    rw [hgate.1, ite_eq_right (fun h => h hsame)]
   have hcheckedStep : checked.regs rStep = 0 := by
     rw [LeanCompCert.Verified.ArrayRegFrame.arun_frame k rStep
       hostArithmeticOverflowChecks (by rfl) checkedCore,

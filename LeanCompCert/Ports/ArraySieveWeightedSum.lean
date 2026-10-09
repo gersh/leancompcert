@@ -99,15 +99,15 @@ private theorem sel_eq (q bound n v : Nat) :
       = (if q < bound then Sieve.spfStep n v q else v) := by
   unfold Sieve.spfStep
   by_cases h1 : q < bound
-  · rw [if_pos h1]
+  · rw [ite_eq_left h1]
     by_cases h2 : v = 0
     · by_cases h3 : (q + 2) * (q + 2) ≤ n
       · by_cases h4 : n % (q + 2) = 0
-        · rw [if_pos ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, if_pos ⟨h2, h3, h4⟩]
-        · rw [if_neg (fun h => h4 h.2), if_neg (fun h => h4 h.2.2)]
-      · rw [if_neg (fun h => h3 h.1.2), if_neg (fun h => h3 h.2.1)]
-    · rw [if_neg (fun h => h2 h.1.1.2), if_neg (fun h => h2 h.1)]
-  · rw [if_neg h1, if_neg (fun h => h1 h.1.1.1)]
+        · rw [ite_eq_left ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, ite_eq_left ⟨h2, h3, h4⟩]
+        · rw [ite_eq_right (fun h => h4 h.2), ite_eq_right (fun h => h4 h.2.2)]
+      · rw [ite_eq_right (fun h => h3 h.1.2), ite_eq_right (fun h => h3 h.2.1)]
+    · rw [ite_eq_right (fun h => h2 h.1.1.2), ite_eq_right (fun h => h2 h.1)]
+  · rw [ite_eq_right h1, ite_eq_right (fun h => h1 h.1.1.1)]
 
 set_option maxRecDepth 40000 in
 set_option maxHeartbeats 1000000 in
@@ -168,19 +168,19 @@ theorem body_spec (bound len weight bonus t : Nat) (s : AState)
     rw [hsafeM']
     split <;> omega
   refine ⟨?_, ?_, ?_⟩
-  · simp only [sieveWeightedBody, AllDefined, ADefined, arun, astep,
+  · simp only [sieveWeightedBody, AllDefined, ADefined, astep,
       InstrBlock.sdest, InstrBlock.sval, denoteOperand, denoteOp,
-      AState.writeReg, AState.writeArr, RegState.set, Option.getD_some,
-      reduceIte, reduceCtorEq, Nat.reduceEqDiff, if_true, hlmm, hlne, htM,
+      AState.writeReg, AState.writeArr, Option.getD_some,
+      reduceIte, reduceCtorEq, Nat.reduceEqDiff, ite_true, hlmm, hlne, htM,
       hnM, hqM, hboundM, hweightM, hbonusM, h2M, h1M, hzeroM, hdM, hddM,
       hremM, hvaM, ite_mod, bit_mul_val, bit'_mul_val, ite_add_ite,
       one_sub_bit, ite_ite_and, ite_ite_and', ge_iff_le]
-    simp [hnlt, hsafeM', hsafeNe']
+    simp [hnlt, hsafeM']
     omega
   · simp only [sieveWeightedBody, arun, astep, InstrBlock.sdest,
       InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
-      AState.writeArr, RegState.set, Option.getD_some, reduceIte,
-      reduceCtorEq, Nat.reduceEqDiff, if_true, hlmm, hlne, htM, hnM, hqM,
+      AState.writeArr, Option.getD_some, reduceIte,
+      reduceCtorEq, Nat.reduceEqDiff, ite_true, hlmm, hlne, htM, hnM, hqM,
       hboundM, hweightM, hbonusM, h2M, h1M, hzeroM, hdM, hddM, hremM,
       hvaM, ite_mod, bit_mul_val, bit'_mul_val, ite_add_ite, one_sub_bit,
       ite_ite_and, ite_ite_and', ge_iff_le]
@@ -188,14 +188,14 @@ theorem body_spec (bound len weight bonus t : Nat) (s : AState)
     simp only [gstep, obs, sel_eq]
   · simp only [sieveWeightedBody, arun, astep, InstrBlock.sdest,
       InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
-      AState.writeArr, RegState.set, Option.getD_some, reduceIte,
-      reduceCtorEq, Nat.reduceEqDiff, if_true, hlmm, hlne, htM, hnM, hqM,
+      AState.writeArr, Option.getD_some, reduceIte,
+      reduceCtorEq, Nat.reduceEqDiff, ite_true, hlmm, hlne, htM, hnM, hqM,
       hboundM, hweightM, hbonusM, h2M, h1M, hzeroM, hdM, hddM, hremM,
       hvaM, ite_mod, bit_mul_val, bit'_mul_val, ite_add_ite, one_sub_bit,
       ite_ite_and, ite_ite_and', ge_iff_le]
     simp only [gstep, obs, rowWeight]
     rw [hsafeM']
-    simp [hsafeNe']
+    simp []
     by_cases hn2 : 2 ≤ t % len
     · have hnne : ¬ t % len = 0 := by omega
       simp [hn2, hnne, Nat.add_mod]
@@ -213,18 +213,18 @@ theorem body_closed (bound len weight bonus t : Nat) (s : AState)
   rw [(body_spec bound len weight bonus t s h0 hlm ht hq hB hw hb hP).2.1]
   simp only [gstep, obs]
   by_cases hc : c = t % len
-  · rw [if_pos hc]
+  · rw [ite_eq_left hc]
     by_cases hq' : t / len < bound
-    · rw [if_pos hq']
+    · rw [ite_eq_left hq']
       unfold Sieve.spfStep
       split
       · have hb2 : bound + 2 ≤ (bound + 2) * (bound + 2) :=
           Nat.le_mul_of_pos_left _ (by omega)
         omega
       · exact hP _
-    · rw [if_neg hq']
+    · rw [ite_eq_right hq']
       exact hP _
-  · rw [if_neg hc]
+  · rw [ite_eq_right hc]
     exact hP c
 
 theorem markPass (bound len weight bonus q : Nat) (hq : q < bound)
@@ -246,18 +246,18 @@ theorem markPass (bound len weight bonus q : Nat) (hq : q < bound)
           Nat.add_zero]
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
         ih (by omega)]
-      simp only [gstep, hmod, hdiv, if_pos hq, if_neg (Nat.lt_irrefl k),
+      simp only [gstep, hmod, hdiv, ite_eq_left hq, ite_eq_right (Nat.lt_irrefl k),
         Prod.mk.injEq]
       refine ⟨?_, ?_⟩
       · funext c
         by_cases hc : c = k
         · subst hc
-          rw [if_pos rfl, if_pos (Nat.lt_succ_self c)]
-        · rw [if_neg hc]
+          rw [ite_eq_left rfl, ite_eq_left (Nat.lt_succ_self c)]
+        · rw [ite_eq_right hc]
           by_cases hc2 : c < k
-          · rw [if_pos hc2, if_pos (by omega)]
-          · rw [if_neg hc2, if_neg (by omega)]
-      · rw [if_neg (fun hh => hh.1.1 hq), Nat.add_zero]
+          · rw [ite_eq_left hc2, ite_eq_left (by omega)]
+          · rw [ite_eq_right hc2, ite_eq_right (by omega)]
+      · rw [ite_eq_right (fun hh => hh.1.1 hq), Nat.add_zero]
         exact Nat.mod_eq_of_lt hacc
 
 def weightedPrefix (k weight bonus : Nat) (A : Nat → Nat) : Nat :=
@@ -310,12 +310,12 @@ theorem accPass (bound len weight bonus : Nat) (h0 : 0 < len)
           Nat.add_zero]
       rw [weightedPrefix_succ, List.range_succ, List.foldl_append,
         List.foldl_cons, List.foldl_nil, ih (by omega)]
-      simp only [gstep, hmod, hdiv, if_neg (Nat.lt_irrefl bound), Prod.mk.injEq]
+      simp only [gstep, hmod, hdiv, ite_eq_right (Nat.lt_irrefl bound), Prod.mk.injEq]
       refine ⟨?_, ?_⟩
       · funext c
         by_cases hc : c = k
-        · rw [if_pos hc, hc]
-        · rw [if_neg hc]
+        · rw [ite_eq_left hc, hc]
+        · rw [ite_eq_right hc]
       · have hpref := weightedPrefix_le k weight bonus A
         simp only [Nat.lt_irrefl, not_false_eq_true, true_and]
         have hif : (if A k = 0 ∧ 2 ≤ k then rowWeight weight bonus k else 0) =
@@ -363,9 +363,9 @@ theorem markRounds (bound len weight bonus : Nat) (h0 : 0 < len)
       refine ⟨?_, trivial⟩
       funext c
       by_cases hc : c < len
-      · rw [if_pos hc, if_pos hc, if_pos hc, List.foldl_append,
+      · rw [ite_eq_left hc, ite_eq_left hc, ite_eq_left hc, List.foldl_append,
           List.foldl_cons, List.foldl_nil]
-      · rw [if_neg hc, if_neg hc, if_neg hc]
+      · rw [ite_eq_right hc, ite_eq_right hc, ite_eq_right hc]
 
 /-- Mathematical weighted sum over the finite prime predicate used by the
 proved sieve. -/
@@ -481,7 +481,7 @@ theorem sieveWeightedProgram_denote (bound len weight bonus : Nat)
   apply foldl_eq_of_mem
   intro acc n hn
   have hnlt : n < len := List.mem_range.mp hn
-  simp only [if_pos hnlt]
+  simp only [ite_eq_left hnlt]
   congr 1
   by_cases h2 : 2 ≤ n
   · simp only [h2, true_and]
@@ -489,8 +489,8 @@ theorem sieveWeightedProgram_denote (bound len weight bonus : Nat)
     have hiff := ArraySieveCount.spfScan_eq_zero_iff bound n h2 hc
     unfold Sieve.spfScan at hiff
     by_cases hs : (List.range bound).foldl (Sieve.spfStep n) 0 = 0
-    · rw [if_pos hs, if_pos (hiff.mp hs)]
-    · rw [if_neg hs, if_neg]
+    · rw [ite_eq_left hs, ite_eq_left (hiff.mp hs)]
+    · rw [ite_eq_right hs, ite_eq_right]
       exact fun hp => hs (hiff.mpr hp)
   · simp [h2]
 
@@ -558,7 +558,7 @@ theorem sieveWeightedBudgetProgram_denote
         simp only [sieveWeightedBudgetProgram, sieveWeightedProgram,
           denoteAInstrs, denoteAInstr,
           LeanCompCert.Verified.Reflect.denoteInstr, denoteOperand, denoteOp,
-          Option.bind_some, Option.map_some, Function.comp_apply]
+          ]
         simp only [Nat.mod_eq_of_lt hbudgetM]
         simp [RegState.set, obs])
   rw [hbridge]
@@ -578,7 +578,7 @@ theorem sieveWeightedBudgetProgram_denote
   apply foldl_eq_of_mem
   intro acc n hn
   have hnlt : n < len := List.mem_range.mp hn
-  simp only [if_pos hnlt]
+  simp only [ite_eq_left hnlt]
   congr 1
   by_cases h2 : 2 ≤ n
   · simp only [h2, true_and]
@@ -586,8 +586,8 @@ theorem sieveWeightedBudgetProgram_denote
     have hiff := ArraySieveCount.spfScan_eq_zero_iff bound n h2 hc
     unfold Sieve.spfScan at hiff
     by_cases hs : (List.range bound).foldl (Sieve.spfStep n) 0 = 0
-    · rw [if_pos hs, if_pos (hiff.mp hs)]
-    · rw [if_neg hs, if_neg]
+    · rw [ite_eq_left hs, ite_eq_left (hiff.mp hs)]
+    · rw [ite_eq_right hs, ite_eq_right]
       exact fun hp => hs (hiff.mpr hp)
   · simp [h2]
 
@@ -597,7 +597,7 @@ theorem sieveWeightedBody_wf (bound len weight bonus : Nat) :
   intro a ha
   simp only [sieveWeightedBody, List.mem_cons, List.not_mem_nil, or_false] at ha
   rcases ha with h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h|h <;>
-    subst h <;> simp +decide [AInstr.WF, Instr.WF, Operand.WF, regCount]
+    subst h <;> simp +decide [AInstr.WF, Instr.WF, Operand.WF]
 
 theorem sieveWeightedProgram_wf (bound len weight bonus : Nat) :
     (sieveWeightedProgram bound len weight bonus).WF :=

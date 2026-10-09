@@ -208,7 +208,7 @@ theorem bodyRun_onePeriod_position
       have hfuelLt : fuel < c.shape.period := by omega
       have hprev := ih (by omega)
       dsimp only at hprev
-      simp only [if_neg (Nat.ne_of_lt hfuelLt)] at hprev
+      simp only [ite_eq_right (Nat.ne_of_lt hfuelLt)] at hprev
       have hstep := body_position_run c k (bodyRun k c fuel s) fuel w
         hprev.1 hprev.2 (by omega) hperiodM hwindowM
       dsimp only at hstep
@@ -268,7 +268,7 @@ theorem windowRun_position
         (w + windows * c.shape.segLen) (windowRun k c windows s)
         hprev.1 hprev.2 hperiodPos hperiodM hnextWindow (Nat.le_refl _)
       dsimp only at hperiod
-      simp only [if_true] at hperiod
+      simp only [ite_true] at hperiod
       simpa only [windowRun_succ, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
         using hperiod
 
@@ -372,10 +372,10 @@ theorem ofChain_body_classification_run
   have hm10 : marked.regs 10 = 0 := by
     change (arun k s shape.markBody).regs 10 = 0
     rw [hphase.1,
-      if_neg (by omega : ¬s.regs ShapeSieve.rR < shape.markSteps)]
+      ite_eq_right (by omega : ¬s.regs ShapeSieve.rR < shape.markSteps)]
   have hm11 : marked.regs 11 = 1 := by
     change (arun k s shape.markBody).regs 11 = 1
-    rw [hphase.2, if_pos hclassShape]
+    rw [hphase.2, ite_eq_left hclassShape]
   have hmarkFrame := markBody_position_zero_frame shape k s
   dsimp only at hmarkFrame
   have hmR : marked.regs ShapeSieve.rR = s.regs ShapeSieve.rR :=

@@ -235,13 +235,13 @@ theorem normalizeCC_u64_def (x : Int) :
     normalizeCC .u64 x = some (x.emod (Int.ofNat (2 ^ 64))) := by
   show (if (Int.ofNat (2 ^ 64)) = 0 then none
     else some (x.emod (Int.ofNat (2 ^ 64)))) = _
-  rw [if_neg modulus64_ne]
+  rw [ite_eq_right modulus64_ne]
 
 theorem normalizeCC_u8_def (x : Int) :
     normalizeCC .u8 x = some (x.emod (Int.ofNat (2 ^ 8))) := by
   show (if (Int.ofNat (2 ^ 8)) = 0 then none
     else some (x.emod (Int.ofNat (2 ^ 8)))) = _
-  rw [if_neg modulus8_ne]
+  rw [ite_eq_right modulus8_ne]
 
 theorem normalizeCC_u64_natCast (n : Nat) :
     normalizeCC .u64 (n : Int) = some (((n % M : Nat) : Int)) := by
@@ -325,7 +325,7 @@ theorem evalCCBinary_u64_natCast
     by_cases hZero : b = 0
     · subst hZero
       rfl
-    · rw [if_neg (by exact_mod_cast hZero),
+    · rw [ite_eq_right (by exact_mod_cast hZero),
         show (((a : Int)).ediv (b : Int)) = ((a / b : Nat) : Int) from
           (Int.natCast_ediv a b).symm,
         normalizeCC_u64_natCast,
@@ -338,7 +338,7 @@ theorem evalCCBinary_u64_natCast
     by_cases hZero : b = 0
     · subst hZero
       rfl
-    · rw [if_neg (by exact_mod_cast hZero),
+    · rw [ite_eq_right (by exact_mod_cast hZero),
         show (((a : Int)).emod (b : Int)) = ((a % b : Nat) : Int) from
           (Int.natCast_emod a b).symm,
         normalizeCC_u64_natCast,
@@ -389,55 +389,55 @@ theorem evalCCComparison_u8_natCast
   case eq =>
     show normalizeCC .u8 (if (a : Int) = (b : Int) then 1 else 0) = _
     by_cases h : a = b
-    · rw [if_pos (by exact_mod_cast h), normalizeCC_u8_one,
+    · rw [ite_eq_left (by exact_mod_cast h), normalizeCC_u8_one,
         show denoteOp .eq a b = some 1 from by simp [denoteOp, h]]
       rfl
-    · rw [if_neg (by exact_mod_cast h), normalizeCC_u8_zero,
+    · rw [ite_eq_right (by exact_mod_cast h), normalizeCC_u8_zero,
         show denoteOp .eq a b = some 0 from by simp [denoteOp, h]]
       rfl
   case ne =>
     show normalizeCC .u8 (if (a : Int) ≠ (b : Int) then 1 else 0) = _
     by_cases h : a = b
-    · rw [if_neg (by simp [h]), normalizeCC_u8_zero,
+    · rw [ite_eq_right (by simp [h]), normalizeCC_u8_zero,
         show denoteOp .ne a b = some 0 from by simp [denoteOp, h]]
       rfl
-    · rw [if_pos (by exact_mod_cast h), normalizeCC_u8_one,
+    · rw [ite_eq_left (by exact_mod_cast h), normalizeCC_u8_one,
         show denoteOp .ne a b = some 1 from by simp [denoteOp, h]]
       rfl
   case lt =>
     show normalizeCC .u8 (if (a : Int) < (b : Int) then 1 else 0) = _
     by_cases h : a < b
-    · rw [if_pos (by exact_mod_cast h), normalizeCC_u8_one,
+    · rw [ite_eq_left (by exact_mod_cast h), normalizeCC_u8_one,
         show denoteOp .lt a b = some 1 from by simp [denoteOp, h]]
       rfl
-    · rw [if_neg (by exact_mod_cast h), normalizeCC_u8_zero,
+    · rw [ite_eq_right (by exact_mod_cast h), normalizeCC_u8_zero,
         show denoteOp .lt a b = some 0 from by simp [denoteOp, h]]
       rfl
   case le =>
     show normalizeCC .u8 (if (a : Int) ≤ (b : Int) then 1 else 0) = _
     by_cases h : a ≤ b
-    · rw [if_pos (by exact_mod_cast h), normalizeCC_u8_one,
+    · rw [ite_eq_left (by exact_mod_cast h), normalizeCC_u8_one,
         show denoteOp .le a b = some 1 from by simp [denoteOp, h]]
       rfl
-    · rw [if_neg (by exact_mod_cast h), normalizeCC_u8_zero,
+    · rw [ite_eq_right (by exact_mod_cast h), normalizeCC_u8_zero,
         show denoteOp .le a b = some 0 from by simp [denoteOp, h]]
       rfl
   case gt =>
     show normalizeCC .u8 (if (a : Int) > (b : Int) then 1 else 0) = _
     by_cases h : a > b
-    · rw [if_pos (by exact_mod_cast h), normalizeCC_u8_one,
+    · rw [ite_eq_left (by exact_mod_cast h), normalizeCC_u8_one,
         show denoteOp .gt a b = some 1 from by simp [denoteOp, h]]
       rfl
-    · rw [if_neg (by exact_mod_cast h), normalizeCC_u8_zero,
+    · rw [ite_eq_right (by exact_mod_cast h), normalizeCC_u8_zero,
         show denoteOp .gt a b = some 0 from by simp [denoteOp, h]]
       rfl
   case ge =>
     show normalizeCC .u8 (if (a : Int) ≥ (b : Int) then 1 else 0) = _
     by_cases h : a ≥ b
-    · rw [if_pos (by exact_mod_cast h), normalizeCC_u8_one,
+    · rw [ite_eq_left (by exact_mod_cast h), normalizeCC_u8_one,
         show denoteOp .ge a b = some 1 from by simp [denoteOp, h]]
       rfl
-    · rw [if_neg (by exact_mod_cast h), normalizeCC_u8_zero,
+    · rw [ite_eq_right (by exact_mod_cast h), normalizeCC_u8_zero,
         show denoteOp .ge a b = some 0 from by simp [denoteOp, h]]
       rfl
 
@@ -507,13 +507,13 @@ private theorem stateInv_set
     · have hId : (⟨i + 1⟩ : CCIR.LocalId) ≠ ⟨dest + 1⟩ := by
         intro h
         exact hEq ((regLocal_eq_iff i dest).mp h)
-      simp only [CCEnv.set, RegState.set, if_neg hId, if_neg hEq]
+      simp only [CCEnv.set, RegState.set, ite_eq_right hId, ite_eq_right hEq]
       exact hInv.1 i hi
   · intro i hi
     by_cases hEq : i = dest
     · subst hEq
       simpa [RegState.set] using hValue
-    · simp only [RegState.set, if_neg hEq]
+    · simp only [RegState.set, ite_eq_right hEq]
       exact hInv.2 i hi
 
 private theorem stateInv_set_scratch
@@ -522,7 +522,7 @@ private theorem stateInv_set_scratch
     StateInv regCount s (env.set ⟨0⟩ value) := by
   constructor
   · intro i hi
-    simp only [CCEnv.set, if_neg (regLocal_ne_scratch i)]
+    simp only [CCEnv.set, ite_eq_right (regLocal_ne_scratch i)]
     exact hInv.1 i hi
   · exact hInv.2
 
@@ -767,7 +767,7 @@ theorem preamble_correct (regCount : Nat) :
       · have hId : (⟨i + 1⟩ : CCIR.LocalId) ≠ ⟨regCount + 1⟩ := by
           intro h
           exact hEq ((regLocal_eq_iff i regCount).mp h)
-        simp only [CCEnv.set, if_neg hId]
+        simp only [CCEnv.set, ite_eq_right hId]
         exact hRegs i (Nat.lt_of_le_of_ne (Nat.le_of_lt_succ hi) hEq)
 
 /-- The preamble writes the comparison scratch and registers `0 … regCount-1`
@@ -795,7 +795,7 @@ theorem preamble_preserves (id : CCIR.LocalId) (hScratch : id ≠ ⟨0⟩) :
       injection hRun with h
       rw [← h]
       show (if id = scratchLocal.id then _ else env id) = env id
-      exact if_neg hScratch
+      exact ite_eq_right hScratch
   | succ n ih =>
       intro hNe env envOut hRun
       have hPreamble : preamble (n + 1) =
@@ -817,7 +817,7 @@ theorem preamble_preserves (id : CCIR.LocalId) (hScratch : id ≠ ⟨0⟩) :
           injection hRun with h
           rw [← h]
           show (if id = (regLocal n).id then _ else envMid id) = env id
-          rw [if_neg (show ¬(id = (regLocal n).id) from
+          rw [ite_eq_right (show ¬(id = (regLocal n).id) from
             hNe n (Nat.lt_succ_self n))]
           exact ih (fun i hi => hNe i (Nat.lt_succ_of_lt hi)) env envMid hMid
 

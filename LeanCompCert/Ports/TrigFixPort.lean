@@ -86,7 +86,7 @@ theorem tail_spec (k : Nat) (t : RegState) (dst rlo rhi : Nat)
     Option.getD_some, RegState.set]
   have h1 : ¬ (rlo = rhi) := hlohi
   have h2 : ¬ (rhi = rlo) := Ne.symm hlohi
-  simp only [if_true, if_neg h1, if_neg h2]
+  simp only [ite_true, ite_eq_right h1, ite_eq_right h2]
   have hm62 : (62 : Nat) % M = 62 := by decide
   have hm2 : (2 : Nat) % M = 2 := by decide
   rw [hm62, hm2]
@@ -203,7 +203,7 @@ theorem cFactorG_spec (k : Nat) (s : RegState) (hk : k < M)
   simp only [cFactorG, srun_cons, srun_nil, sdest, sval, denoteOperand,
     denoteOp, Option.getD_some, RegState.set]
   simp only [hMv] at hk hc hle ⊢
-  simp only [if_true, show ¬((7 : Nat) = 8) by decide, if_false]
+  simp only [ite_true, show ¬((7 : Nat) = 8) by decide, ite_false]
   have m1 : (2 : Nat) % 18446744073709551616 = 2 := by decide
   have m2 : (1 : Nat) % 18446744073709551616 = 1 := by decide
   have m0 : k % 18446744073709551616 = k := Nat.mod_eq_of_lt (by omega)
@@ -284,10 +284,10 @@ theorem cosBodyG_raw (k : Nat) (s : RegState) (X : Nat)
         ≤ s 2 * X / B62 * X / B62 := Nat.div_le_self _ _
     omega
   rw [cosBodyG, srun_append, srun_append, srun_append]
-  simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
+  simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp.eq_def,
     RegState.set]
   rw [e3, e3b]
-  simp only [Nat.ne_of_gt hcpos, if_true, if_false, Option.getD_some]
+  simp only [Nat.ne_of_gt hcpos, ite_true, ite_false, Option.getD_some]
   rw [Nat.mod_eq_of_lt hres]
   rfl
 
@@ -348,7 +348,7 @@ theorem accG_spec (k : Nat) (s : RegState) (hk : k < M)
     show ¬((2 : Nat) = 20) by decide, show ¬((2 : Nat) = 22) by decide,
     show ¬((2 : Nat) = 23) by decide,
     show ¬((20 : Nat) = 21) by decide, show ¬((21 : Nat) = 20) by decide,
-    show (1 : Nat) % M = 1 by decide, if_true, if_false, if_pos rfl]
+    show (1 : Nat) % M = 1 by decide, ite_true, ite_false, ite_eq_left rfl]
   rw [hpar]
   have h21 : s 21 < M := by omega
   have h20 : s 20 < M := by omega
@@ -358,7 +358,7 @@ theorem accG_spec (k : Nat) (s : RegState) (hk : k < M)
     rw [hz]
     have h1M : (1 + (M - 0)) % M = 1 := by simp only [hMv]
     rw [h1M]
-    simp only [if_pos rfl, Nat.one_mul, Nat.zero_mul, Nat.zero_mod,
+    simp only [ite_eq_left rfl, Nat.one_mul, Nat.zero_mul, Nat.zero_mod,
       Nat.add_zero]
     rw [Nat.mod_eq_of_lt ht, Nat.mod_eq_of_lt hE, Nat.mod_eq_of_lt h21]
     exact ⟨rfl, rfl⟩
@@ -368,7 +368,7 @@ theorem accG_spec (k : Nat) (s : RegState) (hk : k < M)
     rw [hz]
     have h1M : (1 + (M - 1)) % M = 0 := by simp only [hMv]
     rw [h1M]
-    simp only [show ¬((1 : Nat) = 0) by decide, if_false, Nat.one_mul,
+    simp only [show ¬((1 : Nat) = 0) by decide, ite_false, Nat.one_mul,
       Nat.zero_mul, Nat.zero_mod, Nat.add_zero]
     rw [Nat.mod_eq_of_lt ht, Nat.mod_eq_of_lt hO, Nat.mod_eq_of_lt h20]
     exact ⟨rfl, rfl⟩
@@ -476,10 +476,10 @@ theorem cosFold_spec (X : Nat) (hX : X ≤ B62) : ∀ n, 2 * n + 2 < 4294967296 
     · exact s2
     · rw [show cosFold X (n + 1) = srun n (cosFold X n) cosStepG from rfl, s20, h20]
       show _ = evenSum X n + (if n % 2 = 0 then cosTerm X n else 0)
-      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+      by_cases h : n % 2 = 0 <;> simp only [h, ite_eq_right, ite_true, ite_false] <;> omega
     · rw [show cosFold X (n + 1) = srun n (cosFold X n) cosStepG from rfl, s21, h21]
       show _ = oddSum X n + (if n % 2 = 0 then 0 else cosTerm X n)
-      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+      by_cases h : n % 2 = 0 <;> simp only [h, ite_eq_right, ite_true, ite_false] <;> omega
 
 
 /-! ### The program
@@ -514,7 +514,7 @@ theorem cosStepG_defined (k : Nat) (s : RegState) (hk : k < M)
   simp only [denoteOperand]
   rw [cosPrefix_divisor k (srun k s accG) hk hc]
   simp only [denoteOp]
-  rw [if_neg (Nat.ne_of_gt hcpos)]
+  rw [ite_eq_right (Nat.ne_of_gt hcpos)]
   rfl
 
 /-- The emitted program: seed the argument and the first term, run the body
@@ -540,11 +540,11 @@ theorem cosProgram_init (X : Nat) (hX : X ≤ B62) :
   simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, RegState.set,
     hXM, hBM, cosState, initialState]
   by_cases h2 : j = 2
-  · simp only [h2, if_pos rfl, show ¬((2 : Nat) = 1) by decide, if_false]
+  · simp only [h2, ite_eq_left rfl, show ¬((2 : Nat) = 1) by decide, ite_false]
   · by_cases h1 : j = 1
-    · simp only [h1, h2, if_pos rfl, if_false]
-      simp only [show ¬((1 : Nat) = 2) by decide, if_false, if_pos rfl]
-    · simp only [h1, h2, if_false]
+    · simp only [h1, h2, ite_eq_left rfl, ite_false]
+      simp only [show ¬((1 : Nat) = 2) by decide, ite_false, ite_eq_left rfl]
+    · simp only [h1, h2, ite_false]
 
 
 
@@ -622,7 +622,7 @@ theorem CosInv_closed (k : Nat) (s : RegState) (X : Nat) (hXb : X ≤ B62)
   · rw [srun_untouched k 1 cosStepG (by decide)]; exact hX1
   · rw [h2, h20, h21]
     by_cases h : k % 2 = 0 <;>
-      simp only [h, if_neg, if_true, if_false] <;> omega
+      simp only [h, ite_eq_right, ite_true, ite_false] <;> omega
 
 
 /-- The `Nat`-level fold the bridge produces. -/
@@ -641,9 +641,9 @@ theorem cosFoldObs_eq (X : Nat) (hX : X ≤ B62) : ∀ n,
     simp only [cosG, Prod.mk.injEq]
     refine ⟨rfl, ?_, ?_⟩
     · show _ = evenSum X n + (if n % 2 = 0 then cosTerm X n else 0)
-      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+      by_cases h : n % 2 = 0 <;> simp only [h, ite_eq_right, ite_true, ite_false] <;> omega
     · show _ = oddSum X n + (if n % 2 = 0 then 0 else cosTerm X n)
-      by_cases h : n % 2 = 0 <;> simp only [h, if_neg, if_true, if_false] <;> omega
+      by_cases h : n % 2 = 0 <;> simp only [h, ite_eq_right, ite_true, ite_false] <;> omega
 
 /-- **The program denotes the even parity sum.**  Proved through
 `Program.denote_eq_obs_foldl_mem`, so the 53-instruction body is never

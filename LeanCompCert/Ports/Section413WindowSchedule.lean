@@ -167,8 +167,8 @@ theorem divisorStage_outputs (idx : Nat) (s : RegState)
   simp only [divisorStage, srun, sdest, sval, denoteOperand, denoteOp,
     RegState.set, rN, rS, rQ, rRem, rSquare, rInRoot, rDivides, rActive,
     rPair]
-  simp only [Nat.reduceEqDiff, if_false, if_true]
-  rw [if_neg (Nat.ne_of_gt hs), if_neg (Nat.ne_of_gt hs)]
+  simp only [Nat.reduceEqDiff, ite_false, ite_true]
+  rw [ite_eq_right (Nat.ne_of_gt hs), ite_eq_right (Nat.ne_of_gt hs)]
   simp only [Option.getD_some]
   have hq : s 0 / s 1 < M := Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hnM
   have hr : s 0 % s 1 < M := Nat.lt_trans (Nat.mod_lt _ hs) hsM
@@ -201,8 +201,8 @@ theorem halfStage_outputs (idx : Nat) (s : RegState)
     RegState.set, rEvenRem, rEven, rHalf, rHalfQ, rHalfRem,
     rHalfDivides, rHalfActive, rHalfPair, rHalfInRoot, rN, rS,
     rSquare]
-  simp only [Nat.reduceEqDiff, if_false, if_true]
-  rw [if_neg (Nat.ne_of_gt hs), if_neg (Nat.ne_of_gt hs)]
+  simp only [Nat.reduceEqDiff, ite_false, ite_true]
+  rw [ite_eq_right (Nat.ne_of_gt hs), ite_eq_right (Nat.ne_of_gt hs)]
   simp only [Option.getD_some]
   have hevenRem : s 0 % 2 < M := by
     exact Nat.lt_trans (Nat.mod_lt _ (by decide)) (by decide)
@@ -311,7 +311,7 @@ theorem body_outputs (idx : Nat) (st : AState)
   have hbSquare : b rSquare = a rS * a rS := by
     simp only [b, divisorStage, srun, sdest, sval, denoteOperand, denoteOp,
       Option.getD_some, RegState.set, rN, rS, rQ, rRem, rSquare, rInRoot,
-      rDivides, rActive, rPair, Nat.reduceEqDiff, if_false, if_true]
+      rDivides, rActive, rPair, Nat.reduceEqDiff, ite_false, ite_true]
     exact Nat.mod_eq_of_lt hsSqM
   have hc := halfStage_outputs idx b (by simpa [hbn] using hnM)
     (by simpa [hbs] using hsPos) (by simpa [hbs] using hsM)

@@ -115,7 +115,7 @@ theorem weightFlagsS_spec (k : Nat) (s : RegState) (z : TSel) (t : TState)
     apply Nat.mod_eq_of_lt
     exact Nat.lt_trans (Nat.mod_lt z.X (by decide)) (by decide)
   simp only [weightFlagsS, srun, sdest, sval, denoteOperand, denoteOp,
-    RegState.set, Option.getD_some, if_true, if_false, Nat.reduceEqDiff,
+    RegState.set, Option.getD_some, ite_true, ite_false, Nat.reduceEqDiff,
     h5, h31, h33, h72, one_mod_M, zero_mod_M,
     show 2 % M = 2 by decide, hrem]
   change
@@ -141,7 +141,7 @@ theorem weightQuotG_spec (k : Nat) (s : RegState) (sig1 scale scale1 : Nat)
   have hC : ((sig1 + scale1) % M) / sig1 < M :=
     Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (Nat.mod_lt _ M_pos)
   simp only [weightQuotG, srun, sdest, sval, denoteOperand, denoteOp,
-    RegState.set, Option.getD_some, if_true, if_false, Nat.reduceEqDiff,
+    RegState.set, Option.getD_some, ite_true, ite_false, Nat.reduceEqDiff,
     hsig, h0, hScale, hScale1, zero_mod_M, tsub]
   simp only [Nat.mod_eq_of_lt hF, Nat.mod_eq_of_lt hC]
   simp only [true_and]
@@ -175,7 +175,7 @@ theorem weightRawS_spec (k : Nat) (s : RegState)
   have hNNF : isM * negF < M := by
     rcases (by omega : isM = 0 ∨ isM = 1) with rfl | rfl <;> simp [hNF, M_pos]
   simp only [weightRawS, srun, sdest, sval, denoteOperand, denoteOp,
-    RegState.set, Option.getD_some, if_true, if_false, Nat.reduceEqDiff,
+    RegState.set, Option.getD_some, ite_true, ite_false, Nat.reduceEqDiff,
     h73, h74, h77, h80, h81, h82, h83, Nat.mod_eq_of_lt hPF,
     Nat.mod_eq_of_lt hPC, Nat.mod_eq_of_lt hNNC, Nat.mod_eq_of_lt hNNF]
   simp only [true_and]

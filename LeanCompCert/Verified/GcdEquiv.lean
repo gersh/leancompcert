@@ -62,7 +62,7 @@ theorem gcdFuel_eq (fuel a b : Nat) (h : a ≤ fuel) :
       by_cases ha : a = 0
       · subst ha
         show (if (0 : Nat) = 0 then b else gcdFuel fuel (b % 0) 0) = Nat.gcd 0 b
-        rw [if_pos rfl, Nat.gcd_zero_left]
+        rw [ite_eq_left rfl, Nat.gcd_zero_left]
       · have hlt : b % a < a := Nat.mod_lt b (Nat.pos_of_ne_zero ha)
         have hle : b % a ≤ fuel := Nat.lt_succ_iff.mp (Nat.lt_of_lt_of_le hlt h)
         calc gcdFuel (fuel + 1) a b

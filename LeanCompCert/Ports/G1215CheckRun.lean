@@ -179,12 +179,12 @@ theorem advRenorm_band {y : Nat} (hlo : MB ≤ y) (hhi : y < 2 ^ 41) :
     MB ≤ y / 2 ^ (if 2 ^ 40 ≤ y then 1 else 0) ∧
       y / 2 ^ (if 2 ^ 40 ≤ y then 1 else 0) < 2 ^ 40 := by
   by_cases hg : 2 ^ 40 ≤ y
-  · rw [if_pos hg, show (2:Nat) ^ 1 = 2 from rfl]
+  · rw [ite_eq_left hg, show (2:Nat) ^ 1 = 2 from rfl]
     have hd1 : MB ≤ y / 2 :=
       (Nat.le_div_iff_mul_le (by decide : 0 < 2)).mpr (by simp only [MB]; omega)
     have hd2 : y / 2 < 2 ^ 40 := Nat.div_lt_of_lt_mul (by omega)
     exact ⟨hd1, hd2⟩
-  · rw [if_neg hg, show (2:Nat) ^ 0 = 1 from rfl, Nat.div_one]
+  · rw [ite_eq_right hg, show (2:Nat) ^ 0 = 1 from rfl, Nat.div_one]
     omega
 
 /-! ## §6a Generic unfolding, with every literal a VARIABLE
@@ -353,7 +353,7 @@ theorem blkA2_spec (k : Nat) (t : RegState) (n : Nat) (h13 : t 13 = n)
     have hne : n ≠ 0 := by omega
     have hne' : n + 1 ≠ 0 := by omega
     by_cases hb2 : 2 * 2 ^ aOf n ≤ n + 1
-    · rw [if_pos hb2, hlog, hlog']
+    · rw [ite_eq_left hb2, hlog, hlog']
       have hge : (2:Nat) ^ (Nat.log2 n + 1) ≤ n + 1 := by
         rw [Nat.pow_succ, Nat.mul_comm]
         rw [hlog] at hb2
@@ -367,7 +367,7 @@ theorem blkA2_spec (k : Nat) (t : RegState) (n : Nat) (h13 : t 13 = n)
           rw [Nat.pow_succ]; omega
         omega
       omega
-    · rw [if_neg hb2, hlog, hlog', Nat.add_zero]
+    · rw [ite_eq_right hb2, hlog, hlog', Nat.add_zero]
       have hlt : n + 1 < 2 ^ (Nat.log2 n + 1) := by
         rw [Nat.pow_succ, Nat.mul_comm]
         rw [hlog] at hb2
@@ -437,13 +437,13 @@ theorem blkB1_spec (k : Nat) (t : RegState) (m0 sq0 d : Nat)
     omega
   by_cases ha : m0 % d = 0
   · by_cases hb : m0 / d % d = 0
-    · rw [if_pos (And.intro ha hb)]
+    · rw [ite_eq_left (And.intro ha hb)]
       simp [run, blkB1, evalExpr, denoteOp, RegState.set, h1, h3, h14, h19,
         h20, lit0, lit1, e1, e2, ha, hb]
-    · rw [if_neg (show ¬ (m0 % d = 0 ∧ m0 / d % d = 0) from fun hc => hb hc.2)]
+    · rw [ite_eq_right (show ¬ (m0 % d = 0 ∧ m0 / d % d = 0) from fun hc => hb hc.2)]
       simp [run, blkB1, evalExpr, denoteOp, RegState.set, h1, h3, h14, h19,
         h20, lit0, lit1, e1, e2, ha, hb, modId hsq0M]
-  · rw [if_neg (show ¬ (m0 % d = 0 ∧ m0 / d % d = 0) from fun hc => ha hc.1)]
+  · rw [ite_eq_right (show ¬ (m0 % d = 0 ∧ m0 / d % d = 0) from fun hc => ha hc.1)]
     simp [run, blkB1, evalExpr, denoteOp, RegState.set, h1, h3, h14, h19,
       h20, lit0, lit1, e1, e2, ha, modId hsq0M]
 

@@ -52,7 +52,7 @@ theorem foldl_cellWrite_of_forall_ne
   | nil => rfl
   | cons x xs ih =>
       simp only [List.foldl_cons]
-      rw [if_neg (fun h => hne x (by simp) h.symm)]
+      rw [ite_eq_right (fun h => hne x (by simp) h.symm)]
       exact ih init (fun y hy => hne y (by simp [hy]))
 
 /-- If all writes to a present address agree, the last-write fold returns
@@ -68,7 +68,7 @@ theorem foldl_cellWrite_eq_of_mem
       simp only [List.foldl_cons]
       by_cases hx : x.1 = j
       · have hxv : x.2 = value := hvalue x (by simp) hx
-        rw [if_pos hx.symm, hxv]
+        rw [ite_eq_left hx.symm, hxv]
         by_cases htail : (j, value) ∈ xs
         · exact ih value htail (fun y hy => hvalue y (by simp [hy]))
         · apply foldl_cellWrite_of_forall_ne
@@ -77,7 +77,7 @@ theorem foldl_cellWrite_eq_of_mem
           apply htail
           cases y
           simp_all
-      · rw [if_neg (fun h => hx h.symm)]
+      · rw [ite_eq_right (fun h => hx h.symm)]
         have htail : (j, value) ∈ xs := by
           rcases List.mem_cons.mp hmem with hhead | htail
           · subst x

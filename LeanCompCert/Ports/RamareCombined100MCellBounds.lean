@@ -139,9 +139,9 @@ theorem CellDivisorBounds.markPrime
     have hbaseLe : row.p ≤ n := Nat.le_of_dvd hn hbaseDvd
     have hprodDvd : cell.prod * row.p ^ e ∣ n :=
       (hcoprime.pow_right e).mul_dvd_of_dvd_of_dvd hcell.prodDvd heDvd
-    rw [if_neg hskip]
+    rw [ite_eq_right hskip]
     by_cases hcount0 : cell.count = 0
-    · rw [if_pos hcount0]
+    · rw [ite_eq_left hcount0]
       constructor
       · exact hprodDvd
       · exact hbaseLe
@@ -150,12 +150,12 @@ theorem CellDivisorBounds.markPrime
       · simp
       · simp
       · simp
-    · rw [if_neg hcount0]
+    · rw [ite_eq_right hcount0]
       by_cases hcount1 : cell.count = 1
-      · rw [if_pos hcount1]
+      · rw [ite_eq_left hcount1]
         exact ⟨hprodDvd, hcell.p, hcell.pe, hcell.pProdDvd,
           hbaseLe, he32, heDvd⟩
-      · rw [if_neg hcount1]
+      · rw [ite_eq_right hcount1]
         exact ⟨hprodDvd, hcell.p, hcell.pe, hcell.pProdDvd,
           hcell.q, hcell.qe, hcell.qProdDvd⟩
 
@@ -199,15 +199,15 @@ theorem CoprimeRows.markPrime
   · simpa [hskip] using hold
   · have hmul : (cell.prod * head.p ^ e).Coprime row.p :=
       Nat.Coprime.mul_left hold (hnew.pow_left e)
-    rw [if_neg hskip]
+    rw [ite_eq_right hskip]
     by_cases hcount0 : cell.count = 0
-    · rw [if_pos hcount0]
+    · rw [ite_eq_left hcount0]
       exact hmul
-    · rw [if_neg hcount0]
+    · rw [ite_eq_right hcount0]
       by_cases hcount1 : cell.count = 1
-      · rw [if_pos hcount1]
+      · rw [ite_eq_left hcount1]
         exact hmul
-      · rw [if_neg hcount1]
+      · rw [ite_eq_right hcount1]
         exact hmul
 
 /-- A complete source row fold is candidate-bounded whenever its bases are
@@ -278,7 +278,7 @@ theorem trialPrime_not_dvd {n d : Nat}
   intro hdvd
   have hn2 := trialPrime_two_le hprime
   unfold trialPrime at hprime
-  rw [if_neg (by omega)] at hprime
+  rw [ite_eq_right (by omega)] at hprime
   have hall := List.all_eq_true.mp hprime d (by
     rw [List.mem_range]
     omega)
@@ -477,7 +477,7 @@ theorem nonzeroProduct_pos (x : Nat) : 0 < nonzeroProduct x := by
 
 theorem nonzeroProduct_eq_self {x : Nat} (hx : x ≠ 0) :
     nonzeroProduct x = x := by
-  simp only [nonzeroProduct, zeroBit, if_neg hx, Nat.add_zero]
+  simp only [nonzeroProduct, zeroBit, ite_eq_right hx, Nat.add_zero]
 
 /-- Installing a first prime never decreases its raw plane. -/
 theorem le_nextP (pow base p : Nat) : p ≤ nextP pow base p := by
@@ -578,7 +578,7 @@ theorem PlaneCellProductionBounds.of_planeEventCellFold
       have hstep := ih
         (if event.1 = i then x.markPower event.2 base else x) hfinal
       by_cases hselected : event.1 = i
-      · rw [if_pos hselected] at hstep
+      · rw [ite_eq_left hselected] at hstep
         exact PlaneCellProductionBounds.of_markPower hbase hstep
       · simpa [hselected] using hstep
 

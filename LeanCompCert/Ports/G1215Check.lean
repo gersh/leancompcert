@@ -726,8 +726,8 @@ theorem aOf_eq_log2 {n : Nat} (h1 : 1 ≤ n) (h25 : n < 2 ^ 25) :
     intro v i hv
     subst hv
     by_cases h : 2 ^ i ≤ n
-    · rw [if_pos h, if_pos ((Nat.le_log2 hn0).mpr h)]
-    · rw [if_neg h, if_neg (fun hc => h ((Nat.le_log2 hn0).mp hc))]
+    · rw [ite_eq_left h, ite_eq_left ((Nat.le_log2 hn0).mpr h)]
+    · rw [ite_eq_right h, ite_eq_right (fun hc => h ((Nat.le_log2 hn0).mp hc))]
   unfold aOf ind
   rw [g 2 1 (by decide), g 4 2 (by decide), g 8 3 (by decide),
     g 16 4 (by decide), g 32 5 (by decide), g 64 6 (by decide),

@@ -77,7 +77,7 @@ theorem compileAInstr_counter_frame
       injection hStep with hEq
       rw [← hEq]
       simp only [CCEnv.set]
-      rw [if_neg]
+      rw [ite_eq_right]
       intro hId
       have := congrArg CCIR.LocalId.value hId
       simp only [regLocal] at this

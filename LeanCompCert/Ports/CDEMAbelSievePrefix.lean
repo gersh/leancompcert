@@ -98,9 +98,9 @@ theorem sieveFactorHead_run (idx : Nat) (st : AState)
       st.regs 9 % st.regs 53 := by simpa [rM] using hremMod
   have hdivMod9 : (st.regs 9 / st.regs 53) % M =
       st.regs 9 / st.regs 53 := by simpa [rM] using hdivMod
-  simp [sieveFactorHead, sieveHit, arun, astep, InstrBlock.sdest,
-    InstrBlock.sval, denoteOperand, denoteOp, AState.writeReg,
-    rM, hgate, hpNe, hremMod9, hdivMod9]
+  simp [sieveFactorHead, sieveHit.eq_def, arun, astep, InstrBlock.sdest,
+    InstrBlock.sval, denoteOperand, denoteOp.eq_def, AState.writeReg,
+    rM.eq_def, hgate, hpNe, hremMod9, hdivMod9]
   split <;> decide
 
 def sieveNextM (m p : Nat) : Nat :=

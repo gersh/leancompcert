@@ -90,7 +90,7 @@ theorem scaledAbsG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
     srun_lt k _ (fun i hi => List.all_eq_true.mp (absDiffG_noDiv 30 31 33 41 42) i hi) s hs
   rw [scaledAbsG, srun_append]
   simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
-    Option.getD_some, RegState.set, if_true]
+    Option.getD_some, RegState.set, ite_true]
   rw [hD]
   have hlit : (1000 : Nat) % M = 1000 := by decide
   rw [hlit]
@@ -131,7 +131,7 @@ theorem hurstTestG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
     srun_lt k _ (fun i hi => List.all_eq_true.mp constR_noDiv i hi) _ w2
   have e3 : srun k (srun k (srun k s scaledAbsG) wideL) constR 39 = 326041 := by
     simp only [constR, srun_cons, srun_nil, sdest, sval, denoteOperand,
-      RegState.set, if_true]
+      RegState.set, ite_true]
     decide
   have p3n : srun k (srun k (srun k s scaledAbsG) wideL) constR 32 = s 32 := by
     rw [srun_untouched k 32 _ (by decide)]; exact p2n
@@ -211,14 +211,14 @@ theorem hurstAccG_spec (k : Nat) (s : RegState)
           else if r = 30 then (s 30 + s 79) % M else s r) := by
     intro r
     simp only [hurstAccG, srun_cons, srun_nil, sdest, sval, denoteOperand,
-      denoteOp, Option.getD_some, RegState.set, if_true]
+      denoteOp, Option.getD_some, RegState.set, ite_true]
   constructor
   · rw [hsimp 30]
-    simp only [show ¬((30 : Nat) = 31) by decide, if_false, if_pos rfl]
+    simp only [show ¬((30 : Nat) = 31) by decide, ite_false, ite_eq_left rfl]
     exact Nat.mod_eq_of_lt h30
   · rw [hsimp 31]
-    simp only [if_pos rfl, show ¬((31 : Nat) = 30) by decide,
-      show ¬((80 : Nat) = 30) by decide, if_false]
+    simp only [ite_eq_left rfl, show ¬((31 : Nat) = 30) by decide,
+      show ¬((80 : Nat) = 30) by decide, ite_false]
     exact Nat.mod_eq_of_lt h31
 
 /-- **What the two counters mean.**  Their difference advances by exactly
@@ -357,7 +357,7 @@ theorem hurstRowG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
   have hMB : M = MulWide.B64 := by decide
   have e1 : srun k s hurstScale 60 = 1000 * s 37 := by
     simp only [hurstScale, srun_cons, srun_nil, sdest, sval, denoteOperand,
-      denoteOp, Option.getD_some, RegState.set, if_true]
+      denoteOp, Option.getD_some, RegState.set, ite_true]
     rw [show (1000 : Nat) % M = 1000 by decide]
     have h' : s 37 * 1000 < M := by omega
     rw [Nat.mod_eq_of_lt h']
@@ -377,7 +377,7 @@ theorem hurstRowG_spec (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
     srun_lt k _ (fun i hi => List.all_eq_true.mp hurstConst_noDiv i hi) _ w2
   have e3 : srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 63 = 326041 := by
     simp only [hurstConst, srun_cons, srun_nil, sdest, sval, denoteOperand,
-      RegState.set, if_true]
+      RegState.set, ite_true]
     decide
   have p3x : srun k (srun k (srun k s hurstScale) hurstWideL) hurstConst 9 = s 9 := by
     rw [srun_untouched k 9 _ (by decide)]; exact p2x
@@ -476,12 +476,12 @@ theorem hurstClampG_spec (c : Cfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M
     by_cases h : j = 58
     · subst h
       simpa [RegState.set] using Nat.mod_lt _ (by have := ArrayFoldBridge.one_lt_M; omega)
-    · simpa [RegState.set, if_neg h] using hs j
+    · simpa [RegState.set, ite_eq_right h] using hs j
   have hstep : srun k s (hurstClampG c)
       = srun k (srun k (RegState.set s 58 (c.cap % M)) (minG 37 58 59 70 71))
           [Instr.mov 37 (.reg 59)] := by
     simp only [hurstClampG, srun_cons, srun_append, sdest, sval, denoteOperand,
-      RegState.set, if_true]
+      RegState.set, ite_true]
   have hmin := minG_spec k (RegState.set s 58 (c.cap % M)) 37 58 59 70 71 hcap
     (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
     (by decide) (by decide) (by decide)
@@ -495,12 +495,12 @@ theorem hurstClampG_spec (c : Cfg) (k : Nat) (s : RegState) (hs : ∀ j, s j < M
   refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · rw [hstep]
     simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, RegState.set,
-      if_true]
+      ite_true]
     exact hmin
   all_goals
     rw [hstep]
     simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, RegState.set]
-    rw [if_neg (by decide)]
+    rw [ite_eq_right (by decide)]
     rw [srun_untouched k _ _ (by decide)]
     simp [RegState.set]
 
@@ -567,8 +567,8 @@ theorem hurstRowG_iff (k : Nat) (s : RegState) (hs : ∀ j, s j < M)
       ↔ (1000 * s 37) * (1000 * s 37) ≤ 326041 * s 9 := by
   rw [hurstRowG_spec k s hs hfit]
   by_cases h : (1000 * s 37) * (1000 * s 37) ≤ 326041 * s 9
-  · rw [if_pos h]; exact ⟨fun _ => h, fun _ => rfl⟩
-  · rw [if_neg h]
+  · rw [ite_eq_left h]; exact ⟨fun _ => h, fun _ => rfl⟩
+  · rw [ite_eq_right h]
     exact ⟨fun hc => absurd hc (by decide), fun hc => absurd hc h⟩
 
 /-- With `|M|` supplied by the biased accumulator, the block's verdict is
@@ -816,9 +816,9 @@ theorem hurstTestFlagG_flag (c : Cfg) (idx : Nat) (s : RegState)
   by_cases hineq : (1000 * absClampedBias c.cap c.bias (s 1))
         * (1000 * absClampedBias c.cap c.bias (s 1))
       ≤ 326041 * s 9
-  · have h66 : srun idx s hurstRowG 66 = 1 := by rw [hrow, if_pos hineq]
+  · have h66 : srun idx s hurstRowG 66 = 1 := by rw [hrow, ite_eq_left hineq]
     simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
-      Option.getD_some, RegState.set, if_true, reduceIte, reduceCtorEq,
+      Option.getD_some, RegState.set, ite_true, reduceIte, reduceCtorEq,
       Nat.reduceEqDiff, h66, p0, p1, p9, p22,
       hlow', hax', ham', h1c, h0c, hb1, hb0]
     have e0 : s 0 = 0 ∨ s 0 = 1 := by omega
@@ -828,9 +828,9 @@ theorem hurstTestFlagG_flag (c : Cfg) (idx : Nat) (s : RegState)
       by_cases hlow : c.lower ≤ s 9 <;>
       rcases e0 with q0 | q0 <;> rcases e22 with q22 | q22 <;>
       simp_all [hbit, hor1, hor2, hone]
-  · have h66 : srun idx s hurstRowG 66 = 0 := by rw [hrow, if_neg hineq]
+  · have h66 : srun idx s hurstRowG 66 = 0 := by rw [hrow, ite_eq_right hineq]
     simp only [srun_cons, srun_nil, sdest, sval, denoteOperand, denoteOp,
-      Option.getD_some, RegState.set, if_true, reduceIte, reduceCtorEq,
+      Option.getD_some, RegState.set, ite_true, reduceIte, reduceCtorEq,
       Nat.reduceEqDiff, h66, p0, p1, p9, p22,
       hlow', hax', ham', h1c, h0c, hb1, hb0]
     have e0 : s 0 = 0 ∨ s 0 = 1 := by omega
@@ -1119,10 +1119,10 @@ theorem hurstBody_defined (c : Cfg) (idx : Nat) (s : RegState)
   refine ⟨bodyA_defined c idx s hne, bodyB_defined idx _ hd0, ?_, ?_, ?_⟩
   · simp only [bodyC1, SAllDefined, SDefined, sdest, sval, denoteOperand,
       denoteOp, RegState.set, Option.getD_some, Option.isSome_some, reduceIte,
-      reduceCtorEq, Nat.reduceEqDiff, if_true, and_true, true_and]
+      reduceCtorEq, Nat.reduceEqDiff, ite_true, and_true, true_and]
   · simp only [bodyC2a, SAllDefined, SDefined, sdest, sval, denoteOperand,
       denoteOp, RegState.set, Option.getD_some, Option.isSome_some, reduceIte,
-      reduceCtorEq, Nat.reduceEqDiff, if_true, and_true, true_and]
+      reduceCtorEq, Nat.reduceEqDiff, ite_true, and_true, true_and]
   · exact SAllDefined_of_noDiv idx _
       (fun i hi => List.all_eq_true.mp (hurstBodyC2b_noDiv c) i hi) _
 
@@ -1300,10 +1300,10 @@ theorem hurstGstep_round (c : Cfg) (n r : Nat) (hr : r < c.rounds) (a : Abs)
   rw [hurstGstep_qX c (n * c.rounds + r) a r (c.lo + n) hmod (by rw [hdiv])]
   by_cases hlast : r + 1 = c.rounds
   · have hq : r = c.rounds - 1 := by omega
-    simp only [if_pos hlast, if_pos hq, Nat.one_mul, moAdvance]
+    simp only [ite_eq_left hlast, ite_eq_left hq, Nat.one_mul, moAdvance]
     rfl
   · have hq : ¬ (r = c.rounds - 1) := by omega
-    simp only [if_neg hlast, if_neg hq, Nat.zero_mul, ite_self, Nat.or_zero,
+    simp only [ite_eq_right hlast, ite_eq_right hq, Nat.zero_mul, ite_self, Nat.or_zero,
       moStep_zero _ hmo]
 
 open LeanCompCert.Ports.MertensCDEM in
@@ -1324,7 +1324,7 @@ theorem hurstBlock_prefix (c : Cfg) (hR : 0 < c.rounds) (n : Nat) (a : Abs)
       rw [show (List.range 1) = [0] from rfl, List.foldl_cons, List.foldl_nil,
         hurstGstep_round c n 0 hk a hmo]
       simp only [trialPrefix, show (List.range 1) = [0] from rfl,
-        List.foldl_cons, List.foldl_nil, if_pos rfl]
+        List.foldl_cons, List.foldl_nil, ite_eq_left rfl]
       rfl
   | succ k ih =>
       intro hk
@@ -1332,11 +1332,11 @@ theorem hurstBlock_prefix (c : Cfg) (hR : 0 < c.rounds) (n : Nat) (a : Abs)
       have hkne : ¬ (k + 1 = c.rounds) := by omega
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
         ih hklt]
-      rw [if_neg hkne]
+      rw [ite_eq_right hkne]
       rw [hurstGstep_round c n (k + 1) hk
         ⟨a.bad, a.mo, trialPrefix (c.lo + n) (k + 1)⟩ hmo]
       have hne0 : ¬ (k + 1 = 0) := by omega
-      simp only [if_neg hne0, trialPrefix, List.range_succ, List.foldl_append,
+      simp only [ite_eq_right hne0, trialPrefix, List.range_succ, List.foldl_append,
         List.foldl_cons, List.foldl_nil]
 
 open LeanCompCert.Ports.MertensCDEM in
@@ -1476,7 +1476,7 @@ theorem hurstValue_eq_zero_sound (c : Cfg) (hadm : Admissible c)
       ∨ AnchorFail c (c.lo + n) (moAt c (n + 1))) := by
     rw [hurstRowFlag] at hflag
     intro h
-    rw [if_pos h] at hflag
+    rw [ite_eq_left h] at hflag
     omega
   constructor
   · intro hlow

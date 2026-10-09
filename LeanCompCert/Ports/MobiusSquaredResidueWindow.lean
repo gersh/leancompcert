@@ -325,9 +325,9 @@ theorem squaredResStep_viol_eq (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
           (accStep (if mu n = 1 then 1 else 0)
             (if mu n = -1 then 1 else 0) (wPair k n).1 (wPair k n).2
             r.tLo r.tHi).2))
-  · simp only [hp, if_true, Nat.zero_mul, Nat.add_zero]
+  · simp only [hp, ite_true, Nat.zero_mul, Nat.add_zero]
     exact Nat.mod_eq_of_lt (by omega)
-  · simp only [hp, if_false, Nat.one_mul]
+  · simp only [hp, ite_false, Nat.one_mul]
     exact Nat.mod_eq_of_lt (by omega)
 
 /-- A zero next counter exposes both the zero carry-in and the passing
@@ -338,9 +338,9 @@ theorem squaredPass_of_next_viol_zero (k : Nat) (mu : Nat → Int) (n : Nat)
     r.viol = 0 ∧ SquaredPass k n (stepAbs k mu n r) := by
   rw [squaredResStep_viol_eq k mu n r hviol] at hz
   by_cases hp : SquaredPass k n (stepAbs k mu n r)
-  · simp only [hp, if_true, Nat.add_zero] at hz
+  · simp only [hp, ite_true, Nat.add_zero] at hz
     exact ⟨hz, hp⟩
-  · simp only [hp, if_false] at hz
+  · simp only [hp, ite_false] at hz
     omega
 
 /-- A zero final counter means every squared endpoint in the run passed. -/
@@ -482,7 +482,7 @@ theorem squaredResRun_stable_all_pass (k : Nat) (mu : Nat → Int) (r0 : Res)
   by_cases hp : SquaredPass k (m + 1)
       (stepAbs k mu (m + 1) (squaredResRun k mu r0 m))
   · exact hp
-  · simp only [hp, if_false] at hnext
+  · simp only [hp, ite_false] at hnext
     omega
 
 /-- A passing squared step proves the exact cross-multiplied source bound. -/

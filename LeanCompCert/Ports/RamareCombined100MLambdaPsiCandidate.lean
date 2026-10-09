@@ -252,12 +252,12 @@ theorem PsiQR.advance_q_lt_word (n lam : Nat) (z : PsiQR)
   unfold PsiQR.advance
   dsimp only
   by_cases hle : z.q ≤ z.r + lam
-  · rw [if_pos hle]
+  · rw [ite_eq_left hle]
     change z.q + (z.r + lam - z.q) / (n + 1) < M
     have hdiv : (z.r + lam - z.q) / (n + 1) ≤
         z.r + lam - z.q := Nat.div_le_self _ _
     omega
-  · rw [if_neg hle]
+  · rw [ite_eq_right hle]
     split
     · change z.q - (z.q - (z.r + lam)) / (n + 1) < M
       exact Nat.lt_of_le_of_lt (Nat.sub_le _ _) hq

@@ -34,10 +34,10 @@ theorem classAddresses_lt_of_markRound
   let marked := arun k s c.markBody
   have hp := c.markBody_phase_run k s hsteps
   dsimp only at hp
-  have hm10 : marked.regs 10 = 1 := by rw [hp.1, if_pos hround]
+  have hm10 : marked.regs 10 = 1 := by rw [hp.1, ite_eq_left hround]
   have hnclass : ¬ c.markSteps ≤ s.regs rR := by omega
   have hm11 : marked.regs 11 = 0 := by
-    rw [hp.2, if_neg hnclass]
+    rw [hp.2, ite_eq_right hnclass]
   have ha := c.classAddressBody_mark_run k marked hm10 hm11
     h7 h8 h9 h10 h11 h12 h13
   dsimp only at ha ⊢
@@ -76,8 +76,8 @@ theorem classAddresses_lt_of_classRound
   have hp := c.markBody_phase_run k s hsteps
   dsimp only at hp
   have hm10 : marked.regs 10 = 0 := by
-    rw [hp.1, if_neg (Nat.not_lt_of_ge hround)]
-  have hm11 : marked.regs 11 = 1 := by rw [hp.2, if_pos hround]
+    rw [hp.1, ite_eq_right (Nat.not_lt_of_ge hround)]
+  have hm11 : marked.regs 11 = 1 := by rw [hp.2, ite_eq_left hround]
   have hmR : marked.regs rR = s.regs rR :=
     arun_frame k rR c.markBody (by rfl) s
   have hmW : marked.regs rW = s.regs rW :=

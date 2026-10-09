@@ -50,12 +50,12 @@ detected by the wrapped sum dropping below one of the summands. -/
 private theorem carry_split {a b m : Nat} (ha : a < m) (hb : b < m) :
     a + b = m * (if (a + b) % m < b then 1 else 0) + (a + b) % m := by
   by_cases h : a + b < m
-  · rw [Nat.mod_eq_of_lt h, if_neg (by omega)]
+  · rw [Nat.mod_eq_of_lt h, ite_eq_right (by omega)]
     omega
   · have hge : a + b ≥ m := by omega
     have h1 : (a + b) % m = a + b - m := by
       rw [Nat.mod_eq_sub_mod hge, Nat.mod_eq_of_lt (by omega)]
-    rw [h1, if_pos (by omega)]
+    rw [h1, ite_eq_left (by omega)]
     omega
 
 /-- Recombination of the two limbs: if the low limb carries into the high one,
@@ -201,10 +201,10 @@ private theorem round_close {n S q r : Nat} (hdm : n * q + r = S) (hr : r < n) :
     2 * ((q + (if n ≤ 2 * r then 1 else 0)) * n) ≤ 2 * S + n ∧
       2 * S ≤ 2 * ((q + (if n ≤ 2 * r then 1 else 0)) * n) + n := by
   by_cases hc : n ≤ 2 * r
-  · rw [if_pos hc]
+  · rw [ite_eq_left hc]
     have h1 : (q + 1) * n = n * q + n := by grind
     omega
-  · rw [if_neg hc]
+  · rw [ite_eq_right hc]
     have h1 : (q + 0) * n = n * q := by grind
     omega
 
@@ -212,11 +212,11 @@ private theorem round_close {n S q r : Nat} (hdm : n * q + r = S) (hr : r < n) :
 private theorem round_le {n S q r : Nat} (hn : 1 ≤ n) (hdm : n * q + r = S) (hr : r < n) :
     q + (if n ≤ 2 * r then 1 else 0) ≤ S := by
   by_cases hc : n ≤ 2 * r
-  · rw [if_pos hc]
+  · rw [ite_eq_left hc]
     have hn2 : 2 ≤ n := by omega
     have hmul : 2 * q ≤ n * q := Nat.mul_le_mul_right q hn2
     omega
-  · rw [if_neg hc]
+  · rw [ite_eq_right hc]
     have hmul : 1 * q ≤ n * q := Nat.mul_le_mul_right q hn
     omega
 

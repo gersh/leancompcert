@@ -207,14 +207,14 @@ theorem denoteAInstr_load_oob {len index dest idxReg : Nat} {s : AState}
     (h : len ≤ s.regs idxReg) :
     denoteAInstr len index s (.load dest idxReg) = none := by
   simp only [denoteAInstr]
-  exact if_neg (by omega)
+  exact ite_eq_right (by omega)
 
 /-- Bounds discipline: an out-of-range `store` denotes `none`. -/
 theorem denoteAInstr_store_oob {len index idxReg srcReg : Nat} {s : AState}
     (h : len ≤ s.regs idxReg) :
     denoteAInstr len index s (.store idxReg srcReg) = none := by
   simp only [denoteAInstr]
-  exact if_neg (by omega)
+  exact ite_eq_right (by omega)
 
 /-- Sequencing distributes over append. -/
 theorem denoteAInstrs_append (len index : Nat) (s : AState)
@@ -307,18 +307,18 @@ theorem cellPass_arr (g : Nat → Nat → Nat) (len : Nat) (s : AState)
       if n < len then g n (s.arr n) else s.arr n := by
   induction len with
   | zero =>
-      rw [if_neg (Nat.not_lt_zero n)]
+      rw [ite_eq_right (Nat.not_lt_zero n)]
       rfl
   | succ len ih =>
       rw [cellPass_succ]
       by_cases hn : n = len
       · subst hn
-        rw [AState.writeArr_arr_self, ih, if_neg (Nat.lt_irrefl _),
-          if_pos (Nat.lt_succ_self _)]
+        rw [AState.writeArr_arr_self, ih, ite_eq_right (Nat.lt_irrefl _),
+          ite_eq_left (Nat.lt_succ_self _)]
       · rw [AState.writeArr_arr_ne _ _ hn, ih]
         by_cases h2 : n < len
-        · rw [if_pos h2, if_pos (Nat.lt_succ_of_lt h2)]
-        · rw [if_neg h2, if_neg (show ¬ n < len + 1 by omega)]
+        · rw [ite_eq_left h2, ite_eq_left (Nat.lt_succ_of_lt h2)]
+        · rw [ite_eq_right h2, ite_eq_right (show ¬ n < len + 1 by omega)]
 
 /-- The marking pass for divisor candidate `d = i + 2`: one guarded
 select per cell, `Sieve.spfStep`. -/
@@ -363,7 +363,7 @@ theorem markSweep_arr (bound len : Nat) (s : AState) (n : Nat)
   induction bound with
   | zero => rfl
   | succ bound ih =>
-      rw [markSweep_succ, markPass_arr, if_pos hn, ih,
+      rw [markSweep_succ, markPass_arr, ite_eq_left hn, ih,
         foldl_range_succ (Sieve.spfStep n) (s.arr n) bound]
 
 /-- Cells at or beyond `len` are never written. -/
@@ -373,7 +373,7 @@ theorem markSweep_arr_oob (bound len : Nat) (s : AState) (n : Nat)
   induction bound with
   | zero => rfl
   | succ bound ih =>
-      rw [markSweep_succ, markPass_arr, if_neg hn]
+      rw [markSweep_succ, markPass_arr, ite_eq_right hn]
       exact ih
 
 /-- The finalize pass: write `n` into every still-empty cell (a prime
@@ -431,14 +431,14 @@ fixed-shape smallest-prime-factor value. -/
 theorem sieveSweep_arr (bound len n : Nat) (hn : n < len) :
     (sieveSweep bound len).arr n = Sieve.spfFixed bound n := by
   unfold sieveSweep
-  rw [finalizePass_arr, if_pos hn, sieveMark_arr bound len n hn]
+  rw [finalizePass_arr, ite_eq_left hn, sieveMark_arr bound len n hn]
   rfl
 
 /-- Cells at or beyond `len` come out `0`. -/
 theorem sieveSweep_arr_oob (bound len n : Nat) (hn : ¬ n < len) :
     (sieveSweep bound len).arr n = 0 := by
   unfold sieveSweep
-  rw [finalizePass_arr, if_neg hn, sieveMark_arr_oob bound len n hn]
+  rw [finalizePass_arr, ite_eq_right hn, sieveMark_arr_oob bound len n hn]
 
 /-- The sweep is pure array work: registers stay zero. -/
 theorem sieveSweep_regs (bound len : Nat) :

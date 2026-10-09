@@ -181,12 +181,12 @@ theorem denoteOp_sub_of_le {a b : Nat} (hb : b ≤ a) (ha : a < M) :
 theorem denoteOp_udiv_of_ne {a b : Nat} (hb : b ≠ 0) (ha : a < M) :
     denoteOp .udiv a b = some (a / b) := by
   show (if b = 0 then none else some ((a / b) % M)) = _
-  rw [if_neg hb, Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self a b) ha)]
+  rw [ite_eq_right hb, Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self a b) ha)]
 
 theorem denoteOp_urem_of_ne {a b : Nat} (hb : b ≠ 0) (ha : a < M) :
     denoteOp .urem a b = some (a % b) := by
   show (if b = 0 then none else some ((a % b) % M)) = _
-  rw [if_neg hb, Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.mod_le a b) ha)]
+  rw [ite_eq_right hb, Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.mod_le a b) ha)]
 
 theorem denoteOp_lshr_of_lt {a n : Nat} (ha : a < M) :
     denoteOp .lshr a n = some (a >>> n) := by
@@ -231,8 +231,8 @@ theorem isBit_one : IsBit 1 := Or.inr rfl
 
 theorem isBit_ite (p : Prop) [Decidable p] : IsBit (if p then 1 else 0) := by
   by_cases h : p
-  · exact Or.inr (if_pos h)
-  · exact Or.inl (if_neg h)
+  · exact Or.inr (ite_eq_left h)
+  · exact Or.inl (ite_eq_right h)
 
 theorem sval_eq_isBit (k : Nat) (s : RegState) (d : Nat) (l r : Operand) :
     IsBit (sval k s (.binop d .eq l r)) := by
@@ -310,7 +310,7 @@ theorem sDefined_udiv {k : Nat} {s : RegState} {d : Nat} {l r : Operand}
   show (denoteOp .udiv (denoteOperand k s l) (denoteOperand k s r)).isSome = true
   show ((if denoteOperand k s r = 0 then none
     else some ((denoteOperand k s l / denoteOperand k s r) % M)).isSome) = true
-  rw [if_neg h]
+  rw [ite_eq_right h]
   rfl
 
 theorem sDefined_urem {k : Nat} {s : RegState} {d : Nat} {l r : Operand}
@@ -318,7 +318,7 @@ theorem sDefined_urem {k : Nat} {s : RegState} {d : Nat} {l r : Operand}
   show (denoteOp .urem (denoteOperand k s l) (denoteOperand k s r)).isSome = true
   show ((if denoteOperand k s r = 0 then none
     else some ((denoteOperand k s l % denoteOperand k s r) % M)).isSome) = true
-  rw [if_neg h]
+  rw [ite_eq_right h]
   rfl
 
 /-! ## Definedness of a block, one stage at a time -/

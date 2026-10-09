@@ -209,7 +209,7 @@ def ExpCfg.init (c : ExpCfg) : List AInstr :=
 /-- The mantissa in slot `0`, the unconsumed exponent bits in slot `1`, the
 aggregate violation count in slot `2`, and the two classes it is made of in
 slots `3` and `4`: roots that overshot, roots that undershot. -/
-def ExpCfg.epilogue (c : ExpCfg) : List AInstr :=
+def ExpCfg.epilogue (_c : ExpCfg) : List AInstr :=
   storeResult 0 rX ++ storeResult 1 rR ++ storeResult 2 rViol ++
   storeResult 3 rVHi ++ storeResult 4 rVLo
 

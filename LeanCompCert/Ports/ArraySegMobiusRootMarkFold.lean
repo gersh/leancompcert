@@ -252,8 +252,8 @@ theorem arun_coreBody_simulates_terminal_limit (c : Cfg) (idx : Nat)
     Nat.min_eq_right (by omega)
   apply ScheduleState.ext
   · dsimp [machineScheduleState, machineCursor, scheduleStep, cursorStep]
-    rw [hpi, if_neg (Nat.not_lt.mpr hj), hmin, htable]
-    simp only [if_pos]
+    rw [hpi, ite_eq_right (Nat.not_lt.mpr hj), hmin, htable]
+    simp only [ite_eq_left]
     rw [Cursor.mk.injEq]
     exact ⟨hcur.1, hcur.2.1, hcur.2.2.1⟩
   · dsimp [machineScheduleState, scheduleStep]

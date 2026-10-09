@@ -99,9 +99,9 @@ theorem astep_core {c : Cfg} {k : Nat} {a b : AState} {i : AInstr}
         have hrval := hr v hwf.2
         simp only [astep, AState.writeArr]
         by_cases hxa : x = a.regs r
-        · rw [if_pos hxa, ← hraddr, if_pos hxa, hrval]
+        · rw [ite_eq_left hxa, ← hraddr, ite_eq_left hxa, hrval]
         · have hxb : x ≠ b.regs r := by simpa only [← hraddr] using hxa
-          rw [if_neg hxa, if_neg hxb]
+          rw [ite_eq_right hxa, ite_eq_right hxb]
           exact ha x hx
 
 theorem arun_core {c : Cfg} {k : Nat} :
@@ -135,7 +135,7 @@ theorem arun_arr_outside {len k x : Nat} (hx : len ≤ x) :
       | store r v =>
           simp only [astep, AState.writeArr]
           have haddr : s.regs r < len := h.1
-          rw [if_neg (by intro heq; subst x; omega)]
+          rw [ite_eq_right (by intro heq; subst x; omega)]
 
 theorem body_wf256 (c : Cfg) :
     ∀ i ∈ c.body, i.WF LeanCompCert.Ports.Section413G1Program.regCount := by
@@ -528,7 +528,7 @@ theorem rawPrefix_zero_cells (c : Cfg) (hc : TableAdmissible c) :
             tableLo c + (c.tsel k).isF * (c.tsel k).X := by omega
         have hhieq : tableHi c ≠
             tableHi c + (c.tsel k).isF * (c.tsel k).X := by omega
-        simp only [hlohi, hhilo, hloeq, hhieq, if_false] at hlo hhi
+        simp only [hlohi, hhilo, hloeq, hhieq, ite_false] at hlo hhi
         exact ⟨hlo.trans hprev.1, hhi.trans hprev.2⟩
 
 theorem rawFinal_zero_cells (c : Cfg) (hc : TableAdmissible c) :
@@ -701,7 +701,7 @@ theorem rawPrefix_preserves_cell_after (c : Cfg) (hc : TableAdmissible c)
           tableLo c + (c.tsel idx).isF * (c.tsel idx).X := by omega
       have hhieq : tableHi c + X ≠
           tableHi c + (c.tsel idx).isF * (c.tsel idx).X := by omega
-      simp only [hlohi, hloeq, hhieq, hhilo, if_false] at hlo hhi
+      simp only [hlohi, hloeq, hhieq, hhilo, ite_false] at hlo hhi
       rw [← rawPrefix_succ] at hlo hhi
       have htime : idx + 1 = c.phase1 + X * c.p + (d + 1) := by
         dsimp [idx]

@@ -374,7 +374,7 @@ theorem P1224MarkWindow.CellsRep.residentStep
     (w.step c windowBase tableWord).CellsRep c out := by
   intro i hi
   simp only [P1224MarkWindow.step]
-  rw [if_pos hresident]
+  rw [ite_eq_left hresident]
   change p1224PlaneWordsAt out c.segLen i =
     ((updateP1224Cell w.cells w.cursor.offset
       ((w.cells w.cursor.offset).markPower w.cursor.base

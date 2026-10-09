@@ -47,6 +47,12 @@ def emptyMarkCell : MarkCell := ⟨0, 0, 0, 0, 0⟩
 def packWeights (count w1 w2 : Nat) : Nat :=
   w1 + (w2 <<< wtBits) + (count <<< 56)
 
+/-- The defining equation of `packWeights`, stated explicitly so that `simp`
+can use it without generating the definition's equation lemma (which needs
+expensive reduction of the literal shifts). -/
+theorem packWeights_eq (count w1 w2 : Nat) :
+    packWeights count w1 w2 = w1 + (w2 <<< wtBits) + (count <<< 56) := rfl
+
 def PlaneWords.count (x : PlaneWords) : Nat := x.weights >>> 56
 def PlaneWords.w1 (x : PlaneWords) : Nat := x.weights &&& maskWt
 def PlaneWords.w2 (x : PlaneWords) : Nat :=
@@ -110,7 +116,8 @@ theorem packWeights_count (count w1 w2 : Nat)
     packWeights count w1 w2 >>> 56 = count := by
   have hlo := lowerWeights_lt w1 w2 hw1 hw2
   have hpow : 0 < 2 ^ 56 := Nat.two_pow_pos 56
-  simp only [packWeights, wtBits, Nat.shiftRight_eq_div_pow, Nat.shiftLeft_eq]
+  unfold packWeights
+  simp only [wtBits, Nat.shiftRight_eq_div_pow, Nat.shiftLeft_eq]
   have hform :
       w1 + w2 * 2 ^ 28 + count * 2 ^ 56 =
         (w1 + w2 * 2 ^ 28) + 2 ^ 56 * count := by omega
@@ -126,7 +133,8 @@ theorem packWeights_w1 (count w1 w2 : Nat)
   have hw1' : w1 < 2 ^ 28 := by simpa only [wtBits] using hw1
   simp only [maskWt, wtBits]
   rw [Nat.and_two_pow_sub_one_eq_mod]
-  simp only [packWeights, wtBits, Nat.shiftLeft_eq]
+  unfold packWeights
+  simp only [wtBits, Nat.shiftLeft_eq]
   have hform :
       w1 + w2 * 2 ^ 28 + count * 2 ^ 56 =
         w1 + 2 ^ 28 * (w2 + count * 2 ^ 28) := by omega
@@ -140,7 +148,8 @@ theorem packWeights_w2 (count w1 w2 : Nat)
   have hw2' : w2 < 2 ^ 28 := by simpa only [wtBits] using hw2
   simp only [maskWt, wtBits]
   rw [Nat.and_two_pow_sub_one_eq_mod]
-  simp only [packWeights, wtBits, Nat.shiftRight_eq_div_pow,
+  unfold packWeights
+  simp only [wtBits, Nat.shiftRight_eq_div_pow,
     Nat.shiftLeft_eq]
   have hpow : 0 < 2 ^ 28 := Nat.two_pow_pos 28
   have hform :

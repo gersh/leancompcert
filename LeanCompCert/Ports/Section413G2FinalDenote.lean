@@ -41,7 +41,7 @@ theorem finAccumS_spec (k : Nat) (s : RegState) (isF : Nat)
   have hsub : (1 + (M - isF)) % M = 1 - isF := msub_bit hF
   simp only [finAccumS, srun, InstrBlock.sdest, InstrBlock.sval,
     denoteOperand, denoteOp, RegState.set, Option.getD_some, h35, hsub,
-    one_mod_M, if_true, if_false, Nat.reduceEqDiff]
+    one_mod_M, ite_true, ite_false, Nat.reduceEqDiff]
   simp
 
 theorem finAccumS_frame (k : Nat) (s : RegState) (j : Nat)
@@ -127,7 +127,7 @@ theorem finLowPreS_spec (c : Cfg) (k : Nat) (s : RegState)
       f 228 = tsub 0 (s 12) := by
   simp only [finLowPreS, srun, InstrBlock.sdest, InstrBlock.sval,
     denoteOperand, denoteOp, RegState.set, Option.getD_some, hcl, H63_mod,
-    show (10 : Nat) % M = 10 by decide, zero_mod_M, if_true, if_false,
+    show (10 : Nat) % M = 10 by decide, zero_mod_M, ite_true, ite_false,
     Nat.reduceEqDiff, ge_iff_le, tsub, bnat]
   simp
 
@@ -192,7 +192,7 @@ theorem finLowPostS_spec (k : Nat) (s : RegState)
   dsimp only [a, b, d] at hbd habd hsgm hbad hor
   simp only [finLowPostS, srun, InstrBlock.sdest, InstrBlock.sval,
     denoteOperand, denoteOp, RegState.set, Option.getD_some, one_mod_M,
-    KLO_mod, rViol, if_true, if_false, Nat.reduceEqDiff, gt_iff_lt]
+    KLO_mod, rViol, ite_true, ite_false, Nat.reduceEqDiff, gt_iff_lt]
   simp only [bnat] at hbd habd hsgm hbad hor ⊢
   simp only [rViol] at hor
   rw [Nat.mod_eq_of_lt hbd, Nat.mod_eq_of_lt habd,
@@ -357,7 +357,7 @@ theorem finHighPreS_spec (k : Nat) (s : RegState) :
   have hsub := msub_bit hb
   simp only [finHighPreS, srun, InstrBlock.sdest, InstrBlock.sval,
     denoteOperand, denoteOp, RegState.set, Option.getD_some, H63_mod,
-    one_mod_M, zero_mod_M, if_true, if_false, Nat.reduceEqDiff, ge_iff_le,
+    one_mod_M, zero_mod_M, ite_true, ite_false, Nat.reduceEqDiff, ge_iff_le,
     tsub]
   simp only [bnat] at hsub ⊢
   rw [hsub]
@@ -412,7 +412,7 @@ theorem finHighPostS_spec (k : Nat) (s : RegState)
   dsimp only [a, b, d] at hbd habd hsgm hbad hor
   simp only [finHighPostS, srun, InstrBlock.sdest, InstrBlock.sval,
     denoteOperand, denoteOp, RegState.set, Option.getD_some, one_mod_M,
-    KLO_mod, rViol, if_true, if_false, Nat.reduceEqDiff, gt_iff_lt]
+    KLO_mod, rViol, ite_true, ite_false, Nat.reduceEqDiff, gt_iff_lt]
   simp only [bnat] at hbd habd hsgm hbad hor ⊢
   simp only [rViol] at hor
   rw [Nat.mod_eq_of_lt hbd, Nat.mod_eq_of_lt habd,

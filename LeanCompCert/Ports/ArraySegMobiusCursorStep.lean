@@ -291,12 +291,12 @@ theorem roundAfterFlag_advance (c : Cfg) (idx : Nat) (s : AState)
     exact hs5pBase.trans hs4p
   · rw [hdecomp]
     by_cases hterm : pi + 1 = limit
-    · rw [if_pos hterm]
+    · rw [ite_eq_left hterm]
       rcases cursorFinish_terminal c idx s4 hs4adv1 hs4drop0
           (by rw [hs4piNext, hs4limitVal, hterm]) hLM with
         ⟨hj, _⟩
       exact hj
-    · rw [if_neg hterm]
+    · rw [ite_eq_right hterm]
       rcases cursorFinish_advance c idx s4 (firstOffset w p)
           hs4adv1 hs4drop0 hs4off
           (by rw [hs4piNext, hs4limitVal]; exact hterm)

@@ -297,30 +297,30 @@ theorem eventTwice_clean_accumulates (k : Nat) (s : AState) (c : Cfg)
   · rw [hk1lo, hpK1Lo, hpDivisor, hpGate, hpInLo, hpInHi,
       eventK1Contribution_lo]
     cases negK1
-    · simp only [Bool.false_eq_true, if_false]
+    · simp only [Bool.false_eq_true, ite_false]
       rw [hdecodeLo]
-    · simp only [if_true]
+    · simp only [ite_true]
       rw [hnegHi]
   · rw [hk1hi, hpK1Hi, hpDivisor, hpGate, hpInLo, hpInHi,
       eventK1Contribution_hi]
     cases negK1
-    · simp only [Bool.false_eq_true, if_false]
+    · simp only [Bool.false_eq_true, ite_false]
       rw [hdecodeHi]
-    · simp only [if_true]
+    · simp only [ite_true]
       rw [hnegLo]
   · rw [hk2lo, hpK2Lo, hpFactor, hpGate, hpInLo, hpInHi,
       eventK2Contribution_lo]
     cases negK2
-    · simp only [Bool.false_eq_true, if_false, Int.mul_comm]
+    · simp only [Bool.false_eq_true, ite_false, Int.mul_comm]
       rw [hdecodeLo]
-    · simp only [if_true, Int.mul_comm]
+    · simp only [ite_true, Int.mul_comm]
       rw [hnegHi]
   · rw [hk2hi, hpK2Hi, hpFactor, hpGate, hpInLo, hpInHi,
       eventK2Contribution_hi]
     cases negK2
-    · simp only [Bool.false_eq_true, if_false, Int.mul_comm]
+    · simp only [Bool.false_eq_true, ite_false, Int.mul_comm]
       rw [hdecodeHi]
-    · simp only [if_true, Int.mul_comm]
+    · simp only [ite_true, Int.mul_comm]
       rw [hnegLo]
 
 #print axioms event_clean_accumulates

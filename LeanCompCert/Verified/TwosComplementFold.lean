@@ -80,7 +80,7 @@ checker verify it by running rather than a proof supplying it. -/
 instance decidablePartialsInRange : ∀ ps : List (Nat × Int),
     Decidable (PartialsInRange ps)
   | [] => isTrue trivial
-  | p :: ps =>
+  | _p :: ps =>
       have : Decidable (PartialsInRange ps) := decidablePartialsInRange ps
       inferInstanceAs (Decidable (PartialsInRange ps ∧ _ ∧ _))
 

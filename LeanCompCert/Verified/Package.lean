@@ -243,7 +243,7 @@ theorem localType?_reg (p : Program) (name : String) (hWF : p.WF)
           left
           simp only [Proof.StraightInstruction.toCCIR,
             CCIR.Instruction.destination?, scratchLocal]
-          rw [if_neg]
+          rw [ite_eq_right]
           show ¬ ((0 == i + 1 : Bool) = true)
           simp
       | assignReg dest src hSrc =>
@@ -252,9 +252,9 @@ theorem localType?_reg (p : Program) (name : String) (hWF : p.WF)
           by_cases hEq : dest = i
           · subst hEq
             right
-            rw [if_pos (beq_ids_true (dest + 1))]
+            rw [ite_eq_left (beq_ids_true (dest + 1))]
           · left
-            rw [if_neg]
+            rw [ite_eq_right]
             show ¬ ((dest + 1 == i + 1 : Bool) = true)
             simp
             omega
@@ -264,9 +264,9 @@ theorem localType?_reg (p : Program) (name : String) (hWF : p.WF)
           by_cases hEq : dest = i
           · subst hEq
             right
-            rw [if_pos (beq_ids_true (dest + 1))]
+            rw [ite_eq_left (beq_ids_true (dest + 1))]
           · left
-            rw [if_neg]
+            rw [ite_eq_right]
             show ¬ ((dest + 1 == i + 1 : Bool) = true)
             simp
             omega
@@ -274,7 +274,7 @@ theorem localType?_reg (p : Program) (name : String) (hWF : p.WF)
           left
           simp only [Proof.StraightInstruction.toCCIR,
             CCIR.Instruction.destination?, scratchLocal]
-          rw [if_neg]
+          rw [ite_eq_right]
           show ¬ ((0 == i + 1 : Bool) = true)
           simp
       | cast dest =>
@@ -283,9 +283,9 @@ theorem localType?_reg (p : Program) (name : String) (hWF : p.WF)
           by_cases hEq : dest = i
           · subst hEq
             right
-            rw [if_pos (beq_ids_true (dest + 1))]
+            rw [ite_eq_left (beq_ids_true (dest + 1))]
           · left
-            rw [if_neg]
+            rw [ite_eq_right]
             show ¬ ((dest + 1 == i + 1 : Bool) = true)
             simp
             omega
@@ -300,7 +300,7 @@ theorem localType?_reg (p : Program) (name : String) (hWF : p.WF)
           (List.mem_map.mpr ⟨i, List.mem_range.mpr hi, rfl⟩))
       · simp only [Proof.StraightInstruction.toCCIR,
           CCIR.Instruction.destination?, regLocal]
-        rw [if_pos (beq_ids_true (i + 1))]
+        rw [ite_eq_left (beq_ids_true (i + 1))]
         simp
 
 theorem localType?_scratch (p : Program) (name : String) (hWF : p.WF) :
@@ -319,31 +319,31 @@ theorem localType?_scratch (p : Program) (name : String) (hWF : p.WF) :
           right
           simp only [Proof.StraightInstruction.toCCIR,
             CCIR.Instruction.destination?, scratchLocal]
-          rw [if_pos (beq_ids_true 0)]
+          rw [ite_eq_left (beq_ids_true 0)]
       | assignReg dest src hSrc =>
           left
           simp only [Proof.StraightInstruction.toCCIR,
             CCIR.Instruction.destination?, regLocal]
-          rw [if_neg]
+          rw [ite_eq_right]
           show ¬ ((dest + 1 == 0 : Bool) = true)
           simp
       | binary dest op lhs rhs hLhs hRhs =>
           left
           simp only [Proof.StraightInstruction.toCCIR,
             CCIR.Instruction.destination?, regLocal]
-          rw [if_neg]
+          rw [ite_eq_right]
           show ¬ ((dest + 1 == 0 : Bool) = true)
           simp
       | compare cmp lhs rhs hLhs hRhs =>
           right
           simp only [Proof.StraightInstruction.toCCIR,
             CCIR.Instruction.destination?, scratchLocal]
-          rw [if_pos (beq_ids_true 0)]
+          rw [ite_eq_left (beq_ids_true 0)]
       | cast dest =>
           left
           simp only [Proof.StraightInstruction.toCCIR,
             CCIR.Instruction.destination?, regLocal]
-          rw [if_neg]
+          rw [ite_eq_right]
           show ¬ ((dest + 1 == 0 : Bool) = true)
           simp
   case hExists =>
@@ -356,7 +356,7 @@ theorem localType?_scratch (p : Program) (name : String) (hWF : p.WF) :
         exact List.mem_cons.mpr (Or.inl rfl)
       · simp only [Proof.StraightInstruction.toCCIR,
           CCIR.Instruction.destination?, scratchLocal]
-        rw [if_pos (beq_ids_true 0)]
+        rw [ite_eq_left (beq_ids_true 0)]
         simp
 
 /-! ## Structural lowering and well-formedness -/

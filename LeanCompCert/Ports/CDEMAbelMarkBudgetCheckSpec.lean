@@ -58,7 +58,7 @@ theorem block_prefix (n : Nat) (a : Abs) (hacc : a.acc < M) :
       rw [show (List.range 1) = [0] from rfl, List.foldl_cons,
         List.foldl_nil, gstep_round n 0 hk a hacc]
       simp only [trialPrefix, show (List.range 1) = [0] from rfl,
-        List.foldl_cons, List.foldl_nil, if_pos rfl]
+        List.foldl_cons, List.foldl_nil, ite_eq_left rfl]
       rfl
   | succ k ih =>
       intro hk
@@ -66,11 +66,11 @@ theorem block_prefix (n : Nat) (a : Abs) (hacc : a.acc < M) :
       have hkne : ¬ (k + 1 = rounds) := by omega
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
         ih hklt]
-      rw [if_neg hkne]
+      rw [ite_eq_right hkne]
       rw [gstep_round n (k + 1) hk ⟨a.acc, trialPrefix (2 + n) (k + 1)⟩
         hacc]
       have hne0 : ¬ (k + 1 = 0) := by omega
-      simp only [if_neg hne0, trialPrefix, List.range_succ,
+      simp only [ite_eq_right hne0, trialPrefix, List.range_succ,
         List.foldl_append, List.foldl_cons, List.foldl_nil]
 
 theorem block_spec (n : Nat) (a : Abs) (hacc : a.acc < M) :
@@ -80,7 +80,7 @@ theorem block_spec (n : Nat) (a : Abs) (hacc : a.acc < M) :
   have h := block_prefix n a hacc (rounds - 1) (by decide)
   rw [show rounds - 1 + 1 = rounds from by decide] at h
   rw [block_eq_shift, h]
-  simp only [trialPrefix_full, if_pos]
+  simp only [trialPrefix_full, ite_eq_left]
 
 /-- The accumulated machine word after `n` complete divisor blocks. -/
 def budgetAtMod : Nat → Nat

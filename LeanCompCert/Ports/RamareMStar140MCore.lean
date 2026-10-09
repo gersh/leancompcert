@@ -149,8 +149,8 @@ theorem bitOf_lt (p : Prop) [Decidable p] : bitOf p < M := by
 theorem bitOf_le_one (p : Prop) [Decidable p] : bitOf p ≤ 1 := by
   unfold bitOf; split <;> omega
 
-theorem bitOf_pos {p : Prop} [Decidable p] (h : p) : bitOf p = 1 := if_pos h
-theorem bitOf_neg {p : Prop} [Decidable p] (h : ¬ p) : bitOf p = 0 := if_neg h
+theorem bitOf_pos {p : Prop} [Decidable p] (h : p) : bitOf p = 1 := ite_eq_left h
+theorem bitOf_neg {p : Prop} [Decidable p] (h : ¬ p) : bitOf p = 0 := ite_eq_right h
 
 
 /-- `1 − flag` is the negated flag. -/
@@ -213,8 +213,8 @@ theorem MA_MA_zero (a b : Nat) : MA (MA a 0) b = MA a b := by
 theorem MMul_bit_left (p : Prop) [Decidable p] {x : Nat} (hx : x < M) :
     MMul (bitOf p) x = if p then x else 0 := by
   by_cases hp : p
-  · rw [bitOf_pos hp, if_pos hp, MMul_one_left hx]
-  · rw [bitOf_neg hp, if_neg hp, MMul_zero_left]
+  · rw [bitOf_pos hp, ite_eq_left hp, MMul_one_left hx]
+  · rw [bitOf_neg hp, ite_eq_right hp, MMul_zero_left]
 
 /-- Gating a value by a flag on the right. -/
 theorem MMul_bit_right (p : Prop) [Decidable p] {x : Nat} (hx : x < M) :
@@ -225,10 +225,10 @@ theorem MMul_bit_right (p : Prop) [Decidable p] {x : Nat} (hx : x < M) :
 theorem select_bit (p : Prop) [Decidable p] {x y : Nat} (hx : x < M) (hy : y < M) :
     MA (MMul (bitOf p) x) (MMul (bitOf (¬ p)) y) = if p then x else y := by
   by_cases hp : p
-  · rw [MMul_bit_left p hx, MMul_bit_left (¬ p) hy, if_pos hp, if_neg (fun t => t hp),
-      MA_zero_right hx, if_pos hp]
-  · rw [MMul_bit_left p hx, MMul_bit_left (¬ p) hy, if_neg hp, if_pos hp,
-      MA_zero_left hy, if_neg hp]
+  · rw [MMul_bit_left p hx, MMul_bit_left (¬ p) hy, ite_eq_left hp, ite_eq_right (fun t => t hp),
+      MA_zero_right hx, ite_eq_left hp]
+  · rw [MMul_bit_left p hx, MMul_bit_left (¬ p) hy, ite_eq_right hp, ite_eq_left hp,
+      MA_zero_left hy, ite_eq_right hp]
 
 
 /-! ## The machine's own arithmetic

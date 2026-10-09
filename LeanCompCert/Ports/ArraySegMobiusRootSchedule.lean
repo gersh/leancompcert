@@ -314,13 +314,13 @@ theorem arun_coreBody_mark_live_nonstart_machineCell (c : Cfg) (idx : Nat)
     have hm := arun_coreBody_mark_live_nonstart c idx s hmark hR hj hpPos
       hpM hpSqM hnM hTM hA
     change RootCellState.mk _ _ = scheduledCellStep _ _ _ _ _
-    rw [scheduledCellStep, if_pos rfl, rootCellStep_hit _ _ _ hdiv,
+    rw [scheduledCellStep, ite_eq_left rfl, rootCellStep_hit _ _ _ hdiv,
       RootCellState.mk.injEq]
     exact ⟨hm.1, hm.2⟩
   · have hf := arun_coreBody_mark_live_nonstart_frame c idx s hmark hR hj
       hpPos hpM hpSqM hnM hTM hA i hi hij
     change RootCellState.mk _ _ = scheduledCellStep _ _ _ _ _
-    rw [scheduledCellStep, if_neg hij, RootCellState.mk.injEq]
+    rw [scheduledCellStep, ite_eq_right hij, RootCellState.mk.injEq]
     exact ⟨hf.1, hf.2⟩
 
 /-- An exhausted nonstart cursor performs no live-cell update in the complete
@@ -663,7 +663,7 @@ theorem arun_coreBody_mark_live_start_machineCell (c : Cfg) (idx : Nat)
         _ = flagUpdate (s.regs rW + j) (s.arr (j + c.segLen))
             c.firstPrime := hm.2.1
     change RootCellState.mk _ _ = scheduledCellStep _ _ _ _ _
-    rw [scheduledCellStep, if_pos (by rfl),
+    rw [scheduledCellStep, ite_eq_left (by rfl),
       rootCellStep_hit _ _ _ hdiv, RootCellState.mk.injEq]
     exact ⟨houtProd, houtFlag⟩
   · have hpost := arun_postSignal_mark_cells c idx t ht.1 ht.2.1 ht.2.2
@@ -679,7 +679,7 @@ theorem arun_coreBody_mark_live_start_machineCell (c : Cfg) (idx : Nat)
     have hqfi : q.arr (i + c.segLen) = s.arr (i + c.segLen) :=
       hm.2.2 (i + c.segLen) hiFlagTarget hiFlagTargetFlag
     change RootCellState.mk _ _ = scheduledCellStep _ _ _ _ _
-    rw [scheduledCellStep, if_neg hij, hcore, RootCellState.mk.injEq]
+    rw [scheduledCellStep, ite_eq_right hij, hcore, RootCellState.mk.injEq]
     exact ⟨hpost.1.trans ((congrFun htarr i).trans hqi),
       hpost.2.trans ((congrFun htarr (i + c.segLen)).trans hqfi)⟩
 

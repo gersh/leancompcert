@@ -66,7 +66,7 @@ theorem PsiQR.advance_value {n lam : Nat} (z : PsiQR) :
   unfold PsiQR.advance PsiQR.value
   dsimp only
   by_cases h : z.q ≤ z.r + lam
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     change
       (z.q + (z.r + lam - z.q) / (n + 1)) * (n + 1) +
           (z.r + lam - z.q) % (n + 1) =
@@ -79,7 +79,7 @@ theorem PsiQR.advance_value {n lam : Nat} (z : PsiQR) :
       simpa only [Nat.mul_comm, Nat.add_comm] using hdm
     rw [Nat.add_assoc, ht, Nat.mul_add, Nat.mul_one]
     omega
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     have hlt : z.r + lam < z.q := by omega
     have hd : 0 < n + 1 := by omega
     let t := z.q - (z.r + lam)
@@ -91,7 +91,7 @@ theorem PsiQR.advance_value {n lam : Nat} (z : PsiQR) :
       Nat.div_add_mod t (n + 1)
     have hr : t % (n + 1) < n + 1 := Nat.mod_lt _ hd
     by_cases hz : t % (n + 1) = 0
-    · rw [if_pos hz]
+    · rw [ite_eq_left hz]
       change (z.q - t / (n + 1)) * (n + 1) =
         z.q * n + z.r + lam
       rw [Nat.sub_mul]
@@ -101,7 +101,7 @@ theorem PsiQR.advance_value {n lam : Nat} (z : PsiQR) :
       rw [htd, Nat.mul_add, Nat.mul_one]
       simp only [t]
       omega
-    · rw [if_neg hz]
+    · rw [ite_eq_right hz]
       have hrpos : 0 < t % (n + 1) := Nat.pos_of_ne_zero hz
       have hklt : t / (n + 1) < t := by
         have hd1 : 1 < n + 1 := by omega
@@ -150,9 +150,9 @@ theorem PsiQR.advance_rem_lt {n lam : Nat} (z : PsiQR) :
   unfold PsiQR.advance
   dsimp only
   by_cases h : z.q ≤ z.r + lam
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     exact Nat.mod_lt _ (by omega)
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     split
     · change 0 < n + 1
       omega

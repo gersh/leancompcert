@@ -271,7 +271,7 @@ def montMul (s N n' a b : Nat) : Nat :=
 
 /-- The output is always a reduced residue. -/
 theorem montMul_lt (s N n' a b : Nat) (hinv : MontMultiplier N n')
-    (hN : 0 < N) (hNR : N ≤ B ^ s) (ha : a < N) (hb : b < N) :
+    (_hN : 0 < N) (hNR : N ≤ B ^ s) (ha : a < N) (hb : b < N) :
     montMul s N n' a b < N := by
   have hab : a * b < N * B ^ s + N := by
     have h1 : (a + 1) * (b + 1) ≤ N * N := Nat.mul_le_mul (by omega) (by omega)
@@ -297,7 +297,7 @@ reduction side: the result, scaled back by `Bˢ`, is the ordinary product
 modulo `N`.
 -/
 theorem montMul_spec (s N n' a b : Nat) (hinv : MontMultiplier N n')
-    (hN : 0 < N) (hNR : N ≤ B ^ s) (ha : a < N) (hb : b < N) :
+    (_hN : 0 < N) (_hNR : N ≤ B ^ s) (_ha : a < N) (_hb : b < N) :
     (montMul s N n' a b * B ^ s) % N = (a * b) % N := by
   obtain ⟨c, hc⟩ := redcIter_mul N n' hinv s (a * b)
   simp only [montMul]

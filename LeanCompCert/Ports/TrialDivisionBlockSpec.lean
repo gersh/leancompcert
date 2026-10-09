@@ -173,8 +173,8 @@ theorem tdRound_full (P : Params) (k : Nat) (v : Vals) :
       , om := (tdOut P k v).om
       , sq := (tdOut P k v).sq
       , ok := if v.acc + ctOf P k v < M then v.ok else 0 } := by
-  simp only [tdRound, ctOf, tdOut, termOf, tdIn, tdbRound_m, tdbRound_phi,
-    tdbRound_om, tdbRound_sq, tdbFinal_fst, tdbFinal_snd, shiftBase]
+  simp only [tdRound.eq_def, ctOf.eq_def, tdOut.eq_def, termOf.eq_def, tdIn.eq_def, tdbRound_m, tdbRound_phi,
+    tdbRound_om, tdbRound_sq, tdbFinal_fst, tdbFinal_snd, shiftBase.eq_def]
 
 theorem tdIn_of_eq (P : Params) (k : Nat) (v : Vals) (h : k % P.div = 0) :
     tdIn P k v = { m := P.start + k / P.div, phi := 1, om := 0, sq := 1 } := by
@@ -198,10 +198,10 @@ theorem round_step (P : Params) (k : Nat) (v : Vals) (t : TD)
       , sq := (tdbRound (k % P.div + 2) t).sq
       , ok := v.ok } := by
   have hct : ctOf P k v = 0 := by
-    unfold ctOf; rw [if_neg hne]
+    unfold ctOf; rw [ite_eq_right hne]
   rw [tdRound_full, hct]
   unfold tdOut
-  rw [hin, Nat.add_zero, Nat.mod_eq_of_lt hacc, if_pos hacc]
+  rw [hin, Nat.add_zero, Nat.mod_eq_of_lt hacc, ite_eq_left hacc]
 
 /-- **The last round of a block.**  The peel is the same; the accumulator
 gains the candidate's term, computed from the state this very round
@@ -219,7 +219,7 @@ theorem round_last (P : Params) (k : Nat) (v : Vals) (t : TD)
           termOf (P.start + k / P.div) (tdbRound (k % P.div + 2) t) < M
         then v.ok else 0 } := by
   have hct : ctOf P k v = termOf (P.start + k / P.div) (tdOut P k v) := by
-    unfold ctOf; rw [if_pos hlast]
+    unfold ctOf; rw [ite_eq_left hlast]
   rw [tdRound_full, hct]
   unfold tdOut
   rw [hin]
@@ -384,10 +384,10 @@ theorem acc_of_ok (P : Params) (hD : 2 ≤ P.div) (v : Vals) (hacc : v.acc < M) 
           ((List.range f).foldl
             (fun v q => BlockedFold.block P.div (fun v k => tdRound P k v) v q)
             v).acc + progTerm P.div (P.start + f) < M
-      · rw [if_pos hlt] at hok
+      · rw [ite_eq_left hlt] at hok
         rw [Nat.mod_eq_of_lt hlt, ih hok]
         omega
-      · rw [if_neg hlt] at hok
+      · rw [ite_eq_right hlt] at hok
         exact absurd hok (by omega)
 
 /-- `acc_of_ok` at the scan's own fuel: the shape the consumer states. -/

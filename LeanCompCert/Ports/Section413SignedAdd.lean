@@ -81,8 +81,8 @@ private theorem flagStage_outputs (k : Nat) (s : RegState)
   simp only [flagStage, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rSignA, rSignB, rSignOut, rSame,
     rChanged, rBad, rViol, rA, rB, rOut]
-  simp only [show H63 % M = H63 by decide, Nat.reduceEqDiff, if_false,
-    if_true]
+  simp only [show H63 % M = H63 by decide, Nat.reduceEqDiff, ite_false,
+    ite_true]
   simp only [rOut, rA, rB] at hout
   rw [hout]
   unfold overflowBit signBit
@@ -150,16 +150,16 @@ theorem overflowBit_zero_range (a b : Nat) (ha : a < M) (hb : b < M)
       · exact hs
       · have hlt : (a + b) % M < H63 := by omega
         simp [hsa, hsb, hlt] at hz
-    simp only [if_neg (by omega : ¬a < H63),
-      if_neg (by omega : ¬b < H63)]
+    simp only [ite_eq_right (by omega : ¬a < H63),
+      ite_eq_right (by omega : ¬b < H63)]
     simp only [LeanCompCert.Verified.MulWide.B64, M, H63] at *
     omega
-  · simp only [if_neg (by omega : ¬a < H63),
-      if_pos (by omega : b < H63)]
+  · simp only [ite_eq_right (by omega : ¬a < H63),
+      ite_eq_left (by omega : b < H63)]
     simp only [LeanCompCert.Verified.MulWide.B64, M, H63] at *
     omega
-  · simp only [if_pos (by omega : a < H63),
-      if_neg (by omega : ¬b < H63)]
+  · simp only [ite_eq_left (by omega : a < H63),
+      ite_eq_right (by omega : ¬b < H63)]
     simp only [LeanCompCert.Verified.MulWide.B64, M, H63] at *
     omega
   · have hsum : a + b < M := by
@@ -171,8 +171,8 @@ theorem overflowBit_zero_range (a b : Nat) (ha : a < M) (hb : b < M)
       · exact hs
       · have hge : H63 ≤ (a + b) % M := by omega
         simp [hsa, hsb, hge] at hz
-    simp only [if_pos (by omega : a < H63),
-      if_pos (by omega : b < H63)]
+    simp only [ite_eq_left (by omega : a < H63),
+      ite_eq_left (by omega : b < H63)]
     omega
 
 theorem clean_output_sound (k : Nat) (s : RegState)

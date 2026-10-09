@@ -97,7 +97,7 @@ theorem markCellBody_rawMarkCount_run (k : Nat) (s : AState)
   rw [h31, harr1] at harr2
   rw [h32', harr2] at harr3
   simp [s1, s2, loadedPlaneWords, PlaneWords.rawMarkCount,
-    writeLoadedPlaneWords, AState.writeArr, markWeightAdd,
+    writeLoadedPlaneWords, AState.writeArr, markWeightAdd_eq,
     h30ne31.symm, h30ne32.symm, h31ne32.symm] at harr3 ⊢
   rw [harr3]
   congr

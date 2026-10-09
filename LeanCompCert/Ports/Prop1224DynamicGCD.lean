@@ -72,7 +72,7 @@ theorem round_run (k a b : Nat) (s : AState)
       LeanCompCert.Verified.InstrBlock.sdest,
       LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
       AState.writeReg, rA, rB, rSafe, rZero, rActive, rRem, rKeep, rTake,
-      ha', hb', hzero, Nat.mod_eq_of_lt haM, Nat.mod_eq_of_lt hbM,
+      ha', hb', hzero, Nat.mod_eq_of_lt hbM,
       Nat.mod_eq_of_lt hremM, Nat.mod_eq_of_lt honeM]
 
 theorem rounds_run (n k a b : Nat) (s : AState)

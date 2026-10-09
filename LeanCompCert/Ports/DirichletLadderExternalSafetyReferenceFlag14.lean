@@ -64,7 +64,7 @@ theorem historicalFlag14_result
     Nat.mod_eq_of_lt hproduct, rViol]
   by_cases huok : scaled ≤ uElem
   · have hsubExact := modular_sub_eq uElem scaled huok huWord
-    simp only [if_pos huok, Nat.one_mul]
+    simp only [ite_eq_left huok, Nat.one_mul]
     rw [Nat.mod_eq_of_lt hscaledWord, hsubExact]
     by_cases hup : uElem - scaled < (upper + 1) * henc
     · cases isLastB <;>
@@ -75,7 +75,7 @@ theorem historicalFlag14_result
       · simp [huok, hup, bump]
         rw [show n + (1 + M) = (n + 1) + M by omega,
           Nat.add_mod_right, Nat.mod_eq_of_lt hNoWrap]
-  · simp only [if_neg huok, Nat.zero_mul, Nat.zero_mod]
+  · simp only [ite_eq_right huok, Nat.zero_mul, Nat.zero_mod]
     have hzero : (0 + (M - 0)) % M = 0 := by simp [M]
     rw [hzero]
     by_cases hup : 0 < (upper + 1) * henc

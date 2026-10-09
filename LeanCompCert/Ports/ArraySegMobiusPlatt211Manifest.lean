@@ -201,7 +201,7 @@ theorem strictThreshold_eq_platt211Threshold_of_certificate (row : Row)
   unfold platt211Threshold
   change row.strictThreshold =
     (if Nat.sqrt radicand ≤ budget then 0 else Nat.sqrt radicand - budget)
-  rw [hsqrt, if_neg (Nat.not_le_of_lt hbudget)]
+  rw [hsqrt, ite_eq_right (Nat.not_le_of_lt hbudget)]
   dsimp only [raw, budget]
   omega
 

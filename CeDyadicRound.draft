@@ -77,7 +77,7 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
     · refine ⟨h0, ?_⟩
       by_cases hle : pk2 ≤ n
       · exact hle
-      · rw [h0, Nat.one_mul, if_neg hle] at h; exact absurd h (by omega)
+      · rw [h0, Nat.one_mul, ite_eq_right hle] at h; exact absurd h (by omega)
   have hdob0 : dob = 0 → n < 2 * s 2 := by
     intro h0
     rcases Nat.lt_or_ge n (2 * s 2) with h | h
@@ -86,26 +86,26 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
       have hrr0 : rr = 0 := by
         have hb := hs.bumpRnd (by rw [hcandk]; exact hne)
         rw [hrndk] at hb; exact hb
-      have hf1 : first = 1 := by rw [efirst, if_pos hrr0]
+      have hf1 : first = 1 := by rw [efirst, ite_eq_left hrr0]
       have hle : pk2 ≤ n := by omega
-      rw [edob, hf1, Nat.one_mul, if_pos hle] at h0
+      rw [edob, hf1, Nat.one_mul, ite_eq_left hle] at h0
       exact absurd h0 (by omega)
   have hpkpos : 0 < pk := by
     rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
-    · rw [epk, if_neg (by omega)]; exact hs2pos
-    · rw [epk, if_pos h]; omega
+    · rw [epk, ite_eq_right (by omega)]; exact hs2pos
+    · rw [epk, ite_eq_left h]; omega
   have hpkle : pk ≤ n := by
     rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
-    · rw [epk, if_neg (by omega)]; exact hs2le
-    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, if_pos h]; exact hle
+    · rw [epk, ite_eq_right (by omega)]; exact hs2le
+    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, ite_eq_left h]; exact hle
   have hpklt : n < 2 * pk := by
     rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
-    · rw [epk, if_neg (by omega)]; exact hdob0 h
-    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, if_pos h]; omega
+    · rw [epk, ite_eq_right (by omega)]; exact hdob0 h
+    · obtain ⟨_, hle⟩ := hdob1 h; rw [epk, ite_eq_left h]; omega
   have hpkPow : pk = 2 ^ kk := by
     rcases (show dob = 0 ∨ dob = 1 by omega) with h | h
-    · rw [epk, if_neg (by omega), ekk, h, Nat.add_zero]; exact hs.pkPow
-    · rw [epk, if_pos h, ekk, h, epk2, hs.pkPow, Nat.pow_succ]
+    · rw [epk, ite_eq_right (by omega), ekk, h, Nat.add_zero]; exact hs.pkPow
+    · rw [epk, ite_eq_left h, ekk, h, epk2, hs.pkPow, Nat.pow_succ]
   have hkkLe : kk ≤ 24 := by
     rcases Nat.lt_or_ge kk 25 with h | h
     · omega
@@ -178,9 +178,9 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
   obtain ⟨cf0, ecf0⟩ : ∃ x, x = if rr = 0 then 0 else s 4 := ⟨_, rfl⟩
   have hpkS2 : rr ≠ 0 → pk = s 2 := by
     intro h
-    have hf0 : first = 0 := by rw [efirst, if_neg h]
+    have hf0 : first = 0 := by rw [efirst, ite_eq_right h]
     have hd0 : dob = 0 := by rw [edob, hf0, Nat.zero_mul]
-    rw [epk, if_neg (by omega)]
+    rw [epk, ite_eq_right (by omega)]
   have hdivA : rr ≠ 0 →
       (s 5, s 6) = sdRun denA (min (rr - 1) 8) (0, numA) := by
     intro h
@@ -195,20 +195,20 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
     exact hh
   have hrA0lt : rA0 < denA := by
     by_cases h : rr = 0
-    · rw [erA0, if_pos h]; exact hnAlt
-    · rw [erA0, if_neg h]; exact sdRun_snd_bound hdA hnAlt (hdivA h)
+    · rw [erA0, ite_eq_left h]; exact hnAlt
+    · rw [erA0, ite_eq_right h]; exact sdRun_snd_bound hdA hnAlt (hdivA h)
   have hrB0lt : rB0 < denB := by
     by_cases h : rr = 0
-    · rw [erB0, if_pos h]; exact hnBlt
-    · rw [erB0, if_neg h]; exact sdRun_snd_bound hdB hnBlt (hdivB h)
+    · rw [erB0, ite_eq_left h]; exact hnBlt
+    · rw [erB0, ite_eq_right h]; exact sdRun_snd_bound hdB hnBlt (hdivB h)
   have hqA0b : 4 * qA0 ≤ 3 * 256 ^ (min (rr - 1) 8) := by
     by_cases h : rr = 0
-    · rw [eqA0, if_pos h]; omega
-    · rw [eqA0, if_neg h]; exact sdRun_fst_bound hdA hA43' (hdivA h)
+    · rw [eqA0, ite_eq_left h]; omega
+    · rw [eqA0, ite_eq_right h]; exact sdRun_fst_bound hdA hA43' (hdivA h)
   have hqB0b : 4 * qB0 ≤ 3 * 256 ^ (min (rr - 1) 8) := by
     by_cases h : rr = 0
-    · rw [eqB0, if_pos h]; omega
-    · rw [eqB0, if_neg h]; exact sdRun_fst_bound hdB hB43' (hdivB h)
+    · rw [eqB0, ite_eq_left h]; omega
+    · rw [eqB0, ite_eq_right h]; exact sdRun_fst_bound hdB hB43' (hdivB h)
   have hp8 : (256 : Nat) ^ (min (rr - 1) 8) ≤ 2 ^ 64 :=
     pow256_le8 (Nat.min_le_right _ _)
   have hqA0M : 4 * qA0 ≤ 3 * 2 ^ 64 := by omega
@@ -456,8 +456,8 @@ theorem ceRun_spec (c : Params) (hP : c.Sane) {k : Nat}
       = if rr = 0 then a else b := by
     intro a b
     by_cases h : rr = 0
-    · rw [efirst, if_pos h, if_pos h, if_pos rfl]
-    · rw [efirst, if_neg h, if_neg h, if_neg (by omega : ¬ (0 : Nat) = 1)]
+    · rw [efirst, ite_eq_left h, ite_eq_left h, ite_eq_left rfl]
+    · rw [efirst, ite_eq_right h, ite_eq_right h, ite_eq_right (by omega : ¬ (0 : Nat) = 1)]
   rw [hif, ← eqA0] at r34
   rw [hif, ← erA0] at r35
   rw [hif, ← eqB0] at r36

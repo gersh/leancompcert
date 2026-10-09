@@ -155,23 +155,23 @@ theorem historicalEarly_viol
     rw [frame (idx := idx) (l := early5) (r := r) (by
       simp [LeanCompCert.Verified.ArrayRegFrame.writes,
         LeanCompCert.Verified.ArrayRegFrame.instrWrites, early5,
-        LeanCompCert.Verified.InstrBlock.sdest, rViol]; omega)]
+        LeanCompCert.Verified.InstrBlock.sdest.eq_def, rViol]; omega)]
     rw [frame (idx := idx) (l := early4) (r := r) (by
       simp [LeanCompCert.Verified.ArrayRegFrame.writes,
         LeanCompCert.Verified.ArrayRegFrame.instrWrites, early4,
-        LeanCompCert.Verified.InstrBlock.sdest, rViol]; omega)]
+        LeanCompCert.Verified.InstrBlock.sdest.eq_def, rViol]; omega)]
     rw [frame (idx := idx) (l := early3) (r := r) (by
       simp [LeanCompCert.Verified.ArrayRegFrame.writes,
         LeanCompCert.Verified.ArrayRegFrame.instrWrites, early3,
-        LeanCompCert.Verified.InstrBlock.sdest, rViol]; omega)]
+        LeanCompCert.Verified.InstrBlock.sdest.eq_def, rViol]; omega)]
     rw [frame (idx := idx) (l := early2) (r := r) (by
       simp [LeanCompCert.Verified.ArrayRegFrame.writes,
         LeanCompCert.Verified.ArrayRegFrame.instrWrites, early2,
-        LeanCompCert.Verified.InstrBlock.sdest, rViol]; omega)]
+        LeanCompCert.Verified.InstrBlock.sdest.eq_def, rViol]; omega)]
     exact frame (idx := idx) (s := loaded) (l := early1) (r := r) (by
       simp [LeanCompCert.Verified.ArrayRegFrame.writes,
         LeanCompCert.Verified.ArrayRegFrame.instrWrites, early1,
-        LeanCompCert.Verified.InstrBlock.sdest, rViol]; omega)
+        LeanCompCert.Verified.InstrBlock.sdest.eq_def, rViol]; omega)
   have h6 := early6_result idx v5 lower slots upper s5 hv5
     (by simpa using low5 23 (by omega) (by omega) |>.trans hlower0)
     (by simpa using low5 24 (by omega) (by omega) |>.trans hslots0)

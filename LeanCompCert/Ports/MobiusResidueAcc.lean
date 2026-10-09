@@ -35,7 +35,7 @@ theorem accStep_snd_lt (pos neg wl wh tLo tHi : Nat) :
 theorem accStep_zero (wl wh tLo tHi : Nat) (hlo : tLo < M) (hhi : tHi < M) :
     accStep 0 0 wl wh tLo tHi = (tLo, tHi) := by
   simp only [accStep, M_eq', Nat.zero_mul, Nat.zero_mod, Nat.add_zero,
-    Nat.sub_zero, Nat.not_lt_zero, if_false, Prod.mk.injEq] at *
+    Nat.sub_zero, Nat.not_lt_zero, ite_false, Prod.mk.injEq] at *
   omega
 
 /-- μ(n) = +1: a 128-bit add, exact below 2^128. -/
@@ -49,7 +49,7 @@ theorem accStep_add (wl wh tLo tHi : Nat) (hwl : wl < M) (hwh : wh < M)
   -- `b152 = b153 = 0`, so both outer subtractions are `+ M`, i.e. the identity.
   simp only [accStep, hwl', hwh', Nat.add_mod_right, Nat.mod_mod, M_eq',
     Nat.one_mul, Nat.zero_mul, Nat.zero_mod, Nat.sub_zero,
-    Nat.not_lt_zero, if_false] at *
+    Nat.not_lt_zero, ite_false] at *
   -- the remaining `if` is the carry `b155`
   split <;> omega
 
@@ -65,7 +65,7 @@ theorem accStep_sub (wl wh tLo tHi : Nat) (hwl : wl < M) (hwh : wh < M)
   have hhi' : tHi % M = tHi := Nat.mod_eq_of_lt hhi
   -- `b150 = b151 = 0`, so `b154 = tLo`, `b155 = 0`, `b157 = tHi`.
   simp only [accStep, Nat.one_mul, Nat.zero_mul, Nat.zero_mod, Nat.add_zero,
-    hwl', hwh', hlo', hhi', Nat.not_lt_zero, if_false, M_eq'] at *
+    hwl', hwh', hlo', hhi', Nat.not_lt_zero, ite_false, M_eq'] at *
   -- the remaining `if` is the borrow `b158`
   split <;> omega
 

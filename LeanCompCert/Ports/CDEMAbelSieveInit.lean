@@ -45,7 +45,7 @@ theorem cdem_cellWrite_of_forall_ne (j init : Nat)
   | nil => rfl
   | cons x xs ih =>
       simp only [List.foldl_cons]
-      rw [if_neg (fun h => hne x (by simp) h.symm)]
+      rw [ite_eq_right (fun h => hne x (by simp) h.symm)]
       exact ih init (fun y hy => hne y (by simp [hy]))
 
 theorem cdem_cellWrite_eq_of_mem (j value init : Nat)
@@ -58,7 +58,7 @@ theorem cdem_cellWrite_eq_of_mem (j value init : Nat)
       simp only [List.foldl_cons]
       by_cases hx : x.1 = j
       · have hxv : x.2 = value := hvalue x (by simp) hx
-        rw [if_pos hx.symm, hxv]
+        rw [ite_eq_left hx.symm, hxv]
         by_cases htail : (j, value) ∈ xs
         · exact ih value htail (fun y hy => hvalue y (by simp [hy]))
         · apply cdem_cellWrite_of_forall_ne
@@ -67,7 +67,7 @@ theorem cdem_cellWrite_eq_of_mem (j value init : Nat)
           apply htail
           cases y
           simp_all
-      · rw [if_neg (fun h => hx h.symm)]
+      · rw [ite_eq_right (fun h => hx h.symm)]
         have htail : (j, value) ∈ xs := by
           rcases List.mem_cons.mp hmem with hhead | htail
           · subst x
@@ -87,7 +87,7 @@ theorem cdem_seedRegs_arr (idx : Nat) (s : AState)
 theorem cdem_seedReg_reg (idx r : Nat) (s : AState) (x : Nat × Nat) :
     (arun idx s [.scalar (.mov x.1 (.lit x.2))]).regs r =
       if r = x.1 then x.2 % M else s.regs r := by
-  simp [arun, astep, AState.writeReg, InstrBlock.sdest, InstrBlock.sval,
+  simp [arun, astep, AState.writeReg, InstrBlock.sdest.eq_def, InstrBlock.sval,
     denoteOperand]
 
 theorem cdem_seedRegs_reg_zero (idx r : Nat) (s : AState)
@@ -101,8 +101,8 @@ theorem cdem_seedRegs_reg_zero (idx r : Nat) (s : AState)
       apply ih (arun idx s [.scalar (.mov x.1 (.lit x.2))])
       · rw [cdem_seedReg_reg]
         by_cases hxr : x.1 = r
-        · rw [if_pos hxr.symm, hz x (by simp) hxr, Nat.zero_mod]
-        · rw [if_neg (fun h => hxr h.symm), hs]
+        · rw [ite_eq_left hxr.symm, hz x (by simp) hxr, Nat.zero_mod]
+        · rw [ite_eq_right (fun h => hxr h.symm), hs]
       · intro y hy
         exact hz y (by simp [hy])
 
@@ -138,8 +138,8 @@ theorem primeCell_mem (c : Cfg) (j : Nat) (hj : j < c.pn) :
     (j, c.primes[j]) ∈ c.primeCells := by
   apply List.mem_map.mpr
   refine ⟨(c.primes[j], j), ?_, ?_⟩
-  · exact List.mk_mem_zipIdx_iff_getElem?.mpr (by simp)
-  · simp [Cfg.primeBase]
+  · exact List.mk_mem_zipIdx_iff_getElem?.mpr (List.getElem?_eq_getElem hj)
+  · exact congrArg (fun a => (a, c.primes[j])) (Nat.zero_add j)
 
 theorem primeCells_value (c : Cfg) (j : Nat) (hj : j < c.pn)
     (x : Nat × Nat) (hx : x ∈ c.primeCells) (haddr : x.1 = j) :

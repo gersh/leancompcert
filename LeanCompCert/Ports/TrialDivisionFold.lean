@@ -662,11 +662,11 @@ theorem blkPeelB_spec (k : Nat) (t : RegState)
   have hshl := shlVal omC homC
   have e0 : om1 % M = om1 := Nat.mod_eq_of_lt (by omega)
   by_cases hgt : 1 < m1
-  · rw [if_pos hgt] at ephiF eomF
+  · rw [ite_eq_left hgt] at ephiF eomF
     rw [eomF] at eomC
     subst ephiF
     by_cases h15 : om1 + 1 < 15
-    · rw [if_pos h15] at eomC
+    · rw [ite_eq_left h15] at eomC
       subst eomC
       refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
         simp [run, blkPeelB, evalExpr, denoteOp, RegState.set, sel,
@@ -674,7 +674,7 @@ theorem blkPeelB_spec (k : Nat) (t : RegState)
           lit1, lit14, lit15, Nat.mod_eq_of_lt hphiFM,
           Nat.mod_eq_of_lt hom1M, Nat.mod_eq_of_lt hnphiF,
           Nat.mod_eq_of_lt hsum]
-    · rw [if_neg h15] at eomC
+    · rw [ite_eq_right h15] at eomC
       subst eomC
       refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
         simp [run, blkPeelB, evalExpr, denoteOp, RegState.set, sel,
@@ -682,11 +682,11 @@ theorem blkPeelB_spec (k : Nat) (t : RegState)
           lit1, lit14, lit15, Nat.mod_eq_of_lt hphiFM,
           Nat.mod_eq_of_lt hom1M, Nat.mod_eq_of_lt hnphiF,
           Nat.mod_eq_of_lt hsum]
-  · rw [if_neg hgt] at ephiF eomF
+  · rw [ite_eq_right hgt] at ephiF eomF
     rw [eomF] at eomC
     subst ephiF
     by_cases h15 : om1 < 15
-    · rw [if_pos h15] at eomC
+    · rw [ite_eq_left h15] at eomC
       subst eomC
       refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
         simp [run, blkPeelB, evalExpr, denoteOp, RegState.set, sel,
@@ -694,7 +694,7 @@ theorem blkPeelB_spec (k : Nat) (t : RegState)
           lit1, lit14, lit15,
           Nat.mod_eq_of_lt hphi1M, Nat.mod_eq_of_lt hphiFM,
           Nat.mod_eq_of_lt hnphiF, Nat.mod_eq_of_lt hsum]
-    · rw [if_neg h15] at eomC
+    · rw [ite_eq_right h15] at eomC
       subst eomC
       refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
         simp [run, blkPeelB, evalExpr, denoteOp, RegState.set, sel,
@@ -778,12 +778,12 @@ private theorem divStep_lt (dest : Nat) (op : Op) (a b : Nat) (s : RegState)
   by_cases h : i = dest
   · subst h
     show (if i = i then (denoteOp op (s a) (s b)).getD 0 else s i) < M
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     cases hd : denoteOp op (s a) (s b) with
     | none => exact M_pos
     | some r => exact denoteOp_lt op _ _ r hd
   · show (if i = dest then (denoteOp op (s a) (s b)).getD 0 else s i) < M
-    rw [if_neg h]
+    rw [ite_eq_right h]
     exact hs i
 
 private theorem idxDivStep_lt (D k : Nat) (s : RegState) (hs : ∀ i, s i < M) :
@@ -792,17 +792,17 @@ private theorem idxDivStep_lt (D k : Nat) (s : RegState) (hs : ∀ i, s i < M) :
   show (if i = 7 then (denoteOp .urem (k % M) (D % M)).getD 0
     else (if i = 6 then (denoteOp .udiv (k % M) (D % M)).getD 0 else s i)) < M
   by_cases h7 : i = 7
-  · rw [if_pos h7]
+  · rw [ite_eq_left h7]
     cases hd : denoteOp Op.urem (k % M) (D % M) with
     | none => exact M_pos
     | some r => exact denoteOp_lt _ _ _ r hd
-  · rw [if_neg h7]
+  · rw [ite_eq_right h7]
     by_cases h6 : i = 6
-    · rw [if_pos h6]
+    · rw [ite_eq_left h6]
       cases hd : denoteOp Op.udiv (k % M) (D % M) with
       | none => exact M_pos
       | some r => exact denoteOp_lt _ _ _ r hd
-    · rw [if_neg h6]; exact hs i
+    · rw [ite_eq_right h6]; exact hs i
 
 theorem tdRun_lt (P : Params) (k : Nat) (s : RegState) (hs : ∀ i, s i < M) :
     ∀ i, tdRun P k s i < M := by
@@ -877,24 +877,24 @@ theorem tdRun_spec (hP : P.Sane) (hk : k < P.fuel * P.div) (hs : TDInv P s) :
   have hdB : d ≤ 2 ^ 31 := by omega
   have hm0pos : 0 < m0 := by
     by_cases hz : rr = 0
-    · rw [em0, if_pos hz]; omega
-    · rw [em0, if_neg hz]; exact hs.mPos
+    · rw [em0, ite_eq_left hz]; omega
+    · rw [em0, ite_eq_right hz]; exact hs.mPos
   have hphi0pos : 0 < phi0 := by
     by_cases hz : rr = 0
-    · rw [ephi0, if_pos hz]; omega
-    · rw [ephi0, if_neg hz]; exact hs.phiPos
+    · rw [ephi0, ite_eq_left hz]; omega
+    · rw [ephi0, ite_eq_right hz]; exact hs.phiPos
   have hprod0 : m0 * phi0 ≤ P.start + P.fuel := by
     by_cases hz : rr = 0
-    · rw [em0, ephi0, if_pos hz, if_pos hz, Nat.mul_one]; omega
-    · rw [em0, ephi0, if_neg hz, if_neg hz]; exact hs.prod
+    · rw [em0, ephi0, ite_eq_left hz, ite_eq_left hz, Nat.mul_one]; omega
+    · rw [em0, ephi0, ite_eq_right hz, ite_eq_right hz]; exact hs.prod
   have homs0 : om0 + m0 ≤ P.start + P.fuel := by
     by_cases hz : rr = 0
-    · rw [em0, eom0, if_pos hz, if_pos hz]; omega
-    · rw [em0, eom0, if_neg hz, if_neg hz]; exact hs.omSum
+    · rw [em0, eom0, ite_eq_left hz, ite_eq_left hz]; omega
+    · rw [em0, eom0, ite_eq_right hz, ite_eq_right hz]; exact hs.omSum
   have hsq0le : sq0 ≤ 1 := by
     by_cases hz : rr = 0
-    · rw [esq0, if_pos hz]; exact Nat.le_refl _
-    · rw [esq0, if_neg hz]; exact hs.sqLe
+    · rw [esq0, ite_eq_left hz]; exact Nat.le_refl _
+    · rw [esq0, ite_eq_right hz]; exact hs.sqLe
   have hm0B : m0 ≤ P.start + P.fuel :=
     Nat.le_trans (Nat.le_mul_of_pos_right m0 hphi0pos) hprod0
   have hphi0B : phi0 ≤ P.start + P.fuel :=
@@ -919,15 +919,15 @@ theorem tdRun_spec (hP : P.Sane) (hk : k < P.fuel * P.div) (hs : TDInv P s) :
     · exact h0
   have hm1pos : 0 < m1 := by
     by_cases hdvd : m0 % d = 0
-    · rw [em1, if_pos hdvd]; exact hqpos hdvd
-    · rw [em1, if_neg hdvd]; exact hm0pos
+    · rw [em1, ite_eq_left hdvd]; exact hqpos hdvd
+    · rw [em1, ite_eq_right hdvd]; exact hm0pos
   have hphi1pos : 0 < phi1 := by
     by_cases hdvd : m0 % d = 0
-    · rw [ephi1, if_pos hdvd]; exact Nat.mul_pos hphi0pos (by omega)
-    · rw [ephi1, if_neg hdvd]; exact hphi0pos
+    · rw [ephi1, ite_eq_left hdvd]; exact Nat.mul_pos hphi0pos (by omega)
+    · rw [ephi1, ite_eq_right hdvd]; exact hphi0pos
   have hprod1 : m1 * phi1 ≤ P.start + P.fuel := by
     by_cases hdvd : m0 % d = 0
-    · rw [em1, ephi1, if_pos hdvd, if_pos hdvd]
+    · rw [em1, ephi1, ite_eq_left hdvd, ite_eq_left hdvd]
       have h1 := hmd hdvd
       have hX : m0 / d * (d - 1) ≤ m0 := by
         have : m0 / d * (d - 1) ≤ m0 / d * d :=
@@ -938,19 +938,19 @@ theorem tdRun_spec (hP : P.Sane) (hk : k < P.fuel * P.div) (hs : TDInv P s) :
         _ ≤ phi0 * m0 := Nat.mul_le_mul (Nat.le_refl _) hX
         _ = m0 * phi0 := Nat.mul_comm _ _
         _ ≤ P.start + P.fuel := hprod0
-    · rw [em1, ephi1, if_neg hdvd, if_neg hdvd]; exact hprod0
+    · rw [em1, ephi1, ite_eq_right hdvd, ite_eq_right hdvd]; exact hprod0
   have homs1 : om1 + m1 ≤ P.start + P.fuel := by
     by_cases hdvd : m0 % d = 0
-    · rw [em1, eom1, if_pos hdvd, if_pos hdvd]
+    · rw [em1, eom1, ite_eq_left hdvd, ite_eq_left hdvd]
       have h1 := hmd hdvd
       have h2 : m0 / d * 2 ≤ m0 / d * d := Nat.mul_le_mul (Nat.le_refl _) hd2
       have h3 := hqpos hdvd
       omega
-    · rw [em1, eom1, if_neg hdvd, if_neg hdvd]; exact homs0
+    · rw [em1, eom1, ite_eq_right hdvd, ite_eq_right hdvd]; exact homs0
   have hsq1le : sq1 ≤ 1 := by
     by_cases hdvd : m0 % d = 0 ∧ m0 / d % d = 0
-    · rw [esq1, if_pos hdvd]; omega
-    · rw [esq1, if_neg hdvd]; exact hsq0le
+    · rw [esq1, ite_eq_left hdvd]; omega
+    · rw [esq1, ite_eq_right hdvd]; exact hsq0le
   have hm1B : m1 ≤ P.start + P.fuel :=
     Nat.le_trans (Nat.le_mul_of_pos_right m1 hphi1pos) hprod1
   have hphi1B : phi1 ≤ P.start + P.fuel :=
@@ -965,23 +965,23 @@ theorem tdRun_spec (hP : P.Sane) (hk : k < P.fuel * P.div) (hs : TDInv P s) :
     omega
   have hphiFpos : 0 < phiF := by
     by_cases hgt : 1 < m1
-    · rw [ephiF, if_pos hgt]; exact Nat.mul_pos hphi1pos (by omega)
-    · rw [ephiF, if_neg hgt]; exact hphi1pos
+    · rw [ephiF, ite_eq_left hgt]; exact Nat.mul_pos hphi1pos (by omega)
+    · rw [ephiF, ite_eq_right hgt]; exact hphi1pos
   have hphiFB : phiF ≤ P.start + P.fuel := by
     by_cases hgt : 1 < m1
-    · rw [ephiF, if_pos hgt]
+    · rw [ephiF, ite_eq_left hgt]
       have hc : phi1 * m1 = m1 * phi1 := Nat.mul_comm _ _
       have hle : phi1 * (m1 - 1) ≤ phi1 * m1 :=
         Nat.mul_le_mul (Nat.le_refl _) (by omega)
       omega
-    · rw [ephiF, if_neg hgt]; exact hphi1B
+    · rw [ephiF, ite_eq_right hgt]; exact hphi1B
   have homC14 : omC ≤ 14 := by
     by_cases h15 : omF < 15
-    · rw [eomC, if_pos h15]
+    · rw [eomC, ite_eq_left h15]
       by_cases hgt : 1 < m1
-      · rw [eomF, if_pos hgt] at h15 ⊢; omega
-      · rw [eomF, if_neg hgt] at h15 ⊢; omega
-    · rw [eomC, if_neg h15]; exact Nat.le_refl _
+      · rw [eomF, ite_eq_left hgt] at h15 ⊢; omega
+      · rw [eomF, ite_eq_right hgt] at h15 ⊢; omega
+    · rw [eomC, ite_eq_right h15]; exact Nat.le_refl _
   have hnphiF : n * phiF < M := by
     have : n * phiF ≤ 2 ^ 31 * 2 ^ 31 := Nat.mul_le_mul (by omega) (by omega)
     omega
@@ -1067,12 +1067,12 @@ theorem tdRun_spec (hP : P.Sane) (hk : k < P.fuel * P.div) (hs : TDInv P s) :
   -- Stage 5: masked accumulation.
   have hmaskle : mask ≤ 1 := by
     by_cases hz : rr = P.div - 1
-    · rw [emask, if_pos hz]; exact Nat.le_refl _
-    · rw [emask, if_neg hz]; omega
+    · rw [emask, ite_eq_left hz]; exact Nat.le_refl _
+    · rw [emask, ite_eq_right hz]; omega
   have ect' : ct = mask * (sq1 * tv) := by
     by_cases hz : rr = P.div - 1
-    · rw [ect, emask, if_pos hz, if_pos hz, Nat.one_mul]
-    · rw [ect, emask, if_neg hz, if_neg hz, Nat.zero_mul]
+    · rw [ect, emask, ite_eq_left hz, ite_eq_left hz, Nat.one_mul]
+    · rw [ect, emask, ite_eq_right hz, ite_eq_right hz, Nat.zero_mul]
   obtain ⟨c21, c5, c0, c1, c2, c3, c4⟩ :=
     blkAcc_spec k (st4 P k s) (s 0) (s 5) mask sq1 tv ct
       ((s4_other 0 (by decide)).trans s3_0)
@@ -1089,7 +1089,8 @@ theorem tdRun_spec (hP : P.Sane) (hk : k < P.fuel * P.div) (hs : TDInv P s) :
   · rw [tdRound_mk P k (valsOf s) rr n d m0 phi0 om0 sq0 m1 phi1 om1 sq1 phiF
       omF omC den tv ct err en ed em0 ephi0 eom0 esq0 em1 ephi1 eom1 esq1 ephiF
       eomF eomC eden etv ect]
-    simp only [valsOf, c0, c1, c2, c3, c4, c5]
+    by_cases hw : s 0 + ct < M <;>
+      simp only [valsOf, c0, c1, c2, c3, c4, c5, hw, ↓reduceIte]
   · exact
       { word := tdRun_lt P k s hs.word
         mPos := by rw [c1]; exact hm1pos
@@ -1099,8 +1100,8 @@ theorem tdRun_spec (hP : P.Sane) (hk : k < P.fuel * P.div) (hs : TDInv P s) :
         okLe := by
           rw [c5]
           by_cases hw : s 0 + ct < M
-          · rw [if_pos hw]; exact hs.okLe
-          · rw [if_neg hw]; omega
+          · rw [ite_eq_left hw]; exact hs.okLe
+          · rw [ite_eq_right hw]; omega
         omSum := by rw [c3, c1]; exact homs1 }
 
 end Round

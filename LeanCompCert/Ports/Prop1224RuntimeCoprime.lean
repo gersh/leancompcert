@@ -71,7 +71,7 @@ theorem round_run (spfBase len k q m cop : Nat) (spf : Nat → Nat) (s : AState)
     (harr : s.arr (spfBase + m) = spf m)
     (haddr : spfBase + m < len) (haddrM : spfBase + m < M)
     (hp : 0 < spf m) (hpM : spf m < M)
-    (hqM : q < M) (hmM : m < M) (hcop1 : cop ≤ 1) :
+    (_hqM : q < M) (hmM : m < M) (hcop1 : cop ≤ 1) :
     let out := arun k s (round spfBase)
     out.regs rM = (step spf q (m, cop)).1 ∧
       out.regs rCop = (step spf q (m, cop)).2 ∧ out.arr = s.arr := by
@@ -102,19 +102,18 @@ theorem round_run (spfBase len k q m cop : Nat) (spf : Nat → Nat) (s : AState)
       LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
       AState.writeReg, rQ, rM, rCop, rAddr, rP, rPZero, rPSafe, rActive,
       rRem, rNondiv, rKeep, rSelect, rQuot, rNext,
-      hq', hm', hcop', harr', haddr', haddrMod', hmMod, hpne, hcopM, hm1,
-      hMsub1, Nat.mod_eq_of_lt honeM,
-      Nat.mod_eq_of_lt hpM, Nat.mod_eq_of_lt hqM,
-      Nat.mod_eq_of_lt hqmodM, Nat.mod_eq_of_lt hdivM]
+      hq', hm', hcop', hm1,
+      Nat.mod_eq_of_lt honeM,
+      ]
     exact Nat.mod_eq_of_lt hcopM
   · simp [round, step, arun, astep,
       LeanCompCert.Verified.InstrBlock.sdest,
       LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
       AState.writeReg, rQ, rM, rCop, rAddr, rP, rPZero, rPSafe, rActive,
       rRem, rNondiv, rKeep, rSelect, rQuot, rNext,
-      hq', hm', hcop', harr', haddr', haddrMod', hmMod, hpne, hp, hpM, hqM,
-      hmM, hcopM, honeM, hm1, hMsub1, Nat.mod_eq_of_lt honeM,
-      Nat.mod_eq_of_lt hpM, Nat.mod_eq_of_lt hqM,
+      hq', hm', hcop', harr', haddrMod', hpne,
+      hm1, hMsub1, Nat.mod_eq_of_lt honeM,
+      Nat.mod_eq_of_lt hpM,
       Nat.mod_eq_of_lt hqmodM, Nat.mod_eq_of_lt hdivM,
       Nat.mod_eq_of_lt hselM]
 

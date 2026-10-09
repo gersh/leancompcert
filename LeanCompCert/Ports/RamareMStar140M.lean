@@ -592,18 +592,18 @@ theorem lift_wf {xs : List Instr} (h : xs.all instrOK = true) :
 
 theorem msPre_ok (c : Cfg) : (msPre c).all instrOK = true := by
   simp +decide [msPre, decodeBlock, scanBlock, selectBlock, indexBlock,
-    List.all_append, instrOK, operandOK, msRegCount, rBad, rLb, rLam, rIdx,
-    rBs, rMax, rAcc, rS, rMuQ, rCell, rN, rR, rD, rSq, rW, rQg, rC, rZ, rP,
-    rQ, rQq, rI, rV, rMu1, rAbs, rMun, rAbsN, rSt, rMx, rCv, rFire, rLU, rIU,
-    rDn, rOk, rLo, rHi, rMid, rP00, rP01, rP10, rP11, rCM, rCL, rT1, rT2, rT3,
-    rG, rH]
+    instrOK, operandOK, rIdx,
+    rAcc, rS, rN, rR, rD, rSq, rW, rQg, rC, rZ, rP,
+    rQ, rQq, rI,
+    rT1, rT2, rT3,
+    rG]
 
 theorem msPost_ok (c : Cfg) : (msPost c).all instrOK = true := by
   simp +decide [msPost, unpackBlock, termBlock, latchBlock, muBlock, lbBlock,
     starBlock, gateBlock, ladderBlock, productBlock, badBlock, updateBlock,
-    List.all_append, instrOK, operandOK, msRegCount, rBad, rLb, rLam, rIdx,
-    rBs, rMax, rAcc, rS, rMuQ, rCell, rN, rR, rD, rSq, rW, rQg, rC, rZ, rP,
-    rQ, rQq, rI, rV, rMu1, rAbs, rMun, rAbsN, rSt, rMx, rCv, rFire, rLU, rIU,
+    instrOK, operandOK, rBad, rLb, rLam, rIdx,
+    rBs, rMax, rAcc, rMuQ, rCell, rN, rSq, rW, rQg, rC, rP,
+    rQ, rQq, rV, rMu1, rAbs, rMun, rAbsN, rSt, rMx, rCv, rFire, rLU, rIU,
     rDn, rOk, rLo, rHi, rMid, rP00, rP01, rP10, rP11, rCM, rCL, rT1, rT2, rT3,
     rG, rH]
 
@@ -624,7 +624,7 @@ theorem msInit_wf (c : Cfg) : ∀ a ∈ msInit c, a.WF msRegCount := by
   rcases List.mem_append.mp ha with h | h
   · rcases List.mem_append.mp h with h | h
     · refine lift_wf ?_ a h
-      simp +decide [instrOK, operandOK, msRegCount, rLb, rLam, rBs, rCell, rMuQ,
+      simp +decide [instrOK, operandOK, rLb, rLam, rBs, rCell, rMuQ,
         rT1, rT2]
     · rcases List.mem_cons.mp h with rfl | h
       · exact ⟨by simp [msRegCount, rT1], by simp [msRegCount, rT2]⟩

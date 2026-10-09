@@ -51,7 +51,7 @@ theorem exactOperandCapCheck_run (k : Nat) (s : AState) :
   by_cases ha : exactOperandCap ≤ s.regs 263 <;>
     by_cases hb : exactOperandCap ≤ s.regs 264 <;>
       by_cases hp : exactProjectedCap ≤ s.regs 289 <;>
-        simp only [ha, hb, hp, or_true, or_false, if_true, if_false] <;>
+        simp only [ha, hb, hp, or_true, or_false, ite_true, ite_false] <;>
           simp [M]
 
 /-- Acceptance of a product's cap check proves both exact-product operands
@@ -342,7 +342,7 @@ theorem endpointIncrement_signed_bounds
           else if tail then 2 * (posProduct : Int) else 0) + gamma) <
         (Section413Cells.H63 : Int) := by
   by_cases hr : rest <;> by_cases ht : tail <;>
-    simp only [hr, ht, if_false, if_true] <;> omega
+    simp only [hr, ht, ite_false, ite_true] <;> omega
 
 /-- Syntactic certificate that an instruction either frames `rViol` or updates
 it by sticky OR with some word. -/
@@ -402,7 +402,7 @@ theorem astep_rViol_mono (k : Nat) (s : AState) (i : AInstr)
       denoteOperand_lt_of_all_words k s.regs hw rhs
     simp only [astep, LeanCompCert.Verified.InstrBlock.sdest,
       LeanCompCert.Verified.InstrBlock.sval, denoteOp,
-      AState.writeReg, if_pos, Option.getD_some]
+      AState.writeReg, ite_eq_left, Option.getD_some]
     change s.regs rViol ≤
       (s.regs rViol ||| denoteOperand k s.regs rhs) % M
     rw [Nat.mod_eq_of_lt (stickyOr_lt_M (hw rViol) hrhs)]
@@ -1560,7 +1560,7 @@ theorem ProgramV3.gatePost_checked_zero_of_step_one
     (hzero : (arun k checked ProgramV3.gatePost).regs rViol = 0) :
     checked.regs rViol = 0 := by
   rw [ProgramV3.gatePost_rViol_run k checked (Or.inr hstep) hw,
-    if_pos hstep] at hzero
+    ite_eq_left hstep] at hzero
   exact hzero
 
 /-- Machine-word closure packaged opaquely so consumers do not normalize the
@@ -1625,7 +1625,7 @@ theorem ProgramV3.bodyStages_checks_zero_of_seen_change_of
     exact (LeanCompCert.Verified.ArrayRegFrame.arun_frame k sSeen
       ProgramV3.gatePre (by rfl) s).symm
   have hstep : gated.regs rStep = 1 := by
-    rw [(ProgramV3.candidateGateStep_run k host).1, if_pos]
+    rw [(ProgramV3.candidateGateStep_run k host).1, ite_eq_left]
     intro heq
     apply hseen
     rw [heq, hprev, hsnapSeen]
@@ -3199,7 +3199,7 @@ theorem ProgramV3.correctedRowAt_run (k : Nat) (s : AState)
     · have htarget : s.regs 317 + s.regs 370 +
           (if 0 < s.regs 371 then 1 else 0) < M := by
         simpa only [rLogUPre, ProgramV3.rPsiAtNUQ,
-          ProgramV3.rPsiAtNUR, gt_iff_lt, hr, if_true] using hGU
+          ProgramV3.rPsiAtNUR, gt_iff_lt, hr, ite_true] using hGU
       simp [staged, correctedStageAt, arun, astep,
         LeanCompCert.Verified.InstrBlock.sdest,
         LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
@@ -3212,7 +3212,7 @@ theorem ProgramV3.correctedRowAt_run (k : Nat) (s : AState)
           (if 0 < s.regs 371 then 1 else 0) < M := by
         simpa only [rLogUPre, ProgramV3.rPsiAtNUQ,
           ProgramV3.rPsiAtNUR, gt_iff_lt, hr', Nat.lt_irrefl,
-          if_false] using hGU
+          ite_false] using hGU
       simp [staged, correctedStageAt, arun, astep,
         LeanCompCert.Verified.InstrBlock.sdest,
         LeanCompCert.Verified.InstrBlock.sval, denoteOperand, denoteOp,
@@ -3322,7 +3322,7 @@ theorem qSubRow_source_sound (k : Nat) (s : AState)
   by_cases hr1 : sh.rest = 1
   · simp [hr1]
   · by_cases hqr : sh.q = sh.rest
-    · simp only [hr1, hqr, ne_eq, not_false_eq_true, or_false, if_false]
+    · simp only [hr1, hqr, ne_eq, not_false_eq_true, or_false, ite_false]
       apply decide_eq_true_iff.mpr
       rw [hpLog]
       unfold LeanCompCert.Ports.RamareCombined100M.carriedLogUpper32

@@ -457,7 +457,7 @@ theorem stepAbs_exact_bound (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
     have habsEq : stepAbs k mu n r = E / q - B := by
       unfold stepAbs
       change absBias (vBias k t.1 t.2) = _
-      rw [habs, hv, if_pos hB]
+      rw [habs, hv, ite_eq_left hB]
     rw [habsEq]
     exact ha
   · have hAle : accTrue k mu n ≤ 0 := by omega
@@ -479,7 +479,7 @@ theorem stepAbs_exact_bound (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
     have habsEq : stepAbs k mu n r = B - E / q := by
       unfold stepAbs
       change absBias (vBias k t.1 t.2) = _
-      rw [habs, hv, if_neg (Nat.not_le_of_lt hvB)]
+      rw [habs, hv, ite_eq_right (Nat.not_le_of_lt hvB)]
     rw [habsEq]
     exact ha
 
@@ -545,7 +545,7 @@ theorem stepAbs_exact_bound_of_fields
     have habsEq : stepAbs k mu n r = E / q - B := by
       unfold stepAbs
       change absBias (vBias k t.1 t.2) = _
-      rw [habs, hv, if_pos hB]
+      rw [habs, hv, ite_eq_left hB]
     rw [habsEq]
     exact ha
   · have hAle : accTrue k mu n ≤ 0 := by omega
@@ -568,7 +568,7 @@ theorem stepAbs_exact_bound_of_fields
     have habsEq : stepAbs k mu n r = B - E / q := by
       unfold stepAbs
       change absBias (vBias k t.1 t.2) = _
-      rw [habs, hv, if_neg (Nat.not_le_of_lt hvB)]
+      rw [habs, hv, ite_eq_right (Nat.not_le_of_lt hvB)]
     rw [habsEq]
     exact ha
 
@@ -593,18 +593,18 @@ theorem resStep_viol_eq (k : Nat) (mu : Nat → Int) (n : Nat) (r : Res)
   rw [hv]
   simp only [Nat.mul_one]
   by_cases hp : StepPass k mu n r
-  · rw [if_pos hp]
+  · rw [ite_eq_left hp]
     have hnot : ¬(2 ^ 61 / stepCel n r < stepAbs k mu n r +
         (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1) := by
       unfold StepPass at hp
       omega
-    rw [if_neg hnot]
-  · rw [if_neg hp]
+    rw [ite_eq_right hnot]
+  · rw [ite_eq_right hp]
     have hlt : 2 ^ 61 / stepCel n r < stepAbs k mu n r +
         (n + 2 ^ (k + 2) - 1) / 2 ^ (k + 2) + 1 := by
       unfold StepPass at hp
       omega
-    rw [if_pos hlt]
+    rw [ite_eq_left hlt]
 
 /-- Therefore a zero next counter forces a zero carry-in counter and a
 passing current comparison. -/
@@ -840,7 +840,7 @@ private theorem denoteAInstr_reg_frame {len idx : Nat} {s s' : AState}
           subst h
           simp only [ainstrRegDest?, ne_eq, Option.some.injEq] at hj
           simp only [RegState.set]
-          exact if_neg (fun h => hj h.symm)
+          exact ite_eq_right (fun h => hj h.symm)
       | binop d op l r =>
           simp only [denoteAInstr, denoteInstr, Option.bind_eq_bind] at h
           cases hv : denoteOp op (denoteOperand idx s.regs l)
@@ -853,7 +853,7 @@ private theorem denoteAInstr_reg_frame {len idx : Nat} {s s' : AState}
               subst h
               simp only [ainstrRegDest?, ne_eq, Option.some.injEq] at hj
               simp only [RegState.set]
-              exact if_neg (fun h => hj h.symm)
+              exact ite_eq_right (fun h => hj h.symm)
   | load d i =>
       obtain ⟨_, _, _, hframe⟩ := denoteAInstr_load_some h
       simp only [ainstrRegDest?, ne_eq, Option.some.injEq] at hj

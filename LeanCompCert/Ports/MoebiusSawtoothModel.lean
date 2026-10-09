@@ -516,7 +516,7 @@ theorem rowFold_succ_a (U k : Nat) (z : Acc) :
   | succ k ih =>
       rw [rowFold_succ]
       simp only [rowStep, Acc.a]
-      rw [if_neg (by omega), ih]
+      rw [ite_eq_right (by omega), ih]
       rfl
 
 theorem rowFold_succ_b (U k : Nat) (z : Acc) :
@@ -526,7 +526,7 @@ theorem rowFold_succ_b (U k : Nat) (z : Acc) :
   | succ k ih =>
       rw [rowFold_succ]
       simp only [rowStep, Acc.b]
-      rw [if_neg (by omega), ih]
+      rw [ite_eq_right (by omega), ih]
       rw [show rowDeltaB U (k + 1 + 1) =
         rowDeltaB U (k + 1) +
           deltaB U (k + 1 + 1) (muCode (k + 1 + 1) trialRounds) from rfl]

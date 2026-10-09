@@ -73,7 +73,7 @@ theorem productionAdvanceWordPre_after_mark_prefix
   have hp := c.markPhaseBody_run k s productionCursorCfg_markSteps_lt_word
   dsimp only at hp
   have hp10 : phased.regs 10 = 1 := by
-    rw [hp.1, if_pos hround]
+    rw [hp.1, ite_eq_left hround]
   have hr10 : reset.regs 10 = 1 :=
     (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
   rcases productionStaticPlaneWordBounds with

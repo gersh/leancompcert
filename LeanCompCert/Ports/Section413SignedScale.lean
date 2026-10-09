@@ -152,7 +152,7 @@ theorem finalStage_violation (k : Nat) (s : RegState)
       Option.getD_some, RegState.set, rBad, rHi, rTmp, rLo, rViol]
     simp only [show (0 : Nat) % M = 0 by decide,
       show (1 : Nat) % M = 1 by decide,
-      show H63 % M = H63 by decide, Nat.reduceEqDiff, if_false, if_true]
+      show H63 % M = H63 by decide, Nat.reduceEqDiff, ite_false, ite_true]
     unfold finalBad
     have hl0 := LeanCompCert.Ports.Section413G1Denote.lor_mod_M hv
       (show (0 : Nat) < M by exact M_pos)
@@ -188,7 +188,7 @@ theorem selectStage_output (k : Nat) (s : RegState)
   have htword : ∀ j, t j < M := srun_lt_of_lt k _ s hword
   have htneg : t rNegOut = (M - s rLo) % M := by
     simp only [t, srun, sdest, sval, denoteOperand, denoteOp,
-      Option.getD_some, RegState.set, rNegOut, rLo, if_pos]
+      Option.getD_some, RegState.set, rNegOut, rLo, ite_eq_left]
     simp only [show (0 : Nat) % M = 0 by decide, Nat.zero_add]
   have htsign : t rSign = s rSign := by
     apply srun_untouched
@@ -230,9 +230,9 @@ theorem finalBad_eq_zero_iff (lo hi : Nat) :
     finalBad lo hi = 0 ↔ hi = 0 ∧ lo < H63 := by
   unfold finalBad
   by_cases h : hi ≠ 0 ∨ H63 ≤ lo
-  · simp only [h, if_true, Nat.one_ne_zero, false_iff]
+  · simp only [h, ite_true, Nat.one_ne_zero, false_iff]
     omega
-  · simp only [h, if_false, true_iff]
+  · simp only [h, ite_false, true_iff]
     refine ⟨?_, Nat.lt_of_not_ge (fun hlo => h (Or.inr hlo))⟩
     exact Classical.byContradiction (fun hhi => h (Or.inl hhi))
 
@@ -262,7 +262,7 @@ theorem selectedWord_eq_encode_scale (w factor product : Nat)
       exact Int.mul_comm _ _
     have hsbit : LeanCompCert.Ports.Section413SignedDiv.signBit w = 1 := by
       simp [LeanCompCert.Ports.Section413SignedDiv.signBit, hsign]
-    rw [if_pos hsbit]
+    rw [ite_eq_left hsbit]
     rw [hz, ← LeanCompCert.Ports.Section413Cells.encodeZ_neg (product : Int)]
     rw [LeanCompCert.Ports.Section413SignedDiv.encodeZ_natCast product
       (Nat.lt_trans hproduct (by decide : H63 <
@@ -280,7 +280,7 @@ theorem selectedWord_eq_encode_scale (w factor product : Nat)
       simp [Int.mul_comm]
     have hsbit : LeanCompCert.Ports.Section413SignedDiv.signBit w ≠ 1 := by
       simp [LeanCompCert.Ports.Section413SignedDiv.signBit, hsign]
-    rw [if_neg hsbit]
+    rw [ite_eq_right hsbit]
     rw [hz, LeanCompCert.Ports.Section413SignedDiv.encodeZ_natCast product
       (Nat.lt_trans hproduct (by decide : H63 <
         LeanCompCert.Verified.MulWide.B64))]

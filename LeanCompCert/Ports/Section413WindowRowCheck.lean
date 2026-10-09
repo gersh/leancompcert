@@ -94,8 +94,8 @@ private theorem signedChooseLo_output (k : Nat) (s : RegState)
   simp only [signedChooseStage, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rSignA, rSignB, rDifferent, rSame,
     rUnsignedGe, rPartDifferent, rPartSame, rChoose, rDiv1Lo, rDiv2Lo]
-  simp only [show H63 % M = H63 by decide, Nat.reduceEqDiff, if_false,
-    if_true]
+  simp only [show H63 % M = H63 by decide, Nat.reduceEqDiff, ite_false,
+    ite_true]
   by_cases hcmp : decodeZ (s rDiv1Lo) ≥ decodeZ (s rDiv2Lo)
   all_goals
     simp only [rDiv1Lo, rDiv2Lo] at ha hb hcmp ⊢
@@ -113,8 +113,8 @@ private theorem signedChooseHi_output (k : Nat) (s : RegState)
   simp only [signedChooseStage, srun, sdest, sval, denoteOperand, denoteOp,
     Option.getD_some, RegState.set, rSignA, rSignB, rDifferent, rSame,
     rUnsignedGe, rPartDifferent, rPartSame, rChoose, rDiv1Hi, rDiv2Hi]
-  simp only [show H63 % M = H63 by decide, Nat.reduceEqDiff, if_false,
-    if_true]
+  simp only [show H63 % M = H63 by decide, Nat.reduceEqDiff, ite_false,
+    ite_true]
   by_cases hcmp : decodeZ (s rDiv1Hi) ≥ decodeZ (s rDiv2Hi)
   all_goals
     simp only [rDiv1Hi, rDiv2Hi] at ha hb hcmp ⊢

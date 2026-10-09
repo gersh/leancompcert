@@ -88,7 +88,7 @@ comparison `lo < v` — one fragment instruction, branchless — computes the
 carry-out bit. -/
 theorem carry_bit (u v : Nat) (hu : u < B64) (hv : v < B64) :
     (if (u + v) % B64 < v then 1 else 0) = (u + v) / B64 := by
-  simp only [B64, MulWide.B64] at hu hv ⊢
+  unfold B64 MulWide.B64 at hu hv ⊢
   split <;> omega
 
 /-- **The borrow is a comparison.**  Dually, `u < v` is the borrow-out of
@@ -218,14 +218,14 @@ theorem subWide_exact (x a : Nat × Nat) (hx : Ok x) (ha : Ok a)
   -- the borrow never underflows the high limb
   have hborrow : (if x.1 < a.1 then 1 else 0) ≤ x.2 - a.2 := by
     by_cases hlt : x.1 < a.1
-    · rw [if_pos hlt]
+    · rw [ite_eq_left hlt]
       cases Nat.lt_or_ge a.2 x.2 with
       | inl hlt2 => omega
       | inr hge2 =>
           have hEq : x.2 = a.2 := by omega
           rw [hEq] at h
           omega
-    · rw [if_neg hlt]; omega
+    · rw [ite_eq_right hlt]; omega
   have e1 : (x.1 + (B64 - a.1)) % B64
       = if x.1 < a.1 then x.1 + B64 - a.1 else x.1 - a.1 :=
     borrow_bit x.1 a.1 hx1 ha1
@@ -249,7 +249,7 @@ theorem subWide_exact (x a : Nat × Nat) (hx : Ok x) (ha : Ok a)
   have hd1 : x.1 < a.1 → B64 * (x.2 - a.2 - 1) + B64 * a.2 + B64 = B64 * x.2 := by
     intro hlt
     have hge : 1 ≤ x.2 - a.2 := by
-      have := hborrow; rw [if_pos hlt] at this; omega
+      have := hborrow; rw [ite_eq_left hlt] at this; omega
     rw [← Nat.mul_add, ← Nat.mul_succ]
     congr 1
     omega

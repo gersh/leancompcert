@@ -81,7 +81,7 @@ theorem productionWindowStart_markCoreInv
     vmark_le := by omega
     last_failure_le := by omega }
   apply PowerCellState.ext
-  · simp only [resetPowerCellState, resetPowerCursor, hround, if_pos,
+  · simp only [resetPowerCellState, resetPowerCursor, hround, ite_eq_left,
       productionInitialPowerCell]
     rw [productionPowerPhases_head, productionTable_head, hwindow]
     rfl

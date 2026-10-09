@@ -74,7 +74,7 @@ theorem markAddresses_lt_of_classRound
   have hp := c.markPhaseBody_run k s hsteps
   dsimp only at hp
   have hp10 : phased.regs 10 = 0 := by
-    rw [hp.1, if_neg (Nat.not_lt_of_ge hround)]
+    rw [hp.1, ite_eq_right (Nat.not_lt_of_ge hround)]
   have hr10 : reset.regs 10 = 0 :=
     (arun_frame k 10 c.markResetBody (by rfl) phased).trans hp10
   have ha := c.markAddressBody_inactive_run k reset hr10

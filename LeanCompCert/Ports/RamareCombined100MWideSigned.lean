@@ -106,13 +106,13 @@ theorem signExtendBlock_run (k : Nat) (s : AState) (dstHi src sign : Nat) :
     LeanCompCert.Verified.InstrBlock.sval,
     denoteOperand, denoteOp, AState.writeReg]
   have hH : Section413Cells.H63 % M = Section413Cells.H63 := by decide
-  simp only [if_true, Option.getD_some, Nat.zero_mod, hH]
+  simp only [ite_true, Option.getD_some, Nat.zero_mod, hH]
   by_cases h : Section413Cells.H63 ≤ s.regs src
-  · rw [if_pos h]
-    simp only [signHi, h, if_true]
+  · rw [ite_eq_left h]
+    simp only [signHi, h, ite_true]
     rw [LeanCompCert.Ports.AddWidePort.M_eq_B64]
     exact Nat.mod_eq_of_lt (by decide)
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     simp [signHi, h]
 
 theorem signExtendBlock_src_frame (k : Nat) (s : AState)

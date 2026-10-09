@@ -1333,7 +1333,7 @@ theorem localRound_prefix (B n t SL SU : Nat) (ht : t < B) :
       have hlast : t ≠ B - 1 := by omega
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
         ih ht']
-      simp only [localRound, hlast, false_and, if_false]
+      simp only [localRound, hlast, false_and, ite_false]
       rw [scanNext_eq_spfStep, ← Sieve.spfScan_succ]
       simp only [Nat.add_zero]
 
@@ -1385,8 +1385,8 @@ theorem flatObs_block_eq_loopE (n0 B q SL SU : Nat) (hB : 0 < B)
   · have hleast : Sieve.leastFactor (n0 + q) = n0 + q := hiff.mp hs
     have hp : scanPrime (n0 + q) = true := by
       simp [scanPrime, hn2, hleast]
-    simp only [hs, if_pos]
-    simp only [loopE, hp, if_pos]
+    simp only [hs, ite_eq_left]
+    simp only [loopE, hp, ite_eq_left]
     rw [incL_eq_wordSafe (n0 + q - 1) (by omega),
       incU_eq_wordSafe (n0 + q - 1) (by omega)]
   · have hleast : Sieve.leastFactor (n0 + q) ≠ n0 + q := by
@@ -1394,8 +1394,8 @@ theorem flatObs_block_eq_loopE (n0 B q SL SU : Nat) (hB : 0 < B)
       exact hs (hiff.mpr h)
     have hp : scanPrime (n0 + q) = false := by
       simp [scanPrime, hn2, hleast]
-    simp only [hs, if_false, Nat.add_zero]
-    simp only [loopE, hp, Bool.false_eq_true, if_false]
+    simp only [hs, ite_false, Nat.add_zero]
+    simp only [loopE, hp, Bool.false_eq_true, ite_false]
 
 /-- Folding candidate blocks is the guarded ladder fold.  This proof only
 re-associates symbolic folds; it never evaluates the candidate range. -/
@@ -1497,7 +1497,7 @@ private theorem flatObs_blocks_bounds (n0 f B SL SU q : Nat)
         exact Nat.le_trans (incUWord_le (n0 + q - 1)) (by omega)
       have hL : incLWord (n0 + q - 1) ≤ fpD := incLWord_le _
       by_cases hs : Sieve.spfScan B (n0 + q) = 0
-      · simp only [hs, if_pos]
+      · simp only [hs, ite_eq_left]
         constructor
         · have h := Nat.add_le_add hz.1 hL
           rw [Nat.succ_mul]
@@ -1507,7 +1507,7 @@ private theorem flatObs_blocks_bounds (n0 f B SL SU q : Nat)
             rw [Nat.succ_mul]
             omega
           · exact True.intro
-      · simp only [hs, if_false, Nat.add_zero]
+      · simp only [hs, ite_false, Nat.add_zero]
         constructor
         · rw [Nat.succ_mul]
           omega

@@ -130,7 +130,7 @@ theorem PlaneCellProductionBounds.of_powerCellStep
   by_cases hmark : st.cursor.j < c.segLen ∧ st.cursor.j = i
   · rcases hmark with ⟨hj, hji⟩
     subst i
-    simp only [powerCellStep, hj, true_and, if_true] at hnext
+    simp only [powerCellStep, hj, true_and, ite_true] at hnext
     exact PlaneCellProductionBounds.of_markPower hbase hnext
   · simpa [powerCellStep, hmark] using hnext
 

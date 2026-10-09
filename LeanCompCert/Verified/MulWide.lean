@@ -69,17 +69,17 @@ theorem step (p00 p01 p10 p11 : Nat)
           (p00 + (p01 + p10) % 18446744073709551616 *
             4294967296 % 18446744073709551616) %
               18446744073709551616 < p00
-      · simp only [hmid, hlo, if_true]
+      · simp only [hmid, hlo, ite_true]
         omega
-      · simp only [hmid, hlo, if_true, if_false]
+      · simp only [hmid, hlo, ite_true, ite_false]
         omega
     · by_cases hlo :
           (p00 + (p01 + p10) % 18446744073709551616 *
             4294967296 % 18446744073709551616) %
               18446744073709551616 < p00
-      · simp only [hmid, hlo, if_true, if_false]
+      · simp only [hmid, hlo, ite_true, ite_false]
         omega
-      · simp only [hmid, hlo, if_false]
+      · simp only [hmid, hlo, ite_false]
         omega
   · omega
 

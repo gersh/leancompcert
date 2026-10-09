@@ -56,7 +56,7 @@ theorem deltaF_one (kBound : Nat) (hk : 0 < kBound) :
   rw [show k + 1 + 1 = (k + 1) + 1 by omega,
     dropOneRangeSucc, rangeOneSplit]
   simp only [List.foldl_cons, Nat.mod_self, ne_eq, not_true_eq_false,
-    if_false, LeanCompCert.Ports.CDEMAbelMarkPlane.muCodeFor_one]
+    ite_false, LeanCompCert.Ports.CDEMAbelMarkPlane.muCodeFor_one]
   rw [show (0 + 1) % M = 1 by decide]
   change (List.range' 2 k).foldl (deltaOneStep (k + 1)) 1 = 1
   exact deltaOneTail (k + 1) k
@@ -98,8 +98,8 @@ theorem deltaF_two_of_muCode_two (kBound : Nat) (hk : 2 ≤ kBound)
   rw [show n + 2 + 1 = (n + 2) + 1 by omega,
     dropOneRangeSucc, rangeTwoSplit]
   simp only [List.foldl_cons, Nat.mod_one, ne_eq, not_true_eq_false,
-    if_false, LeanCompCert.Ports.CDEMAbelMarkPlane.muCodeFor_one, hcode,
-    Nat.reduceEqDiff, if_true]
+    ite_false, LeanCompCert.Ports.CDEMAbelMarkPlane.muCodeFor_one, hcode,
+    Nat.reduceEqDiff, ite_true]
   rw [show (0 + 1) % M = 1 by decide,
     show (1 + (M - 1)) % M = 0 by decide]
   change (List.range' 3 n).foldl (deltaTwoStep (n + 2)) 0 = 0

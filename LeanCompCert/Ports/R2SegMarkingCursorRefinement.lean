@@ -91,7 +91,7 @@ theorem pastResult_refines_cursor (c : R2Cfg) (windowBase : Nat)
   dsimp only at hstep hq hbp hwt hfs hjOut hpi
   have hpast : ¬(R2MarkCursor.ofState s).offset < c.segLen := by
     simpa [R2MarkCursor.ofState] using hj
-  simp only [if_neg hpast] at hstep
+  simp only [ite_eq_right hpast] at hstep
   rw [hstep]
   apply R2MarkCursor.ext
   · simpa [R2MarkCursor.ofState] using hpi

@@ -107,17 +107,17 @@ theorem loopE_eq_foldl (p : Nat → Bool) :
       rw [show List.range' n (f + 1) = n :: List.range' (n + 1) f from rfl,
         List.foldl_cons]
       by_cases hp : p n = true
-      · rw [if_pos hp, ih (n + 1) _ _]
+      · rw [ite_eq_left hp, ih (n + 1) _ _]
         show _ = (List.range' (n + 1) f).foldl (stepGuarded p)
           (stepGuarded p (SL, SU) n)
         rw [show stepGuarded p (SL, SU) n = (SL + incL (n - 1), SU + incU (n - 1))
-          from by simp only [stepGuarded, hp, if_pos, stepRef]]
+          from by simp only [stepGuarded, hp, ite_eq_left, stepRef]]
       · simp only [Bool.not_eq_true] at hp
-        rw [if_neg (by simp [hp]), ih (n + 1) _ _]
+        rw [ite_eq_right (by simp [hp]), ih (n + 1) _ _]
         show _ = (List.range' (n + 1) f).foldl (stepGuarded p)
           (stepGuarded p (SL, SU) n)
         rw [show stepGuarded p (SL, SU) n = (SL, SU) from by
-          simp only [stepGuarded, hp, Bool.false_eq_true, if_false]]
+          simp only [stepGuarded, hp, Bool.false_eq_true, ite_false]]
 
 /-! ## Segmentation -/
 

@@ -2145,7 +2145,7 @@ theorem srun_lit_val (idx : Nat) (s : RegState) (pre post : List Instr)
   rw [srun_append, srun_cons, srun_untouched idx d post hpost]
   show (if d = d then Reflect.denoteOperand idx (srun idx s pre) (Operand.lit v)
         else srun idx s pre d) = v % M
-  rw [if_pos rfl]
+  rw [ite_eq_left rfl]
   exact denoteOperand_lit idx v _
 
 
@@ -2278,14 +2278,14 @@ theorem epi_val (s : RegState) :
   rw [e]
   by_cases h1 : s 5 = s 11
   · by_cases h2 : s 6 = s 12
-    · rw [if_pos h1, if_pos h2, if_pos (⟨h1, h2⟩ : s 5 = s 11 ∧ s 6 = s 12)]
+    · rw [ite_eq_left h1, ite_eq_left h2, ite_eq_left (⟨h1, h2⟩ : s 5 = s 11 ∧ s 6 = s 12)]
       decide +kernel
-    · rw [if_pos h1, if_neg h2, if_neg (fun h => h2 h.2)]
+    · rw [ite_eq_left h1, ite_eq_right h2, ite_eq_right (fun h => h2 h.2)]
       decide +kernel
   · by_cases h2 : s 6 = s 12
-    · rw [if_neg h1, if_pos h2, if_neg (fun h => h1 h.1)]
+    · rw [ite_eq_right h1, ite_eq_left h2, ite_eq_right (fun h => h1 h.1)]
       decide +kernel
-    · rw [if_neg h1, if_neg h2, if_neg (fun h => h1 h.1)]
+    · rw [ite_eq_right h1, ite_eq_right h2, ite_eq_right (fun h => h1 h.1)]
       decide +kernel
 
 theorem pval_inj (x0 x1 y0 y1 : Nat) (hx0 : x0 < M) (hy0 : y0 < M)
@@ -2401,8 +2401,8 @@ theorem prothProgram_denote (n kbits k a : Nat)
         = (if a ^ ((prothN n k - 1) / 2) % prothN n k = prothN n k - 1
            then 0 else 1) := by
     by_cases hc : a ^ ((prothN n k - 1) / 2) % prothN n k = prothN n k - 1
-    · rw [if_pos (hiff.mpr hc), if_pos hc]
-    · rw [if_neg (fun hx => hc (hiff.mp hx)), if_neg hc]
+    · rw [ite_eq_left (hiff.mpr hc), ite_eq_left hc]
+    · rw [ite_eq_right (fun hx => hc (hiff.mp hx)), ite_eq_right hc]
   rw [hmain]
 
 /-! ## Packaged compiled checker

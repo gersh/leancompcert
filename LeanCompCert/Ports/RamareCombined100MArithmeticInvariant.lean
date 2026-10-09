@@ -114,19 +114,19 @@ theorem PsiQR.advance_q_le_add (n lam : Nat) (z : PsiQR) :
   unfold PsiQR.advance
   dsimp only
   by_cases h : z.q ≤ z.r + lam
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     change z.q + (z.r + lam - z.q) / (n + 1) ≤ z.q + z.r + lam
     have hdiv : (z.r + lam - z.q) / (n + 1) ≤ z.r + lam - z.q :=
       Nat.div_le_self _ _
     omega
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     by_cases hz : (z.q - (z.r + lam)) % (n + 1) = 0
-    · rw [if_pos hz]
+    · rw [ite_eq_left hz]
       change z.q - (z.q - (z.r + lam)) / (n + 1) ≤
         z.q + z.r + lam
       have hq : z.q ≤ z.q + z.r + lam := by omega
       exact Nat.le_trans (Nat.sub_le _ _) hq
-    · rw [if_neg hz]
+    · rw [ite_eq_right hz]
       change z.q - (z.q - (z.r + lam)) / (n + 1) - 1 ≤
         z.q + z.r + lam
       have hq : z.q ≤ z.q + z.r + lam := by omega

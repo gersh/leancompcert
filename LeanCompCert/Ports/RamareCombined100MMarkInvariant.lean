@@ -199,7 +199,7 @@ theorem CellRel.markPrime {x : PlaneCell} {cell : Cell} (hrel : CellRel x cell)
           hactive] using
           CellRel.empty
       · have hrange := markRange_empty row.p e hrow
-        rw [if_neg he] at hrange
+        rw [ite_eq_right he] at hrange
         rw [hrange]
         simpa [e, he, RamareCombined100MSeg.markPrime, emptyCell,
           hactive] using
@@ -213,7 +213,7 @@ theorem CellRel.markPrime {x : PlaneCell} {cell : Cell} (hrel : CellRel x cell)
       · have hrange := markRange_one_new prod p pe (p ^ pe) row.p e
           (by omega) hrow hpFresh hprod
           (Nat.ne_of_gt (Nat.pow_pos (by omega)))
-        rw [if_neg he] at hrange
+        rw [ite_eq_right he] at hrange
         rw [hrange]
         simpa [e, he, RamareCombined100MSeg.markPrime, hactive] using
           (CellRel.two (prod * row.p ^ e) p pe row.p e

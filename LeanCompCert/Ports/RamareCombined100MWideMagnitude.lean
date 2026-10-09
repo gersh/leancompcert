@@ -158,12 +158,12 @@ private theorem subWide_zero_split (x : Nat) (hx0 : 0 < x)
   have hzeroLo : (0 + (M - lo)) % M = if lo = 0 then 0 else M - lo := by
     by_cases h : lo = 0
     · simp [h]
-    · rw [if_neg h]
+    · rw [ite_eq_right h]
       exact sub_mod_lt (by omega) hlo
   have hzeroHi : (0 + (M - hi)) % M = if hi = 0 then 0 else M - hi := by
     by_cases h : hi = 0
     · simp [h]
-    · rw [if_neg h]
+    · rw [ite_eq_right h]
       exact sub_mod_lt (Nat.pos_of_ne_zero h) hhi
   have hpair : LeanCompCert.Verified.AddWide.subWide (0, 0) (lo, hi) =
       if lo = 0 then (0, M - hi) else (M - lo, M - hi - 1) := by
@@ -176,23 +176,23 @@ private theorem subWide_zero_split (x : Nat) (hx0 : 0 < x)
       rw [← LeanCompCert.Ports.AddWidePort.M_eq_B64]
       rw [hzeroHi]
       by_cases hlo0 : lo = 0
-      · rw [if_pos hlo0]
+      · rw [ite_eq_left hlo0]
         have hhi0 : hi ≠ 0 := by
           intro h
           rw [hlo0, h] at hsplit'
           simp at hsplit'
           omega
-        rw [if_neg hhi0]
+        rw [ite_eq_right hhi0]
         have hhipos : 0 < hi := Nat.pos_of_ne_zero hhi0
         have hdiff : M - hi < M := by omega
         simp [hlo0, Nat.mod_eq_of_lt hdiff]
-      · rw [if_neg hlo0]
+      · rw [ite_eq_right hlo0]
         have hlopos : 0 < lo := Nat.pos_of_ne_zero hlo0
         by_cases hhi0 : hi = 0
-        · rw [if_pos hhi0]
+        · rw [ite_eq_left hhi0]
           simp [hlopos, Nat.mod_eq_of_lt (show M - 1 < M by decide)]
           omega
-        · rw [if_neg hhi0]
+        · rw [ite_eq_right hhi0]
           have hhipos : 0 < hi := Nat.pos_of_ne_zero hhi0
           have hsub := sub_mod_ge (a := M - hi) (b := 1)
             (by omega) (by omega)
@@ -201,14 +201,14 @@ private theorem subWide_zero_split (x : Nat) (hx0 : 0 < x)
       (LeanCompCert.Verified.AddWide.subWide (0, 0) (lo, hi)) = _
   rw [hpair]
   by_cases hlo0 : lo = 0
-  · rw [if_pos hlo0]
+  · rw [ite_eq_left hlo0]
     simp only [LeanCompCert.Verified.AddWide.wval, Prod.fst, Prod.snd,
       Nat.zero_add, WideSigned.B64]
     rw [← LeanCompCert.Ports.AddWidePort.M_eq_B64]
     simp only [WideSigned.B128, LeanCompCert.Verified.AddWide.B128,
       LeanCompCert.Verified.Reflect.M] at hx hsplit' ⊢
     omega
-  · rw [if_neg hlo0]
+  · rw [ite_eq_right hlo0]
     simp only [LeanCompCert.Verified.AddWide.wval, Prod.fst, Prod.snd,
       WideSigned.B64]
     rw [← LeanCompCert.Ports.AddWidePort.M_eq_B64]
@@ -516,15 +516,15 @@ theorem absAccLoWide_run (k : Nat) (s : AState)
     LeanCompCert.Verified.ArrayRegFrame.arun_frame _ _ _ (by rfl) _
   change (sH.regs rMagLoLo, sH.regs rMagLoHi) = _
   by_cases h : Section413Cells.H63 ≤ s.regs rAccLoHi
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     have hs1 : sS.regs rAbsSign = 1 := by simp [hsign, h]
-    rw [hlowH, hlow, hhigh, hs1, if_pos rfl, hsignL, hs1, if_pos rfl,
+    rw [hlowH, hlow, hhigh, hs1, ite_eq_left rfl, hsignL, hs1, ite_eq_left rfl,
       hnloS, hnhiL, hnhiS]
     exact hneg
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     have hs0 : sS.regs rAbsSign = 0 := by simp [hsign, h]
-    rw [hlowH, hlow, hhigh, hs0, if_neg (by decide), hsignL, hs0,
-      if_neg (by decide), hloS, hhiL, hhiS]
+    rw [hlowH, hlow, hhigh, hs0, ite_eq_right (by decide), hsignL, hs0,
+      ite_eq_right (by decide), hloS, hhiL, hhiS]
 
 theorem absAccHiWide_run (k : Nat) (s : AState)
     (hw : ∀ j, s.regs j < M) (haW : ∀ j, s.arr j < M) :
@@ -591,15 +591,15 @@ theorem absAccHiWide_run (k : Nat) (s : AState)
     LeanCompCert.Verified.ArrayRegFrame.arun_frame _ _ _ (by rfl) _
   change (sH.regs rMagHiLo, sH.regs rMagHiHi) = _
   by_cases h : Section413Cells.H63 ≤ s.regs rAccHiHi
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     have hs1 : sS.regs rAbsSign = 1 := by simp [hsign, h]
-    rw [hlowH, hlow, hhigh, hs1, if_pos rfl, hsignL, hs1, if_pos rfl,
+    rw [hlowH, hlow, hhigh, hs1, ite_eq_left rfl, hsignL, hs1, ite_eq_left rfl,
       hnloS, hnhiL, hnhiS]
     exact hneg
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     have hs0 : sS.regs rAbsSign = 0 := by simp [hsign, h]
-    rw [hlowH, hlow, hhigh, hs0, if_neg (by decide), hsignL, hs0,
-      if_neg (by decide), hloS, hhiL, hhiS]
+    rw [hlowH, hlow, hhigh, hs0, ite_eq_right (by decide), hsignL, hs0,
+      ite_eq_right (by decide), hloS, hhiL, hhiS]
 
 theorem absAccLoWide_wval (k : Nat) (s : AState) (z : Int)
     (hw : ∀ j, s.regs j < M) (haW : ∀ j, s.arr j < M)
@@ -618,9 +618,9 @@ theorem absAccLoWide_wval (k : Nat) (s : AState) (z : Int)
   rw [absAccLoWide_run k s hw haW, hcanon.1, hcanon.2]
   have hsign := hiOf_sign z hlo hhi
   by_cases hz : z < 0
-  · rw [if_pos (hsign.mpr hz)]
+  · rw [ite_eq_left (hsign.mpr hz)]
     exact negCanonical_wval z hlo hz
-  · rw [if_neg (fun h => hz (hsign.mp h))]
+  · rw [ite_eq_right (fun h => hz (hsign.mp h))]
     exact canonical_wval_natAbs_of_nonneg z (Int.le_of_not_gt hz) hhi
 
 theorem absAccHiWide_wval (k : Nat) (s : AState) (z : Int)
@@ -640,9 +640,9 @@ theorem absAccHiWide_wval (k : Nat) (s : AState) (z : Int)
   rw [absAccHiWide_run k s hw haW, hcanon.1, hcanon.2]
   have hsign := hiOf_sign z hlo hhi
   by_cases hz : z < 0
-  · rw [if_pos (hsign.mpr hz)]
+  · rw [ite_eq_left (hsign.mpr hz)]
     exact negCanonical_wval z hlo hz
-  · rw [if_neg (fun h => hz (hsign.mp h))]
+  · rw [ite_eq_right (fun h => hz (hsign.mp h))]
     exact canonical_wval_natAbs_of_nonneg z (Int.le_of_not_gt hz) hhi
 
 theorem maxWide_run (k : Nat) (s : AState)
@@ -706,16 +706,16 @@ theorem maxWide_run (k : Nat) (s : AState)
       (s.regs rMagHiLo, s.regs rMagHiHi) ≤
       LeanCompCert.Verified.AddWide.wval
         (s.regs rMagLoLo, s.regs rMagLoHi)
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     have hs1 : sG.regs rAbsSign = 1 := by
-      rw [hchoose, if_pos (hlex.mp h)]
-    rw [hloH, hlo, hhigh, hs1, if_pos rfl, hsignL, hs1, if_pos rfl,
+      rw [hchoose, ite_eq_left (hlex.mp h)]
+    rw [hloH, hlo, hhigh, hs1, ite_eq_left rfl, hsignL, hs1, ite_eq_left rfl,
       hframeG _ (Or.inl rfl), hmagLoHiL, hframeG _ (Or.inr (Or.inl rfl))]
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     have hs0 : sG.regs rAbsSign = 0 := by
-      rw [hchoose, if_neg (fun hh => h (hlex.mpr hh))]
-    rw [hloH, hlo, hhigh, hs0, if_neg (by decide), hsignL, hs0,
-      if_neg (by decide), hframeG _ (Or.inr (Or.inr (Or.inl rfl))),
+      rw [hchoose, ite_eq_right (fun hh => h (hlex.mpr hh))]
+    rw [hloH, hlo, hhigh, hs0, ite_eq_right (by decide), hsignL, hs0,
+      ite_eq_right (by decide), hframeG _ (Or.inr (Or.inr (Or.inl rfl))),
       hmagHiHiL, hframeG _ (Or.inr (Or.inr (Or.inr rfl)))]
 
 theorem maxWide_wval (k : Nat) (s : AState)
@@ -732,8 +732,8 @@ theorem maxWide_wval (k : Nat) (s : AState)
       (s.regs rMagHiLo, s.regs rMagHiHi) ≤
       LeanCompCert.Verified.AddWide.wval
         (s.regs rMagLoLo, s.regs rMagLoHi)
-  · rw [if_pos h, Nat.max_eq_left h]
-  · rw [if_neg h, Nat.max_eq_right (Nat.le_of_not_ge h)]
+  · rw [ite_eq_left h, Nat.max_eq_left h]
+  · rw [ite_eq_right h, Nat.max_eq_right (Nat.le_of_not_ge h)]
 
 theorem intervalMagnitudeWide_run (k : Nat) (s : AState) (lo hi : Int)
     (hw : ∀ j, s.regs j < M) (haW : ∀ j, s.arr j < M)
